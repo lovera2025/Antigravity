@@ -351,24 +351,33 @@ void main() {
     expect(servicio, contains('final desde = ultimoDelJefe(registros);'));
     expect(servicio, contains('if (desde == null) return null;'));
     expect(servicio, contains('if (r.automatico) continue;'));
-    // solo con internet y sin mesas de otra PC por bajar;
-    expect(servicio, contains('if (distintos == null) {'));
+    // o a quien acaba de agregar una mesa, y solo con una cuota entera de su
+    // contrato paga (regla del usuario, 11-nov);
     expect(
       servicio,
-      contains(
-        'if (distintos > 0) return const ResultadoMesaNueva(EstadoMesaNueva.esperar);',
-      ),
+      contains('if (tieneUnaCuotaPaga(a, pagos[id] ?? const [])) id,'),
     );
+    expect(servicio, contains(').cuotasBase >=\n      1;'));
+    // solo con internet y sin mesas de otra PC por bajar;
+    expect(servicio, contains('if (distintos == null) {'));
+    expect(servicio, contains('if (distintos > 0) {'));
+    expect(servicio, contains('EstadoMesaNueva.esperar,'));
     // y solo una mesa suya (una nueva, o una que el jefe le había fijado):
     // nunca una mesa libre del salón.
     expect(servicio, contains('if (!recibe.every(suyas.contains)) {'));
 
-    // Quién la llama: el cobro de la fiesta, y el que mira al abrir y cuando
-    // baja algo.
+    // Quién la llama: el cobro de la fiesta, Editar alumno (al agregar una
+    // mesa), y el que mira al abrir y cuando baja algo.
     expect(archivosCon('mesaNuevaSolaProvider'), {
       pantallaFiesta,
+      'lib/features/eventos/widgets/modal_alumno_premium.dart',
       mesaNuevaSolaDeLaApp,
     });
+    // Editar alumno la pide solo si la edición es "agregó una mesa".
+    final modal = leer('lib/features/eventos/widgets/modal_alumno_premium.dart');
+    expect(modal, contains('agregoUnaMesa = MesaNuevaSola.agregoUnaMesa('));
+    expect(modal, contains('if (agregoUnaMesa) {'));
+    expect(modal, contains('agregaron: {alumnoId},'));
     expect(archivosCon('vigiaDeLaMesaNuevaProvider'), {
       mesaNuevaSolaDeLaApp,
       'lib/features/common/widgets/operational_sync_coordinator.dart',

@@ -77,6 +77,9 @@ elegido) · **En las mesas libres del salón** (lo de siempre). Antes de sortear
 - El salón, los números y el renglón van **en una sola transacción** (`asignarNumerosMesa(plano:)`), y el renglón anota qué mesas
   se agregaron (`SorteoMesasRegistro.nuevas`, clave `_nuevas`).
 - Una PC con la 6.5.0 ve la mesa nueva como cualquier otra: no hay claves nuevas en el JSON del armado.
+- **El salto de la mesa nueva no cuenta para "los números no siguen el salón"** (`PlanoDeLaFiesta._avisoDeSaltos`). En la
+  muestra del 11-nov, después de dar la 102 al fondo, el plano decía "deshacé el sorteo para ordenarlos": lo contrario de lo
+  pedido. Los tests estaban todos en verde; se vio mirando la imagen.
 - Tests: `test/mesas_nuevas_al_fondo_test.dart` y `test/sorteo_mesas_nuevas_dialog_test.dart`.
 
 ## Tramo 3 · La mesa se da sola
@@ -92,11 +95,22 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
     (`ultimoDelJefe`): con lo pagado hasta ahí no le tocaba, y ahora sí. No alcanza con haber pagado algo después: si ya le
     tocaba y no la tiene (el jefe deshizo su sorteo para rehacerlo, o tenía algo pagado de la adicional y quedó con una sola),
     que pague otra cuota no se la da sola. Sin registro de sorteos, no hace nada;
-  - **la cuenta del candado, sin excepciones tildadas:** la adicional sin pagar no entra, y quien no pagó nada tampoco;
+  - **o a quien acaba de agregar una mesa** (regla del usuario, 11-nov a la madrugada: "tengo una cuota paga y agrego una mesa
+    sin pagar en el momento: solo agrego al sistema, ya debería darle"). Con **una cuota entera** de su contrato paga la recibe
+    **al guardar Editar alumno**, aunque esa mesa no esté paga; la paga antes de retirar las entradas, que ya frena a quien debe
+    algo. "Una cuota entera" lo confirmó él ("claro, una cuota entera"): una entrega parcial no alcanza, y sale de los pagos con
+    la cuenta del saldo (`MesaNuevaSola.tieneUnaCuotaPaga`). **El sorteo no cambia: ahí sigue alcanzando con algo pagado.** Solo
+    si tenía todas las suyas (`MesaNuevaSola.agregoUnaMesa`): si le faltaba una de antes (la tenía con candado, o el jefe
+    deshizo su sorteo), agregar otra no le da ninguna sola. **No queda anotado en ningún lado que la agregó:** si en ese momento
+    no hay internet, o la otra PC cambió mesas que todavía no bajaron, no se le da sola más tarde (salvo que la pague), y el
+    aviso lo dice: "El jefe se la da con SORTEO";
+  - **fuera de eso, la cuenta del candado, sin excepciones tildadas:** la adicional que ya estaba cargada sin pagar no entra
+    (es la que el jefe decide en el sorteo), y quien no pagó nada de su contrato, nunca;
   - **solo con internet**, sin mesas de otra PC por bajar y con el plano recién leído de la nube. Sin internet queda "le falta el
     número de su mesa" y se da al volver.
 - **Cuándo mira:** justo después de un cobro (un paso más de `DespuesDeGuardarCobro`, detrás de la subida: no frena el cobro ni
-  el recibo), y **al abrir el programa y cuando baja algo de otra PC** (`VigiaDeLaMesaNueva`, desde
+  el recibo), al guardar Editar alumno si se agregó una mesa (sin frenar el cierre de la ventana), y **al abrir el programa y
+  cuando baja algo de otra PC** (`VigiaDeLaMesaNueva`, desde
   `OperationalSyncCoordinator`). Sin reloj propio: se dispara con algo que pasó, espera entre 20 y 60 segundos (distinto en cada
   PC) y **mira primero la base de esta PC, sin pedirle nada a la nube**. Casi siempre no hay nada y ahí termina.
 - **Dos PCs a la vez.** La fila del plano sube entera: si dos PCs le dan la misma mesa nueva a dos familias en el mismo momento, en
@@ -112,11 +126,13 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
 - **Los tests:** los cinco archivos nuevos y los que ya cuidaban el salón (`solo_modo_jefe`, `puerta_sigue_al_salon`, el sorteo
   sobre el plano).
 - **Dos PCs simuladas y una nube de mentira** (`test/mesa_nueva_sola_dos_pcs_test.dart`, pedido del usuario): cada PC con su base,
-  su cola y su internet, y la prueba decide cuándo sube y cuándo baja cada una. Cubre: una PC; sin internet y al volver; el
-  candado; quien tenía una mesa reservada; lo que el jefe deshace; una PC después de la otra; la que todavía no bajó lo de la
-  otra; las dos mirando a la misma familia; **la carrera** (las dos cobrando a familias distintas en el mismo momento, con el
-  plano de cada una subiendo último, y las dos arreglándola a la vez). En todos: ningún número repetido al final, nadie se mueve,
-  y queda quieto.
+  su cola y su internet, y la prueba decide cuándo sube y cuándo baja cada una. Son 32 casos. Cubre: una PC; sin internet y al
+  volver; el candado; quien tenía una mesa reservada; **quien agrega una mesa sin pagarla** (con su cuota paga, dos de una vez,
+  sin nada pagado del contrato, con una entrega parcial, la que ya estaba cargada de antes, sin internet, con mesas de la otra
+  PC por bajar); lo que el
+  jefe deshace; una PC después de la otra; la que todavía no bajó lo de la otra; las dos mirando a la misma familia; **la
+  carrera** (las dos cobrando, o agregando, a familias distintas en el mismo momento, con el plano de cada una subiendo último,
+  y las dos arreglándola a la vez). En todos: ningún número repetido al final, nadie se mueve, y queda quieto.
   **Lo que usa de verdad:** `MesaNuevaSola` entera, `MesasNuevasAlFondo`, el sorteo sobre el plano con su control final y la cuenta
   de lo pagado. **Lo que es de mentira:** las bases y la nube. En la app, esos caminos son los mismos por los que ya guarda el
   botón SORTEO; **no se probó con dos PCs de verdad contra la nube.**
@@ -124,7 +140,12 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
   la opción en Acomodar, guardar y ver la derecha numerada del escenario al fondo; sortear; el cartel de verdad con la pregunta; la
   mesa nueva al fondo a la derecha, al lado de la última.
 - **El simulacro** sobre una copia de la base (`tool/simulacro_mesa_nueva_sola_test.dart`; la real, con el mismo SHA-256): dice,
-  fiesta por fiesta, a quién le daría una mesa el programa la primera vez que se abra. La salida lleva nombres: va a `build/`.
+  fiesta por fiesta, a quién le daría una mesa el programa la primera vez que se abra, y dónde cae. La salida lleva nombres: va a
+  `build/`. **El 11-nov dio una sola familia en seis fiestas:** la que esperaba su mesa en la escuela ya sorteada, que recibiría
+  la 102 al lado de la mesa libre de la última fila, a 2,50 m y adentro del hormigón. En las otras cinco, nadie.
+- **Las muestras** (`tool/mesas_al_fondo_muestra_test.dart`): cinco imágenes de la pantalla y del cartel de verdad, con el salón
+  entero y familias inventadas.
+- **Dos corridas de `flutter test` a la vez se pisan** (las dos copian `sqlite3.dll` y una se cae): de a una.
 
 ## Lo que no hace
 

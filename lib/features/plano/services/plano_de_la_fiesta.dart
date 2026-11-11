@@ -18,6 +18,7 @@ import 'divisiones.dart';
 import 'editar_armado.dart';
 import 'familias_en_el_plano.dart';
 import 'medir_salon.dart';
+import 'mesas_nuevas_al_fondo.dart';
 
 /// Algo del plano que conviene mirar, dicho en palabras, con la mesa a la que
 /// lleva al tocarlo.
@@ -183,11 +184,23 @@ class PlanoDeLaFiesta {
   ///
   /// Los saltos esperados son los del mismo salón con los números en orden; en un
   /// armado del Canva, los de ese armado como salió de fábrica, que no se ordena.
+  ///
+  /// [nuevas]: las mesas que se agregaron al fondo para quien llegó después del
+  /// sorteo (6.5.1). Su salto es a propósito (la 102 no va al lado de la 101, va
+  /// donde hay lugar): no se cuentan, o el plano diría "deshacé el sorteo para
+  /// ordenarlos" justo después de hacer lo que se pidió.
   static AvisoPlano? _avisoDeSaltos(
-    ArmadoSalon armado, {
+    ArmadoSalon completo, {
     required bool hayFamilias,
     FinNumeracion fin = FinNumeracion.escenario,
+    Set<int> nuevas = const {},
   }) {
+    final armado = nuevas.isEmpty
+        ? completo
+        : completo.copyWith(mesas: [
+            for (final m in completo.mesas)
+              if (!nuevas.contains(m.numero)) m,
+          ]);
     final hay = armado.cortes.length;
     if (hay == 0) return null;
     final conBorde = EditarArmado.conBordeDelPlayon(armado);
@@ -370,10 +383,18 @@ class PlanoDeLaFiesta {
       ));
     }
 
+    final hayFamilias = alumnos.any(SalonMesas.tieneNumeros);
     final saltos = _avisoDeSaltos(
       armado,
-      hayFamilias: alumnos.any(SalonMesas.tieneNumeros),
+      hayFamilias: hayFamilias,
       fin: config.numeracion,
+      // Sin familias, el salón se ordena entero al guardar: ahí cuentan todas.
+      nuevas: hayFamilias
+          ? {
+              for (final e in config.fijadas.entries)
+                if (e.value.motivo == MesasNuevasAlFondo.motivo) e.key,
+            }
+          : const {},
     );
     if (saltos != null) avisos.add(saltos);
 

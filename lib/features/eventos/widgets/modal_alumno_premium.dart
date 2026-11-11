@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +17,8 @@ import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../caja_sesiones/services/caja_auto_sync_service.dart';
+import '../../plano/services/mesa_nueva_sola.dart';
+import '../../plano/services/mesa_nueva_sola_de_la_app.dart';
 import '../../recepcion/services/puerta_al_dia.dart';
 
 /// Lo que se guarda al editar un alumno.
@@ -607,6 +611,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         }
       }
 
+      // Con el sorteo ya hecho, a la familia que agrega una mesa el programa se
+      // la da sola, al fondo (6.5.1). Se decide acá, con el antes y el después.
+      var agregoUnaMesa = false;
       if (isEdit) {
         // Modo Edición
         final al = widget.alumno!;
@@ -668,6 +675,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
               .read(puertaAlDiaProvider)
               .trasLosAlumnos(widget.evento.id, [al.id]);
         }
+        agregoUnaMesa = MesaNuevaSola.agregoUnaMesa(
+          antes: al,
+          despues: alumnoEditado,
+        );
       } else {
         // Modo Creación
         final nuevoContrato = ContratoAlumno(
@@ -720,7 +731,39 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
             isPayment: false,
           );
       if (mounted) {
-        ref.read(contratosMutationTickProvider.notifier).bump();
+        final lista = ref.read(contratosMutationTickProvider.notifier);
+        lista.bump();
+        // La mesa nueva, detrás de la subida y sin frenar el cierre: depende
+        // de internet. Todo lo que hace falta se pide ahora, antes de cerrar
+        // la ventana. Lo que decide y lo angosto que es está en
+        // `MesaNuevaSola`.
+        if (agregoUnaMesa) {
+          final sola = ref.read(mesaNuevaSolaProvider);
+          final avisos = ScaffoldMessenger.maybeOf(context);
+          final eventoId = widget.evento.id;
+          final alumnoId = widget.alumno!.id;
+          unawaited(() async {
+            try {
+              final r = await mirarMesaNueva(
+                sola,
+                eventoId,
+                agregaron: {alumnoId},
+              );
+              if (r.estado == EstadoMesaNueva.dio) lista.bump();
+              final aviso = r.aviso;
+              if (aviso != null) {
+                avisos?.showSnackBar(
+                  SnackBar(
+                    duration: const Duration(seconds: 10),
+                    content: Text(aviso),
+                  ),
+                );
+              }
+            } catch (e) {
+              debugPrint('La mesa nueva, después de editar al alumno: $e');
+            }
+          }());
+        }
         Navigator.pop(context, true);
       }
     } catch (e) {

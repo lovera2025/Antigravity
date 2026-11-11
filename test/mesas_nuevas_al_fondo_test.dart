@@ -15,6 +15,7 @@ import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
+import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -359,6 +360,45 @@ void main() {
       a.mesa(102)!.distanciaA(a.mesa(101)!),
       closeTo(paso, 0.5),
       reason: 'la 101 es la de más afuera de la última fila',
+    );
+  });
+
+  test('el plano no avisa "los números no siguen el salón" por la mesa nueva',
+      () {
+    // Se vio en la muestra del 11-nov: después de dar la 102 al fondo, el
+    // plano decía "deshacé el sorteo para ordenarlos". El salto es a propósito.
+    final alumnos = [..._sorteados(), tarde];
+    final plan = _planear(salon, alumnos);
+    final sentados = [
+      for (final a in alumnos)
+        a.id == 'tarde' ? _familia('tarde', extras: 1, mesas: [9, 102]) : a,
+    ];
+    final plano = PlanoDeLaFiesta.desde(
+      armado: plan.armado,
+      config: plan.config,
+      alumnos: sentados,
+    );
+    expect(
+      plano.avisos.where((a) => a.texto.contains('no siguen el salón')),
+      isEmpty,
+    );
+
+    // Un salón con los números de verdad mezclados sigue avisando.
+    final mezclado = plan.armado.copyWith(mesas: [
+      for (final m in plan.armado.mesas)
+        m.numero == 3
+            ? MesaPlano(numero: 60, hoja: m.hoja, x: m.x, y: m.y)
+            : m.numero == 60
+                ? MesaPlano(numero: 3, hoja: m.hoja, x: m.x, y: m.y)
+                : m,
+    ]);
+    expect(
+      PlanoDeLaFiesta.desde(
+        armado: mezclado,
+        config: plan.config,
+        alumnos: sentados,
+      ).avisos.where((a) => a.texto.contains('no siguen el salón')),
+      isNotEmpty,
     );
   });
 

@@ -3,6 +3,7 @@ import 'dart:math';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sorteo_mesas_registro.dart';
+import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/sorteo_mesas_motor.dart';
@@ -42,11 +43,13 @@ abstract class PuertosDeLaMesaNueva {
   Future<PlanoEvento?> planoDeLaNube(String eventoId);
 
   /// Los números, el renglón del registro y el plano, en una sola transacción,
-  /// y a subir.
+  /// y a subir. [plano] es null si el salón no cambió (la familia recibió una
+  /// mesa que ya tenía fijada): la fila del plano sube entera, y no hay por
+  /// qué volver a subirla.
   Future<void> guardar({
     required Map<String, String> numeros,
     required SorteoMesasRegistro registro,
-    required PlanoEvento plano,
+    PlanoEvento? plano,
   });
 
   /// La lista de la puerta, al día para esos alumnos.
@@ -89,12 +92,19 @@ class ResultadoMesaNueva {
   /// Qué falló, para dejarlo escrito. No se le muestra a nadie.
   final String? error;
 
+  /// Quedó esperando, y **el programa se la va a dar solo más tarde** (cuando
+  /// vuelva internet, o cuando baje lo de la otra PC). En false, no: la
+  /// familia solo agregó la mesa, y eso no queda anotado. Se la da el jefe con
+  /// SORTEO, o el programa cuando la pague.
+  final bool alVolver;
+
   const ResultadoMesaNueva(
     this.estado, {
     this.dadas = const {},
     this.apellidos = const {},
     this.detalle,
     this.error,
+    this.alVolver = true,
   });
 
   static const nada = ResultadoMesaNueva(EstadoMesaNueva.nada);
@@ -106,22 +116,30 @@ class ResultadoMesaNueva {
       case EstadoMesaNueva.dio:
         final partes = [
           for (final e in dadas.entries)
-            'A ${apellidos[e.key] ?? 'una familia'} se le dio la '
-                '${e.value.length == 1 ? 'mesa' : 'mesas'} '
+            'A ${apellidos[e.key] ?? 'una familia'} '
+                '${e.value.length == 1 ? 'se le dio la mesa' : 'se le dieron las mesas'} '
                 '${e.value.join(' y ')}',
         ];
         return '${partes.join('. ')}.';
       case EstadoMesaNueva.sinInternet:
-        return 'A ${detalle ?? 'una familia'} le falta el número de su mesa: '
-            'se le da solo cuando vuelva internet.';
+        return alVolver
+            ? 'A ${detalle ?? 'una familia'} le falta el número de su mesa: '
+                'se le da solo cuando vuelva internet.'
+            : 'A ${detalle ?? 'una familia'} no se le pudo dar la mesa ahora: '
+                'no hay internet. El jefe se la da con SORTEO.';
       case EstadoMesaNueva.fallo:
         // Sin saber a quién le tocaba no hay nada útil que decir en pantalla.
         return detalle == null
             ? null
             : 'No se le pudo dar la mesa sola a $detalle: el jefe se la da '
                 'con SORTEO.';
-      case EstadoMesaNueva.nada:
       case EstadoMesaNueva.esperar:
+        // Lo de quien pagó se vuelve a mirar cuando baje lo de la otra PC.
+        return alVolver || detalle == null
+            ? null
+            : 'A $detalle no se le pudo dar la mesa ahora: la otra PC cambió '
+                'mesas que todavía no bajaron. El jefe se la da con SORTEO.';
+      case EstadoMesaNueva.nada:
         return null;
     }
   }
@@ -175,9 +193,14 @@ class CuentaMesaNueva {
 ///   deshacer o restaurar que hizo el jefe: con lo pagado hasta ahí no le
 ///   tocaba, y ahora sí. Si el jefe deshace un sorteo, esas familias no
 ///   vuelven a recibir mesa solas, aunque paguen otra cuota;
-/// - la mesa adicional sin pagar sigue con candado, y quien no pagó nada de su
-///   contrato tampoco entra: es la misma cuenta del sorteo ("solo a lo que
-///   tiene algo pagado"), sin excepciones tildadas;
+/// - **o a quien acaba de agregar una mesa** con el sorteo ya hecho (regla del
+///   usuario, 11-nov-2026): con **una cuota entera** de su contrato paga
+///   ([tieneUnaCuotaPaga]) la recibe en el momento de cargarla, aunque esa
+///   mesa no esté paga. La paga antes de retirar las entradas. Solo si tenía
+///   todas las suyas ([agregoUnaMesa]);
+/// - fuera de eso, la mesa adicional sin pagar sigue con candado, y quien no
+///   pagó nada de su contrato no entra nunca: es la misma cuenta del sorteo
+///   ("solo a lo que tiene algo pagado"), sin excepciones tildadas;
 /// - solo **con internet** y con el plano recién leído de la nube: sin eso, dos
 ///   PCs podrían darle el mismo número a dos familias;
 /// - queda anotado en el registro como automático, y el jefe lo deshace con
@@ -203,11 +226,18 @@ class MesaNuevaSola {
   ///
   /// Lanza [StateError] si la cuenta no cierra (el control final del sorteo
   /// encontró algo): no hay que guardar nada.
+  ///
+  /// [agregaron]: las familias que **acaban de agregar una mesa** a su cuenta
+  /// ([agregoUnaMesa]). Con una cuota entera de su contrato paga la reciben
+  /// aunque esa mesa todavía no esté paga (regla del usuario, 11-nov-2026:
+  /// "solo agrego al sistema, ya debería darle"); la pagan antes de retirar las
+  /// entradas, que ya frena a quien debe algo.
   static CuentaMesaNueva? calcular({
     required PlanoEvento plano,
     required List<ContratoAlumno> alumnos,
     required Map<String, List<Map<String, dynamic>>> pagos,
     required Iterable<SorteoMesasRegistro> registros,
+    Set<String> agregaron = const {},
     String? por,
     DateTime? ahora,
   }) {
@@ -244,16 +274,29 @@ class MesaNuevaSola {
     int leTocan(ContratoAlumno a, Map<String, PagoAlumno> pagado) =>
         ExtrasSegunPago.de(a, pagado[a.id] ?? PagoAlumno.nada)
             .mesasConElSorteoDeHoy;
+    // Quien acaba de agregar una mesa, con una cuota entera de su contrato
+    // paga.
+    final conAgregada = {
+      for (final id in agregaron)
+        if (_alumno(vistos, id) case final a?)
+          if (tieneUnaCuotaPaga(a, pagos[id] ?? const [])) id,
+    };
     bool llegoDespues(String id) {
       if (sinRepetidos.perdieron.contains(id)) return true;
+      if (conAgregada.contains(id)) return true;
       final a = _alumno(vistos, id);
       return a != null && leTocan(a, loPagado) > leTocan(a, loPagadoEntonces);
     }
 
+    // El candado de la adicional sin pagar no corre para quien la acaba de
+    // agregar, ni para quien perdió un número repetido: a ese el programa ya
+    // le había dado su mesa, y hay que devolvérsela con otro número.
+    final soloBase = exclusion.soloBase
+        .difference({...conAgregada, ...sinRepetidos.perdieron});
     final todos = SorteoMesasMotor.pedidos(
       vistos,
       sinMesa: exclusion.sinMesa,
-      soloBase: exclusion.soloBase,
+      soloBase: soloBase,
     );
     final pedidos = [
       for (final p in todos)
@@ -284,7 +327,7 @@ class MesaNuevaSola {
           for (final p in todos)
             if (!entran.contains(p.alumnoId)) p.alumnoId,
         },
-        soloBase: exclusion.soloBase,
+        soloBase: soloBase,
       ),
       modo: ModoSorteo.entera,
     );
@@ -340,6 +383,47 @@ class MesaNuevaSola {
       nuevas: nuevas,
       repetidos: sinRepetidos.perdieron,
     );
+  }
+
+  /// ¿Tiene **al menos una cuota entera** de su contrato paga? Es lo que se le
+  /// pide a quien agrega una mesa sin pagarla (regla del usuario, 11-nov-2026:
+  /// "una cuota entera"; una entrega parcial no alcanza). Sale de los pagos,
+  /// con la misma cuenta del saldo, no de los campos de la ficha.
+  static bool tieneUnaCuotaPaga(
+    ContratoAlumno a,
+    Iterable<Map<String, dynamic>> pagos,
+  ) =>
+      recalcularSaldoDesdePagos(
+        montoTotalPactado: a.montoTotalPactado,
+        totalCuotas: a.totalCuotas,
+        mesaExtraPrecio: a.mesaExtraPrecio,
+        sillasExtraPrecioTotal: a.sillasExtraPrecioTotal,
+        precioUnitarioMesaExtra: a.precioUnitarioMesaExtra,
+        mesaExtraCuotas: a.mesaExtraCuotas,
+        mesaExtraCantidad: a.mesaExtraCantidad,
+        sillasExtraCuotas: a.sillasExtraCuotas,
+        pagos: pagos,
+      ).cuotasBase >=
+      1;
+
+  /// ¿Esta edición del alumno es **agregar una mesa** a una familia que tenía
+  /// todas las suyas? Es lo que se le pasa a [revisar] en `agregaron`.
+  ///
+  /// - Tenía mesa, y tantos números como mesas cargadas: si le faltaba alguna
+  ///   (la tenía con candado, o el jefe deshizo su sorteo), agregar otra no le
+  ///   da ninguna sola. Lo decide el jefe con SORTEO.
+  /// - Ahora tiene más mesas cargadas que antes. Una mesa cargada sin precio
+  ///   no cuenta, como en todo el salón.
+  static bool agregoUnaMesa({
+    required ContratoAlumno antes,
+    required ContratoAlumno despues,
+  }) {
+    if (despues.esBajaTemporal) return false;
+    final tenia =
+        MesasExtraUtils.numerosMesaDesdeTexto(antes.numeroMesa).length;
+    final cargadasAntes = MesasExtraUtils.cantidadMesasFisicasSorteo(antes);
+    final cargadasAhora = MesasExtraUtils.cantidadMesasFisicasSorteo(despues);
+    return tenia >= 1 && tenia == cargadasAntes && cargadasAhora > cargadasAntes;
   }
 
   /// ¿El pago se cargó después de [desde]? Uno sin hora que se pueda leer
@@ -418,16 +502,27 @@ class MesaNuevaSola {
   }
 
   /// Mira un evento y, si a alguien le toca, le da su mesa. **Nunca lanza.**
-  Future<ResultadoMesaNueva> revisar(String eventoId) async {
+  ///
+  /// [agregaron]: las familias que acaban de agregar una mesa en esta PC (ver
+  /// [calcular]). No queda anotado en ningún lado que la agregaron: si ahora
+  /// no se puede (sin internet), no se les da sola más tarde, salvo que la
+  /// paguen. Por eso el aviso de ese caso manda al SORTEO del jefe.
+  Future<ResultadoMesaNueva> revisar(
+    String eventoId, {
+    Set<String> agregaron = const {},
+  }) async {
     if (!kMesaNuevaSolaHabilitada) return ResultadoMesaNueva.nada;
     try {
-      return await _revisar(eventoId);
+      return await _revisar(eventoId, agregaron);
     } catch (e) {
       return ResultadoMesaNueva(EstadoMesaNueva.fallo, error: '$e');
     }
   }
 
-  Future<ResultadoMesaNueva> _revisar(String eventoId) async {
+  Future<ResultadoMesaNueva> _revisar(
+    String eventoId,
+    Set<String> agregaron,
+  ) async {
     // 1. Con lo de esta PC, sin pedirle nada a la nube: casi siempre no hay
     //    nada que hacer, y ahí se termina.
     final planoLocal = await _puertos.planoDeEstaPc(eventoId);
@@ -442,12 +537,29 @@ class MesaNuevaSola {
         alumnos: alumnos,
         pagos: pagos,
         registros: registros,
+        agregaron: agregaron,
       );
     } on StateError catch (e) {
       return ResultadoMesaNueva(EstadoMesaNueva.fallo, error: e.message);
     }
     if (previa == null) return ResultadoMesaNueva.nada;
     final esperan = _apellidos(alumnos, previa.asignaciones.keys);
+    // Lo de quien pagó se vuelve a ver solo cuando haya internet. Lo de quien
+    // solo agregó la mesa, no: no queda anotado en ningún lado.
+    bool alVolver() {
+      if (agregaron.isEmpty) return true;
+      try {
+        return calcular(
+              plano: planoLocal,
+              alumnos: alumnos,
+              pagos: pagos,
+              registros: registros,
+            ) !=
+            null;
+      } on StateError {
+        return false;
+      }
+    }
 
     // 2. Hay alguien esperando: ahora sí, con la nube. Sin internet no se da.
     final distintos = await _puertos.mesasDeOtraPcSinBajar(eventoId);
@@ -455,9 +567,16 @@ class MesaNuevaSola {
       return ResultadoMesaNueva(
         EstadoMesaNueva.sinInternet,
         detalle: esperan.values.join(', '),
+        alVolver: alVolver(),
       );
     }
-    if (distintos > 0) return const ResultadoMesaNueva(EstadoMesaNueva.esperar);
+    if (distintos > 0) {
+      return ResultadoMesaNueva(
+        EstadoMesaNueva.esperar,
+        detalle: esperan.values.join(', '),
+        alVolver: alVolver(),
+      );
+    }
     final PlanoEvento? plano;
     try {
       plano = await _puertos.planoDeLaNube(eventoId);
@@ -465,6 +584,7 @@ class MesaNuevaSola {
       return ResultadoMesaNueva(
         EstadoMesaNueva.sinInternet,
         detalle: esperan.values.join(', '),
+        alVolver: alVolver(),
       );
     }
     if (plano == null) return ResultadoMesaNueva.nada;
@@ -482,6 +602,7 @@ class MesaNuevaSola {
         alumnos: alumnos,
         pagos: pagos,
         registros: registros,
+        agregaron: agregaron,
         por: 'El programa',
         ahora: ahora,
       );
@@ -521,12 +642,14 @@ class MesaNuevaSola {
         hechoPor: 'El programa',
         createdAt: ahora,
       ),
-      plano: plano.copyWith(
-        armado: cuenta.nuevas.vacio ? null : cuenta.nuevas.armado,
-        config: cuenta.nuevas.config,
-        hechoPor: 'El programa',
-        ahora: ahora,
-      ),
+      plano: cuenta.nuevas.vacio
+          ? null
+          : plano.copyWith(
+              armado: cuenta.nuevas.armado,
+              config: cuenta.nuevas.config,
+              hechoPor: 'El programa',
+              ahora: ahora,
+            ),
     );
     await _puertos.puertaAlDia(eventoId, numeros.keys);
     final dadas = {

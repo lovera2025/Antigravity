@@ -74,7 +74,7 @@ class _PuertosDeLaApp implements PuertosDeLaMesaNueva {
   Future<void> guardar({
     required Map<String, String> numeros,
     required SorteoMesasRegistro registro,
-    required PlanoEvento plano,
+    PlanoEvento? plano,
   }) async {
     final desde = DateTime.now().toUtc();
     await _contratos.asignarNumerosMesa(
@@ -113,13 +113,19 @@ final mesaNuevaSolaProvider = Provider<MesaNuevaSola>(
 
 /// Mira un evento con [sola] y deja escrito lo que pasó. **En la web no hace
 /// nada**: ahí no hay base en el equipo, y la mesa la da una PC cuando abre.
+///
+/// [agregaron]: las familias que acaban de agregar una mesa en Editar alumno
+/// (`MesaNuevaSola.agregoUnaMesa`).
 Future<ResultadoMesaNueva> mirarMesaNueva(
   MesaNuevaSola sola,
-  String eventoId,
-) async {
+  String eventoId, {
+  Set<String> agregaron = const {},
+}) async {
   if (kIsWeb) return ResultadoMesaNueva.nada;
-  final r = await sola.revisar(eventoId);
-  if (r.estado == EstadoMesaNueva.dio || r.estado == EstadoMesaNueva.fallo) {
+  final r = await sola.revisar(eventoId, agregaron: agregaron);
+  if (r.estado == EstadoMesaNueva.dio ||
+      r.estado == EstadoMesaNueva.fallo ||
+      (agregaron.isNotEmpty && r.aviso != null)) {
     await VigiaDeLaMesaNueva.anotar(r);
   }
   return r;

@@ -210,6 +210,22 @@ barra (cajeras y encargada con solapas, un puente entre las dos notebooks) lo pi
 **No crear "Silla suelta" en el catálogo, ni usar SILLA SUELTA, ni reservar una mesa con "Es para alguien" hasta que las PCs y las
 tablets tengan la 6.5.0.**
 
+**La 6.5.1: las mesas que llegan después del sorteo van al fondo** (programada el 10 y el 11-nov, **sin publicar**;
+`docs/CONTEXTO_v6.5.1_2026-11-10.md`, que empieza con "Para retomar en otro chat"). Sin SQL. Salió de los audios del jefe después del
+sorteo de una escuela de 101 mesas: el candado estuvo bien (**no se cambia la regla de lo pagado**: el usuario lo había pedido y se
+descartó al escucharlo), y lo que pidió fue que el último número quede al fondo y que quien llega tarde reciba el número que sigue.
+- **La numeración puede terminar al fondo** (Acomodar → "La numeración termina: Junto al escenario · Al fondo"; ver "El salón").
+- **Con el sorteo hecho, el cartel del SORTEO pregunta dónde van las mesas que faltan**, y viene elegido "en una mesa nueva, al
+  fondo", con el número que sigue (`MesasNuevasAlFondo`).
+- **La mesa se da sola** a quien le tocó por un pago posterior al sorteo, **y a quien agrega una mesa después del sorteo con una
+  cuota entera de su contrato paga, aunque no pague la mesa en el momento** (`MesaNuevaSola`; ver "Lo que cambia el salón", en
+  Roles). Se apaga en un solo lugar: `kMesaNuevaSolaHabilitada`. **El sorteo sigue con "algo pagado": la cuota entera es solo
+  para esto.**
+- Probado con dos PCs simuladas y una nube de mentira (`test/mesa_nueva_sola_dos_pcs_test.dart`) y con un simulacro sobre una copia
+  de la base (`tool/simulacro_mesa_nueva_sola_test.dart`). **No se probó con dos PCs de verdad contra la nube.**
+- **El plano se toca desde una PC con la 6.5.1:** una con la 6.5.0 que guarde el salón antes del sorteo lo vuelve a la numeración
+  de siempre.
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -355,6 +371,29 @@ cambiar o mudar familias y escribir el "N° de mesa" de Editar alumno piden modo
   `detalle_evento_masivo_screen.dart` y `plano_evento_screen.dart`.
 - `test/solo_modo_jefe_test.dart` lee esas dos pantallas y falla si aparece un guardado del salón sin la llave.
   **Un guardado nuevo del salón tiene que llevarla.**
+- **La única excepción es la mesa que se da sola** (6.5.1, pedido del usuario el 10-nov: "¿por qué tendría que apretar?").
+  A la familia que **le tocó una mesa por un pago posterior al último sorteo del jefe**, el programa se la da sin modo jefe:
+  su fijada, si tenía una esperándola, o una mesa nueva al fondo. `MesaNuevaSola` (`plano/services/mesa_nueva_sola.dart`)
+  decide, y `mesa_nueva_sola_de_la_app.dart` solo lee y guarda, por `asignarNumerosMesa`. **Es angosta a propósito, y así
+  tiene que seguir:**
+  - solo agrega: nunca mueve ni saca una mesa, ni da una libre del salón;
+  - **no alcanza con haber pagado algo después del sorteo:** con lo pagado hasta el último sorteo, deshacer o restaurar del
+    jefe no le tocaba, y ahora sí. Lo que el jefe deshace no vuelve solo, aunque esa familia pague otra cuota;
+  - **o acaba de agregar una mesa** (regla del usuario, 11-nov: "solo agrego al sistema, ya debería darle"): con **una cuota
+    entera** de su contrato paga (`tieneUnaCuotaPaga`, de los pagos; una entrega parcial no alcanza) la recibe **en el momento
+    de cargarla en Editar alumno**, aunque esa mesa no esté paga; la paga antes de
+    retirar las entradas (`RetiroEntradas.bloqueo` ya frena a quien debe). Solo si tenía todas las suyas
+    (`MesaNuevaSola.agregoUnaMesa`): si le faltaba una de antes, lo decide el jefe. **No queda anotado que la agregó:** si en
+    ese momento no hay internet no se le da sola más tarde (salvo que la pague), y el aviso manda al SORTEO del jefe;
+  - fuera de eso, la cuenta del candado sin excepciones tildadas: la adicional que ya estaba cargada sin pagar no entra, y
+    quien no pagó nada de su contrato, nunca;
+  - solo con internet, sin mesas de otra PC por bajar y con el plano recién leído de la nube;
+  - el renglón va marcado automático (`_auto`) y **no cuenta como "el último sorteo"**.
+  Mira después de un cobro (un paso de `DespuesDeGuardarCobro`, detrás de la subida), al guardar Editar alumno si se agregó
+  una mesa, al abrir y cuando baja algo (`VigiaDeLaMesaNueva`, sin reloj propio: espera 20 a 60 s y **mira primero la base
+  de esta PC, sin pedirle nada a la nube**).
+  Si dos PCs le dan la misma mesa nueva a dos familias, la que no figura en el plano de la nube pasa a la que sigue. El test
+  nombra el archivo y lo que se le permite.
 
 ## El salón: plano, sorteo y entradas
 
@@ -396,6 +435,16 @@ ninguna. Por eso lo que entra no depende de esa opción.
   `ArmarAMedida.ordenarNumeros`; `ultimoNumero` vuelve a N). Las mesas no se mueven. Las fijadas, las libres y los
   bloques siguen a su mesa (`conNumerosNuevos`). No en un armado del Canva, ni **sin internet**: esa PC no puede saber si
   la otra ya sorteó.
+- **La numeración puede terminar al fondo** (6.5.1, `FinNumeracion`): las dos mitades desde el escenario, y el último número
+  al fondo a la derecha. Se elige en Acomodar y va en la `config` del plano (clave `numeracion`; sin la clave, la serpentina
+  de siempre). `armar`, `acomodar` y `ordenarNumeros` usan el mismo recorrido (`_enSerpentina`): un cambio va en los tres.
+  **Los números cambian al guardar, no mientras se acomoda:** si se renumeraran en la sesión, las fijadas quedarían apuntando
+  a otra mesa.
+- **Quien llega después del sorteo recibe una mesa nueva al fondo** (6.5.1, `MesasNuevasAlFondo`): el número que sigue al más
+  alto (nunca un hueco), a continuación de la última fila del lado derecho, **fijada para su familia** con el motivo "Mesa
+  nueva: llegó después del sorteo". El sorteo de siempre se la entrega: el motor no se tocó. El cartel lo pregunta solo con
+  alguna familia ya sentada y en un salón a medida. **Su salto no cuenta para "los números no siguen el salón"**
+  (`_avisoDeSaltos`): si contara, el plano diría "deshacé el sorteo" justo después de hacer lo pedido (se vio en la muestra).
 - **La barra de Acomodar depende del momento** (`SesionAcomodo.barraReacomoda`): sin familias con mesa y con el borde del
   playón, "Distancia entre mesas", que reacomoda en vivo con la misma cuenta de ACOMODAR LAS MESAS y al guardar pasa a Medidas;
   si no, "Separar o juntar", que estira sin cambiar ninguna mesa.

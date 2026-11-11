@@ -184,7 +184,7 @@ class _Pc implements PuertosDeLaMesaNueva {
   Future<void> guardar({
     required Map<String, String> numeros,
     required SorteoMesasRegistro registro,
-    required PlanoEvento plano,
+    PlanoEvento? plano,
   }) async {
     for (final e in numeros.entries) {
       final a = alumnosLocal[e.key]!.copyWith(numeroMesa: e.value);
@@ -199,8 +199,10 @@ class _Pc implements PuertosDeLaMesaNueva {
       registro.id,
       (n) => n.registros[registro.id] = registro,
     ));
-    planoLocal = plano;
-    cola.add(_Subida('planos_evento', _evento, (n) => n.plano = plano));
+    if (plano != null) {
+      planoLocal = plano;
+      cola.add(_Subida('planos_evento', _evento, (n) => n.plano = plano));
+    }
     if (subeSola) subir();
   }
 
@@ -442,6 +444,8 @@ void main() {
       });
       expect(o.nube.mesasDe('nopago'), [52]);
       expect(o.nube.plano!.armado.mesas, hasLength(101));
+      // El salón no cambió: la fila del plano no se vuelve a subir.
+      expect(o.nube.plano!.hechoPor, isNot('El programa'));
       expect(o.nube.registros.values.singleWhere((r) => r.automatico).nuevas,
           isNull);
     });
@@ -459,6 +463,268 @@ void main() {
         ),
         isEmpty,
       );
+    });
+  });
+
+  group('agrega una mesa después del sorteo, sin pagarla', () {
+    // Regla del usuario del 11-nov: "tengo una cuota paga y agrego una mesa sin
+    // pagar en el momento: solo agrego al sistema, ya debería darle". La paga
+    // antes de retirar las entradas.
+
+    /// Editar alumno en la PC [pc]: la familia [id] pasa a tener [extras] mesas
+    /// adicionales, sin pagar nada. Devuelve si eso es "agregó una mesa".
+    bool agregar(_Pc pc, String id, int extras) {
+      final antes = pc.alumnosLocal[id]!;
+      final despues = antes.copyWith(
+        mesaExtraCantidad: extras,
+        mesaExtraPrecio: 70000.0 * extras,
+      );
+      pc.alumnosLocal[id] = despues;
+      pc.cola.add(_Subida('contratos_alumnos', id, (n) {
+        n.alumnos[id] = n.alumnos[id]!.copyWith(
+          mesaExtraCantidad: extras,
+          mesaExtraPrecio: 70000.0 * extras,
+        );
+      }));
+      if (pc.subeSola) pc.subir();
+      return MesaNuevaSola.agregoUnaMesa(antes: antes, despues: despues);
+    }
+
+    test('con su cuota paga: recibe la 102 en el momento, sin pagar la mesa',
+        () async {
+      final o = _Oficina();
+      expect(agregar(o.a, 'f30', 1), isTrue);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'f30'});
+      expect(r.estado, EstadoMesaNueva.dio);
+      expect(r.aviso, 'A F30 se le dio la mesa 102.');
+      expect(o.nube.mesasDe('f30'), [30, 102]);
+      expect(o.nube.plano!.config.fijadas[102]!.alumnoId, 'f30');
+      o.nadieSeMovio(salvo: {'f30'});
+      // No pagó nada de esa mesa.
+      expect(
+        o.nube.pagos.values.where(
+          (p) =>
+              p['contrato_alumno_id'] == 'f30' &&
+              '${p['concepto']}'.contains('Mesa'),
+        ),
+        isEmpty,
+      );
+      // Y queda quieto, también en la otra PC.
+      o.sincronizar();
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      expect((await o.b.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+    });
+
+    test('dos mesas de una vez: las dos, juntas', () async {
+      final o = _Oficina();
+      expect(agregar(o.a, 'f30', 2), isTrue);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'f30'});
+      expect(r.dadas, {
+        'f30': [102, 103],
+      });
+      expect(r.aviso, 'A F30 se le dieron las mesas 102 y 103.');
+      o.nadieSeMovio(salvo: {'f30'});
+    });
+
+    test('sin nada pagado de su contrato no: sigue el candado', () async {
+      final o = _Oficina();
+      // El jefe lo sorteó igual (tildado): tiene mesa, sin ningún pago.
+      o.nube.alumnos['nopago'] = _familia('nopago', mesas: [52]);
+      o.sincronizar();
+      expect(agregar(o.a, 'nopago', 1), isTrue);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'nopago'});
+      expect(r.estado, EstadoMesaNueva.nada);
+      expect(o.nube.mesasDe('nopago'), [52]);
+      expect(o.nube.plano!.armado.mesas, hasLength(101));
+    });
+
+    test('con una entrega parcial de su primera cuota no alcanza: hace falta '
+        'una cuota entera', () async {
+      final o = _Oficina();
+      // De su cuota de $33.333 lleva pagados $10.000.
+      o.nube.pagos['base-f30'] = {
+        ...o.nube.pagos['base-f30']!,
+        'monto': 10000.0,
+        'monto_gross': 10000.0,
+      };
+      o.sincronizar();
+      expect(agregar(o.a, 'f30', 1), isTrue);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'f30'});
+      expect(r.estado, EstadoMesaNueva.nada);
+      expect(o.nube.mesasDe('f30'), [30]);
+      expect(o.nube.plano!.armado.mesas, hasLength(101));
+    });
+
+    test('qué es "una cuota entera": sale de los pagos, no de la ficha', () {
+      // $300.000 en 9 cuotas: $33.333 cada una.
+      final a = _familia('a', mesas: [3]);
+      Map<String, dynamic> pago(double monto, {int anulado = 0}) => {
+            'contrato_alumno_id': 'a',
+            'concepto': 'Cuota Base (1/9)',
+            'monto': monto,
+            'monto_gross': monto,
+            'anulado': anulado,
+          };
+      expect(MesaNuevaSola.tieneUnaCuotaPaga(a, const []), isFalse);
+      expect(MesaNuevaSola.tieneUnaCuotaPaga(a, [pago(20000)]), isFalse);
+      expect(MesaNuevaSola.tieneUnaCuotaPaga(a, [pago(35000)]), isTrue);
+      // Dos entregas que juntas completan la cuota.
+      expect(
+        MesaNuevaSola.tieneUnaCuotaPaga(a, [pago(20000), pago(15000)]),
+        isTrue,
+      );
+      // Un pago anulado no cuenta.
+      expect(
+        MesaNuevaSola.tieneUnaCuotaPaga(a, [pago(35000, anulado: 1)]),
+        isFalse,
+      );
+      // Pagar la mesa no es pagar una cuota del contrato.
+      expect(
+        MesaNuevaSola.tieneUnaCuotaPaga(_familia('a', extras: 1, mesas: [3]), [
+          {...pago(70000), 'concepto': 'Mesa Extra (1/1)'},
+        ]),
+        isFalse,
+      );
+      // La ficha dice que pagó, pero no hay pagos: manda lo que dicen los pagos.
+      expect(
+        MesaNuevaSola.tieneUnaCuotaPaga(
+          a.copyWith(cuotasPagadas: 5, saldoDeudor: 0),
+          const [],
+        ),
+        isFalse,
+      );
+    });
+
+    test('la que ya tenía cargada sin pagar desde antes sigue con candado',
+        () async {
+      final o = _Oficina();
+      // X tiene una adicional cargada desde antes del sorteo y quedó con una
+      // sola. Nadie la "agregó" ahora: no se le da.
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      expect(
+        (await o.a.sola.revisar(_evento, agregaron: const {})).estado,
+        EstadoMesaNueva.nada,
+      );
+      expect(o.nube.mesasDe('x'), [9]);
+    });
+
+    test('si le faltaba una de antes, agregar otra no le da ninguna sola', () {
+      // X: una adicional con candado. Suma otra: lo decide el jefe con SORTEO.
+      final o = _Oficina();
+      expect(agregar(o.a, 'x', 2), isFalse);
+    });
+
+    test('qué es "agregó una mesa"', () {
+      final completa = _familia('a', mesas: [3]);
+      final conDos = _familia('a', extras: 1, mesas: [3, 4]);
+      expect(
+        MesaNuevaSola.agregoUnaMesa(
+          antes: completa,
+          despues: _familia('a', extras: 1, mesas: [3]),
+        ),
+        isTrue,
+      );
+      expect(
+        MesaNuevaSola.agregoUnaMesa(
+          antes: conDos,
+          despues: _familia('a', extras: 3, mesas: [3, 4]),
+        ),
+        isTrue,
+      );
+      // No cambió las mesas (editó el teléfono).
+      expect(
+        MesaNuevaSola.agregoUnaMesa(antes: completa, despues: completa),
+        isFalse,
+      );
+      // Sacó una.
+      expect(
+        MesaNuevaSola.agregoUnaMesa(
+          antes: conDos,
+          despues: _familia('a', mesas: [3, 4]),
+        ),
+        isFalse,
+      );
+      // Todavía sin mesa: el sorteo se la da cuando le toque.
+      expect(
+        MesaNuevaSola.agregoUnaMesa(
+          antes: _familia('a'),
+          despues: _familia('a', extras: 1),
+        ),
+        isFalse,
+      );
+    });
+
+    test('sin internet no se le da, y el aviso no promete que se da sola',
+        () async {
+      final o = _Oficina();
+      o.a.conInternet = false;
+      agregar(o.a, 'f30', 1);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'f30'});
+      expect(r.estado, EstadoMesaNueva.sinInternet);
+      expect(r.alVolver, isFalse);
+      expect(
+        r.aviso,
+        'A F30 no se le pudo dar la mesa ahora: no hay internet. El jefe se '
+        'la da con SORTEO.',
+      );
+      expect(o.a.alumnosLocal['f30']!.numeroMesa, '30');
+      // Al volver internet nadie la da sola: no quedó anotado que la agregó.
+      o.a.conInternet = true;
+      o.sincronizar();
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      // Pero si paga algo de esa mesa, sí.
+      o.a.cobrar('f30', 'Mesa Extra (1/7)', 10000);
+      expect((await o.a.sola.revisar(_evento)).dadas, {
+        'f30': [102],
+      });
+    });
+
+    test('la otra PC cambió mesas que no bajaron: no se le da, y se dice',
+        () async {
+      final o = _Oficina();
+      o.b.cobrar('y', 'Mesa Extra (1/1)', 70000);
+      await o.b.sola.revisar(_evento);
+      agregar(o.a, 'f30', 1);
+      final r = await o.a.sola.revisar(_evento, agregaron: {'f30'});
+      expect(r.estado, EstadoMesaNueva.esperar);
+      expect(r.aviso, contains('El jefe se la da con SORTEO'));
+      expect(o.nube.mesasDe('f30'), [30]);
+    });
+
+    test('la carrera: dos PCs agregan a familias distintas a la vez', () async {
+      final o = _Oficina();
+      o.a.subeSola = false;
+      o.b.subeSola = false;
+      agregar(o.a, 'f30', 1);
+      agregar(o.b, 'f40', 1);
+      o.a.subir();
+      o.b.subir();
+      expect((await o.a.sola.revisar(_evento, agregaron: {'f30'})).dadas, {
+        'f30': [102],
+      });
+      expect((await o.b.sola.revisar(_evento, agregaron: {'f40'})).dadas, {
+        'f40': [102],
+      });
+      o.sincronizar();
+      expect(o.nube.repetidas.keys, [102]);
+
+      // Al mirar de nuevo (cuando baja lo de la otra), la que no figura en el
+      // plano pasa a la que sigue, **aunque su mesa no esté paga**.
+      o.a.subeSola = true;
+      o.b.subeSola = true;
+      final arreglo = await o.a.sola.revisar(_evento);
+      expect(arreglo.estado, EstadoMesaNueva.dio);
+      o.sincronizar();
+      expect(o.nube.repetidas, isEmpty);
+      expect(
+        {...o.nube.mesasDe('f30'), ...o.nube.mesasDe('f40')},
+        {30, 40, 102, 103},
+      );
+      expect(o.nube.mesasDe('f30'), hasLength(2));
+      expect(o.nube.mesasDe('f40'), hasLength(2));
+      o.nadieSeMovio(salvo: {'f30', 'f40'});
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      expect((await o.b.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
     });
   });
 
