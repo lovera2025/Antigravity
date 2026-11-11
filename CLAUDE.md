@@ -213,7 +213,9 @@ tablets tengan la 6.5.0.**
 
 **La 6.5.1: las mesas que llegan después del sorteo van al fondo** (programada el 10 y el 11-nov, versión `6.5.1+68`.
 **PUBLICADA el 11-nov a la mañana, con el usuario**: foto de la mora "antes de 6.5.1" (642 alumnos), tag `v6.5.1`, release con el
-Setup y el APK, y la web. **Falta que instale, primero la PC que sortea, y la foto "después de 6.5.1"**;
+Setup y el APK, y la web. **Instalada en la PC de la casa (11-nov, 7:48): al minuto la mesa se dio sola, como decía el
+simulacro. Falta que instale las otras dos, primero la que sortea, y la foto "después de 6.5.1"** (la lista entera, en "Lo
+pendiente" del CONTEXTO);
 `docs/CONTEXTO_v6.5.1_2026-11-10.md`, que empieza con "Para retomar en otro chat"). Sin SQL. Salió de los audios del jefe después del
 sorteo de una escuela de 101 mesas: el candado estuvo bien (**no se cambia la regla de lo pagado**: el usuario lo había pedido y se
 descartó al escucharlo), y lo que pidió fue que el último número quede al fondo y que quien llega tarde reciba el número que sigue.

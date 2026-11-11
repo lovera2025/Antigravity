@@ -19,10 +19,26 @@ mañana: la última numeración elegida queda para las fiestas que vienen, en la
   números, el plano con la 102 fijada ("Mesa nueva") y el renglón del registro marcado automático. **El usuario avisó a los
   segundos de abrir que "no se la dio": todavía no había pasado la espera** (el programa mira entre 20 y 60 segundos después de
   abrir, cuando terminó de bajar). No había nada roto. Si vuelve a pasar, mirar primero `mesa_nueva_sola.txt` y la hora.
-- **Falta:** que el usuario instale las otras, **primero la PC que sortea** (a la tarde del 11-nov hay un sorteo y esa PC tiene que tener la
-  6.5.1 antes); las otras conviven con la 6.5.0, pero **el plano se toca solo desde la que tiene la 6.5.1**. Después, con las tres
-  instaladas y abiertas: la foto "después de 6.5.1" y mirar que la escuela ya sorteada quedó igual, salvo la familia que esperaba
-  su mesa (recibe la 102 sola al abrir).
+
+**Lo pendiente, al 11-nov al mediodía** (lo que se sabe hasta las 7:50; después de eso el usuario no avisó qué instaló):
+1. **Instalar las otras dos PCs, primero la que sortea** (a la tarde del 11-nov hay un sorteo y esa PC tiene que tener la 6.5.1
+   antes), y el APK en la tablet. Las que sigan en la 6.5.0 conviven, pero **el plano se toca solo desde una con la 6.5.1**.
+   Preguntarle qué instaló antes de darlo por pendiente.
+2. **El sorteo de esa tarde**, con los pasos de "Para la tarde del sorteo", abajo. Preguntarle cómo salió: es la primera vez que
+   la numeración al fondo y la memoria se usan con una fiesta de verdad.
+3. **La foto de la mora "después de 6.5.1"**, con las tres instaladas y abiertas, y la comparación con "antes de 6.5.1". Va a
+   figurar una ficha bajando de $372.368 a 0: es la corrección de la 6.5.0 (abajo).
+4. **Mirar que la escuela ya sorteada quedó igual**, salvo la familia de la 102. La 102 se comprobó en la nube; que nadie más
+   cambió de mesa no se comparó familia por familia.
+5. **Dos cosas que se le avisaron y no contestó:** el alumno que se eliminó entre la foto del 10-nov y la del 11-nov (¿fue él o el
+   jefe?), y otra ficha a la que la mora le bajó de $4.200 a 0 el 10-nov a las 18:36 (el perdón y la eximición no cambiaron; no se
+   miró qué escritura fue en `mora_cambios`).
+6. **De la 6.5.0, ya se puede** (las tres PCs la tienen): crear "Silla suelta" en el catálogo, reservar una mesa con "Es para
+   alguien" y que la Encargada de barra use el iPhone.
+7. **Lo que no se probó:** dos PCs de verdad contra la nube, ni para la mesa sola ni para la memoria de la numeración.
+8. **Lo que quedó sin hacer a propósito:** "Estilo y armado" con mesas (A medida) numera como siempre y toma la recordada recién
+   al abrir Acomodar; el chat con la barra (`docs/pendientes/chat-con-la-barra.md`); y `chat_de_la_noche_test`, que falla a veces
+   con la PC cargada (abajo).
 
 **La 6.5.0 quedó instalada en las tres PCs** (lo dijo el 10-nov a la noche) **y cerrada el 11-nov a las 7:44**: la ficha corregida
 y la foto "después de 6.5.0", sin nada sospechoso (el detalle, arriba de todo en su CONTEXTO). **La foto "antes de 6.5.1" es de las
@@ -64,7 +80,7 @@ Ingreso, y se agrega en Acomodar.
   derecha, aunque la 101 siga junto al escenario.
 
 > Frase para retomar: "Seguimos con la 6.5.1: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.5.1_2026-11-10.md. Está
-> programada y probada en el sandbox; falta publicarla conmigo."
+> publicada desde el 11-nov y la PC de la casa ya la tiene; mirá 'Lo pendiente' y preguntame qué instalé y cómo salió el sorteo."
 
 ## Tramo 1 · La numeración termina al fondo
 
