@@ -4,12 +4,20 @@ Las mesas que llegan después del sorteo van al fondo. Sin SQL ni migración.
 
 ## Para retomar en otro chat
 
-**Dónde estamos (11-nov, mañana):** programado, con sus tests, guardado y subido a la rama: los tres tramos **y un cuarto, de esta
-mañana: la última numeración elegida queda para las fiestas que vienen, en las tres PCs** (abajo, "Tramo 4"). La versión ya es
-`6.5.1+68`. **Sin publicar.** El usuario aprobó el plan del 11-nov: publicar **esta mañana**, porque **a la tarde hay un sorteo** y la
-PC que sortea tiene que tener la 6.5.1 antes. Falta, con él y con su OK en cada paso: mirar las capturas (`build/muestras_6.5.1/`),
-la foto de la mora "antes de 6.5.1", el tag, el release (novedades propuestas en `build/novedades_6.5.1.md`: "Las mesas que llegan
-después del sorteo van al fondo") y la web. Él instala primero la PC que sortea.
+**PUBLICADA el 11-nov a las 7:30, con el OK del usuario** ("dale, tenés mi ok, publicá"): los tres tramos **y un cuarto, de esa
+mañana: la última numeración elegida queda para las fiestas que vienen, en las tres PCs** (abajo, "Tramo 4"). Sin SQL.
+- **Foto de la mora "antes de 6.5.1":** 642 alumnos, los mismos que hay (`foto_id` `24de5b63-d23c-48f9-a399-70194ec8f263`). Son 642
+  y no los 643 del 10-nov: entre las dos fotos se eliminó a un alumno (sin mora; su ficha no se tocaba desde julio). No se revisó
+  quién ni por qué: se le avisó al usuario. **Se sacó por el conector de Supabase, que desde el 11-nov ve ArguelloApp** (antes estaba en otra cuenta): ya no hace falta
+  el SQL Editor en el navegador, que ese día pedía iniciar sesión.
+- **Tag `v6.5.1`** en `23f9005` y **release** con el Setup y el APK firmado (comprobado con apksigner por el instalador). Novedades:
+  "Las mesas que llegan después del sorteo van al fondo".
+- **Web** en Vercel: `dpl_77AhrbdhTREfkMNmZLvbzCeZ8QGN`, producción, `version.json` da 6.5.1/68. La anterior, para volver atrás:
+  `dpl_H544LDGtEjttRgRJt3Qu3ACN9KCL` (la 6.5.0).
+- **Falta:** que el usuario instale, **primero la PC que sortea** (a la tarde del 11-nov hay un sorteo y esa PC tiene que tener la
+  6.5.1 antes); las otras conviven con la 6.5.0, pero **el plano se toca solo desde la que tiene la 6.5.1**. Después, con las tres
+  instaladas y abiertas: la foto "después de 6.5.1" y mirar que la escuela ya sorteada quedó igual, salvo la familia que esperaba
+  su mesa (recibe la 102 sola al abrir).
 
 **La 6.5.0 quedó instalada en las tres PCs** (lo dijo el 10-nov a la noche). Su cierre no frena esta publicación: con la app cerrada
 en las tres, `build/corregir_mora_10nov_6.5.0.sql` y la foto "después de 6.5.0".
@@ -211,8 +219,8 @@ no cada una por separado.
 
 1. Las capturas y lo que pasó las pruebas, con el usuario.
 2. `6.5.1+68` en `pubspec.yaml` y en `installer/junior_eventos_setup.iss`. **Hecho el 11-nov.**
-3. `installer\build_installer.ps1` (comprueba la firma del APK).
-4. Foto de la mora "antes de 6.5.1". Sin SQL.
-5. Tag `v6.5.1`, release con el Setup y el APK, y la web.
+3. `installer\build_installer.ps1` (comprueba la firma del APK). **Hecho el 11-nov.**
+4. Foto de la mora "antes de 6.5.1". Sin SQL. **Hecho el 11-nov** (642 alumnos).
+5. Tag `v6.5.1`, release con el Setup y el APK, y la web. **Hecho el 11-nov.**
 6. Instala la PC que sortea antes del próximo sorteo; las otras conviven con la 6.5.0.
 7. Después de instalar: mirar que la escuela ya sorteada quedó igual, salvo la familia que esperaba su mesa.
