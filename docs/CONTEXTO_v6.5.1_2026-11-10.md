@@ -14,7 +14,12 @@ mañana: la última numeración elegida queda para las fiestas que vienen, en la
   "Las mesas que llegan después del sorteo van al fondo".
 - **Web** en Vercel: `dpl_77AhrbdhTREfkMNmZLvbzCeZ8QGN`, producción, `version.json` da 6.5.1/68. La anterior, para volver atrás:
   `dpl_H544LDGtEjttRgRJt3Qu3ACN9KCL` (la 6.5.0).
-- **Falta:** que el usuario instale, **primero la PC que sortea** (a la tarde del 11-nov hay un sorteo y esa PC tiene que tener la
+- **La primera PC con la 6.5.1 se abrió el 11-nov a las 7:48 (la de la casa), y la mesa se dio sola a las 7:49:** la familia que
+  esperaba su mesa en la escuela ya sorteada quedó con la suya y la 102, como decía el simulacro. En la nube: la ficha con los dos
+  números, el plano con la 102 fijada ("Mesa nueva") y el renglón del registro marcado automático. **El usuario avisó a los
+  segundos de abrir que "no se la dio": todavía no había pasado la espera** (el programa mira entre 20 y 60 segundos después de
+  abrir, cuando terminó de bajar). No había nada roto. Si vuelve a pasar, mirar primero `mesa_nueva_sola.txt` y la hora.
+- **Falta:** que el usuario instale las otras, **primero la PC que sortea** (a la tarde del 11-nov hay un sorteo y esa PC tiene que tener la
   6.5.1 antes); las otras conviven con la 6.5.0, pero **el plano se toca solo desde la que tiene la 6.5.1**. Después, con las tres
   instaladas y abiertas: la foto "después de 6.5.1" y mirar que la escuela ya sorteada quedó igual, salvo la familia que esperaba
   su mesa (recibe la 102 sola al abrir).
