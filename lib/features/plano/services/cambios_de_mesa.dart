@@ -5,6 +5,7 @@ import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../modelo/armado_salon.dart';
 import 'divisiones.dart';
+import 'sorteo_con_plano.dart';
 
 /// Un cambio en lo que se configura del plano (fijar una mesa, dejarla libre),
 /// ya calculado. Si no se puede, [problema] dice por qué en palabras y [config]
@@ -96,13 +97,39 @@ class CambioDeMesas {
     return t.isEmpty ? 'sin mesa' : t;
   }
 
+  /// La mesa que una familia dejó y la que tomó, si cambió **una sola** de
+  /// varias. Null: se movió entera, o tiene una sola mesa.
+  ({int deja, int toma})? _unaSolaDe(String id) {
+    final a = MesasExtraUtils.numerosMesaDesdeTexto(antes[id]);
+    final d = MesasExtraUtils.numerosMesaDesdeTexto(despues[id]);
+    final salen = a.difference(d);
+    final entran = d.difference(a);
+    if (salen.length != 1 || entran.length != 1) return null;
+    return (deja: salen.single, toma: entran.single);
+  }
+
+  bool _tieneVarias(String id) =>
+      MesasExtraUtils.numerosMesaDesdeTexto(antes[id]).length > 1;
+
   /// Lo que se dice cuando el cambio ya quedó guardado.
   String textoHecho(String Function(String alumnoId) apellidoDe) {
     final ids = despues.keys.toList();
     switch (tipo) {
       case TipoMovimientoMesas.intercambio:
+        // Cambiaron una sola mesa, y alguna de las dos conserva otras: se
+        // dice cuál, porque "cambiaron de lugar" sonaría a la familia entera.
+        final una = _unaSolaDe(ids.first);
+        if (una != null && ids.any(_tieneVarias)) {
+          return '${ids.map(apellidoDe).join(' y ')} cambiaron la '
+              '${una.deja} por la ${una.toma}.';
+        }
         return '${ids.map(apellidoDe).join(' y ')} cambiaron de lugar.';
       case TipoMovimientoMesas.mover:
+        final una = _unaSolaDe(ids.first);
+        if (una != null && _tieneVarias(ids.first)) {
+          return '${apellidoDe(ids.first)} pasó la ${una.deja} a la '
+              '${una.toma}.';
+        }
         final mesas = MesasExtraUtils.numerosMesaDesdeTexto(despues[ids.first])
             .toList()
           ..sort();
@@ -139,7 +166,10 @@ class CambioDeMesas {
 /// sorteo, y cambiar o mover familias después. Todo es cuenta pura: recibe
 /// cómo están las cosas y devuelve cómo quedarían, o por qué no se puede.
 ///
-/// Siempre se mueve **la familia entera**, con todas sus mesas juntas.
+/// Se mueve **la familia entera**, con todas sus mesas juntas ([mover],
+/// [intercambiar]), salvo que el jefe elija **una sola de sus mesas**
+/// ([moverUna], [intercambiarUna]): un arreglo puntual después del sorteo, como
+/// juntar la mesa del sorteo con la que la familia recibió al fondo.
 class CambiosDeMesa {
   CambiosDeMesa._();
 
@@ -660,6 +690,317 @@ class CambiosDeMesa {
     );
   }
 
+  // ── Una sola mesa de la familia ─────────────────────────────────────────
+
+  /// Las mesas forman un solo grupo en el salón: de cualquiera se llega a
+  /// cualquier otra pasando por mesas pegadas de la misma familia. Dos mesas
+  /// pueden tocarse sin tener números seguidos (una en cada fila).
+  static bool _unidasEnElSalon(ArmadoSalon armado, List<int> mesas) {
+    if (mesas.length < 2) return true;
+    final vistas = <int>{mesas.first};
+    final cola = [mesas.first];
+    while (cola.isNotEmpty) {
+      final n = cola.removeLast();
+      for (final m in mesas) {
+        if (!vistas.contains(m) && armado.pegadas(n, m)) {
+          vistas.add(m);
+          cola.add(m);
+        }
+      }
+    }
+    return vistas.length == mesas.length;
+  }
+
+  /// Lo que hay que saber de una familia que cambia **una sola** de sus
+  /// mesas: deja [deja] y toma [toma]. Las demás quedan donde están.
+  static List<String> _avisosDeUna({
+    required ContratoAlumno a,
+    required List<int> viejas,
+    required List<int> nuevas,
+    required int deja,
+    required int toma,
+    required ArmadoSalon armado,
+    required ConfigPlano config,
+    required Set<String> yaRetiraron,
+  }) {
+    final nombre = apellido(a);
+    final avisos = <String>[];
+    final pasto = armado.pasto;
+    if (pasto.contains(toma) && !pasto.contains(deja)) {
+      avisos.add('La $toma es una mesa del pasto.');
+    }
+    final clave = Divisiones.clave(a.cursoDivision);
+    for (final b in config.bloques) {
+      if (b.division != clave) continue;
+      if (!b.contiene(toma)) {
+        avisos.add(
+          'La $toma queda fuera del bloque de ${_division(a)} (mesas '
+          '${b.texto(a: ' a ')}).',
+        );
+      }
+    }
+    if (yaRetiraron.contains(a.id)) {
+      avisos.add(
+        '$nombre ya retiró sus entradas: hay que avisarle y reimprimir la '
+        'planilla de entrega.',
+      );
+    }
+    if (SalonMesas.sillasExtra(a) > 0) {
+      avisos.add(
+        'Las sillas extra de $nombre siguen a sus mesas: mirá cómo queda el '
+        'reparto.',
+      );
+    }
+    if (config.fijadas[deja]?.alumnoId == a.id) {
+      avisos.add(
+        'La $deja estaba fijada para $nombre: la fijada pasa a la $toma, con '
+        'el mismo motivo.',
+      );
+    }
+    // Juntas o separadas, medido como lo dibuja el plano (`tramosPegados`).
+    if (nuevas.length > 1) {
+      final juntas = SorteoConPlano.tramosPegados(armado, nuevas).length == 1;
+      final antes = SorteoConPlano.tramosPegados(armado, viejas).length == 1;
+      if (juntas) {
+        if (!antes) avisos.add('$nombre queda con sus mesas juntas.');
+      } else if (_unidasEnElSalon(armado, nuevas)) {
+        avisos.add(
+          '$nombre queda con sus mesas pegadas en el salón '
+          '(${textoMesas(nuevas)}), aunque los números no son seguidos.',
+        );
+      } else {
+        avisos.add(
+          '$nombre ${antes ? 'queda' : 'sigue'} con sus mesas separadas: '
+          '${textoMesas(nuevas)}.',
+        );
+      }
+    }
+    return avisos;
+  }
+
+  /// La configuración con las fijadas pasadas **mesa por mesa**: [cambios]
+  /// dice, para cada familia, qué mesa deja y a cuál pasa. Solo se mueve la
+  /// fijada de una mesa que era de esa familia; las demás quedan donde están.
+  /// Null si ninguna de las mesas que se dejan estaba fijada.
+  static ConfigPlano? _fijadasMesaPorMesa(
+    ConfigPlano config,
+    Map<String, Map<int, int>> cambios,
+  ) {
+    final quitar = <int>{};
+    final poner = <int, MesaFijada>{};
+    for (final familia in cambios.entries) {
+      for (final c in familia.value.entries) {
+        final dato = config.fijadas[c.key];
+        if (dato == null || dato.alumnoId != familia.key) continue;
+        quitar.add(c.key);
+        poner[c.value] = dato;
+      }
+    }
+    if (quitar.isEmpty) return null;
+    final fijadas = {
+      for (final e in config.fijadas.entries)
+        if (!quitar.contains(e.key)) e.key: e.value,
+    };
+    for (final e in poner.entries) {
+      // Una mesa que sigue siendo fijada de otra familia no se pisa.
+      fijadas.putIfAbsent(e.key, () => e.value);
+    }
+    return config.copyWith(fijadas: fijadas);
+  }
+
+  /// Una familia pasa **una sola de sus mesas** ([mesa]) a una mesa vacía
+  /// ([aMesa]). Las otras quedan donde están: sirve para juntarla con la que
+  /// recibió después del sorteo, o para correr una sola.
+  static CambioDeMesas moverUna({
+    required ArmadoSalon armado,
+    required ConfigPlano config,
+    required List<ContratoAlumno> alumnos,
+    required String alumnoId,
+    required int mesa,
+    required int aMesa,
+    Set<String> yaRetiraron = const {},
+  }) {
+    const tipo = TipoMovimientoMesas.mover;
+    final a = _alumno(alumnos, alumnoId);
+    if (a == null || a.esBajaTemporal) {
+      return const CambioDeMesas.noSePuede(
+        tipo,
+        'Esa familia ya no está en la fiesta.',
+      );
+    }
+    final viejas = numerosDe(a);
+    if (!viejas.contains(mesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        '${apellido(a)} ya no tiene la mesa $mesa.',
+      );
+    }
+    if (!armado.existe(aMesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'La mesa $aMesa no está en este armado.',
+      );
+    }
+    if (viejas.contains(aMesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'La mesa $aMesa ya es de ${apellido(a)}: tocá otra.',
+      );
+    }
+    final otro = duenios(alumnos)[aMesa];
+    if (otro != null) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        otro.esBajaTemporal
+            ? _ocupadaPor(aMesa, otro)
+            : 'La mesa $aMesa es de ${apellido(otro)}.',
+      );
+    }
+    if (config.libres.containsKey(aMesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'La mesa $aMesa se dejó libre a propósito. Volvé a usarla primero.',
+      );
+    }
+    final fijada = config.fijadas[aMesa];
+    if (fijada != null && fijada.alumnoId != a.id) {
+      final para = _alumno(alumnos, fijada.alumnoId);
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'La mesa $aMesa está fijada para '
+        '${para == null ? 'otra familia' : apellido(para)}.',
+      );
+    }
+    final nuevas = [
+      for (final n in viejas)
+        if (n != mesa) n,
+      aMesa,
+    ]..sort();
+    return CambioDeMesas._(
+      tipo: tipo,
+      antes: {a.id: MesasExtraUtils.formatearAsignacionMesas(viejas)},
+      despues: {a.id: MesasExtraUtils.formatearAsignacionMesas(nuevas)},
+      avisos: _avisosDeUna(
+        a: a,
+        viejas: viejas,
+        nuevas: nuevas,
+        deja: mesa,
+        toma: aMesa,
+        armado: armado,
+        config: config,
+        yaRetiraron: yaRetiraron,
+      ),
+      hayQueAvisarALaFamilia: yaRetiraron.contains(a.id),
+      config: _fijadasMesaPorMesa(config, {
+        a.id: {mesa: aMesa},
+      }),
+    );
+  }
+
+  /// Dos familias cambian **una mesa por otra**: la [mesa] de una por
+  /// [otraMesa], que es de otra familia. Cada una conserva las demás, así que
+  /// no hace falta que tengan la misma cantidad.
+  static CambioDeMesas intercambiarUna({
+    required ArmadoSalon armado,
+    required ConfigPlano config,
+    required List<ContratoAlumno> alumnos,
+    required String alumnoId,
+    required int mesa,
+    required int otraMesa,
+    Set<String> yaRetiraron = const {},
+  }) {
+    const tipo = TipoMovimientoMesas.intercambio;
+    final a = _alumno(alumnos, alumnoId);
+    if (a == null) {
+      return const CambioDeMesas.noSePuede(
+        tipo,
+        'Una de las familias ya no está en la fiesta.',
+      );
+    }
+    final deA = numerosDe(a);
+    if (!deA.contains(mesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        '${apellido(a)} ya no tiene la mesa $mesa.',
+      );
+    }
+    final b = duenios(alumnos)[otraMesa];
+    if (b == null) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'En la mesa $otraMesa no hay ninguna familia.',
+      );
+    }
+    if (b.id == a.id) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        'La mesa $otraMesa también es de ${apellido(a)}: tocá la de otra '
+        'familia.',
+      );
+    }
+    if (a.esBajaTemporal || b.esBajaTemporal) {
+      final baja = a.esBajaTemporal ? a : b;
+      return CambioDeMesas.noSePuede(
+        tipo,
+        '${apellido(baja)} está de baja: no se la cambia de lugar. Si no '
+        'vuelve, sacale la mesa en Editar alumno.',
+      );
+    }
+    final deB = numerosDe(b);
+    final nuevasA = [
+      for (final n in deA)
+        if (n != mesa) n,
+      otraMesa,
+    ]..sort();
+    final nuevasB = [
+      for (final n in deB)
+        if (n != otraMesa) n,
+      mesa,
+    ]..sort();
+    final avisos = <String>[
+      if (Divisiones.clave(a.cursoDivision) != Divisiones.clave(b.cursoDivision))
+        'Son de divisiones distintas: ${_division(a)} y ${_division(b)}.',
+      ..._avisosDeUna(
+        a: a,
+        viejas: deA,
+        nuevas: nuevasA,
+        deja: mesa,
+        toma: otraMesa,
+        armado: armado,
+        config: config,
+        yaRetiraron: yaRetiraron,
+      ),
+      ..._avisosDeUna(
+        a: b,
+        viejas: deB,
+        nuevas: nuevasB,
+        deja: otraMesa,
+        toma: mesa,
+        armado: armado,
+        config: config,
+        yaRetiraron: yaRetiraron,
+      ),
+    ];
+    return CambioDeMesas._(
+      tipo: tipo,
+      antes: {
+        a.id: MesasExtraUtils.formatearAsignacionMesas(deA),
+        b.id: MesasExtraUtils.formatearAsignacionMesas(deB),
+      },
+      despues: {
+        a.id: MesasExtraUtils.formatearAsignacionMesas(nuevasA),
+        b.id: MesasExtraUtils.formatearAsignacionMesas(nuevasB),
+      },
+      avisos: avisos,
+      hayQueAvisarALaFamilia:
+          yaRetiraron.contains(a.id) || yaRetiraron.contains(b.id),
+      config: _fijadasMesaPorMesa(config, {
+        a.id: {mesa: otraMesa},
+        b.id: {otraMesa: mesa},
+      }),
+    );
+  }
+
   /// Vuelve atrás un cambio, solo si nada cambió después: las familias siguen
   /// donde las dejó, y las mesas a las que vuelven no las tomó otra.
   static CambioDeMesas deshacer({
@@ -744,6 +1085,22 @@ class CambiosDeMesa {
           '${apellido(_alumno(alumnos, id)!)} ya retiró sus entradas: hay que '
               'avisarle y reimprimir la planilla de entrega.',
     ];
+    // Si alguna familia conservó una mesa, el cambio fue de una sola: sus
+    // fijadas vuelven mesa por mesa. Pasarlas todas a todas dejaría fijada
+    // una mesa que nunca lo fue (la del sorteo, al lado de la del fondo).
+    var deUnaSola = false;
+    final vuelven = <String, Map<int, int>>{};
+    for (final e in movimiento.antes.entries) {
+      final antes = _numerosDeTexto(e.value).toSet();
+      final hoy = _numerosDeTexto(movimiento.despues[e.key]).toSet();
+      if (antes.intersection(hoy).isNotEmpty) deUnaSola = true;
+      final salen = hoy.difference(antes).toList()..sort();
+      final entran = antes.difference(hoy).toList()..sort();
+      vuelven[e.key] = {
+        for (var i = 0; i < salen.length && i < entran.length; i++)
+          salen[i]: entran[i],
+      };
+    }
     return CambioDeMesas._(
       tipo: tipo,
       antes: movimiento.despues,
@@ -751,10 +1108,12 @@ class CambiosDeMesa {
       avisos: avisos,
       hayQueAvisarALaFamilia: avisos.isNotEmpty,
       // Las fijadas que siguieron a la familia vuelven con ella.
-      config: _fijadasQueSiguen(config, {
-        for (final e in movimiento.antes.entries)
-          e.key: _numerosDeTexto(e.value),
-      }),
+      config: deUnaSola
+          ? _fijadasMesaPorMesa(config, vuelven)
+          : _fijadasQueSiguen(config, {
+              for (final e in movimiento.antes.entries)
+                e.key: _numerosDeTexto(e.value),
+            }),
       deshaceId: movimiento.id,
     );
   }

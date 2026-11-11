@@ -36,6 +36,7 @@ import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.da
 import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
+import 'package:arguello_events/features/plano/widgets/cambio_de_mesa_dialogs.dart';
 import 'package:arguello_events/features/plano/widgets/imprimir_plano_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/features/plano/widgets/reserva_de_mesa_dialog.dart';
@@ -402,6 +403,42 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     );
   }
 
+  /// Cambiar o mover familias (la entera, o una sola de sus mesas): el mismo cartel
+  /// de la app, con cómo queda, los avisos y el motivo. El cambio queda en esta
+  /// ventana.
+  Future<void> _cambiarMesas(
+    CambioDeMesas cambio,
+    String titulo,
+    String boton,
+  ) async {
+    if (!cambio.sePuede) {
+      setState(() => _aviso = AvisoDelPlano(cambio.problema!, esError: true));
+      return;
+    }
+    final alumnos = _alumnos;
+    String apellidoDe(String id) =>
+        CambiosDeMesa.apellido(alumnos.firstWhere((a) => a.id == id));
+    final motivo = await confirmarCambioDeMesa(
+      context: context,
+      titulo: titulo,
+      renglones: cambio.renglones(apellidoDe),
+      avisos: cambio.avisos,
+      sugerencias: motivosParaCambiar,
+      textoConfirmar: boton,
+    );
+    if (motivo == null || !mounted) return;
+    setState(() {
+      _asignaciones = {
+        ...?_asignaciones,
+        for (final e in cambio.despues.entries)
+          e.key: MesasExtraUtils.numerosMesaDesdeTexto(e.value).toList()..sort(),
+      };
+      final config = cambio.config;
+      if (config != null) _config = config;
+      _aviso = AvisoDelPlano(cambio.textoHecho(apellidoDe));
+    });
+  }
+
   /// El mismo diálogo de la app, pero el PDF queda en una carpeta en vez de ir a la
   /// impresora: en esta ventana se lo quiere mirar, no gastar papel.
   Future<void> _imprimir() async {
@@ -542,8 +579,52 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             CambiosDeMesa.volverAUsar(_config, mesa),
             'La mesa $mesa vuelve a entrar en el sorteo.',
           ),
-          onCambiar: (_, _) {},
-          onMover: (_, _) {},
+          onCambiar: (a, b) => _cambiarMesas(
+            CambiosDeMesa.intercambiar(
+              armado: _armado,
+              config: _config,
+              alumnos: _alumnos,
+              alumnoId: a,
+              otroId: b,
+            ),
+            'Cambian de lugar',
+            'CAMBIAR',
+          ),
+          onMover: (a, desde) => _cambiarMesas(
+            CambiosDeMesa.mover(
+              armado: _armado,
+              config: _config,
+              alumnos: _alumnos,
+              alumnoId: a,
+              desdeMesa: desde,
+            ),
+            'Pasa a otras mesas',
+            'MOVER',
+          ),
+          onMoverUna: (a, mesa, aMesa) => _cambiarMesas(
+            CambiosDeMesa.moverUna(
+              armado: _armado,
+              config: _config,
+              alumnos: _alumnos,
+              alumnoId: a,
+              mesa: mesa,
+              aMesa: aMesa,
+            ),
+            'La $mesa pasa a la $aMesa',
+            'MOVER',
+          ),
+          onCambiarUna: (a, mesa, otra) => _cambiarMesas(
+            CambiosDeMesa.intercambiarUna(
+              armado: _armado,
+              config: _config,
+              alumnos: _alumnos,
+              alumnoId: a,
+              mesa: mesa,
+              otraMesa: otra,
+            ),
+            'La $mesa se cambia por la $otra',
+            'CAMBIAR',
+          ),
           onGuardarArmado: _guardarSalon,
         ),
       ),

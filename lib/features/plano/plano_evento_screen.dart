@@ -1264,6 +1264,44 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         textoConfirmar: 'MOVER',
       );
 
+  /// Una sola mesa de la familia pasa a una vacía (11-nov-2026): las otras
+  /// quedan donde están. Va por [_cambiarMesas], como todo cambio de mesas.
+  Future<void> _moverUna(String alumnoId, int mesa, int aMesa) => _cambiarMesas(
+        (plano, alumnos, _) => CambiosDeMesa.moverUna(
+          armado: plano.armado,
+          config: plano.config,
+          alumnos: alumnos,
+          alumnoId: alumnoId,
+          mesa: mesa,
+          aMesa: aMesa,
+          yaRetiraron: _yaRetiraron,
+        ),
+        titulo: '${_apellidoDe(alumnoId)}: la $mesa pasa a la $aMesa',
+        textoConfirmar: 'MOVER',
+      );
+
+  /// Una mesa de una familia se cambia por la de otra: cada una conserva las
+  /// demás.
+  Future<void> _cambiarUna(String alumnoId, int mesa, int otraMesa) {
+    final otro = CambiosDeMesa.duenios(_alumnos)[otraMesa];
+    return _cambiarMesas(
+      (plano, alumnos, _) => CambiosDeMesa.intercambiarUna(
+        armado: plano.armado,
+        config: plano.config,
+        alumnos: alumnos,
+        alumnoId: alumnoId,
+        mesa: mesa,
+        otraMesa: otraMesa,
+        yaRetiraron: _yaRetiraron,
+      ),
+      titulo: otro == null
+          ? '${_apellidoDe(alumnoId)} cambia la $mesa por la $otraMesa'
+          : '${_apellidoDe(alumnoId)} y ${CambiosDeMesa.apellido(otro)} '
+              'cambian la $mesa por la $otraMesa',
+      textoConfirmar: 'CAMBIAR',
+    );
+  }
+
   /// Vuelve atrás un cambio. El renglón nuevo guarda como motivo el del
   /// cambio que se deshace: el Historial lo muestra como "El cambio era por…".
   Future<void> _deshacer(MovimientoMesas movimiento) => _cambiarMesas(
@@ -1410,6 +1448,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               onVolverAUsar: _volverAUsar,
               onCambiar: _cambiar,
               onMover: _mover,
+              onMoverUna: _moverUna,
+              onCambiarUna: _cambiarUna,
               onGuardarMedidas: _guardarMedidas,
               onGuardarColoresYTextos: _guardarColoresYTextos,
               onGuardarArmado: _guardarSalon,

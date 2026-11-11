@@ -1531,6 +1531,65 @@ void main() {
       expect(mundo.subida.pedidas, ['mesas_movimientos']);
     });
 
+    // "¿Cuál mesa querés mover?" (11-nov-2026): GÓMEZ tiene la 8 y la 9, y el
+    // jefe mueve solo la 9.
+    testWidgets('mover una sola mesa guarda los números, el renglón y la '
+        'puerta, y la otra mesa queda', (tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester);
+      await _tocarMesa(tester, 9);
+      await _tocar(tester, 'accion_mover');
+      await _asentar(tester);
+      expect(find.text('¿Cuál mesa querés mover?'), findsOneWidget);
+      await _tocar(tester, 'cual_seguir');
+      await _asentar(tester);
+      await _tocarMesa(tester, 30);
+      await _asentar(tester);
+      expect(find.text('GÓMEZ: la 9 pasa a la 30'), findsOneWidget);
+      expect(find.text('GÓMEZ: 8, 9 → 8, 30'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('motivo')),
+        'Para estar con otra familia',
+      );
+      await tester.pump();
+      await _guardar(tester, 'confirmar');
+
+      final cambio = mundo.contratos.asignaciones.single;
+      expect(cambio.numeros, {'gomez': '8, 30'});
+      expect(cambio.movimiento!.tipo, TipoMovimientoMesas.mover);
+      expect(cambio.movimiento!.antes, {'gomez': '8, 9'});
+      expect(cambio.movimiento!.despues, {'gomez': '8, 30'});
+      expect(_dicho(tester), 'GÓMEZ pasó la 9 a la 30.');
+      expect(mundo.puerta.alDia, [_eventoId]);
+      expect(mundo.subida.pedidas, ['mesas_movimientos']);
+    });
+
+    testWidgets('cambiar una sola mesa por la de otra familia guarda las dos',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester);
+      await _tocarMesa(tester, 9);
+      await _tocar(tester, 'accion_cambiar');
+      await _asentar(tester);
+      await _tocar(tester, 'cual_seguir');
+      await _asentar(tester);
+      await _tocarMesa(tester, 20);
+      await _asentar(tester);
+      expect(find.text('GÓMEZ y SOSA cambian la 9 por la 20'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('motivo')),
+        'Pedido de la familia',
+      );
+      await tester.pump();
+      await _guardar(tester, 'confirmar');
+
+      final cambio = mundo.contratos.asignaciones.single;
+      expect(cambio.numeros, {'gomez': '8, 20', 'sosa': '9'});
+      expect(cambio.movimiento!.tipo, TipoMovimientoMesas.intercambio);
+      expect(_dicho(tester), 'GÓMEZ y SOSA cambiaron la 9 por la 20.');
+      expect(mundo.puerta.alDia, [_eventoId]);
+    });
+
     // La puerta sigue al salón: Recepción y el tótem leen otra lista, y si no
     // se pone al día con cada cambio siguen diciendo la mesa vieja.
     testWidgets('mudar una familia deja al día la lista de la puerta',

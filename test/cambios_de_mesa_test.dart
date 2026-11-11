@@ -813,4 +813,281 @@ void main() {
       }
     });
   });
+
+  // El caso de Técnica (11-nov): una familia con la mesa del sorteo y otra que
+  // recibió después, al fondo. El jefe quiere juntarlas moviendo una sola.
+  group('una sola mesa de la familia', () {
+    final alumnos = [
+      alumno('perez', extras: 1, mesas: [26, 80]),
+      alumno('gomez', mesas: [79]),
+      alumno('sosa', extras: 1, mesas: [40, 41], division: '5° B'),
+      alumno('ruiz'),
+      alumno('vega', mesas: [60], baja: true),
+    ];
+    String apellido(String id) => id.toUpperCase();
+
+    CambioDeMesas moverUna(
+      int mesa,
+      int aMesa, {
+      ConfigPlano config = ConfigPlano.vacia,
+      String id = 'perez',
+      Set<String> retiraron = const {},
+    }) =>
+        CambiosDeMesa.moverUna(
+          armado: armado,
+          config: config,
+          alumnos: alumnos,
+          alumnoId: id,
+          mesa: mesa,
+          aMesa: aMesa,
+          yaRetiraron: retiraron,
+        );
+
+    CambioDeMesas cambiarUna(
+      int mesa,
+      int otraMesa, {
+      ConfigPlano config = ConfigPlano.vacia,
+      String id = 'perez',
+    }) =>
+        CambiosDeMesa.intercambiarUna(
+          armado: armado,
+          config: config,
+          alumnos: alumnos,
+          alumnoId: id,
+          mesa: mesa,
+          otraMesa: otraMesa,
+        );
+
+    test('el salón de la prueba: la 79, la 80 y la 81 están pegadas', () {
+      expect(armado.pegadas(79, 80), isTrue);
+      expect(armado.pegadas(80, 81), isTrue);
+      expect(armado.pegadas(26, 80), isFalse);
+      expect(armado.pegadas(30, 80), isFalse);
+    });
+
+    test('pasa una sola a una mesa vacía y las otras quedan', () {
+      final c = moverUna(26, 81);
+      expect(c.sePuede, isTrue);
+      expect(c.tipo, TipoMovimientoMesas.mover);
+      expect(c.antes, {'perez': '26, 80'});
+      expect(c.despues, {'perez': '80, 81'});
+      expect(c.avisos, ['PEREZ queda con sus mesas juntas.']);
+      expect(c.config, isNull);
+      expect(c.renglones(apellido), ['PEREZ: 26, 80 → 80, 81']);
+      expect(c.textoHecho(apellido), 'PEREZ pasó la 26 a la 81.');
+    });
+
+    test('si no queda al lado de la otra, lo dice', () {
+      expect(moverUna(26, 30).avisos,
+          ['PEREZ sigue con sus mesas separadas: la 30 y la 80.']);
+      // Estaban juntas y se separan.
+      final c = CambiosDeMesa.moverUna(
+        armado: armado,
+        config: ConfigPlano.vacia,
+        alumnos: alumnos,
+        alumnoId: 'sosa',
+        mesa: 41,
+        aMesa: 30,
+      );
+      expect(c.despues, {'sosa': '30, 40'});
+      expect(c.avisos, ['SOSA queda con sus mesas separadas: la 30 y la 40.']);
+    });
+
+    test('lo que no se puede', () {
+      expect(moverUna(27, 81).problema, 'PEREZ ya no tiene la mesa 27.');
+      expect(moverUna(26, 80).problema, 'La mesa 80 ya es de PEREZ: tocá otra.');
+      expect(moverUna(26, 79).problema, 'La mesa 79 es de GOMEZ.');
+      expect(moverUna(26, 60).problema, contains('VEGA, que está de baja'));
+      expect(moverUna(26, 500).problema, 'La mesa 500 no está en este armado.');
+      expect(
+        moverUna(26, 81, config: const ConfigPlano(libres: {81: MesaLibre()}))
+            .problema,
+        'La mesa 81 se dejó libre a propósito. Volvé a usarla primero.',
+      );
+      expect(
+        moverUna(
+          26,
+          81,
+          config: const ConfigPlano(fijadas: {81: MesaFijada(alumnoId: 'ruiz')}),
+        ).problema,
+        'La mesa 81 está fijada para RUIZ.',
+      );
+      expect(moverUna(26, 81, id: 'nadie').problema,
+          'Esa familia ya no está en la fiesta.');
+      expect(moverUna(60, 81, id: 'vega').problema,
+          'Esa familia ya no está en la fiesta.');
+    });
+
+    test('avisa si ya retiró, si tiene sillas extra y si sale de su bloque', () {
+      final c = CambiosDeMesa.moverUna(
+        armado: armado,
+        config: const ConfigPlano(bloques: [BloqueDivision('5A', 1, 80)]),
+        alumnos: [alumno('perez', extras: 1, sillas: 2, mesas: [26, 80])],
+        alumnoId: 'perez',
+        mesa: 26,
+        aMesa: 81,
+        yaRetiraron: {'perez'},
+      );
+      expect(c.hayQueAvisarALaFamilia, isTrue);
+      expect(c.avisos, [
+        'La 81 queda fuera del bloque de 5° A (mesas 1 a 80).',
+        'PEREZ ya retiró sus entradas: hay que avisarle y reimprimir la '
+            'planilla de entrega.',
+        'Las sillas extra de PEREZ siguen a sus mesas: mirá cómo queda el '
+            'reparto.',
+        'PEREZ queda con sus mesas juntas.',
+      ]);
+    });
+
+    test('la fijada sigue solo a la mesa que se mueve', () {
+      const config = ConfigPlano(fijadas: {
+        80: MesaFijada(alumnoId: 'perez', motivo: 'Mesa nueva'),
+      });
+      // Se mueve la del sorteo: la fijada del fondo no se toca, y la mesa
+      // nueva no pasa a estar fijada.
+      expect(moverUna(26, 81, config: config).config, isNull);
+      // Se mueve la fijada: va a la mesa nueva, con su motivo.
+      final c = moverUna(80, 27, config: config);
+      expect(c.despues, {'perez': '26, 27'});
+      expect(c.config!.fijadas.keys, {27});
+      expect(c.config!.fijadas[27]!.motivo, 'Mesa nueva');
+      expect(c.avisos, contains(
+        'La 80 estaba fijada para PEREZ: la fijada pasa a la 27, con el mismo '
+        'motivo.',
+      ));
+    });
+
+    test('cambia una mesa por la de otra familia, con distinta cantidad', () {
+      final c = cambiarUna(26, 79);
+      expect(c.sePuede, isTrue);
+      expect(c.tipo, TipoMovimientoMesas.intercambio);
+      expect(c.antes, {'perez': '26, 80', 'gomez': '79'});
+      expect(c.despues, {'perez': '79, 80', 'gomez': '26'});
+      expect(c.avisos, ['PEREZ queda con sus mesas juntas.']);
+      expect(c.textoHecho(apellido), 'PEREZ y GOMEZ cambiaron la 26 por la 79.');
+    });
+
+    test('la otra familia da solo la mesa tocada, y se avisa si se separa', () {
+      final c = cambiarUna(26, 41);
+      expect(c.despues, {'perez': '41, 80', 'sosa': '26, 40'});
+      expect(c.avisos, [
+        'Son de divisiones distintas: 5° A y 5° B.',
+        'PEREZ sigue con sus mesas separadas: la 41 y la 80.',
+        'SOSA queda con sus mesas separadas: la 26 y la 40.',
+      ]);
+    });
+
+    test('cambiando una, las fijadas se cruzan mesa por mesa', () {
+      final c = cambiarUna(
+        26,
+        79,
+        config: const ConfigPlano(fijadas: {
+          26: MesaFijada(alumnoId: 'perez', motivo: 'Cerca del ingreso'),
+          79: MesaFijada(alumnoId: 'gomez', motivo: 'Movilidad reducida'),
+          80: MesaFijada(alumnoId: 'perez', motivo: 'Mesa nueva'),
+        }),
+      );
+      expect(c.config!.fijadas[79]!.alumnoId, 'perez');
+      expect(c.config!.fijadas[79]!.motivo, 'Cerca del ingreso');
+      expect(c.config!.fijadas[26]!.alumnoId, 'gomez');
+      expect(c.config!.fijadas[80]!.motivo, 'Mesa nueva');
+    });
+
+    test('lo que no se puede cambiar', () {
+      expect(cambiarUna(26, 30).problema,
+          'En la mesa 30 no hay ninguna familia.');
+      expect(cambiarUna(26, 80).problema,
+          'La mesa 80 también es de PEREZ: tocá la de otra familia.');
+      expect(cambiarUna(27, 79).problema, 'PEREZ ya no tiene la mesa 27.');
+      expect(cambiarUna(26, 60).problema, contains('VEGA está de baja'));
+      expect(cambiarUna(26, 79, id: 'nadie').problema,
+          'Una de las familias ya no está en la fiesta.');
+    });
+
+    test('mover una y deshacer deja todo como estaba, también las fijadas', () {
+      const config = ConfigPlano(fijadas: {
+        80: MesaFijada(alumnoId: 'perez', motivo: 'Mesa nueva'),
+      });
+      final ida = moverUna(26, 81, config: config);
+      final renglon = ida.movimiento(
+        id: 'u1',
+        eventoId: 'e',
+        motivo: 'Para estar juntas',
+        hechoPor: null,
+        ahora: ahora,
+      );
+      final vuelta = CambiosDeMesa.deshacer(
+        movimiento: renglon,
+        movimientos: [renglon],
+        alumnos: [alumno('perez', extras: 1, mesas: [80, 81])],
+        config: config,
+      );
+      expect(vuelta.sePuede, isTrue);
+      expect(vuelta.despues, {'perez': '26, 80'});
+      // La 26 nunca estuvo fijada: al volver no pasa a estarlo.
+      expect(vuelta.config, isNull);
+    });
+
+    test('deshacer devuelve la fijada de la mesa que se había movido', () {
+      const config = ConfigPlano(fijadas: {
+        80: MesaFijada(alumnoId: 'perez', motivo: 'Mesa nueva'),
+      });
+      final ida = moverUna(80, 27, config: config);
+      final renglon = ida.movimiento(
+        id: 'u2',
+        eventoId: 'e',
+        motivo: 'x',
+        hechoPor: null,
+        ahora: ahora,
+      );
+      final vuelta = CambiosDeMesa.deshacer(
+        movimiento: renglon,
+        movimientos: [renglon],
+        alumnos: [alumno('perez', extras: 1, mesas: [26, 27])],
+        config: ida.config!,
+      );
+      expect(vuelta.despues, {'perez': '26, 80'});
+      expect(vuelta.config!.fijadasPorAlumno, {'perez': [80]});
+      expect(vuelta.config!.fijadas[80]!.motivo, 'Mesa nueva');
+    });
+
+    test('cambiar una y deshacer devuelve cada mesa a su familia', () {
+      final ida = cambiarUna(26, 79);
+      final renglon = ida.movimiento(
+        id: 'u3',
+        eventoId: 'e',
+        motivo: 'x',
+        hechoPor: null,
+        ahora: ahora,
+      );
+      final despues = [
+        alumno('perez', extras: 1, mesas: [79, 80]),
+        alumno('gomez', mesas: [26]),
+      ];
+      final vuelta = CambiosDeMesa.deshacer(
+        movimiento: renglon,
+        movimientos: [renglon],
+        alumnos: despues,
+      );
+      expect(vuelta.sePuede, isTrue);
+      expect(vuelta.despues, {'perez': '26, 80', 'gomez': '79'});
+      // Si después otra familia tomó la 26, ya no.
+      final tomada = CambiosDeMesa.deshacer(
+        movimiento: renglon,
+        movimientos: [renglon],
+        alumnos: [
+          alumno('perez', extras: 1, mesas: [79, 80]),
+          alumno('gomez', mesas: [30]),
+          alumno('ruiz', mesas: [26]),
+        ],
+      );
+      expect(tomada.sePuede, isFalse);
+    });
+
+    test('lo confirmado tiene que ser lo que se guarda', () {
+      final visto = moverUna(26, 81);
+      expect(moverUna(26, 81).esElMismoQue(visto), isTrue);
+      expect(moverUna(26, 82).esElMismoQue(visto), isFalse);
+    });
+  });
 }

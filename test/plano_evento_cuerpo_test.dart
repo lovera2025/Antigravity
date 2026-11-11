@@ -124,8 +124,15 @@ AccionesPlano _acciones(
   List<ColoresYTextos>? colores,
   List<(ArmadoSalon, ArmadoSalon)>? salon,
   List<bool>? rehechos,
+  bool unaSola = false,
 }) =>
     AccionesPlano(
+      onMoverUna: unaSola
+          ? (a, m, d) => tocados.add('mover la $m de $a a la $d')
+          : null,
+      onCambiarUna: unaSola
+          ? (a, m, d) => tocados.add('cambiar la $m de $a por la $d')
+          : null,
       onGuardarMedidas: medidas == null ? null : (m, _) => medidas.add(m),
       onGuardarColoresYTextos:
           colores == null ? null : (c, _) => colores.add(c),
@@ -865,6 +872,151 @@ void main() {
       await tester.tap(find.byKey(const Key('resultado_ruiz')));
       await tester.pump();
       expect(tocados, ['cambiar gomez con ruiz']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    // "¿Cuál mesa querés mover?" (11-nov-2026): con varias mesas, una sola o
+    // todas juntas.
+    Future<void> abrirCartel(WidgetTester tester, String boton) async {
+      await tester.tap(find.byKey(Key(boton)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    Future<void> seguir(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('cual_seguir')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    testWidgets('con dos mesas pregunta cuál, y viene elegida la que se tocó',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones(tocados, unaSola: true));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 9);
+      await abrirCartel(tester, 'accion_mover');
+      expect(find.text('¿Cuál mesa querés mover?'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('cual_mesa_familia'))).data,
+        'GÓMEZ · mesas 8 y 9',
+      );
+      expect(find.text('La que tocaste.'), findsOneWidget);
+      await seguir(tester);
+      expect(
+        franja(tester),
+        'Tocá a dónde va la 9 de GÓMEZ: una mesa vacía, o la de otra familia '
+        'para cambiarla.',
+      );
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover la 9 de gomez a la 30']);
+      expect(franja(tester), startsWith('Personalizar las mesas'));
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('una sola mesa: tocar la de otra familia las cambia',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones(tocados, unaSola: true));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await abrirCartel(tester, 'accion_cambiar');
+      expect(find.text('¿Cuál mesa querés cambiar?'), findsOneWidget);
+      // Elige la otra, no la que tocó.
+      await tester.tap(find.byKey(const Key('cual_9')));
+      await tester.pump();
+      await seguir(tester);
+      // La suya no sirve: lo dice y sigue esperando.
+      await _tocarMesa(tester, armado, 8);
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          'La mesa 8 también es de GÓMEZ: tocá la de otra familia.');
+      expect(tocados, isEmpty);
+      // SOSA tiene una sola mesa: igual se puede, es mesa por mesa.
+      await _tocarMesa(tester, armado, 20);
+      expect(tocados, ['cambiar la 9 de gomez por la 20']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('"Las dos juntas" es lo de siempre, y CANCELAR no deja nada',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones(tocados, unaSola: true));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await abrirCartel(tester, 'accion_mover');
+      await tester.tap(find.text('CANCELAR'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(franja(tester), startsWith('Personalizar las mesas'));
+
+      await abrirCartel(tester, 'accion_mover');
+      await tester.tap(find.byKey(const Key('cual_todas')));
+      await tester.pump();
+      await seguir(tester);
+      expect(franja(tester), startsWith('Tocá la primera mesa para GÓMEZ'));
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover gomez a 30']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('con una sola mesa no pregunta nada', (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones(tocados, unaSola: true));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 20);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      expect(find.byKey(const Key('cual_seguir')), findsNothing);
+      expect(franja(tester), 'Tocá la mesa libre a donde va SOSA.');
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover sosa a 30']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('una sola mesa: la otra familia también se puede buscar',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      final todos = [..._alumnos, _ruiz];
+      await _mostrar(tester,
+          plano: _plano(armado: armado, alumnos: todos),
+          alumnos: todos,
+          acciones: _acciones(tocados, unaSola: true));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 9);
+      await abrirCartel(tester, 'accion_cambiar');
+      await seguir(tester);
+      // RUIZ tiene dos: hay que tocar cuál.
+      await tester.enterText(find.byKey(const Key('buscar')), 'ruiz');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_ruiz')));
+      await tester.pump();
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          'Esa familia tiene 2 mesas: tocá en el plano la que cambia por la 9.');
+      expect(tocados, isEmpty);
+      // SOSA tiene una: es esa.
+      await tester.enterText(find.byKey(const Key('buscar')), 'sosa');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_sosa')));
+      await tester.pump();
+      expect(tocados, ['cambiar la 9 de gomez por la 20']);
       await tester.tap(find.byKey(const Key('soltar')));
       await tester.pump();
     });

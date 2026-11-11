@@ -195,6 +195,148 @@ class _ConfirmarCambioDialogState extends State<ConfirmarCambioDialog> {
   }
 }
 
+/// Qué se mueve de una familia con varias mesas: una sola, o todas juntas.
+class CualMesa {
+  /// La mesa elegida. Null: todas juntas, como siempre.
+  final int? mesa;
+
+  const CualMesa.una(int this.mesa);
+  const CualMesa.todas() : mesa = null;
+}
+
+/// "¿Cuál mesa querés mover?" (11-nov-2026): con una familia de varias mesas,
+/// el jefe elige si mueve una sola o todas juntas. Viene elegida la que tocó
+/// en el plano ([tocada]); si llegó por el buscador, todas juntas.
+///
+/// Null si se cancela.
+Future<CualMesa?> elegirCualMesa({
+  required BuildContext context,
+  required String apellido,
+  required List<int> mesas,
+  int? tocada,
+  bool paraCambiar = false,
+}) =>
+    showDialog<CualMesa>(
+      context: context,
+      builder: (_) => CualMesaDialog(
+        apellido: apellido,
+        mesas: mesas,
+        tocada: tocada,
+        paraCambiar: paraCambiar,
+      ),
+    );
+
+class CualMesaDialog extends StatefulWidget {
+  final String apellido;
+  final List<int> mesas;
+  final int? tocada;
+
+  /// Se va a cambiar con otra familia (si no, a mover a una mesa vacía).
+  final bool paraCambiar;
+
+  const CualMesaDialog({
+    super.key,
+    required this.apellido,
+    required this.mesas,
+    this.tocada,
+    this.paraCambiar = false,
+  });
+
+  @override
+  State<CualMesaDialog> createState() => _CualMesaDialogState();
+}
+
+class _CualMesaDialogState extends State<CualMesaDialog> {
+  /// La mesa elegida; null: todas juntas.
+  late int? _mesa =
+      widget.mesas.contains(widget.tocada) ? widget.tocada : null;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.mesas.length;
+    final primario = Theme.of(context).colorScheme.primary;
+    Widget opcion({
+      required String clave,
+      required int? mesa,
+      required String texto,
+      String? detalle,
+    }) {
+      final elegida = _mesa == mesa;
+      return ListTile(
+        key: Key(clave),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(
+          elegida ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+          color: elegida ? primario : null,
+        ),
+        title: Text(
+          texto,
+          style: TextStyle(
+            fontWeight: elegida ? FontWeight.w800 : FontWeight.w500,
+          ),
+        ),
+        subtitle: detalle == null ? null : Text(detalle),
+        onTap: () => setState(() => _mesa = mesa),
+      );
+    }
+
+    return AlertDialog(
+      title: Text(
+        widget.paraCambiar
+            ? '¿Cuál mesa querés cambiar?'
+            : '¿Cuál mesa querés mover?',
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.apellido} · mesas '
+                '${CambiosDeMesa.textoMesas(widget.mesas).replaceAll('la ', '')}',
+                key: const Key('cual_mesa_familia'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              for (final m in widget.mesas)
+                opcion(
+                  clave: 'cual_$m',
+                  mesa: m,
+                  texto: 'Solo la $m',
+                  detalle: m == widget.tocada ? 'La que tocaste.' : null,
+                ),
+              opcion(
+                clave: 'cual_todas',
+                mesa: null,
+                texto: n == 2 ? 'Las dos juntas' : 'Las $n juntas',
+                detalle: widget.paraCambiar
+                    ? 'Con una familia que tenga la misma cantidad de mesas.'
+                    : 'A $n mesas seguidas y libres.',
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('CANCELAR'),
+        ),
+        FilledButton(
+          key: const Key('cual_seguir'),
+          onPressed: () => Navigator.of(context).pop(
+            _mesa == null ? const CualMesa.todas() : CualMesa.una(_mesa!),
+          ),
+          child: const Text('SEGUIR'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Elige para qué familia se fija una mesa, y por qué.
 ///
 /// [resultadoDe] dice, para cada familia, qué mesas se le fijarían desde esa

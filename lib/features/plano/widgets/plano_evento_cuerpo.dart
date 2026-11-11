@@ -27,6 +27,7 @@ import '../services/numeracion_recordada.dart';
 import '../services/plano_de_la_fiesta.dart';
 import '../services/predios_del_salon.dart';
 import '../services/sesion_acomodo.dart';
+import 'cambio_de_mesa_dialogs.dart';
 import 'personalizar/panel_acomodar.dart';
 import 'personalizar/panel_colores_textos.dart';
 import 'personalizar/panel_medidas.dart';
@@ -61,6 +62,13 @@ class AccionesPlano {
   final void Function(int mesa) onVolverAUsar;
   final void Function(String alumnoId, String otroId) onCambiar;
   final void Function(String alumnoId, int desdeMesa) onMover;
+
+  /// **Una sola mesa** de una familia que tiene varias (11-nov-2026): pasa a
+  /// una mesa vacía ([aMesa]), o se cambia por la de otra familia
+  /// ([otraMesa]). Con alguno en null no se pregunta "¿Cuál mesa querés
+  /// mover?" y se mueve siempre la familia entera.
+  final void Function(String alumnoId, int mesa, int aMesa)? onMoverUna;
+  final void Function(String alumnoId, int mesa, int otraMesa)? onCambiarUna;
 
   /// Guardar las medidas del playón y de las mesas: [vistas] son las que
   /// estaban guardadas cuando se corrigieron. Null: no hay pestaña Medidas.
@@ -107,6 +115,8 @@ class AccionesPlano {
     required this.onVolverAUsar,
     required this.onCambiar,
     required this.onMover,
+    this.onMoverUna,
+    this.onCambiarUna,
     this.onGuardarMedidas,
     this.onGuardarColoresYTextos,
     this.onGuardarArmado,
@@ -327,8 +337,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   bool _medidasMalEscritas = false;
 
   /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
-  /// familia, o con cuál cambia).
-  ({_Espera que, String alumnoId})? _esperando;
+  /// familia, o con cuál cambia). Con [mesa], es **una sola** de sus mesas la
+  /// que se mueve o se cambia; sin ella, la familia entera.
+  ({_Espera que, String alumnoId, int? mesa})? _esperando;
+
+  /// La mesa que se tocó para elegir a la familia: "¿Cuál mesa querés mover?"
+  /// viene con esa elegida. Null si se la eligió por el buscador.
+  int? _mesaTocada;
 
   /// Lo que se le dice si tocó algo que no sirve para lo que se espera.
   String? _pista;
@@ -488,9 +503,12 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     if (espera != null) {
       final a = _alumno(espera.alumnoId);
       final conMesa = a != null && CambiosDeMesa.numerosDe(a).isNotEmpty;
+      final unaMesa = espera.mesa;
       final sigue = a != null &&
           !a.esBajaTemporal &&
-          (espera.que == _Espera.fijar ? !conMesa : conMesa);
+          (espera.que == _Espera.fijar ? !conMesa : conMesa) &&
+          // La mesa que se iba a mover ya no es suya.
+          (unaMesa == null || CambiosDeMesa.numerosDe(a).contains(unaMesa));
       if (!sigue) {
         _esperando = null;
         _pista = null;
@@ -527,9 +545,56 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   }
 
   Set<int> get _resaltadas {
+    // Moviendo una sola mesa, la que se enciende es esa: se ve cuál se va.
+    final unaMesa = _esperando?.mesa;
+    if (unaMesa != null) return {unaMesa};
     final id = _alumnoElegido;
     if (id != null) return _ocupante(id)?.numeros.toSet() ?? const {};
     return const {};
+  }
+
+  /// Con una sola mesa elegida, el toque decide: en una vacía, la mesa pasa
+  /// ahí; en la de otra familia, las dos mesas cambian de lugar. Si ahí no se
+  /// puede, se dice por qué y se sigue esperando.
+  void _elegirDestinoDeUna(
+    ({_Espera que, String alumnoId, int? mesa}) espera,
+    int numero,
+    AccionesPlano acciones,
+  ) {
+    final mesa = espera.mesa!;
+    final info = _plano.estado.info(numero);
+    final otro = info.ocupantes.isEmpty ? null : info.ocupantes.first.id;
+    if (otro == null) {
+      final problema = CambiosDeMesa.moverUna(
+        armado: _plano.armado,
+        config: _plano.config,
+        alumnos: widget.alumnos,
+        alumnoId: espera.alumnoId,
+        mesa: mesa,
+        aMesa: numero,
+      ).problema;
+      if (problema != null) {
+        setState(() => _pista = problema);
+        return;
+      }
+      _dejarDeEsperar();
+      acciones.onMoverUna!(espera.alumnoId, mesa, numero);
+      return;
+    }
+    final problema = CambiosDeMesa.intercambiarUna(
+      armado: _plano.armado,
+      config: _plano.config,
+      alumnos: widget.alumnos,
+      alumnoId: espera.alumnoId,
+      mesa: mesa,
+      otraMesa: numero,
+    ).problema;
+    if (problema != null) {
+      setState(() => _pista = problema);
+      return;
+    }
+    _dejarDeEsperar();
+    acciones.onCambiarUna!(espera.alumnoId, mesa, numero);
   }
 
   void _elegirMesa(int numero) {
@@ -537,6 +602,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     final espera = _esperando;
     final acciones = widget.acciones;
     if (espera != null && acciones != null) {
+      if (espera.mesa != null) {
+        _elegirDestinoDeUna(espera, numero, acciones);
+        return;
+      }
       switch (espera.que) {
         // Si ahí no se puede, se dice por qué y se sigue esperando: así
         // "elegí otra" es tocar otra, sin empezar de nuevo.
@@ -604,9 +673,11 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       if (info.ocupantes.isNotEmpty) {
         _alumnoElegido = info.ocupantes.first.id;
         _mesaElegida = null;
+        _mesaTocada = numero;
       } else {
         _alumnoElegido = null;
         _mesaElegida = numero;
+        _mesaTocada = null;
       }
     });
   }
@@ -615,6 +686,28 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     final espera = _esperando;
     final acciones = widget.acciones;
     if (espera != null && acciones != null) {
+      final unaMesa = espera.mesa;
+      if (unaMesa != null && espera.que == _Espera.cambiar) {
+        // Cambiando una sola mesa, la familia del buscador sirve si tiene una
+        // sola: esa es la que cambia. Con varias, hay que tocar cuál.
+        setState(_busqueda.clear);
+        if (id == espera.alumnoId) {
+          setState(() => _pista = 'Es la misma familia: elegí otra.');
+          return;
+        }
+        final suyas = _ocupante(id)?.numeros ?? const <int>[];
+        if (suyas.length == 1) {
+          _elegirDestinoDeUna(espera, suyas.single, acciones);
+          return;
+        }
+        final principal = _ocupante(id)?.principal;
+        if (principal != null) _irA(principal, elegir: false);
+        setState(() => _pista = suyas.isEmpty
+            ? 'Esa familia todavía no tiene mesa.'
+            : 'Esa familia tiene ${suyas.length} mesas: tocá en el plano la '
+                'que cambia por la $unaMesa.');
+        return;
+      }
       if (espera.que != _Espera.cambiar) {
         // Buscando a dónde mudar (o fijar) una familia: el buscador solo lleva
         // la vista a la otra. Lo elegido sigue siendo la que se muda, y el
@@ -654,6 +747,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     setState(() {
       _alumnoElegido = id;
       _mesaElegida = null;
+      _mesaTocada = null;
       _busqueda.clear();
     });
     final mesa = _ocupante(id)?.principal;
@@ -663,14 +757,37 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   void _soltar() => setState(() {
         _alumnoElegido = null;
         _mesaElegida = null;
+        _mesaTocada = null;
         _esperando = null;
         _pista = null;
       });
 
-  void _esperar(_Espera que, String alumnoId) => setState(() {
-        _esperando = (que: que, alumnoId: alumnoId);
+  void _esperar(_Espera que, String alumnoId, {int? mesa}) => setState(() {
+        _esperando = (que: que, alumnoId: alumnoId, mesa: mesa);
         _pista = null;
       });
+
+  /// Mover o cambiar a una familia. Si tiene varias mesas, primero se pregunta
+  /// cuál: una sola, o todas juntas (lo de siempre).
+  Future<void> _empezar(_Espera que, ContratoAlumno alumno) async {
+    final acciones = widget.acciones;
+    final mesas = CambiosDeMesa.numerosDe(alumno);
+    if (mesas.length < 2 ||
+        acciones?.onMoverUna == null ||
+        acciones?.onCambiarUna == null) {
+      _esperar(que, alumno.id);
+      return;
+    }
+    final cual = await elegirCualMesa(
+      context: context,
+      apellido: CambiosDeMesa.apellido(alumno),
+      mesas: mesas,
+      tocada: _mesaTocada,
+      paraCambiar: que == _Espera.cambiar,
+    );
+    if (cual == null || !mounted) return;
+    _esperar(que, alumno.id, mesa: cual.mesa);
+  }
 
   void _dejarDeEsperar() => setState(() {
         _esperando = null;
@@ -1132,7 +1249,11 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
     } else {
       final quien = CambiosDeMesa.apellido(alumno);
-      texto = switch (espera.que) {
+      final unaMesa = espera.mesa;
+      texto = unaMesa != null
+          ? 'Tocá a dónde va la $unaMesa de $quien: una mesa vacía, o la de '
+              'otra familia para cambiarla.'
+          : switch (espera.que) {
         _Espera.mover => () {
             final n = CambiosDeMesa.numerosDe(alumno).length;
             return n == 1
@@ -1244,9 +1365,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       if (conMesa) {
         botones.addAll([
           boton('accion_cambiar', 'Cambiar con otra familia', Icons.swap_horiz,
-              () => _esperar(_Espera.cambiar, alumno.id)),
+              () => _empezar(_Espera.cambiar, alumno)),
           boton('accion_mover', 'Mover a otras mesas', Icons.open_with,
-              () => _esperar(_Espera.mover, alumno.id)),
+              () => _empezar(_Espera.mover, alumno)),
         ]);
       } else {
         botones.add(boton(
