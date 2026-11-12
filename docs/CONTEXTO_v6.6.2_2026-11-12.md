@@ -61,6 +61,17 @@ Y lo que decidió durante el día, que **reemplaza** partes de la spec:
   antes del sorteo". **Si la ocupa otra familia (conflicto), el candado sigue.** El dato no
   cambia: la fijada queda en la config, y si se deshace el sorteo vuelve a esperar a su familia,
   con su candado.
+- **En una tele acostada, el salón del tótem es toda la pantalla** (pedido del usuario el mismo
+  12-nov, mirando el antes y el después): el fondo claro del plano llega a los cuatro bordes, sin
+  las dos bandas con el fondo de la apariencia a los costados (`EscenaTotem._conElSalon`,
+  `pantallaCompleta`, que es `DatosEscena.apaisado`).
+  - **El dibujo no cambia de lugar ni de tamaño**: ya ocupaba todo el alto, y no se agranda sin
+    cortarlo. `CuadroDelSalon` no se tocó.
+  - El fondo y el panel se apagan juntos detrás del nombre en grande (`_opacidadDelSalon`); la
+    secuencia es la de siempre: en grande, se achica, queda en la pista.
+  - El nombre en una franja al costado (Arriba, Abajo, Izquierda, Derecha) va sobre el cartel
+    oscuro: ahí abajo ahora hay fondo claro. "N más en camino" pasa a oscuro sobre el salón claro.
+  - Mientras se ve el salón, el fondo de la apariencia no se ve. Parada, nada cambia.
 - **Los tests que esperaban "· Jefe" y "(sin pagar)" se cambiaron a propósito**: cambió lo
   pedido, no se aflojó una prueba. El PDF escribe palabra por palabra: para comprobar que un
   texto no está se busca cada palabra, no la frase.

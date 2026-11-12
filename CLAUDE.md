@@ -301,6 +301,10 @@ probó**; el pedido entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`
 - **El candado se ve solo mientras la fijada espera a su familia** (`InfoMesa.conCandado`, una regla para la pantalla y el
   papel). Entregada, es una mesa más; si la ocupa otra familia, el candado sigue. El dato no cambia. El usuario no quiere
   ocuparse del candado: **no ofrecerle un botón para sacarlo** (lo rechazó).
+- **En una tele acostada, el salón del tótem es toda la pantalla**: el fondo claro del plano llega a los cuatro bordes
+  (`EscenaTotem._conElSalon`, `pantallaCompleta`). El dibujo no cambia de lugar ni de tamaño (`CuadroDelSalon` no se tocó), el
+  nombre en una franja va sobre el cartel oscuro, y parada no cambia nada. La idea de animar algo en el plano mientras nadie
+  entra quedó en `docs/ideas/totem-plano-animado-en-la-espera.md`: **mostrársela en movimiento antes de programar**.
 - **El orden por cumplimiento: programado solo el servicio, sin pantalla** (`eventos/services/cumplimiento_de_cuotas.dart`:
   `CumplimientoDeCuotas`, `PlanDeLaFiesta`, `OrdenPorCumplimiento`, `fraseDelPuesto`). Sale de los pagos, nunca de los campos
   de la mora. La app no lo llama todavía. **La lista de una fiesta se saca con `tool/orden_del_frente_test.dart` sobre una

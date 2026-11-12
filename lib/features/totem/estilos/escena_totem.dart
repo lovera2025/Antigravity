@@ -473,14 +473,28 @@ class _EscenaTotemState extends State<EscenaTotem>
                             fontWeight: FontWeight.w700,
                             fontSize: u * 0.75,
                             letterSpacing: u * 0.15,
-                            // Sobre un fondo propio claro, oscuro.
+                            // Sobre un fondo propio claro, oscuro. Y sobre
+                            // el salón a pantalla completa, si es claro.
                             color: receta != null && receta.textoOscuro
                                 ? Color.lerp(
                                     receta.colores.saludo,
                                     Colors.black,
                                     0.35,
                                   )
-                                : Colors.white.withValues(alpha: 0.85),
+                                : cuadro != null &&
+                                        tema != null &&
+                                        ancho > alto * 1.2 &&
+                                        tema.fondo.computeLuminance() > 0.5
+                                    // Oscuro en la medida en que el salón
+                                    // claro está a la vista: detrás del
+                                    // nombre en grande sigue blanco.
+                                    ? Color.lerp(
+                                        Colors.white,
+                                        const Color(0xFF2B2823),
+                                        _opacidadDelSalon(e),
+                                      )!
+                                        .withValues(alpha: 0.85)
+                                    : Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -515,6 +529,17 @@ class _EscenaTotemState extends State<EscenaTotem>
     return (ms / EscenaTotem.caminoDura.inMilliseconds).clamp(0.0, 1.0);
   }
 
+  /// Cuánto se ve el salón: entero en la espera; detrás del nombre en grande,
+  /// apenas; y vuelve mientras el nombre se acomoda.
+  double _opacidadDelSalon(double entrada) {
+    if (widget.llegada == null) return 1;
+    const atras = EscenaTotem.salonDetrasDelNombre;
+    final a =
+        Curves.easeInOutCubic.transform(_acomodo.value.clamp(0.0, 1.0));
+    return (1 + (atras + (1 - atras) * a - 1) * entrada.clamp(0.0, 1.0))
+        .clamp(0.0, 1.0);
+  }
+
   /// Con el salón (6.4.0, pedido del jefe el 4-nov): el salón entero siempre a
   /// la vista, lo de la espera en el cuadro y, cuando llega una familia, su
   /// nombre en grande con el salón apagado detrás que después se achica hasta
@@ -540,12 +565,15 @@ class _EscenaTotemState extends State<EscenaTotem>
         : Curves.easeInOutCubic.transform(_acomodo.value.clamp(0.0, 1.0));
     final encendido = llegada != null && guia != null && _acomodo.value > 0;
 
-    // El salón: entero en la espera; detrás del nombre en grande, apenas.
-    const atras = EscenaTotem.salonDetrasDelNombre;
-    final opacidad = llegada == null ? 1.0 : 1 + (atras + (1 - atras) * a - 1) * e;
+    final opacidad = _opacidadDelSalon(d.entrada);
 
     final enElSalon = cuadro.lugar == LugarDelCuadro.pista ||
         cuadro.lugar == LugarDelCuadro.hueco;
+    // En una tele acostada el salón es toda la pantalla (pedido del usuario,
+    // 12-nov-2026): el fondo del plano llega a los cuatro bordes, sin las dos
+    // bandas con el fondo de la apariencia a los costados. El dibujo no cambia
+    // de lugar ni de tamaño (ya ocupa todo el alto), y su borde sigue latiendo.
+    final pantallaCompleta = d.apaisado;
     // Opaco: que no se transparente el nombre del sector de abajo.
     final cartelClaro = receta != null && receta.textoOscuro;
     final cartel =
@@ -584,28 +612,52 @@ class _EscenaTotemState extends State<EscenaTotem>
     final sale = llegada == null ? 0.0 : (1 - a / 0.55).clamp(0.0, 1.0);
     final entra = llegada == null ? 0.0 : ((a - 0.45) / 0.55).clamp(0.0, 1.0);
 
+    // Lo de la espera y la tarjeta acomodada en una franja al lado del salón:
+    // a pantalla completa caen sobre el fondo claro del plano, y las letras de
+    // las apariencias son claras. Van sobre el cartel, como en la pista.
+    Widget enLaFranja(Widget hijo) =>
+        pantallaCompleta ? sobreCartel(hijo, 1) : hijo;
+
+    final panel = PanelPlano(
+      armado: plano,
+      hoja: encendido ? guia.hoja : cuadro.hoja,
+      estado: encendido ? guia.estado : _salonVacio(plano),
+      resaltadas: encendido ? guia.mesas : const {},
+      ruta: encendido ? guia.ruta : null,
+      tema: tema,
+      borde: d.color,
+      u: d.u,
+      relleno: cuadro.relleno,
+      animar: !widget.quieta,
+      progresoCamino: _progresoCamino,
+      // Mientras el camino marca la mesa, el borde late.
+      pulsar: encendido,
+    );
+
     return [
-      Positioned.fromRect(
-        rect: cuadro.panel,
-        child: Opacity(
-          opacity: opacidad.clamp(0.0, 1.0),
-          child: PanelPlano(
-            armado: plano,
-            hoja: encendido ? guia.hoja : cuadro.hoja,
-            estado: encendido ? guia.estado : _salonVacio(plano),
-            resaltadas: encendido ? guia.mesas : const {},
-            ruta: encendido ? guia.ruta : null,
-            tema: tema,
-            borde: d.color,
-            u: d.u,
-            relleno: cuadro.relleno,
-            animar: !widget.quieta,
-            progresoCamino: _progresoCamino,
-            // Mientras el camino marca la mesa, el borde late.
-            pulsar: encendido,
+      if (pantallaCompleta)
+        // El fondo y el panel se apagan juntos, como una sola cosa: detrás del
+        // nombre en grande no se nota dónde termina uno y empieza el otro.
+        Positioned.fill(
+          child: Opacity(
+            opacity: opacidad,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(
+                  key: const Key('salon_a_pantalla_completa'),
+                  color: tema.fondo,
+                ),
+                Positioned.fromRect(rect: cuadro.panel, child: panel),
+              ],
+            ),
           ),
+        )
+      else
+        Positioned.fromRect(
+          rect: cuadro.panel,
+          child: Opacity(opacity: opacidad, child: panel),
         ),
-      ),
       if (e < 1)
         Positioned.fromRect(
           rect: cuadro.cuadro,
@@ -617,7 +669,7 @@ class _EscenaTotemState extends State<EscenaTotem>
                     ResumenEnElSalon.deLaEspera(d, oscuro: cartelClaro),
                     1,
                   )
-                : achicado(escena.espera(enCuadro)),
+                : enLaFranja(achicado(escena.espera(enCuadro))),
           ),
         ),
       // El nombre en grande, sobre el salón apagado, con cartel. Se va
@@ -654,7 +706,7 @@ class _EscenaTotemState extends State<EscenaTotem>
                     ResumenEnElSalon.deLaLlegada(d, llegada, oscuro: cartelClaro),
                     1,
                   )
-                : achicado(escena.llegada(enCuadro, llegada)),
+                : enLaFranja(achicado(escena.llegada(enCuadro, llegada))),
           ),
         ),
     ];

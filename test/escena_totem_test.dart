@@ -362,6 +362,16 @@ void main() {
           }
           final c = cuadroDe(tamano);
           expect(tester.getRect(find.byType(PanelPlano)), c.panel);
+          // En una tele acostada el fondo del salón llega a los cuatro bordes
+          // (pedido del usuario, 12-nov-2026); parada, no hay nada debajo del
+          // panel. El dibujo no se mueve en ninguna de las dos.
+          final completo = find.byKey(const Key('salon_a_pantalla_completa'));
+          if (tamano.width > tamano.height * 1.2) {
+            expect(tester.getRect(completo), Offset.zero & tamano,
+                reason: 'acostada');
+          } else {
+            expect(completo, findsNothing, reason: 'parada');
+          }
           // Adentro del salón (la pista) va resumido: el título entero.
           final enElSalon = c.lugar == LugarDelCuadro.pista ||
               c.lugar == LugarDelCuadro.hueco;

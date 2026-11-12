@@ -218,6 +218,12 @@ void main() {
           [for (final c in juli.chat.conversaciones) c.nombre],
           ['Todos', 'Pato', 'Vero'],
         );
+        // A Vero la lista le llega un instante después: se la espera. Sin
+        // esperar, con la PC ocupada (la corrida entera) fallaba cada tanto.
+        await _hasta(
+          () => vero.chat.conversaciones.any((c) => c.nombre == 'Juli'),
+          'Juli en Vero',
+        );
         expect(vero.chat.conversaciones.map((c) => c.nombre), contains('Juli'));
       },
     );
