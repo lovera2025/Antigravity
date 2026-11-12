@@ -45,6 +45,9 @@ equipo sigue en la v79). Viene de `docs/CONTEXTO_v6.6.2_2026-11-12.md` y del ped
    6.6.2, que no tienen su "después".
 3. Preguntarle cómo salió el sorteo con el tilde, y con cuál recorrido.
 4. Después: el tilde en una fiesta con sorteo por división (hoy no se prende, y lo dice).
+5. **Pedido el 12-nov después de publicar, sin programar:** que con el sorteo ya hecho no haga
+   falta deshacerlo para usar el tilde, y textos más cortos. Le mostré el plan y dijo "ya con lo
+   publicado probemos": `docs/pendientes/cumplimiento-debido-despues-del-sorteo.md`.
 
 ### Lo que contestó el 12-nov a la tarde
 

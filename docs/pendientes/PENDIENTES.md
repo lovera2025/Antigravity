@@ -37,6 +37,8 @@ Una sola versión con todo junto, en este orden. El estado de cada parte está e
 
 ### Otros
 
+- ["Cumplimiento debido" después del sorteo, sin deshacerlo](cumplimiento-debido-despues-del-sorteo.md) —
+  pedido el 12-nov-2026, con el plan escrito; lo dejó para después de probar la 6.7.0 como está.
 - [La puerta con más de 1000 personas en web y tótem](invitados-mas-de-1000-en-web.md)
   — el QR y el tótem leen hasta 1000 invitados por evento. Hoy no llega ni cerca;
   importa si se cargan las familias enteras. Se resuelve subiendo "Max rows" en
