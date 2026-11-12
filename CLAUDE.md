@@ -361,6 +361,9 @@ con "Para retomar en otro chat" y dice **lo que no se probó**). Sin SQL ni migr
   sortear el plano se ve vacío; al apretar SORTEAR se reparte, salen los números en la grilla y después se ve el plano.
   Tildado, debajo: **Por columnas · Por filas**; se esconde por división, "hasta qué mesa", "lejos" y las mesas nuevas al
   fondo; **queda "Las mesas adicionales: Con su familia · Al final"** (le gusta: primero todas las principales).
+- **"Por filas" es el camino de la numeración "Fila por fila"** (`ArmarAMedida.ordenarNumeros(fin: filas)`): cada fila
+  entera cruzando la pasarela, y la siguiente de vuelta; en un salón numerado así es 1, 2, 3, 4. **No alternar un lado y
+  el otro de la pasarela**: así salió la 6.7.0 y lo corrigió ("1, 2, 3, 4 sin que la pasarela interrumpa").
 - **Las fijadas "Por orden" son solo para esa corrida del sorteo: no se guardan** (`OrdenEnElSalon.paraElSorteo`:
   `configDelSorteo` y `configAGuardar`). Lo que queda es `frente` (quién, dónde y por qué). Por eso deshacer el sorteo
   deja el salón vacío, sin candados. **El motor del sorteo sigue sin tocarse.**

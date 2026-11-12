@@ -1,5 +1,7 @@
 import '../../../models/plano_evento.dart';
 import '../modelo/armado_salon.dart';
+import '../modelo/numeracion.dart';
+import 'armar_a_medida.dart';
 
 /// Dónde está una mesa respecto del paso de los egresados.
 class LugarEnElPaso {
@@ -99,9 +101,9 @@ class MesasDelPaso {
   /// eso no hay paso que medir.
   ///
   /// [recorrido] dice qué manda en el orden: la línea (por columnas, lo de
-  /// siempre) o la fila (por filas: toda la fila del escenario, de la pasarela
-  /// hacia afuera, y después la que sigue). La línea, la fila y el lado de
-  /// cada mesa son los mismos en los dos.
+  /// siempre) o la fila (por filas: cada fila entera cruzando la pasarela, por
+  /// el camino de la numeración "Fila por fila"). La línea, la fila y el lado
+  /// de cada mesa son los mismos en los dos.
   static MesasDelPaso? de(
     ArmadoSalon a, {
     RecorridoDelOrden recorrido = RecorridoDelOrden.columnas,
@@ -212,16 +214,31 @@ class MesasDelPaso {
       }
     }
 
+    // Por filas (6.7.1): **el mismo camino que la numeración "Fila por fila"**
+    // ([FinNumeracion.filas]). Cada fila entera, de una punta a la otra
+    // cruzando la pasarela, y la siguiente de vuelta: 1, 2, 3, 4 sin que la
+    // pasarela interrumpa (pedido del usuario, 12-nov-2026; la primera versión
+    // alternaba un lado y el otro, y no era eso). En un salón numerado fila por
+    // fila, el orden es el de los números. El pasto, al final.
+    if (recorrido == RecorridoDelOrden.filas) {
+      final cambio =
+          ArmarAMedida.ordenarNumeros(a, fin: FinNumeracion.filas).cambio;
+      int enElCamino(int n) => cambio[n] ?? n;
+      final enOrden = [for (final m in a.mesas) m.numero]
+        ..sort((x, y) => enElCamino(x).compareTo(enElCamino(y)));
+      return MesasDelPaso._(
+        enOrden,
+        lugar,
+        {for (final m in delPaso) m.numero: m},
+        hoja,
+      );
+    }
+
     final delPasoEnOrden = [for (final m in delPaso) m.numero]..sort((x, y) {
         final lx = lugar[x]!, ly = lugar[y]!;
-        final porFilas = recorrido == RecorridoDelOrden.filas;
-        var c = porFilas
-            ? lx.fila.compareTo(ly.fila)
-            : lx.linea.compareTo(ly.linea);
+        var c = lx.linea.compareTo(ly.linea);
         if (c != 0) return c;
-        c = porFilas
-            ? lx.linea.compareTo(ly.linea)
-            : lx.fila.compareTo(ly.fila);
+        c = lx.fila.compareTo(ly.fila);
         if (c != 0) return c;
         c = lx.lado.compareTo(ly.lado);
         return c != 0 ? c : x.compareTo(y);

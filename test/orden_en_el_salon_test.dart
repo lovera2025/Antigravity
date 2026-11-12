@@ -188,14 +188,15 @@ void main() {
       expect(orden.lugares.map((l) => l.grupo), [1, 1, 1, 2]);
     });
 
-    test('por filas: la fila del escenario primero', () {
+    test('por filas: 1, 2, 3, 4, cruzando la pasarela', () {
       final o = calcular(recorrido: RecorridoDelOrden.filas);
-      // El salón, de mejor a peor: 2, 3, 1, 4 y después la segunda fila.
+      // El salón de prueba está numerado fila por fila: la primera fila es
+      // 1, 2 | pasarela | 3, 4, y la segunda vuelve (5, 6, 7, 8).
       expect(_lugares(o), {
-        1: [2],
-        2: [3],
-        3: [1, 8], // la 1 no tiene nada detrás: la más cercana de su lado
-        4: [4],
+        1: [1],
+        2: [2],
+        3: [3, 4], // la 4 está detrás de la 3
+        4: [5],
       });
       expect(o.configAGuardar!.frente!.recorrido, RecorridoDelOrden.filas);
     });

@@ -228,8 +228,9 @@ enum RecorridoDelOrden {
   /// después la que sigue hacia afuera.
   columnas('columnas', 'Por columnas'),
 
-  /// Primero toda la fila pegada al escenario, de la pasarela hacia afuera;
-  /// después la que sigue hacia el fondo.
+  /// Cada fila entera, de una punta a la otra **cruzando la pasarela**, y la
+  /// siguiente de vuelta: el camino de la numeración "Fila por fila". En un
+  /// salón numerado así es 1, 2, 3, 4.
   filas('filas', 'Por filas');
 
   final String clave;

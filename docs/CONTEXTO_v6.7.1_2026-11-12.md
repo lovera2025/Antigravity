@@ -103,6 +103,14 @@ Con el sorteo ya hecho:
 - Quien tiene mesa sin haber pagado la base también se reacomoda (queda último).
 - Con el sorteo hecho **por división** (bloques guardados) no se puede: sigue pendiente.
 
+**"Por filas" es el camino de la numeración "Fila por fila"** (`MesasDelPaso.de(recorrido: filas)`
+ordena con `ArmarAMedida.ordenarNumeros(a, fin: FinNumeracion.filas)`): cada fila entera, de una
+punta a la otra **cruzando la pasarela**, y la siguiente de vuelta. En un salón numerado fila por
+fila, el orden es 1, 2, 3, 4. La primera versión (6.7.0 y el primer intento de la 6.7.1) alternaba
+un lado y el otro de la pasarela; al ver el dibujo dijo: "la idea es que esté 1, 2, 3, 4 sin que la
+pasarela interrumpa, como estaba". **Por columnas no cambió.** La adicional va al lado o detrás de su
+principal, nunca del otro lado de la pasarela (`laMasCercana`).
+
 `repartir(alFinal:)`: primero las de adelante de todos, después las del final, en el mismo orden.
 `sinFijadasDelOrden` y `apagado` limpian lo que dejó la 6.7.0; `vigente` dice si el porqué sigue
 valiendo; `entrada` arma la entrada del sorteo; `noCumple` es el control de que cada familia quedó

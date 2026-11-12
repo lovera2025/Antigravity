@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
@@ -22,13 +23,15 @@ void main() {
       expect(p.enLaLinea(2), 6);
     });
 
-    test('por filas: toda la fila del escenario, de la pasarela hacia afuera; '
-        'después la que sigue', () {
+    test('por filas: cada fila entera, cruzando la pasarela, y la siguiente de '
+        'vuelta', () {
       final p = MesasDelPaso.de(
         salonDePrueba(),
         recorrido: RecorridoDelOrden.filas,
       )!;
-      expect(p.enOrden, [2, 3, 1, 4, 7, 6, 8, 5, 10, 11, 9, 12]);
+      // El salón de prueba está numerado fila por fila: es 1, 2, 3, 4… sin
+      // que la pasarela interrumpa (pedido del usuario, 12-nov-2026).
+      expect(p.enOrden, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       // El lugar de cada mesa no depende del recorrido: cambia solo el orden.
       final columnas = MesasDelPaso.de(salonDePrueba())!;
       for (final n in p.enOrden) {
@@ -51,7 +54,10 @@ void main() {
         ),
         recorrido: RecorridoDelOrden.filas,
       )!;
-      expect(p.enOrden.skip(12), [20, 30]);
+      // Primero las doce de la hoja del paso; la otra hoja sigue, y el pasto
+      // cierra.
+      expect(p.enOrden.take(12), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      expect(p.enOrden.skip(12), [30, 20]);
     });
 
     test('la línea, la fila y el lado de cada mesa', () {
@@ -221,39 +227,45 @@ void main() {
         expect(porFila.values.every((c) => c <= 2), isTrue);
       });
 
-      test('${caso.key}, por filas: están todas, una vez, y las filas van del '
-          'escenario al fondo', () {
+      test('${caso.key}, por filas: están todas, una vez, por el camino de la '
+          'numeración "Fila por fila"', () {
         final a = caso.value;
         final p = MesasDelPaso.de(a, recorrido: RecorridoDelOrden.filas)!;
-        final columnas = MesasDelPaso.de(a)!;
-        expect(p.enOrden.toSet(), columnas.enOrden.toSet());
+        expect(p.enOrden.toSet(), {for (final m in a.mesas) m.numero});
         expect(p.enOrden.length, a.mesas.length);
-        // En el orden, la fila nunca baja; y adentro de una fila, la línea
-        // tampoco.
-        LugarEnElPaso? anterior;
-        for (final n in p.enOrden) {
-          final l = p.lugar(n);
-          if (l == null) continue;
-          if (anterior != null) {
-            expect(l.fila, greaterThanOrEqualTo(anterior.fila));
-            if (l.fila == anterior.fila) {
-              expect(l.linea, greaterThanOrEqualTo(anterior.linea));
-            }
-          }
-          anterior = l;
+        // El mismo salón, numerado fila por fila: el orden es 1, 2, 3, 4…
+        final numerado =
+            ArmarAMedida.ordenarNumeros(a, fin: FinNumeracion.filas).armado;
+        final n = numerado.mesas.length;
+        expect(
+          MesasDelPaso.de(numerado, recorrido: RecorridoDelOrden.filas)!.enOrden,
+          [for (var i = 1; i <= n; i++) i],
+        );
+        // El pasto queda al final.
+        final pasto = a.pasto;
+        if (pasto.isNotEmpty) {
+          expect(
+            p.enOrden.skip(p.enOrden.length - pasto.length).toSet(),
+            pasto.toSet(),
+          );
         }
-        // Lo que no es del paso (el pasto, las otras hojas) queda al final,
-        // igual que por columnas.
-        final sinLugar = [
-          for (final n in p.enOrden)
-            if (p.lugar(n) == null) n,
-        ];
-        expect(p.enOrden.skip(p.enOrden.length - sinLugar.length), sinLugar);
-        expect(sinLugar, [
-          for (final n in columnas.enOrden)
-            if (columnas.lugar(n) == null) n,
-        ]);
       });
     }
+
+    test('en un salón armado "Fila por fila", por filas es 1, 2, 3, 4…', () {
+      final a = ArmarAMedida.armar(
+        const OpcionesAMedida(
+          playon: PlayonReal.costaSurubi,
+          cantidad: 75,
+          fin: FinNumeracion.filas,
+        ),
+      ).armado;
+      final p = MesasDelPaso.de(a, recorrido: RecorridoDelOrden.filas)!;
+      expect(p.enOrden, [for (var i = 1; i <= 75; i++) i]);
+      // La primera fila cruza la pasarela: tiene mesas de los dos lados antes
+      // de pasar a la segunda.
+      final primera = p.enOrden.takeWhile((n) => p.lugar(n)!.fila == 1);
+      expect({for (final n in primera) p.lugar(n)!.lado}, {0, 1});
+    });
   });
 }
