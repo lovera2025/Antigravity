@@ -5,30 +5,60 @@ base del equipo sigue en la v79). Viene de `docs/CONTEXTO_v6.7.0_2026-11-12.md`.
 
 ## Para retomar en otro chat
 
-**Estado: la 6.7.1 está PROGRAMADA y probada en el sandbox, SIN PUBLICAR.** Versión `6.7.1+73` en
-`pubspec.yaml` y en el `.iss`. La 6.7.0 está publicada (12-nov, 15:47) y el usuario la probó: de ahí
-salió todo esto.
+**Estado al cortar (12-nov, noche): la 6.7.1 está PROGRAMADA, probada en el sandbox y guardada en la
+rama (último commit del código: `22da2fd`), SIN PUBLICAR.** El usuario pidió guardar el contexto
+para seguir en otro chat **sin haber contestado si se publica**. Versión `6.7.1+73` en `pubspec.yaml`
+y en el `.iss`. La 6.7.0 está publicada (12-nov, 15:47) y él la instaló y la probó: de ahí salió todo
+esto.
 
 | | Estado |
 |---|---|
 | El tilde en el cartel del SORTEO, con "Por columnas · Por filas" | Programado |
+| "Por filas": la fila entera cruzando la pasarela (1, 2, 3, 4) | Programado (corregido a su pedido; el primer intento alternaba los lados) |
 | Reacomodar con el sorteo ya hecho, sin deshacerlo | Programado |
 | El plano sin el tilde; el porqué en el Historial | Programado |
 | La cruz para alinear en Acomodar | Programada |
-| Pruebas | `flutter test` entero: **4.600, todas pasan**. `flutter analyze`: sin errores ni nada en lo tocado |
-| Simulacro sobre la copia de la base (la fiesta del 12-nov) | Columnas y filas, con y sin "al final": 200 sorteos con el salón vacío y 200 reacomodos cada uno, todos bien |
-| Recorrido con el mouse (`tool/plano_prueba.dart`) | Hecho: cartel, tilde, sorteo, plano, Historial, "Ver el porqué", ya sorteado y la cruz. Capturas en `build/recorrido_671/` |
-| Publicar | **Falta su "publicá"**: le mando las capturas y le pregunto |
+| Pruebas | `flutter test` entero: **4.601, todas pasan**. `flutter analyze`: sin errores ni nada en lo tocado |
+| Simulacro sobre la copia de la base (la fiesta del 12-nov) | Columnas y filas, con y sin "al final": 200 sorteos con el salón vacío y 200 reacomodos cada uno, todos bien (por filas, repetido después de la corrección) |
+| Recorrido con el mouse (`tool/plano_prueba.dart`) | Hecho **antes** de corregir "Por filas": cartel, tilde, sorteo, plano, Historial, "Ver el porqué", ya sorteado y la cruz. 12 capturas en `build/recorrido_671/`, ya enviadas. **La 11 y la 12 son del "por filas" viejo** |
+| El dibujo del salón de la fiesta por filas, corregido | Enviado (`build/orden_frente_671_filas/salon_por_filas_671.png`). **No contestó si así está bien** |
+| El instalador, el APK y la web de la 6.7.1 | **Sin armar** (lo compilado en `build/` es de la 6.7.0) |
+| Foto de la mora "antes de 6.7.1" | Sin sacar (la última es "antes de 6.7.0", `1ce863c0…`, 642 alumnos) |
+| Publicar | **Falta su "publicá"** |
 
 ### Lo que falta, en orden
 
-1. Mostrarle las capturas (está en el celular) y esperar su "publicá".
-2. Publicar: foto de la mora "antes de 6.7.1", el instalador por pasos, el APK, tag, release y web
-   (el paso a paso, en "Cómo se publicó" de `docs/CONTEXTO_v6.7.0_2026-11-12.md`).
-3. Que instale, primero la PC que sortea, y la foto de la mora "después".
-4. Decirle que **destilde "Cumplimiento debido" en el plano de la fiesta donde lo tildó con la
-   6.7.0** si todavía no lo hizo (la 6.7.1 lo limpia sola al sortear, pero hasta entonces el plano
-   muestra las mesas con candado).
+1. **Preguntarle si publico la 6.7.1** (quedó sin contestar), y antes:
+   - si el dibujo de "Por filas" corregido es lo que quería (la fila siguiente **vuelve**, como en
+     la numeración "Fila por fila"; no dijo si la quiere siempre de izquierda a derecha);
+   - **qué dicen las novedades** (las ve cualquiera; para la 6.7.0 eligió no nombrar el
+     cumplimiento: "Nuevas capacidades en el modo jefe, en el plano").
+2. Si cambia algo de "Por filas": se toca en un solo lugar (`MesasDelPaso.de`, el tramo de
+   `RecorridoDelOrden.filas`), con `test/mesas_del_paso_test.dart` y `test/orden_en_el_salon_test.dart`.
+3. Conviene **recorrer de nuevo con el mouse "Por filas"** en `tool/plano_prueba.dart` y mandarle la
+   captura nueva: pidió ver las capturas de cada prueba antes de publicar.
+4. Publicar, con su "publicá": foto de la mora "antes de 6.7.1", el instalador por pasos, el APK,
+   tag `v6.7.1`, release y web (el paso a paso, en "Cómo se publicó" de
+   `docs/CONTEXTO_v6.7.0_2026-11-12.md`).
+5. Que instale, primero la PC que sortea, y la foto de la mora "después" (cubre también la 6.6.1,
+   la 6.6.2 y la 6.7.0).
+6. Preguntarle **si destildó "Cumplimiento debido" en el plano de la fiesta donde lo tildó con la
+   6.7.0** (la 6.7.1 lo limpia sola al sortear, pero hasta entonces el plano muestra las mesas con
+   candado), y si la fiesta del 12-nov ya se sorteó y cómo.
+
+### Lo que no se sabe
+
+- En qué PCs está la 6.7.0 (la instaló en al menos una; la 6.6.2 había quedado solo en la de su casa).
+- Si la fiesta del 12-nov se sorteó. A la tarde dijo que todavía no y que esperaba el tilde.
+
+### Lo que quedó abierto, sin apuro
+
+- El tilde con el sorteo **por división**: hay una tarjeta propuesta en el chat del 12-nov
+  ("Cumplimiento debido en fiestas por división"), sin empezar.
+- La oración de quien tiene cuotas vencidas dice "Debe 2 cuotas vencidas…": la ve solo el jefe; no
+  se le preguntó si esa palabra le sirve.
+- En el cartel, "Quedan pegadas a la principal: Ninguna · 1 · 2" (de la 6.6.1) tiene el mismo
+  problema que tenía el recorrido: sobre ese fondo no se nota cuál está elegido. No se tocó.
 
 ### Lo que NO se probó
 
@@ -38,6 +68,7 @@ salió todo esto.
   corrió de punta a punta. El primer sorteo de verdad es la prueba.
 - Deshacer "solo lo último" después de un reacomodo, con la pantalla: probado en la cuenta
   (`UltimosSorteados`), no con el cartel de deshacer.
+- "Por filas" corregido, con el mouse.
 - Dos PCs.
 
 ## Qué pidió, después de probar la 6.7.0

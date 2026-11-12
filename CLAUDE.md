@@ -354,8 +354,10 @@ el cumplimiento, porque las ve cualquiera. Él creía que el tilde ya estaba hec
 - **Lo de arriba es la 6.7.0 como salió. La 6.7.1 lo cambió** (el tilde pasó al cartel del SORTEO): ver abajo.
 
 **La 6.7.1: "Cumplimiento debido" en el cartel del SORTEO, y la cruz para alinear** (programada el 12-nov a la tarde,
-versión `6.7.1+73`, **en la rama y SIN PUBLICAR: falta su "publicá"**; `docs/CONTEXTO_v6.7.1_2026-11-12.md`, que empieza
-con "Para retomar en otro chat" y dice **lo que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
+versión `6.7.1+73`, **en la rama y SIN PUBLICAR: falta su "publicá"**, que quedó sin contestar al cortar el chat, igual
+que si el "Por filas" corregido es lo que quería y qué dicen las novedades; el instalador de la 6.7.1 no se armó;
+`docs/CONTEXTO_v6.7.1_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que falta, en orden, y lo
+que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
 6.7.0: al tildar en el plano las mesas ya aparecían repartidas ("se pierde la emoción") y el cartel se confundía.
 - **El tilde va en el cartel del SORTEO, no en el plano** (`sorteo_mesas_dialog.dart`, `por_cumplimiento`). Antes de
   sortear el plano se ve vacío; al apretar SORTEAR se reparte, salen los números en la grilla y después se ve el plano.
