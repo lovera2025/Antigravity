@@ -1528,6 +1528,94 @@ void main() {
       );
     });
 
+    testWidgets('viene por columnas; eligiendo "Por filas" antes de tildar, se '
+        'reparte así y queda guardado', (tester) async {
+      final mundo =
+          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+      await _personalizar(tester);
+      String dice() => tester
+          .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
+          .data!;
+      expect(dice(), startsWith('Primero toda la columna'));
+
+      await tester.tap(find.text('Por filas'));
+      await _asentar(tester);
+      expect(dice(), startsWith('Primero toda la fila'));
+      // Elegir no guarda nada: se usa al tildar.
+      expect(mundo.planos.guardados, isEmpty);
+
+      await _guardar(tester, 'por_orden');
+      final config = mundo.guardado.config;
+      expect(config.frente!.prendido, isTrue);
+      expect(config.frente!.recorrido, RecorridoDelOrden.filas);
+      final paso = MesasDelPaso.de(
+        mundo.guardado.armado,
+        recorrido: RecorridoDelOrden.filas,
+      )!;
+      expect(config.fijadasPorAlumno['sosa'], [paso.enOrden.first]);
+      expect(_dicho(tester),
+          startsWith('Cumplimiento debido: quedaron ubicadas 2 familias, por filas'));
+
+      await _guardar(tester, 'ver_el_orden');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('orden_resumen'))).data,
+        startsWith('2 familias ubicadas por filas'),
+      );
+    });
+
+    testWidgets('prendido, tocar el otro recorrido lo reparte de nuevo',
+        (tester) async {
+      final mundo =
+          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+      await _personalizar(tester);
+      await _guardar(tester, 'por_orden');
+      expect(mundo.guardado.config.frente!.recorrido,
+          RecorridoDelOrden.columnas);
+      final antes = mundo.planos.guardados.length;
+
+      await tester.tap(find.text('Por filas'));
+      await _asentar(tester);
+      expect(mundo.planos.guardados.length, antes + 1);
+      expect(mundo.guardado.config.frente!.prendido, isTrue);
+      expect(mundo.guardado.config.frente!.recorrido, RecorridoDelOrden.filas);
+      expect(mundo.guardado.config.fijadas.values.every((f) => f.esPorOrden),
+          isTrue);
+
+      // Apagado, el botón recuerda el último elegido.
+      await _guardar(tester, 'por_orden');
+      expect(mundo.guardado.config.frente!.prendido, isFalse);
+      expect(mundo.guardado.config.frente!.recorrido, RecorridoDelOrden.filas);
+      expect(mundo.guardado.config.fijadas, isEmpty);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
+            .data,
+        startsWith('Primero toda la fila'),
+      );
+    });
+
+    testWidgets('lo elegido antes de tildar no pisa lo que se cambió con el '
+        'tilde prendido', (tester) async {
+      final mundo =
+          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+      await _personalizar(tester);
+      String dice() => tester
+          .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
+          .data!;
+      await tester.tap(find.text('Por filas'));
+      await _asentar(tester);
+      await _guardar(tester, 'por_orden');
+      await tester.tap(find.text('Por columnas'));
+      await _asentar(tester);
+      expect(mundo.guardado.config.frente!.recorrido,
+          RecorridoDelOrden.columnas);
+      expect(dice(), startsWith('Primero toda la columna'));
+
+      await _guardar(tester, 'por_orden');
+      expect(mundo.guardado.config.frente!.prendido, isFalse);
+      expect(dice(), startsWith('Primero toda la columna'));
+    });
+
     testWidgets('la lista dice quién quedó dónde y por qué',
         (tester) async {
       await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
@@ -1543,7 +1631,7 @@ void main() {
       expect(find.textContaining('Nunca pagó tarde'), findsNWidgets(2));
       expect(
         tester.widget<Text>(find.byKey(const Key('orden_resumen'))).data,
-        startsWith('2 familias ubicadas'),
+        startsWith('2 familias ubicadas por columnas'),
       );
     });
 

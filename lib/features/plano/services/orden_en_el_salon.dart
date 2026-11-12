@@ -81,6 +81,9 @@ class OrdenEnElSalon {
   /// Prender: calcula el orden con los pagos de hoy y le fija a cada familia
   /// su mesa. Lo que ya estaba fijado a mano o libre no se toca, y esas
   /// familias quedan con lo suyo.
+  ///
+  /// Prendido, volver a prender con otro [recorrido] lo reparte de nuevo: lo
+  /// que había puesto el orden se reemplaza entero.
   static CambioDeConfig prender({
     required String eventoId,
     required ArmadoSalon armado,
@@ -90,6 +93,7 @@ class OrdenEnElSalon {
     required DateTime hoyAr,
     required DateTime ahora,
     ModoSorteo modo = ModoSorteo.entera,
+    RecorridoDelOrden recorrido = RecorridoDelOrden.columnas,
     String? por,
   }) {
     // Por división cada familia va en el bloque de la suya, y este orden no
@@ -104,12 +108,16 @@ class OrdenEnElSalon {
         !a.esBajaTemporal &&
         MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isNotEmpty);
     if (conMesa) {
-      return const CambioDeConfig.noSePuede(
-        'Ya hay familias con mesa. Se tilda antes de sortear: para usarlo hay '
-        'que deshacer el sorteo entero.',
+      return CambioDeConfig.noSePuede(
+        // Prendido y sorteado: quiso cambiar el recorrido.
+        config.frente?.prendido == true
+            ? 'Ya se sorteó con esto tildado. Para cambiarlo hay que deshacer '
+                'el sorteo entero.'
+            : 'Ya hay familias con mesa. Se tilda antes de sortear: para '
+                'usarlo hay que deshacer el sorteo entero.',
       );
     }
-    final paso = MesasDelPaso.de(armado);
+    final paso = MesasDelPaso.de(armado, recorrido: recorrido);
     if (paso == null) {
       return const CambioDeConfig.noSePuede(
         'Este salón no tiene pasarela ni escenario dibujados: no hay desde '
@@ -162,6 +170,7 @@ class OrdenEnElSalon {
           prendido: true,
           el: ahora,
           por: por,
+          recorrido: recorrido,
           lugares: [
             for (final p in orden)
               LugarPorOrden(
@@ -203,7 +212,12 @@ class OrdenEnElSalon {
           for (final e in config.fijadas.entries)
             if (!esPorOrden(e.value)) e.key: e.value,
         },
-        frente: const OrdenDelPlano(prendido: false),
+        // El recorrido elegido queda: el botón lo recuerda.
+        frente: OrdenDelPlano(
+          prendido: false,
+          recorrido:
+              config.frente?.recorrido ?? RecorridoDelOrden.columnas,
+        ),
       ),
       quitadas,
     );

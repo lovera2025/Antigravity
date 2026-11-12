@@ -56,6 +56,7 @@ class VerElOrdenDialog extends StatelessWidget {
           children: [
             Text(
               '$conMesa ${conMesa == 1 ? 'familia ubicada' : 'familias ubicadas'}'
+              ' ${orden.recorrido.rotulo.toLowerCase()}'
               '${cuando == null ? '' : ' · calculado el $cuando'}'
               '${orden.por == null ? '' : ' · ${orden.por}'}',
               key: const Key('orden_resumen'),

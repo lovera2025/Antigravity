@@ -1112,7 +1112,10 @@ class EditarArmado {
             // prendido sin ninguna mesa ubicada.
             frente: config.frente == null
                 ? null
-                : const OrdenDelPlano(prendido: false),
+                : OrdenDelPlano(
+                    prendido: false,
+                    recorrido: config.frente!.recorrido,
+                  ),
           )
         : sacadas.any(config.libres.containsKey)
             ? config.copyWith(libres: {

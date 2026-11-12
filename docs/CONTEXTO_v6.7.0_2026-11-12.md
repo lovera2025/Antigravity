@@ -6,44 +6,77 @@ equipo sigue en la v79). Viene de `docs/CONTEXTO_v6.6.2_2026-11-12.md` y del ped
 
 ## Para retomar en otro chat
 
-**Estado al cortar (12-nov, ~16 hs): la 6.7.0 está PROGRAMADA y guardada en la rama, SIN PUBLICAR.
-El usuario frenó para seguir en otro chat ("pará, actualizá el contexto con lo hecho y lo
-pendiente").**
+**Estado (12-nov, tarde, segundo chat): la 6.7.0 está PROGRAMADA, recorrida con el mouse y con la
+opción "Por columnas · Por filas" sumada. SIN PUBLICAR: se arma el instalador y se publica con su
+"publicá".**
 
 | | Estado |
 |---|---|
-| La 6.6.2 (papeles, candado, tótem a pantalla completa) | **Publicada** el 12-nov a las 14:37. Sin instalar, que se sepa |
+| La 6.6.2 (papeles, candado, tótem a pantalla completa) | **Publicada** el 12-nov a las 14:37. **Instalada solo en la PC de su casa** (lo dijo el 12-nov a la tarde) |
 | La 6.7.0: el tilde "Cumplimiento debido" | **Programada, en la rama.** Versión `6.7.0+72` en `pubspec.yaml` y en el `.iss`. **Sin publicar** |
-| Pruebas de lo tocado (339) y análisis | Pasan, con el nombre final |
-| La corrida **entera** de pruebas con el nombre final | **Terminó bien: 4.565 pruebas, todas pasan** (cerró unos minutos después de frenar). El análisis no marca nada en lo tocado; los errores que lista son de `tool\_tmp_espindola_audit.dart`, un archivo viejo |
-| El recorrido con el mouse (`tool/plano_prueba.dart`) | **No se hizo.** La ventana ya tiene el tilde y pagos inventados |
-| El simulacro con la fiesta que se sorteaba ese día | Hecho: 200 sorteos de verdad, todos bien |
+| "Por columnas · Por filas", debajo del tilde | **Programado el 12-nov a la tarde** (él contestó "Ambas" y "que salga hoy así") |
+| La corrida **entera** de pruebas, con la opción | **4.581 pruebas, todas pasan.** El análisis no marca errores ni nada en lo tocado |
+| El recorrido con el mouse (`tool/plano_prueba.dart`) | **Hecho, dos veces**: el tilde solo y con la opción. Capturas en `build/recorrido_670/` |
+| El simulacro con la fiesta que se sorteaba ese día | Hecho por columnas y **por filas**: 200 sorteos de verdad cada uno, todos bien |
 | Foto de la mora "antes de 6.7.0" | Sin sacar (la de "antes de 6.6.2" es de las 14 hs, `5202bec8…`) |
-| El sorteo de esa fiesta | **No se sabe si se hizo ni cómo.** Tenía la lista para fijar a mano |
+| El sorteo de esa fiesta | **Todavía no se hizo** (lo dijo el 12-nov a la tarde): espera el tilde |
 
 ### Lo que falta, en orden
 
-1. **Preguntarle si ya sorteó** y con qué (a mano con la lista, o esperó el tilde). De eso depende
-   el apuro.
-2. Correr `flutter test` entero y `flutter analyze` **solo si se tocó algo más** (al cortar daba
-   4.565 bien).
-3. **Recorrerlo con el mouse**: `flutter run -d windows -t tool/plano_prueba.dart` → PERSONALIZAR →
-   Mesas → tildar "Cumplimiento debido" → mirar el plano → "Ver la lista y el porqué" → SORTEAR
-   (arriba) → ver que los candados se van y cada familia quedó en lo suyo → DESHACER → destildar.
-   El permiso para manejarla se pide con la ventana ya abierta (`arguello_events`); **nunca abrir
-   "Junior Eventos", que es la app de verdad.**
-4. **Publicar la 6.7.0, con su OK** (lo dio para la 6.6.2, no para esta): foto de la mora, el
+1. **Publicar la 6.7.0, con su OK** (lo dio para la 6.6.2, no para esta): foto de la mora, el
    instalador por pasos, el APK, tag, release y web. El paso a paso, con lo del corte de luz, en
    "Cómo se publicó" de `docs/CONTEXTO_v6.6.2_2026-11-12.md`.
-5. Que instale, primero la PC que sortea, y las fotos de la mora "después".
+2. Que instale, **primero la PC que sortea**, y las fotos de la mora "después".
+3. Después: el tilde en una fiesta con sorteo por división (hoy no se prende, y lo dice).
 
-### Preguntas que quedaron sin contestar
+### Lo que contestó el 12-nov a la tarde
 
-- **Las mesas al costado de la pista cuentan como primera línea** (son las más cercanas al medio
-  en su fila). Se le mostró en el dibujo del salón real y no contestó si está bien.
-- **El recorrido**: por columnas desde el pasillo (lo hecho) o por filas desde el escenario.
-- La idea de animar algo en el plano del tótem mientras nadie entra
+- **Las mesas al costado de la pista cuentan como primera línea: sí** (lo vio en el dibujo del salón
+  de la fiesta, con el puesto en cada mesa).
+- **El recorrido: "Ambas".** Quiere que el jefe elija entre por columnas y por filas, y que saliera
+  ese mismo día con la opción.
+- Sigue sin mostrarse la idea de animar algo en el plano del tótem mientras nadie entra
   (`docs/ideas/totem-plano-animado-en-la-espera.md`): mostrársela en movimiento antes.
+
+### "Por columnas · Por filas"
+
+Debajo del tilde, un botón de dos partes (`RecorridoDelOrden`, en `models/plano_evento.dart`) y un
+renglón que dice qué hace el elegido:
+
+- **Por columnas** (viene así): primero toda la columna pegada a la pasarela, del escenario al fondo;
+  después la que sigue hacia afuera.
+- **Por filas**: primero toda la fila pegada al escenario, de la pasarela hacia afuera; después la
+  que sigue hacia el fondo. Las mesas del costado de la pista quedan para el final.
+
+Cómo está hecho:
+
+- Cambia **solo el orden** de `MesasDelPaso.de(armado, recorrido:)`: la línea, la fila y el lado de
+  cada mesa son los mismos, y la adicional va igual detrás de su principal (`detras`).
+- Se elige **antes de tildar** (no guarda nada: se usa al tildar). **Con el tilde prendido, tocar el
+  otro lo reparte de nuevo** (`prender` otra vez: reemplaza entero lo que había puesto el orden).
+  Con el sorteo hecho no se cambia: "Ya se sorteó con esto tildado…".
+- Va en la clave `recorrido` de `frente` (solo si es `filas`; sin la clave, por columnas). Apagado,
+  queda el último elegido, y el botón lo recuerda.
+- "Ver la lista y el porqué" lo dice arriba ("29 familias ubicadas por filas · calculado el…").
+- El simulacro: `tool/orden_del_frente_test.dart --dart-define=recorrido=filas`.
+
+**En el dibujo del simulacro (`salon_*.svg`), el color es el grupo, no la línea:** verde, nunca pagó
+tarde; gris, pagó tarde alguna. Se lo dije mal una vez ("las verdes son la primera línea").
+
+### Lo que mostró el recorrido con el mouse
+
+- Tildar, la lista, SORTEAR (el botón y **el cartel de la app**), DESHACER y destildar: bien. Con el
+  sorteo hecho, destildar o cambiar el recorrido se rechaza con su motivo; con familias ya con
+  mesa, tildar también.
+- **Sin modo jefe el tilde no aparece** (a propósito: la pantalla no dice "cumplimiento" a quien no
+  es el jefe). No es el "apagado y con el motivo" del resto del salón.
+- La "P" y la "A" de una familia con adicional las pone el plano **por número** (la más baja es la
+  P), no por cuál quedó adelante: con los números mezclados de la ventana de prueba, la A puede
+  verse adelante. En la lista, las mesas van en el orden del reparto (la principal primero).
+- Un detalle arreglado: después de un cambio de recorrido rechazado, el botón mostraba el que se
+  había querido elegir. Ahora, prendido, manda lo guardado (`_recorridoElegido`).
+- La oración de quien tiene cuotas vencidas dice "Debe 2 cuotas vencidas…". La lista es solo del
+  jefe; no se le preguntó si esa palabra le sirve.
 
 ### Cómo se llama (lo eligió él)
 
@@ -108,8 +141,9 @@ Las piezas:
 
 ### Cómo se usa
 
-1. Con el plano listo y **antes de sortear**: PLANO → PERSONALIZAR → Mesas → tildar "Cumplimiento
-   orden". **Tildarlo justo antes de sortear**: usa los pagos que esa PC tiene en ese momento.
+1. Con el plano listo y **antes de sortear**: PLANO → PERSONALIZAR → Mesas → elegir "Por columnas"
+   o "Por filas" y tildar "Cumplimiento debido". **Tildarlo justo antes de sortear**: usa los pagos
+   que esa PC tiene en ese momento.
 2. Mirar el plano y "Ver la lista y el porqué".
 3. SORTEO, como siempre. Les entrega esas mesas.
 4. Después del sorteo, "Ver la lista y el porqué" sigue ahí: es el respaldo.
@@ -137,8 +171,6 @@ las entrega igual al sortear), pero no tiene el tilde ni "Ver la lista y el porq
 - "Ver la lista y el porqué" desde PLANO → HISTORIAL: está en Personalizar → Mesas.
 - El detalle cuota por cuota al tocar una familia: está en la lista de
   `tool/orden_del_frente_test.dart`.
-- No llegó a elegir entre recorrer por columnas desde el pasillo (lo hecho) o por filas desde el
-  escenario. Se cambia en un solo lugar: el orden de `MesasDelPaso.de`.
 - **El sorteo por división: el tilde no se prende, y dice por qué.** El orden no mira los bloques
   y dejaría familias fuera del de su división. La spec dice que 2 de las fiestas que faltan están
   por división: es lo primero que sigue.

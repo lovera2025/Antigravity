@@ -14,6 +14,7 @@
 //     [--dart-define=fiesta=<parte del nombre de la institución>]
 //     [--dart-define=corte=2026-11-12]   el día del sorteo; si no, hoy
 //     [--dart-define=semilla=20261112]   la de los empates
+//     [--dart-define=recorrido=filas]    el salón por filas; si no, por columnas
 //
 // Sin `fiesta`, solo el resumen de todas (sin nombres de alumnos). **La lista
 // de una fiesta lleva nombres y cómo pagó cada uno: va a `build/`, nunca a
@@ -45,6 +46,10 @@ const _salida = String.fromEnvironment('salida');
 const _corte = String.fromEnvironment('corte');
 const _semilla = int.fromEnvironment('semilla', defaultValue: 20261112);
 const _sorteos = int.fromEnvironment('sorteos', defaultValue: 200);
+
+/// `filas` para repartir fila por fila desde el escenario; si no, por columnas.
+final _recorrido =
+    RecorridoDelOrden.desde(const String.fromEnvironment('recorrido'));
 
 String _dia(DateTime? d) => d == null
     ? '—'
@@ -333,12 +338,14 @@ void main() {
         pagos: f.pagos,
         hoyAr: corte,
         ahora: DateTime.utc(2026, 11, 12, 18),
+        recorrido: _recorrido,
         por: 'herramienta',
       );
       if (cambio.config == null) {
         print('El salón por orden no se puede: ${cambio.problema}');
       } else {
-        final paso = MesasDelPaso.de(armado)!;
+        print('El recorrido: ${_recorrido.rotulo.toLowerCase()}.');
+        final paso = MesasDelPaso.de(armado, recorrido: _recorrido)!;
         final lugares = cambio.config!.frente!.lugares;
         final enMesa = <int, LugarPorOrden>{
           for (final l in lugares)

@@ -1,3 +1,4 @@
+import '../../../models/plano_evento.dart';
 import '../modelo/armado_salon.dart';
 
 /// Dónde está una mesa respecto del paso de los egresados.
@@ -21,7 +22,8 @@ class LugarEnElPaso {
 /// Las mesas del salón, de la mejor a la peor según el paso de los egresados
 /// (pedido del usuario, 12-nov-2026): la pasarela y su continuación hasta el
 /// fondo. Primero toda la columna pegada al paso, de punta a punta; después la
-/// que sigue hacia afuera; y así hasta el borde.
+/// que sigue hacia afuera; y así hasta el borde. O, si el jefe lo elige
+/// ([RecorridoDelOrden.filas]), fila por fila desde el escenario.
 ///
 /// Sale del dibujo del salón (posiciones y sectores), sin familias y **sin
 /// mirar ni cambiar ningún número de mesa**.
@@ -95,7 +97,15 @@ class MesasDelPaso {
 
   /// Null si el salón no tiene mesas, o no tiene pasarela ni escenario: sin
   /// eso no hay paso que medir.
-  static MesasDelPaso? de(ArmadoSalon a) {
+  ///
+  /// [recorrido] dice qué manda en el orden: la línea (por columnas, lo de
+  /// siempre) o la fila (por filas: toda la fila del escenario, de la pasarela
+  /// hacia afuera, y después la que sigue). La línea, la fila y el lado de
+  /// cada mesa son los mismos en los dos.
+  static MesasDelPaso? de(
+    ArmadoSalon a, {
+    RecorridoDelOrden recorrido = RecorridoDelOrden.columnas,
+  }) {
     if (a.mesas.isEmpty) return null;
     SectorPlano? pasarela;
     SectorPlano? escenario;
@@ -204,9 +214,14 @@ class MesasDelPaso {
 
     final delPasoEnOrden = [for (final m in delPaso) m.numero]..sort((x, y) {
         final lx = lugar[x]!, ly = lugar[y]!;
-        var c = lx.linea.compareTo(ly.linea);
+        final porFilas = recorrido == RecorridoDelOrden.filas;
+        var c = porFilas
+            ? lx.fila.compareTo(ly.fila)
+            : lx.linea.compareTo(ly.linea);
         if (c != 0) return c;
-        c = lx.fila.compareTo(ly.fila);
+        c = porFilas
+            ? lx.linea.compareTo(ly.linea)
+            : lx.fila.compareTo(ly.fila);
         if (c != 0) return c;
         c = lx.lado.compareTo(ly.lado);
         return c != 0 ? c : x.compareTo(y);

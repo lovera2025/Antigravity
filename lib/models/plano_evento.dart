@@ -221,6 +221,30 @@ class LugarPorOrden {
   }
 }
 
+/// En qué orden se reparten las mesas del salón "por orden" (6.7.0; el usuario
+/// pidió las dos el 12-nov-2026, para que el jefe elija).
+enum RecorridoDelOrden {
+  /// Primero toda la columna pegada a la pasarela, del escenario al fondo;
+  /// después la que sigue hacia afuera.
+  columnas('columnas', 'Por columnas'),
+
+  /// Primero toda la fila pegada al escenario, de la pasarela hacia afuera;
+  /// después la que sigue hacia el fondo.
+  filas('filas', 'Por filas');
+
+  final String clave;
+  final String rotulo;
+  const RecorridoDelOrden(this.clave, this.rotulo);
+
+  /// Una clave vacía o desconocida es "por columnas".
+  static RecorridoDelOrden desde(Object? v) {
+    for (final r in values) {
+      if (r.clave == v) return r;
+    }
+    return columnas;
+  }
+}
+
 /// El salón "por orden" de una fiesta (6.7.0, pedido del usuario el
 /// 12-nov-2026): las mesas van de la familia que mejor cumplió con sus cuotas a
 /// la que peor, desde la pasarela hacia afuera. Al prenderlo se calcula el
@@ -237,17 +261,25 @@ class OrdenDelPlano {
   final String? por;
   final List<LugarPorOrden> lugares;
 
+  /// En qué orden se repartieron las mesas. Apagado, es el último elegido:
+  /// así el botón lo recuerda.
+  final RecorridoDelOrden recorrido;
+
   const OrdenDelPlano({
     required this.prendido,
     this.el,
     this.por,
     this.lugares = const [],
+    this.recorrido = RecorridoDelOrden.columnas,
   });
 
   Map<String, dynamic> toMap() => {
         'general': prendido,
         if (el != null) 'el': _iso(el),
         if (por != null) 'por': por,
+        // Sin la clave, por columnas: lo único que había al principio.
+        if (recorrido != RecorridoDelOrden.columnas)
+          'recorrido': recorrido.clave,
         'orden': [for (final l in lugares) l.toMap()],
       };
 
@@ -258,6 +290,7 @@ class OrdenDelPlano {
       prendido: v['general'] == true,
       el: _momento(v['el']),
       por: _texto(v['por']),
+      recorrido: RecorridoDelOrden.desde(v['recorrido']),
       lugares: [
         if (o is List)
           for (final x in o) ?LugarPorOrden.fromMap(x),

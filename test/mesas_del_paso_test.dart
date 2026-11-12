@@ -8,6 +8,7 @@ import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 
 import 'helpers/salon_de_prueba.dart';
 
@@ -19,6 +20,38 @@ void main() {
       expect(p.enOrden, [2, 3, 7, 6, 10, 11, 1, 4, 8, 5, 9, 12]);
       expect(p.enLaLinea(1), 6);
       expect(p.enLaLinea(2), 6);
+    });
+
+    test('por filas: toda la fila del escenario, de la pasarela hacia afuera; '
+        'después la que sigue', () {
+      final p = MesasDelPaso.de(
+        salonDePrueba(),
+        recorrido: RecorridoDelOrden.filas,
+      )!;
+      expect(p.enOrden, [2, 3, 1, 4, 7, 6, 8, 5, 10, 11, 9, 12]);
+      // El lugar de cada mesa no depende del recorrido: cambia solo el orden.
+      final columnas = MesasDelPaso.de(salonDePrueba())!;
+      for (final n in p.enOrden) {
+        final a = p.lugar(n)!, b = columnas.lugar(n)!;
+        expect([a.linea, a.fila, a.lado], [b.linea, b.fila, b.lado]);
+        expect(p.detras(n), columnas.detras(n));
+      }
+    });
+
+    test('por filas, el pasto y las otras hojas también van al final', () {
+      final p = MesasDelPaso.de(
+        salonDePrueba(
+          otras: const [
+            MesaPlano(numero: 20, hoja: 'A', x: 50, y: 110, pasto: true),
+            MesaPlano(numero: 30, hoja: 'B', x: 30, y: 10),
+          ],
+          otrasHojas: const [
+            HojaPlano(id: 'B', titulo: 'B', caja: RectPlano(0, 0, 100, 40)),
+          ],
+        ),
+        recorrido: RecorridoDelOrden.filas,
+      )!;
+      expect(p.enOrden.skip(12), [20, 30]);
     });
 
     test('la línea, la fila y el lado de cada mesa', () {
@@ -186,6 +219,40 @@ void main() {
           }
         }
         expect(porFila.values.every((c) => c <= 2), isTrue);
+      });
+
+      test('${caso.key}, por filas: están todas, una vez, y las filas van del '
+          'escenario al fondo', () {
+        final a = caso.value;
+        final p = MesasDelPaso.de(a, recorrido: RecorridoDelOrden.filas)!;
+        final columnas = MesasDelPaso.de(a)!;
+        expect(p.enOrden.toSet(), columnas.enOrden.toSet());
+        expect(p.enOrden.length, a.mesas.length);
+        // En el orden, la fila nunca baja; y adentro de una fila, la línea
+        // tampoco.
+        LugarEnElPaso? anterior;
+        for (final n in p.enOrden) {
+          final l = p.lugar(n);
+          if (l == null) continue;
+          if (anterior != null) {
+            expect(l.fila, greaterThanOrEqualTo(anterior.fila));
+            if (l.fila == anterior.fila) {
+              expect(l.linea, greaterThanOrEqualTo(anterior.linea));
+            }
+          }
+          anterior = l;
+        }
+        // Lo que no es del paso (el pasto, las otras hojas) queda al final,
+        // igual que por columnas.
+        final sinLugar = [
+          for (final n in p.enOrden)
+            if (p.lugar(n) == null) n,
+        ];
+        expect(p.enOrden.skip(p.enOrden.length - sinLugar.length), sinLugar);
+        expect(sinLugar, [
+          for (final n in columnas.enOrden)
+            if (columnas.lugar(n) == null) n,
+        ]);
       });
     }
   });

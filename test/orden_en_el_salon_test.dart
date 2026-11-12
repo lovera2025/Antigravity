@@ -86,6 +86,7 @@ CambioDeConfig prender({
   List<ContratoAlumno>? alumnos,
   Map<String, List<Map<String, dynamic>>>? pagos,
   bool conPaso = true,
+  RecorridoDelOrden recorrido = RecorridoDelOrden.columnas,
 }) =>
     OrdenEnElSalon.prender(
       eventoId: _evento,
@@ -95,6 +96,7 @@ CambioDeConfig prender({
       pagos: pagos ?? _pagos(),
       hoyAr: _hoy,
       ahora: _ahora,
+      recorrido: recorrido,
       por: 'Jefe',
     );
 
@@ -121,6 +123,39 @@ void main() {
       expect(c.config!.fijadas.values.every((f) => f.esPorOrden), isTrue);
       expect(c.config!.fijadas.values.map((f) => f.motivo).toSet(),
           {'Por orden'});
+    });
+
+    test('por filas: la fila del escenario primero, de la pasarela hacia '
+        'afuera', () {
+      final c = prender(recorrido: RecorridoDelOrden.filas);
+      expect(c.sePuede, isTrue);
+      // El salón, de mejor a peor: 2, 3, 1, 4 y después la segunda fila.
+      expect(_de(c.config!), {
+        2: _id(1),
+        3: _id(2),
+        1: _id(3),
+        8: _id(3), // la 1 no tiene nada detrás: la más cercana de su lado
+        4: _id(4),
+      });
+      expect(c.config!.frente!.recorrido, RecorridoDelOrden.filas);
+      // El orden de las familias es el mismo: cambia solo qué mesa va primero.
+      expect(
+        [for (final l in c.config!.frente!.lugares) l.alumnoId],
+        [for (final l in prender().config!.frente!.lugares) l.alumnoId],
+      );
+    });
+
+    test('prendido, elegir el otro recorrido lo reparte de nuevo', () {
+      final columnas = prender().config!;
+      final filas = prender(
+        config: columnas,
+        recorrido: RecorridoDelOrden.filas,
+      ).config!;
+      expect(_de(filas),
+          _de(prender(recorrido: RecorridoDelOrden.filas).config!));
+      expect(filas.fijadas.values.every((f) => f.esPorOrden), isTrue);
+      // Y de vuelta.
+      expect(_de(prender(config: filas).config!), _de(columnas));
     });
 
     test('ninguna mesa cambia de número: el armado no se toca', () {
@@ -200,6 +235,17 @@ void main() {
       expect(c.problema, contains('deshacer el sorteo'));
     });
 
+    test('prendido y ya sorteado, cambiar el recorrido tampoco se puede', () {
+      final prendido = prender().config!;
+      final c = prender(
+        config: prendido,
+        alumnos: [_f(1, mesa: '2'), ..._alumnos.skip(1)],
+        recorrido: RecorridoDelOrden.filas,
+      );
+      expect(c.sePuede, isFalse);
+      expect(c.problema, startsWith('Ya se sorteó con esto tildado'));
+    });
+
     test('sin pasarela ni escenario no se puede', () {
       final c = prender(conPaso: false);
       expect(c.sePuede, isFalse);
@@ -240,6 +286,17 @@ void main() {
       expect(c.config!.frente!.lugares, isEmpty);
     });
 
+    test('el recorrido elegido queda: el botón lo recuerda', () {
+      final prendido = prender(recorrido: RecorridoDelOrden.filas).config!;
+      final c = OrdenEnElSalon.apagar(config: prendido, alumnos: _alumnos);
+      expect(c.config!.fijadas, isEmpty);
+      expect(c.config!.frente!.recorrido, RecorridoDelOrden.filas);
+      expect(
+        ConfigPlano.fromJson(c.config!.toJson()).frente!.recorrido,
+        RecorridoDelOrden.filas,
+      );
+    });
+
     test('con el sorteo hecho no se puede: lo guardado queda', () {
       final prendido = prender().config!;
       final c = OrdenEnElSalon.apagar(
@@ -273,6 +330,33 @@ void main() {
         expect(r.asignaciones[_id(2)], [3]);
         expect(r.asignaciones[_id(3)]!.toSet(), {7, 8});
         expect(r.asignaciones[_id(4)], [6]);
+        expect(r.asignaciones.containsKey(_id(5)), isFalse);
+      }
+    });
+
+    test('por filas también: cada familia recibe la mesa que le fijó el orden',
+        () {
+      final pagos = _pagos();
+      final config =
+          prender(pagos: pagos, recorrido: RecorridoDelOrden.filas).config!;
+      final e = EntradaSorteoPlano(
+        armado: salonDePrueba(),
+        config: config,
+        alumnos: _alumnos,
+        exclusion: exclusionSorteo(
+          candidatos:
+              candidatosPorPago(_alumnos, pagosPorAlumno(_alumnos, pagos)),
+          soloPagado: true,
+        ),
+      );
+      expect(SorteoConPlano.preparar(e).entra, isTrue);
+      for (var semilla = 1; semilla <= 40; semilla++) {
+        final r = SorteoConPlano.sortear(e, random: Random(semilla));
+        expect(SorteoConPlano.validar(e, r), isNull, reason: 'semilla $semilla');
+        expect(r.asignaciones[_id(1)], [2]);
+        expect(r.asignaciones[_id(2)], [3]);
+        expect(r.asignaciones[_id(3)]!.toSet(), {1, 8});
+        expect(r.asignaciones[_id(4)], [4]);
         expect(r.asignaciones.containsKey(_id(5)), isFalse);
       }
     });
@@ -313,6 +397,25 @@ void main() {
       expect([for (final l in o.lugares) '${l.puesto}:${l.mesas.join('+')}'],
           ['1:2', '2:3', '3:7+8', '4:6']);
       expect(o.lugares.first.frase, c.frente!.lugares.first.frase);
+    });
+
+    test('el recorrido va y vuelve; por columnas no escribe la clave', () {
+      final columnas = prender().config!;
+      expect(columnas.toJson(), isNot(contains('recorrido')));
+      expect(ConfigPlano.fromJson(columnas.toJson()).frente!.recorrido,
+          RecorridoDelOrden.columnas);
+      final filas = prender(recorrido: RecorridoDelOrden.filas).config!;
+      expect(filas.toJson(), contains('"recorrido":"filas"'));
+      final vuelta = ConfigPlano.fromJson(filas.toJson());
+      expect(vuelta.frente!.recorrido, RecorridoDelOrden.filas);
+      expect(_de(vuelta), _de(filas));
+      // Una clave que no se conoce es "por columnas": nunca un plano roto.
+      expect(
+        ConfigPlano.fromJson('{"frente": {"general": true, "recorrido": "x"}}')
+            .frente!
+            .recorrido,
+        RecorridoDelOrden.columnas,
+      );
     });
 
     test('una fiesta que nunca lo prendió no lleva la clave', () {

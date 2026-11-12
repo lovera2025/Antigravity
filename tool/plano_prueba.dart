@@ -746,7 +746,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
           onGuardarArmado: _guardarSalon,
           // "Mesas por orden" (6.7.0), con la misma cuenta que la pantalla de
           // la app: fija las mesas; SORTEAR, arriba, las entrega.
-          onPorOrden: (prender) => _aplicar(
+          onPorOrden: (prender, recorrido) => _aplicar(
             prender
                 ? OrdenEnElSalon.prender(
                     eventoId: 'prueba',
@@ -756,6 +756,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
                     pagos: pagosDePrueba(),
                     hoyAr: DateTime(2026, 11, 12),
                     ahora: DateTime.now().toUtc(),
+                    recorrido: recorrido,
                     por: 'Prueba',
                   )
                 : OrdenEnElSalon.apagar(config: _config, alumnos: _alumnos),

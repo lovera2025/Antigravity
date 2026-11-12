@@ -330,14 +330,21 @@ entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migrac
   siempre se las entrega.** Se ve en el plano antes de sortear, destildar lo borra, y Deshacer funciona como siempre. Entregadas,
   no llevan candado. La spec pedía un camino nuevo dentro de `SorteoConPlano`: no hizo falta.
 - `MesasDelPaso` (`plano/services/mesas_del_paso.dart`) ordena las mesas del dibujo: **línea** es el puesto de la mesa en su
-  fila y su lado contando desde el medio de la pasarela; primero toda la línea 1, después la 2. **No mira ni cambia números.**
+  fila y su lado contando desde el medio de la pasarela; por columnas, primero toda la línea 1, después la 2. **No mira ni
+  cambia números.**
 - Lo guardado va en la clave **`frente`** de la config del plano (`OrdenDelPlano`), y las fijadas del orden llevan el motivo
   "Por orden" (`MesaFijada.esPorOrden`): **sin el puesto ni nada de cómo pagó**, porque el motivo lo ve cualquiera. El
   Historial las junta en un renglón sin nombres.
 - **Lo fijado a mano y lo libre no se tocan.** Con familias ya con mesa no se tilda ni se destilda. **Con el sorteo por
   división no se prende** (no sabe respetar los bloques): es lo primero que sigue.
-- Probado con sus tests, con la pantalla entera en memoria y con un simulacro sobre una copia de la base (200 sorteos de
-  verdad). **No se recorrió con el mouse ni se publicó.**
+- **"Por columnas · Por filas", debajo del tilde** (`RecorridoDelOrden`; el usuario contestó "Ambas" el 12-nov): por
+  columnas (viene así) va primero toda la columna pegada a la pasarela; por filas, toda la fila pegada al escenario.
+  Cambia solo el orden de `MesasDelPaso.de(armado, recorrido:)`. Se elige antes de tildar; **prendido, tocar el otro lo
+  reparte de nuevo**, y con el sorteo hecho no se cambia. Va en la clave `recorrido` de `frente`, solo si es `filas`.
+- **Las mesas al costado de la pista cuentan como primera línea** (lo confirmó el 12-nov, mirando el dibujo).
+- **Sin modo jefe el tilde no aparece**, a propósito: la pantalla no dice "cumplimiento" a quien no es el jefe.
+- Probado con sus tests, con la pantalla entera en memoria, con un simulacro sobre una copia de la base (200 sorteos de
+  verdad por columnas y 200 por filas) y **recorrido con el mouse** en `tool/plano_prueba.dart` (12-nov). **Sin publicar.**
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

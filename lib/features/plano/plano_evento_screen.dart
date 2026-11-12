@@ -809,7 +809,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   /// que peor, desde la pasarela hacia afuera) y se le fija; SORTEO se las
   /// entrega como a cualquier fijada. Apagarlo las quita. **No sortea ni le da
   /// la mesa a nadie:** cambia solo la config del plano, por [_cambiarConfig].
-  Future<void> _porOrden(bool prender) async {
+  ///
+  /// Prendido, llega otra vez con el otro [recorrido] (por columnas o por
+  /// filas) y se reparte de nuevo.
+  Future<void> _porOrden(bool prender, RecorridoDelOrden recorrido) async {
     if (_ocupado || _frenaSinModoJefe()) return;
     var pagos = const <String, List<Map<String, dynamic>>>{};
     if (prender) {
@@ -842,6 +845,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               hoyAr: ArTime.nowAr(),
               ahora: DateTime.now().toUtc(),
               modo: p.modoSorteo,
+              recorrido: recorrido,
               por: quien,
             )
           : OrdenEnElSalon.apagar(config: p.config, alumnos: alumnos),
@@ -853,6 +857,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         final ubicadas = lugares.where((l) => l.mesas.isNotEmpty).length;
         final sinLugar = lugares.length - ubicadas;
         return 'Cumplimiento debido: quedaron ubicadas $ubicadas familias'
+            '${recorrido == RecorridoDelOrden.filas ? ', por filas' : ''}'
             '${sinLugar == 0 ? '' : ' ($sinLugar no entran: faltan mesas)'}. '
             'Miralas en el plano; con SORTEO se les entrega la mesa.';
       },
