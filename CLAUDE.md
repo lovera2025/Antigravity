@@ -315,9 +315,29 @@ entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migrac
   de la mora. La app no lo llama todavía. **La lista de una fiesta se saca con `tool/orden_del_frente_test.dart` sobre una
   copia de la base, lleva nombres y cómo pagó cada uno, y va a `build/`, nunca a git.** El 12-nov se entregó una para fijar
   las mesas a mano.
-- **Decidido por el usuario el 12-nov para el orden que se reparte solo (6.7.0, solo en el plan):** recorre todo el salón, de
-  la pasarela hacia afuera, y el azar solo desempata; tolerancia 0 días; ninguna mesa cambia de número; un historial con una
-  oración por familia, sin decir "mora" ni "deuda". Las correcciones a la spec, en el contexto.
+- **Decidido por el usuario el 12-nov para el orden que se reparte solo:** recorre todo el salón, de la pasarela hacia afuera,
+  y el azar solo desempata; tolerancia 0 días; ninguna mesa cambia de número; un historial con una oración por familia, sin
+  decir "mora" ni "deuda".
+
+**La 6.7.0: "Cumplimiento debido", la preferencia por cumplimiento** (programada el 12-nov a la tarde, versión `6.7.0+72`,
+**en la rama y SIN PUBLICAR**; `docs/CONTEXTO_v6.7.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está
+**lo que falta, en orden, y lo que no se probó**). Sin SQL ni migración. El usuario creía que el tilde ya estaba hecho en la
+6.6.2 y lo pidió esa misma tarde.
+- **Un tilde en PLANO → PERSONALIZAR → Mesas: "Cumplimiento debido"** (el nombre lo eligió él; "Mesas por orden" lo
+  confundía con el orden de los números). Prendido, cada familia queda con su mesa, de la que mejor cumplió a la que peor,
+  desde la pasarela hacia afuera. "Ver la lista y el porqué" muestra quién quedó dónde, con su oración.
+- **No toca el sorteo: le fija a cada familia su mesa** (`OrdenEnElSalon.prender`, por `_cambiarConfig`) **y el SORTEO de
+  siempre se las entrega.** Se ve en el plano antes de sortear, destildar lo borra, y Deshacer funciona como siempre. Entregadas,
+  no llevan candado. La spec pedía un camino nuevo dentro de `SorteoConPlano`: no hizo falta.
+- `MesasDelPaso` (`plano/services/mesas_del_paso.dart`) ordena las mesas del dibujo: **línea** es el puesto de la mesa en su
+  fila y su lado contando desde el medio de la pasarela; primero toda la línea 1, después la 2. **No mira ni cambia números.**
+- Lo guardado va en la clave **`frente`** de la config del plano (`OrdenDelPlano`), y las fijadas del orden llevan el motivo
+  "Por orden" (`MesaFijada.esPorOrden`): **sin el puesto ni nada de cómo pagó**, porque el motivo lo ve cualquiera. El
+  Historial las junta en un renglón sin nombres.
+- **Lo fijado a mano y lo libre no se tocan.** Con familias ya con mesa no se tilda ni se destilda. **Con el sorteo por
+  división no se prende** (no sabe respetar los bloques): es lo primero que sigue.
+- Probado con sus tests, con la pantalla entera en memoria y con un simulacro sobre una copia de la base (200 sorteos de
+  verdad). **No se recorrió con el mouse ni se publicó.**
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

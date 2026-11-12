@@ -6,6 +6,11 @@ lo que el usuario cambió ese mismo día anotado arriba.
 
 ## Para retomar en otro chat
 
+> **Lo que siguió ese mismo día está en `docs/CONTEXTO_v6.7.0_2026-11-12.md`:** a la tarde el
+> usuario pidió el tilde y se programó (la 6.7.0, "Cumplimiento debido", en la rama y sin
+> publicar). Donde este archivo dice que el orden que se reparte solo está "solo en el plan",
+> quedó viejo.
+
 **Estado: la 6.6.2 está PUBLICADA (12-nov, 14:37, con el usuario: "Sí, publicá"). Falta que
 instale, y la foto de la mora "después". El orden por cumplimiento que se reparte solo (la 6.7.0)
 está SOLO EN EL PLAN: lo único programado es el servicio que ordena, sin pantalla.**

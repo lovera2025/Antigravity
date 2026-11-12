@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_engine.dart';
+import '../../core/utils/ar_time.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/evento.dart';
@@ -39,6 +40,7 @@ import 'services/cambios_de_mesa.dart';
 import 'services/colores_y_textos.dart';
 import 'services/editar_armado.dart';
 import 'services/historial_sorteo.dart';
+import 'services/orden_en_el_salon.dart';
 import 'services/plano_de_la_fiesta.dart';
 import 'services/numeracion_recordada.dart';
 import 'services/predios_del_salon.dart';
@@ -48,6 +50,7 @@ import 'widgets/imprimir_plano_dialog.dart';
 import 'widgets/nombre_predio_dialog.dart';
 import 'widgets/plano_evento_cuerpo.dart';
 import 'widgets/reserva_de_mesa_dialog.dart';
+import 'widgets/ver_el_orden_dialog.dart';
 
 /// El plano del salón de una fiesta: el armado con sus medidas, las familias
 /// en sus mesas y lo que hay que revisar.
@@ -801,6 +804,67 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     }
   }
 
+  /// El salón "por orden" (6.7.0): al prenderlo se calcula, con los pagos que
+  /// tiene esta PC, de qué familia es cada mesa (de la que mejor cumplió a la
+  /// que peor, desde la pasarela hacia afuera) y se le fija; SORTEO se las
+  /// entrega como a cualquier fijada. Apagarlo las quita. **No sortea ni le da
+  /// la mesa a nadie:** cambia solo la config del plano, por [_cambiarConfig].
+  Future<void> _porOrden(bool prender) async {
+    if (_ocupado || _frenaSinModoJefe()) return;
+    var pagos = const <String, List<Map<String, dynamic>>>{};
+    if (prender) {
+      try {
+        final filas = await ref
+            .read(contratosRepositoryProvider)
+            .getPagosForContratoIds([for (final a in _alumnos) a.id]);
+        final porAlumno = <String, List<Map<String, dynamic>>>{};
+        for (final p in filas) {
+          final id = p['contrato_alumno_id'] as String?;
+          if (id != null) porAlumno.putIfAbsent(id, () => []).add(p);
+        }
+        pagos = porAlumno;
+      } catch (e) {
+        _decir('No se pudieron leer los pagos. Probá de nuevo.', error: e);
+        return;
+      }
+    }
+    if (!mounted) return;
+    final quien = quienOpera(ref);
+    final eventoId = widget.evento.id;
+    await _cambiarConfig(
+      (p, alumnos) => prender
+          ? OrdenEnElSalon.prender(
+              eventoId: eventoId,
+              armado: p.armado,
+              config: p.config,
+              alumnos: alumnos,
+              pagos: pagos,
+              hoyAr: ArTime.nowAr(),
+              ahora: DateTime.now().toUtc(),
+              modo: p.modoSorteo,
+              por: quien,
+            )
+          : OrdenEnElSalon.apagar(config: p.config, alumnos: alumnos),
+      hecho: (c) {
+        if (!prender) {
+          return 'Cumplimiento debido, apagado: ya no hay mesas ubicadas.';
+        }
+        final lugares = c.config?.frente?.lugares ?? const <LugarPorOrden>[];
+        final ubicadas = lugares.where((l) => l.mesas.isNotEmpty).length;
+        final sinLugar = lugares.length - ubicadas;
+        return 'Cumplimiento debido: quedaron ubicadas $ubicadas familias'
+            '${sinLugar == 0 ? '' : ' ($sinLugar no entran: faltan mesas)'}. '
+            'Miralas en el plano; con SORTEO se les entrega la mesa.';
+      },
+    );
+  }
+
+  void _verElOrden() {
+    final orden = _plano?.config.frente;
+    if (orden == null || orden.lugares.isEmpty) return;
+    mostrarElOrden(context, orden: orden, alumnos: _alumnos);
+  }
+
   CambioDeConfig _calcularFijar(
     PlanoEvento plano,
     List<ContratoAlumno> alumnos,
@@ -1454,6 +1518,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               onGuardarColoresYTextos: _guardarColoresYTextos,
               onGuardarArmado: _guardarSalon,
               onGuardarComoPredio: _guardarComoPredio,
+              onPorOrden: _porOrden,
+              onVerElOrden: _verElOrden,
             )
           : null,
       onImprimir: _imprimir,

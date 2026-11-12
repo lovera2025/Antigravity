@@ -43,6 +43,12 @@ class MesaFijada {
 
   const MesaFijada({required this.alumnoId, this.motivo, this.por, this.cuando});
 
+  /// El motivo de una fijada que puso el salón "por orden" (6.7.0). Es lo que
+  /// la distingue de una fijada a mano: apagar el orden saca solo estas.
+  static const motivoPorOrden = 'Por orden';
+
+  bool get esPorOrden => (motivo ?? '').startsWith(motivoPorOrden);
+
   Map<String, dynamic> toMap() => {
         'alumno': alumnoId,
         if (motivo != null) 'motivo': motivo,
@@ -167,6 +173,99 @@ class BloqueDivision {
   }
 }
 
+/// El lugar que le tocó a una familia con el salón "por orden" (6.7.0): su
+/// puesto, sus mesas y la oración que dice por qué.
+class LugarPorOrden {
+  final String alumnoId;
+
+  /// 1 es quien mejor cumplió.
+  final int puesto;
+
+  /// 1, 2 o 3 (`GrupoDeCumplimiento.numero`).
+  final int grupo;
+  final List<int> mesas;
+
+  /// "Nunca pagó tarde y terminó de pagar el 8 de abril." Se guarda escrita:
+  /// así dice lo mismo aunque después se corrija un cobro.
+  final String frase;
+
+  const LugarPorOrden({
+    required this.alumnoId,
+    required this.puesto,
+    required this.grupo,
+    required this.mesas,
+    required this.frase,
+  });
+
+  Map<String, dynamic> toMap() =>
+      {'a': alumnoId, 'p': puesto, 'g': grupo, 'm': mesas, 'f': frase};
+
+  static LugarPorOrden? fromMap(Object? v) {
+    if (v is! Map) return null;
+    final a = v['a'];
+    final p = v['p'];
+    if (a is! String || a.isEmpty || p is! num) return null;
+    final m = v['m'];
+    final g = v['g'];
+    return LugarPorOrden(
+      alumnoId: a,
+      puesto: p.toInt(),
+      grupo: g is num ? g.toInt() : 0,
+      mesas: [
+        if (m is List)
+          for (final x in m)
+            if (x is num) x.toInt(),
+      ],
+      frase: _texto(v['f']) ?? '',
+    );
+  }
+}
+
+/// El salón "por orden" de una fiesta (6.7.0, pedido del usuario el
+/// 12-nov-2026): las mesas van de la familia que mejor cumplió con sus cuotas a
+/// la que peor, desde la pasarela hacia afuera. Al prenderlo se calcula el
+/// orden, se le fija a cada familia su mesa y queda guardado acá cómo salió,
+/// con la oración de cada una: es el respaldo para cuando alguien reclame.
+///
+/// Va en la clave `frente` de la config del plano. Una versión anterior no la
+/// conoce y la conserva al guardar.
+class OrdenDelPlano {
+  final bool prendido;
+
+  /// Cuándo se calculó, y quién lo prendió.
+  final DateTime? el;
+  final String? por;
+  final List<LugarPorOrden> lugares;
+
+  const OrdenDelPlano({
+    required this.prendido,
+    this.el,
+    this.por,
+    this.lugares = const [],
+  });
+
+  Map<String, dynamic> toMap() => {
+        'general': prendido,
+        if (el != null) 'el': _iso(el),
+        if (por != null) 'por': por,
+        'orden': [for (final l in lugares) l.toMap()],
+      };
+
+  static OrdenDelPlano? fromMap(Object? v) {
+    if (v is! Map) return null;
+    final o = v['orden'];
+    return OrdenDelPlano(
+      prendido: v['general'] == true,
+      el: _momento(v['el']),
+      por: _texto(v['por']),
+      lugares: [
+        if (o is List)
+          for (final x in o) ?LugarPorOrden.fromMap(x),
+      ],
+    );
+  }
+}
+
 /// Lo que se configura del plano de una fiesta. Viaja como un JSON en la
 /// columna `config`.
 ///
@@ -200,6 +299,9 @@ class ConfigPlano {
   /// vienen, en las tres PCs y sin tabla nueva (`NumeracionRecordada`): viaja
   /// en la clave `numeracion_el`, con el plano.
   final DateTime? numeracionEl;
+
+  /// El salón "por orden" (6.7.0). Null: nunca se prendió en esta fiesta.
+  final OrdenDelPlano? frente;
   final Map<String, dynamic> otras;
 
   const ConfigPlano({
@@ -213,6 +315,7 @@ class ConfigPlano {
     this.medidas = const MedidasPlano(),
     this.numeracion = FinNumeracion.escenario,
     this.numeracionEl,
+    this.frente,
     this.otras = const {},
   });
 
@@ -229,6 +332,7 @@ class ConfigPlano {
     'medidas',
     'numeracion',
     'numeracion_el',
+    'frente',
   };
 
   /// ¿Alguien eligió dónde termina la numeración de esta fiesta? Si nunca se
@@ -303,6 +407,7 @@ class ConfigPlano {
       numeracionEl: FinNumeracion.values.any((f) => f.name == m['numeracion'])
           ? _momento(m['numeracion_el'])
           : null,
+      frente: OrdenDelPlano.fromMap(m['frente']),
       otras: {
         for (final e in m.entries)
           if (!_conocidas.contains(e.key)) e.key: e.value,
@@ -329,6 +434,7 @@ class ConfigPlano {
           'numeracion_el': numeracionEl!.toUtc().toIso8601String(),
         } else if (numeracion.clave != null)
           'numeracion': numeracion.clave,
+        if (frente != null) 'frente': frente!.toMap(),
       });
 
   ConfigPlano copyWith({
@@ -342,6 +448,7 @@ class ConfigPlano {
     MedidasPlano? medidas,
     FinNumeracion? numeracion,
     DateTime? numeracionEl,
+    OrdenDelPlano? frente,
     bool borrarTitulo = false,
     bool borrarSubtitulo = false,
   }) =>
@@ -356,6 +463,7 @@ class ConfigPlano {
         medidas: medidas ?? this.medidas,
         numeracion: numeracion ?? this.numeracion,
         numeracionEl: numeracionEl ?? this.numeracionEl,
+        frente: frente ?? this.frente,
         otras: otras,
       );
 }

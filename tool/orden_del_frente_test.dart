@@ -33,13 +33,18 @@ import 'package:arguello_events/features/eventos/services/cumplimiento_de_cuotas
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/mora_congelada.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
+import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
+import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
+import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 
 const _copia = String.fromEnvironment('copia');
 const _fiesta = String.fromEnvironment('fiesta');
 const _salida = String.fromEnvironment('salida');
 const _corte = String.fromEnvironment('corte');
 const _semilla = int.fromEnvironment('semilla', defaultValue: 20261112);
+const _sorteos = int.fromEnvironment('sorteos', defaultValue: 200);
 
 String _dia(DateTime? d) => d == null
     ? '—'
@@ -55,7 +60,11 @@ class _Fiesta {
   final Map<String, List<Map<String, dynamic>>> pagos;
   final List<PuestoDelOrden> orden;
 
-  _Fiesta(this.id, this.nombre, this.alumnos, this.pagos, this.orden);
+  /// El plano guardado de la fiesta, si tiene.
+  final PlanoEvento? plano;
+
+  _Fiesta(this.id, this.nombre, this.alumnos, this.pagos, this.orden,
+      this.plano);
 
   int grupo(GrupoDeCumplimiento g) => orden.where((p) => p.grupo == g).length;
   int get activos => alumnos.where((a) => !a.esBajaTemporal).length;
@@ -132,6 +141,11 @@ void main() {
               Map<String, dynamic>.from(p),
           ];
         }
+        final filasPlano = await db.query(
+          'planos_evento',
+          where: 'evento_id = ?',
+          whereArgs: [id],
+        );
         fiestas.add(_Fiesta(
           id,
           (e['encabezado_evento'] ?? '(sin nombre)').toString(),
@@ -143,6 +157,11 @@ void main() {
             corteAr: corte,
             rng: Random(_semilla),
           ),
+          filasPlano.isEmpty
+              ? null
+              : PlanoEvento.fromMap(
+                  Map<String, dynamic>.from(filasPlano.first),
+                ),
         ));
       }
     } finally {
@@ -301,6 +320,118 @@ void main() {
           'base): ${sinBase.map((a) => _html(a.nombreAlumno)).join(' · ')}</p>');
     }
     File('${carpeta.path}/orden_$base.html').writeAsStringSync(h.toString());
+
+    // ── El salón por orden: lo que haría el tilde, sobre el plano de verdad ──
+    // Sin nombres: en cada mesa va el puesto de su familia. No guarda nada.
+    final armado = f.plano?.armadoONull;
+    if (armado != null && armado.mesas.isNotEmpty) {
+      final cambio = OrdenEnElSalon.prender(
+        eventoId: f.id,
+        armado: armado,
+        config: f.plano!.config,
+        alumnos: f.alumnos,
+        pagos: f.pagos,
+        hoyAr: corte,
+        ahora: DateTime.utc(2026, 11, 12, 18),
+        por: 'herramienta',
+      );
+      if (cambio.config == null) {
+        print('El salón por orden no se puede: ${cambio.problema}');
+      } else {
+        final paso = MesasDelPaso.de(armado)!;
+        final lugares = cambio.config!.frente!.lugares;
+        final enMesa = <int, LugarPorOrden>{
+          for (final l in lugares)
+            for (final n in l.mesas) n: l,
+        };
+        final hoja = armado.hoja(paso.hoja)!;
+        final c = hoja.caja;
+        final r = armado.radio;
+        const colores = ['#ffffff', '#d7f0dc', '#eeeeee', '#f6cfcf'];
+        final s = StringBuffer()
+          ..writeln('<svg xmlns="http://www.w3.org/2000/svg" '
+              'viewBox="${c.x - r} ${c.y - r} ${c.ancho + 2 * r} '
+              '${c.alto + 2 * r}" font-family="Segoe UI, Arial, sans-serif">')
+          ..writeln('<rect x="${c.x - r}" y="${c.y - r}" '
+              'width="${c.ancho + 2 * r}" height="${c.alto + 2 * r}" '
+              'fill="#faf8f3"/>');
+        for (final x in armado.sectoresDeHoja(paso.hoja)) {
+          final k = x.caja;
+          s
+            ..writeln('<rect x="${k.x}" y="${k.y}" width="${k.ancho}" '
+                'height="${k.alto}" fill="#e3ded2" stroke="#b9b2a2"/>')
+            ..writeln('<text x="${k.centroX}" y="${k.centroY}" '
+                'text-anchor="middle" dominant-baseline="middle" '
+                'font-size="${r * 0.5}" fill="#6b6557">'
+                '${_html(x.texto.isEmpty ? x.tipo.name : x.texto)}</text>');
+        }
+        for (final m in armado.mesasDeHoja(paso.hoja)) {
+          final l = enMesa[m.numero];
+          final principal = l != null && l.mesas.first == m.numero;
+          s
+            ..writeln('<circle cx="${m.x}" cy="${m.y}" r="${r * 0.92}" '
+                'fill="${colores[l?.grupo ?? 0]}" stroke="#555" '
+                'stroke-width="${r * 0.05}"'
+                '${l != null && !principal ? ' stroke-dasharray="${r * 0.2} ${r * 0.12}"' : ''}/>')
+            ..writeln('<text x="${m.x}" y="${m.y - r * 0.05}" '
+                'text-anchor="middle" dominant-baseline="middle" '
+                'font-size="${r * 0.72}" font-weight="700" fill="#111">'
+                '${l == null ? '' : '${l.puesto}${principal ? '' : '+'}'}'
+                '</text>')
+            ..writeln('<text x="${m.x}" y="${m.y + r * 0.62}" '
+                'text-anchor="middle" font-size="${r * 0.3}" fill="#666">'
+                'mesa ${m.numero}</text>');
+        }
+        s.writeln('</svg>');
+        File('${carpeta.path}/salon_$base.svg').writeAsStringSync(s.toString());
+
+        final sinLugar = lugares.where((l) => l.mesas.isEmpty).length;
+        final vacias = armado.mesas.length - enMesa.length;
+        print('El salón por orden: ${lugares.length - sinLugar} familias en '
+            '${enMesa.length} mesas (${paso.enLaLinea(1)} de primera línea, '
+            '${paso.enLaLinea(2)} de segunda), $vacias mesas vacías, '
+            '$sinLugar familias sin lugar. Dibujo: salon_$base.svg');
+        print('Los primeros puestos: ${[
+          for (final l in lugares.take(8)) '${l.puesto}→${l.mesas.join('+')}'
+        ].join('  ')}');
+
+        // Y el SORTEO de siempre, con el candado de lo pagado, sobre ese
+        // plano: tiene que entregarle a cada familia la mesa que le fijó el
+        // orden, y pasar el control final. Lo mismo que corre la app.
+        final entrada = EntradaSorteoPlano(
+          armado: armado,
+          config: cambio.config!,
+          alumnos: f.alumnos,
+          exclusion: exclusionSorteo(
+            candidatos: candidatosPorPago(f.alumnos, pagado),
+            soloPagado: true,
+          ),
+          modo: f.plano!.modoSorteo,
+        );
+        final plan = SorteoConPlano.preparar(entrada);
+        expect(plan.entra, isTrue, reason: plan.avisos.join(' · '));
+        var distintas = 0;
+        for (var semilla = 1; semilla <= _sorteos; semilla++) {
+          final r = SorteoConPlano.sortear(entrada, random: Random(semilla));
+          expect(SorteoConPlano.validar(entrada, r), isNull,
+              reason: 'semilla $semilla');
+          for (final l in lugares) {
+            final suyas = (r.asignaciones[l.alumnoId] ?? const <int>[]).toSet();
+            if (suyas.length != l.mesas.length ||
+                !suyas.containsAll(l.mesas)) {
+              distintas++;
+            }
+          }
+        }
+        expect(distintas, 0,
+            reason: 'alguna familia no recibió la mesa que le fijó el orden');
+        print('$_sorteos sorteos de verdad sobre ese plano '
+            '(${f.plano!.modoSorteo.clave}): todos pasan el control final y '
+            'cada familia recibe la mesa que le fijó el orden.');
+      }
+    } else {
+      print('La fiesta no tiene un plano con mesas guardado.');
+    }
 
     print('${f.nombre}: ${f.orden.length} familias en el orden '
         '(${f.grupo(GrupoDeCumplimiento.nuncaTarde)} nunca tarde, '

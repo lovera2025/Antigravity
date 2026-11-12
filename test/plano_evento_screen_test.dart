@@ -38,6 +38,7 @@ import 'package:arguello_events/features/plano/repositories/predios_repository.d
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
+import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
@@ -192,6 +193,19 @@ class _Contratos extends ContratosRepository {
   @override
   Future<int?> mesasDeOtraPcSinBajar(String eventoId) async =>
       distintasEnLaOtraPc;
+
+  /// Los pagos de cada familia, como están en la base de la PC.
+  Map<String, List<Map<String, dynamic>>> pagos = {};
+
+  @override
+  Future<List<Map<String, dynamic>>> getPagosForContratoIds(
+    List<String> contratoIds,
+  ) async =>
+      [
+        for (final id in contratoIds)
+          for (final p in pagos[id] ?? const <Map<String, dynamic>>[])
+            {...p, 'contrato_alumno_id': id},
+      ];
 
   @override
   Future<void> asignarNumerosMesa(
@@ -1462,6 +1476,116 @@ void main() {
 
   // Fijar y dejar libre cambian el plano; cambiar y mudar cambian los números
   // de mesa de las familias, con su renglón en el Historial.
+  group('Personalizar: Cumplimiento debido', () {
+    Map<String, dynamic> pago(double monto, {String concepto = 'Cuota Base'}) =>
+        {
+          'id': 'p-$concepto-$monto',
+          'concepto': concepto,
+          'monto': monto,
+          'monto_gross': monto,
+          'fecha_pago': '2026-06-10T15:00:00.000Z',
+          'created_at': '2026-06-10T15:00:00.000Z',
+          'anulado': 0,
+        };
+
+    /// SOSA canceló todo; GÓMEZ pagó dos cuotas y su mesa adicional; VEGA no
+    /// pagó nada.
+    void conPagos(_Mundo mundo) => mundo.contratos.pagos = {
+          'sosa': [pago(300000)],
+          'gomez': [pago(60000), pago(70000, concepto: 'Mesa extra (1/1)')],
+        };
+
+    testWidgets('prenderlo le fija a cada familia su mesa, por orden, y lo '
+        'guarda', (tester) async {
+      final mundo =
+          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+      await _personalizar(tester);
+      expect(find.byKey(const Key('ver_el_orden')), findsNothing);
+      await _guardar(tester, 'por_orden');
+
+      final config = mundo.guardado.config;
+      final paso = MesasDelPaso.de(mundo.guardado.armado)!;
+      final mejor = paso.enOrden.first;
+      // SOSA, que canceló, va a la mejor mesa; GÓMEZ, a la que sigue, con su
+      // adicional detrás. VEGA no pagó nada: no entra.
+      expect(config.fijadasPorAlumno['sosa'], [mejor]);
+      expect(config.fijadasPorAlumno['gomez'], hasLength(2));
+      expect(config.fijadasPorAlumno['gomez'],
+          contains(paso.detras(paso.enOrden[1])));
+      expect(config.fijadasPorAlumno.containsKey('vega'), isFalse);
+      expect(config.fijadas.values.every((f) => f.esPorOrden), isTrue);
+      expect(config.frente!.prendido, isTrue);
+      expect(config.frente!.por, isNotEmpty);
+      expect([for (final l in config.frente!.lugares) l.alumnoId],
+          ['sosa', 'gomez']);
+      expect(_dicho(tester), startsWith('Cumplimiento debido: quedaron ubicadas 2 familias'));
+      // No le dio la mesa a nadie: eso lo hace SORTEO.
+      expect(mundo.contratos.asignaciones, isEmpty);
+      // Ninguna mesa cambió de número.
+      expect(
+        [for (final m in mundo.guardado.armado.mesas) m.numero],
+        [for (final m in _armado().mesas) m.numero],
+      );
+    });
+
+    testWidgets('la lista dice quién quedó dónde y por qué',
+        (tester) async {
+      await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+      await _personalizar(tester);
+      await _guardar(tester, 'por_orden');
+      await _guardar(tester, 'ver_el_orden');
+
+      expect(find.byKey(const Key('orden_1')), findsOneWidget);
+      expect(find.byKey(const Key('orden_2')), findsOneWidget);
+      expect(find.byKey(const Key('orden_3')), findsNothing);
+      expect(find.textContaining('SOSA, LUZ · mesa '), findsOneWidget);
+      expect(find.textContaining('GÓMEZ, SOFÍA · mesas '), findsOneWidget);
+      expect(find.textContaining('Nunca pagó tarde'), findsNWidgets(2));
+      expect(
+        tester.widget<Text>(find.byKey(const Key('orden_resumen'))).data,
+        startsWith('2 familias ubicadas'),
+      );
+    });
+
+    testWidgets('apagarlo saca esas mesas fijadas y deja las puestas a mano',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        config: const ConfigPlano(
+          fijadas: {40: MesaFijada(alumnoId: 'vega', motivo: 'Silla de ruedas')},
+        ),
+        antes: conPagos,
+      );
+      await _personalizar(tester);
+      await _guardar(tester, 'por_orden');
+      expect(mundo.guardado.config.fijadas.length, 4);
+      await _guardar(tester, 'por_orden');
+
+      expect(mundo.guardado.config.fijadas.keys, [40]);
+      expect(mundo.guardado.config.fijadas[40]!.motivo, 'Silla de ruedas');
+      expect(mundo.guardado.config.frente!.prendido, isFalse);
+      expect(_dicho(tester), startsWith('Cumplimiento debido, apagado'));
+    });
+
+    testWidgets('con la fiesta ya sorteada no se prende, y dice por qué',
+        (tester) async {
+      final mundo = await _abrir(tester, antes: conPagos);
+      await _personalizar(tester);
+      await _guardar(tester, 'por_orden');
+
+      final (titulo, texto) = _cartel(tester);
+      expect(titulo, 'No se puede');
+      expect(texto, contains('deshacer el sorteo'));
+      expect(mundo.planos.guardados, isEmpty);
+    });
+
+    testWidgets('sin modo jefe el tilde no está', (tester) async {
+      await _abrir(tester, esJefe: false, alumnos: _sinSortear());
+      expect(find.byKey(const Key('por_orden')), findsNothing);
+    });
+  });
+
   group('las mesas y las familias', () {
     testWidgets('dejar libre una mesa la guarda con su motivo', (tester) async {
       final mundo = await _abrir(tester, alumnos: _sinSortear());

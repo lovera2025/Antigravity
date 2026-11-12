@@ -176,9 +176,27 @@ class HistorialSorteo {
     }
 
     // Las fijadas, una por familia (se fijan todas sus mesas juntas).
+    // Las que puso el salón "por orden" (6.7.0) van en un solo renglón, sin
+    // nombres: el Historial lo abre cualquiera, y quién quedó dónde y por qué
+    // lo ve el jefe en "Ver el orden".
     final fijadasPorFamilia = <String, List<int>>{};
+    final porOrden = <String>{};
     for (final e in config.fijadas.entries) {
+      if (e.value.esPorOrden) {
+        porOrden.add(e.value.alumnoId);
+        continue;
+      }
       fijadasPorFamilia.putIfAbsent(e.value.alumnoId, () => []).add(e.key);
+    }
+    if (porOrden.isNotEmpty) {
+      renglones.add(RenglonHistorial(
+        tipo: TipoRenglonHistorial.fijada,
+        cuando: config.frente?.el,
+        titulo: 'Las mesas se ubicaron por orden: '
+            '${porOrden.length == 1 ? '1 familia' : '${porOrden.length} familias'}',
+        detalle: const [],
+        quien: config.frente?.por,
+      ));
     }
     for (final e in fijadasPorFamilia.entries) {
       final mesas = e.value..sort();

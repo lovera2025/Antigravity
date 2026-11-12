@@ -1104,7 +1104,16 @@ class EditarArmado {
       );
     }
     final sinLasSacadas = rehecho
-        ? config.copyWith(fijadas: const {}, libres: const {}, bloques: const [])
+        ? config.copyWith(
+            fijadas: const {},
+            libres: const {},
+            bloques: const [],
+            // Con las fijadas se va el salón "por orden" (6.7.0): quedaría
+            // prendido sin ninguna mesa ubicada.
+            frente: config.frente == null
+                ? null
+                : const OrdenDelPlano(prendido: false),
+          )
         : sacadas.any(config.libres.containsKey)
             ? config.copyWith(libres: {
                 for (final e in config.libres.entries)

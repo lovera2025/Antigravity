@@ -105,6 +105,13 @@ class AccionesPlano {
   final void Function(ArmadoSalon base, ArmadoSalon actual)?
       onGuardarComoPredio;
 
+  /// Prender o apagar el salón "por orden" (6.7.0): las mesas, de la familia
+  /// que mejor cumplió a la que peor. Null: sin el tilde.
+  final void Function(bool prender)? onPorOrden;
+
+  /// "Ver el orden": quién quedó dónde y por qué. Null: sin el botón.
+  final VoidCallback? onVerElOrden;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -121,6 +128,8 @@ class AccionesPlano {
     this.onGuardarColoresYTextos,
     this.onGuardarArmado,
     this.onGuardarComoPredio,
+    this.onPorOrden,
+    this.onVerElOrden,
   });
 }
 
@@ -2263,6 +2272,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               children: consulta.isNotEmpty
                   ? _resultados(consulta)
                   : [
+                      ..._porOrden(context),
                       ..._elegido(context),
                       ..._leyenda(context),
                       ..._avisos(context),
@@ -2272,6 +2282,49 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ],
       ),
     );
+  }
+
+  /// El tilde de la preferencia por cumplimiento (6.7.0) y su lista. El
+  /// nombre lo eligió el usuario el 12-nov-2026: **"Cumplimiento debido"**
+  /// ("Mesas por orden", el primero, lo confundía con el orden de los números).
+  /// No dice "pago", "mora" ni "deuda", y solo se ve en modo jefe.
+  List<Widget> _porOrden(BuildContext context) {
+    final acciones = widget.acciones;
+    final alTildar = acciones?.onPorOrden;
+    if (alTildar == null) return const [];
+    final frente = _plano.config.frente;
+    final prendido = frente?.prendido ?? false;
+    final ubicadas =
+        frente?.lugares.where((l) => l.mesas.isNotEmpty).length ?? 0;
+    final verElOrden = acciones?.onVerElOrden;
+    return [
+      SwitchListTile(
+        key: const Key('por_orden'),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Cumplimiento debido'),
+        subtitle: Text(
+          prendido
+              ? '${ubicadas == 1 ? '1 familia ubicada' : '$ubicadas familias ubicadas'}. '
+                  'SORTEO les entrega la mesa.'
+              : 'Las mejores mesas, para quien mejor cumplió. Los números de '
+                  'mesa no cambian. Se tilda antes de sortear.',
+        ),
+        value: prendido,
+        onChanged: widget.ocupado ? null : alTildar,
+      ),
+      if (frente != null && frente.lugares.isNotEmpty && verElOrden != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('ver_el_orden'),
+            onPressed: verElOrden,
+            icon: const Icon(Icons.format_list_numbered, size: 18),
+            label: const Text('Ver la lista y el porqué'),
+          ),
+        ),
+      const Divider(),
+    ];
   }
 
   List<Widget> _resultados(String consulta) {

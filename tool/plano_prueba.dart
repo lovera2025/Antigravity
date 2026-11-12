@@ -33,7 +33,10 @@ import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
+import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
 import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
+import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
+import 'package:arguello_events/features/plano/widgets/ver_el_orden_dialog.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/features/plano/widgets/cambio_de_mesa_dialogs.dart';
@@ -74,7 +77,52 @@ ContratoAlumno _familia(
       numeroMesa:
           mesas == null ? null : MesasExtraUtils.formatearAsignacionMesas(mesas),
       cursoDivision: '5° A',
+      // Alta el 30/3: la cuota 1 vence el 30/4 (para "Mesas por orden", 6.7.0).
+      createdAt: DateTime.utc(2026, 3, 30, 3),
     );
+
+/// Los pagos inventados de cada familia, para "Mesas por orden" (6.7.0): unas
+/// cancelaron, otras están al día, otras pagaron tarde y otras deben. Todas
+/// pagaron sus mesas adicionales.
+Map<String, List<Map<String, dynamic>>> pagosDePrueba() {
+  var n = 0;
+  Map<String, dynamic> pago(int mes, int dia, double monto,
+      {String concepto = 'Cuota Base'}) {
+    n++;
+    final fecha = DateTime.utc(2026, mes, dia, 15);
+    return {
+      'id': 'p$n',
+      'concepto': concepto,
+      'monto': monto,
+      'monto_gross': monto,
+      'fecha_pago': fecha.toIso8601String(),
+      'created_at': fecha.add(Duration(seconds: n)).toIso8601String(),
+      'anulado': 0,
+    };
+  }
+
+  final r = <String, List<Map<String, dynamic>>>{};
+  final alumnos = alumnosDePrueba();
+  for (var i = 0; i < alumnos.length; i++) {
+    final a = alumnos[i];
+    final cuota = MoraCuotaCalculator.cuotaBaseDe(a);
+    r[a.id] = [
+      ...switch (i % 4) {
+        // Canceló todo, cada una un día distinto de abril.
+        0 => [pago(4, 3 + i % 25, cuota * 9)],
+        // Al día: las siete vencidas, pagadas juntas en término.
+        1 => [pago(4, 30, cuota * 7)],
+        // Pagó tarde la primera, cada una con distintos días.
+        2 => [pago(5, 1 + i % 28, cuota), pago(5, 31, cuota * 6)],
+        // Debe las dos últimas.
+        _ => [pago(4, 30, cuota * 5)],
+      },
+      if (a.mesaExtraPrecio > 0)
+        pago(6, 1, a.mesaExtraPrecio, concepto: 'Mesa extra (1/1)'),
+    ];
+  }
+  return r;
+}
 
 /// Las familias, con las mesas de [asignaciones] (sin nada, nadie tiene mesa). Piden
 /// 35 mesas en total, justo lo que hay: así es una fiesta de verdad.
@@ -696,6 +744,31 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             'CAMBIAR',
           ),
           onGuardarArmado: _guardarSalon,
+          // "Mesas por orden" (6.7.0), con la misma cuenta que la pantalla de
+          // la app: fija las mesas; SORTEAR, arriba, las entrega.
+          onPorOrden: (prender) => _aplicar(
+            prender
+                ? OrdenEnElSalon.prender(
+                    eventoId: 'prueba',
+                    armado: _armado,
+                    config: _config,
+                    alumnos: _alumnos,
+                    pagos: pagosDePrueba(),
+                    hoyAr: DateTime(2026, 11, 12),
+                    ahora: DateTime.now().toUtc(),
+                    por: 'Prueba',
+                  )
+                : OrdenEnElSalon.apagar(config: _config, alumnos: _alumnos),
+            prender
+                ? 'Cumplimiento debido: quedaron ubicadas. Miralas en el plano; con SORTEAR '
+                    'se les entrega la mesa.'
+                : 'Cumplimiento debido, apagado: ya no hay mesas ubicadas.',
+          ),
+          onVerElOrden: () {
+            final orden = _config.frente;
+            if (orden == null) return;
+            mostrarElOrden(context, orden: orden, alumnos: _alumnos);
+          },
         ),
       ),
     );
