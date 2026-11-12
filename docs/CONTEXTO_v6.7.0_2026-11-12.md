@@ -15,7 +15,7 @@ pendiente").**
 | La 6.6.2 (papeles, candado, tótem a pantalla completa) | **Publicada** el 12-nov a las 14:37. Sin instalar, que se sepa |
 | La 6.7.0: el tilde "Cumplimiento debido" | **Programada, en la rama.** Versión `6.7.0+72` en `pubspec.yaml` y en el `.iss`. **Sin publicar** |
 | Pruebas de lo tocado (339) y análisis | Pasan, con el nombre final |
-| La corrida **entera** de pruebas con el nombre final | **No terminó** (se cortó al frenar). La anterior, antes del cambio de nombre, dio 4.545 bien y 1 falla que era de estar editando en el medio |
+| La corrida **entera** de pruebas con el nombre final | **Terminó bien: 4.565 pruebas, todas pasan** (cerró unos minutos después de frenar). El análisis no marca nada en lo tocado; los errores que lista son de `tool\_tmp_espindola_audit.dart`, un archivo viejo |
 | El recorrido con el mouse (`tool/plano_prueba.dart`) | **No se hizo.** La ventana ya tiene el tilde y pagos inventados |
 | El simulacro con la fiesta que se sorteaba ese día | Hecho: 200 sorteos de verdad, todos bien |
 | Foto de la mora "antes de 6.7.0" | Sin sacar (la de "antes de 6.6.2" es de las 14 hs, `5202bec8…`) |
@@ -25,7 +25,8 @@ pendiente").**
 
 1. **Preguntarle si ya sorteó** y con qué (a mano con la lista, o esperó el tilde). De eso depende
    el apuro.
-2. Correr `flutter test` entero y `flutter analyze`.
+2. Correr `flutter test` entero y `flutter analyze` **solo si se tocó algo más** (al cortar daba
+   4.565 bien).
 3. **Recorrerlo con el mouse**: `flutter run -d windows -t tool/plano_prueba.dart` → PERSONALIZAR →
    Mesas → tildar "Cumplimiento debido" → mirar el plano → "Ver la lista y el porqué" → SORTEAR
    (arriba) → ver que los candados se van y cada familia quedó en lo suyo → DESHACER → destildar.
