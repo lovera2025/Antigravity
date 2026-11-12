@@ -291,9 +291,14 @@ mesas principales en las filas de adelante, a todo lo ancho, y las adicionales a
   cargado, principales del 1 al 66 y adicionales del 67 al 79; 200 sorteos por caso, todos pasan el control final) y con las
   muestras (`tool/adicionales_al_final_muestra_test.dart`). **No se sorteó de verdad con la opción.**
 
-**La 6.6.2: los papeles sin datos de cobro, y el orden por cumplimiento** (programada y probada el 12-nov, versión `6.6.2+71`,
-**SIN PUBLICAR**; `docs/CONTEXTO_v6.6.2_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que no se
-probó**; el pedido entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migración.
+**La 6.6.2: los papeles sin datos de cobro, y el orden por cumplimiento** (programada y probada el 12-nov, versión `6.6.2+71`.
+**PUBLICADA el 12-nov a las 14:37, con el usuario**: la foto de la mora "antes de 6.6.2" (642 alumnos, sin nada sospechoso), el
+tag `v6.6.2`, el release con el Setup y el APK, y la web. **Falta que instale y la foto "después de 6.6.2"**;
+`docs/CONTEXTO_v6.6.2_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que no se probó**; el pedido
+entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migración.
+- **Si se corta la luz mientras se arma el instalador, se compila de cero** (pasó el 12-nov): borrar `build\puesto`, y también
+  `build\windows` y `.dart_tool\flutter_build`, porque volver a compilar no reescribe lo que ya dio por hecho. El detalle, en
+  "Cómo se publicó" del contexto.
 - **Ningún papel del sorteo dice "sin pagar", quién sorteó ni cuántos cambios hubo** (pedido del usuario): la línea es "Sorteo
   del 12/11/2026 21:40 hs" (`RegistroSorteo.lineaParaPlanilla`), SIN MESA va en rojo y nada más, y la planilla para repartir
   no dice "· lejos · en la zona elegida". Los cambios se siguen contando y se ven en PLANO → HISTORIAL. **En un PDF el texto

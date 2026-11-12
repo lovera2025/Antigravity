@@ -6,9 +6,45 @@ lo que el usuario cambió ese mismo día anotado arriba.
 
 ## Para retomar en otro chat
 
-**Estado: la 6.6.2 está PROGRAMADA y probada, SIN PUBLICAR. El orden por cumplimiento que se
-reparte solo (la 6.7.0) está SOLO EN EL PLAN: lo único programado es el servicio que ordena, sin
-pantalla.**
+**Estado: la 6.6.2 está PUBLICADA (12-nov, 14:37, con el usuario: "Sí, publicá"). Falta que
+instale, y la foto de la mora "después". El orden por cumplimiento que se reparte solo (la 6.7.0)
+está SOLO EN EL PLAN: lo único programado es el servicio que ordena, sin pantalla.**
+
+### Cómo se publicó
+
+- **Foto de la mora "antes de 6.6.2"** (`5202bec8…`, 642 alumnos, por el conector). Contra la de
+  "antes de 6.6.1" hay dos cambios, los dos normales: un cobro del 12-nov a las 8:55 que dejó mora
+  pendiente (`mora_cambios` lo muestra con el saldo y las cuotas cambiados) y un perdón cargado a
+  las 10:11. **La "después de 6.6.1" no se sacó**: nunca avisó que la instaló en las tres PCs; ese
+  tramo lo cubre esta.
+- **Tag `v6.6.2`** en `fd1a475`. **Release** "Junior Eventos 6.6.2" con
+  `Setup.Junior.Eventos.v6.6.2.exe` (39,2 MB) y `Junior.Eventos.v6.6.2.apk` (50,8 MB, arm64,
+  firmado con "CN=Junior Eventos", comprobado con `apksigner`). Los tamaños subidos son los de los
+  archivos de esta PC.
+- **Web** en Vercel: `arguello-events-8k44vrk77`, producción; `version.json` da 6.6.2/71. La
+  anterior, para volver atrás desde Vercel: `arguello-events-q9h532u4d`.
+- **El instalador se armó por pasos**, con las comprobaciones: la página del celular entera antes
+  de `ISCC` (146 archivos en su registro, como en la 6.6.1), la clave de firma y `apksigner`.
+- **En el medio se cortó la luz** (14:23, la PC se reinició) mientras se compilaba la página del
+  celular. Lo que se hizo, y vale para otra vez:
+  - la página quedó a medias (su registro no decía "Built"): **se borró `build\puesto` y se compiló
+    de cero**. Es lo que arruinó la 6.6.0;
+  - la app de Windows había terminado un minuto antes del corte, y volver a compilar no reescribe
+    nada (el caché mira lo que entra, no lo que salió): **se borraron `build\windows` y
+    `.dart_tool\flutter_build` y se compiló de cero**. El `app.so` dio el mismo SHA-256 que el de
+    antes del corte: estaba sano. El instalador se rearmó igual con lo recién compilado;
+  - la base de esta PC se revisó sobre una copia (`pragma integrity_check`: ok, 642 alumnos, la
+    cola de subida vacía), y la rama era la misma que en GitHub.
+- **Una prueba que fallaba cada tanto en la corrida entera** (`chat_de_la_noche_test`: miraba a un
+  celular antes de que le llegara la lista) ahora espera. No era el programa. La corrida entera:
+  4.524 pruebas.
+
+**Cuando avise que instaló:**
+1. Preguntar si fueron las tres PCs y las tablets, y cuál fue la que sorteó.
+2. Sacar la foto "después de 6.6.2" (`supabase/mora_fotos.sql`, sección 2) y compararla
+   (sección 3). Los perdones y los cobros de esos días van a figurar: es eso, no un problema.
+3. Preguntarle cómo le fue fijando las mesas a mano con la lista, y si imprimió los papeles con
+   la 6.6.2.
 
 El sorteo de una de las fiestas era ese mismo día. El orden automático toca la parte más delicada
 del sorteo y no llegaba probado, así que ese día se hizo **a mano**: al usuario se le entregó la
@@ -18,7 +54,9 @@ mesas con "Fijarle mesas" y sortear al resto con la 6.6.1.
 | | Estado |
 |---|---|
 | La lista del orden de la fiesta del 12-nov | Entregada (con los cobros hasta las 13:02) |
-| La 6.6.2 (papeles y candado) | Programada y probada. **Sin publicar** |
+| La 6.6.2 (papeles, candado y tótem a pantalla completa) | **Publicada el 12-nov a las 14:37. Sin instalar** (que se sepa) |
+| Foto "antes de 6.6.2" | Sacada (`5202bec8…`), sin nada sospechoso |
+| Foto "después de 6.6.2" | **Pendiente**, cuando avise que instaló |
 | El servicio del orden (`cumplimiento_de_cuotas.dart`) | Programado y probado. La app no lo llama |
 | El orden que se reparte solo (6.7.0) | Solo en el plan |
 | La 6.6.1 en las PCs | El usuario quedó en avisar; falta su foto de la mora "después" |
@@ -114,15 +152,16 @@ otra manera de contar.
   tiene su test, el dibujo no se vio.
 - **El camino a mano no se probó con el mouse**: que SORTEO respete las fijadas es lo de
   siempre; lo que se leyó en el código es que con la 6.6.1 el candado quedaba para siempre.
-- La 6.6.2 no se instaló ni se imprimió nada con ella.
-- En la corrida entera falló una vez `chat_de_la_noche_test` (la central de la puerta); sola pasa
-  siempre y ese código no se tocó.
+- La 6.6.2 no se instaló ni se imprimió nada con ella. **El instalador no se abrió en ninguna
+  PC**: se comprobó lo que lleva adentro, no que instale.
+- El tótem a pantalla completa se miró en las muestras (`tool/totem_muestra_test.dart`, los cuatro
+  estilos, las seis ubicaciones del nombre y la llegada paso a paso), **no en una tele de verdad**.
 
 ### Lo que sigue
 
-1. **Publicar la 6.6.2, con el usuario**: foto de la mora "antes de 6.6.2", instalador por pasos
-   (mirando la página del celular), tag, release y web. La planilla se arma desde el sorteo
-   guardado: se puede instalar después de sortear y recién ahí imprimir.
+1. **Que instale la 6.6.2**, primero la PC que sortea. La planilla se arma desde el sorteo
+   guardado: se puede instalar después de sortear y recién ahí imprimir. **Hasta instalarla, los
+   papeles salen con "sin pagar", "Jefe" y "Fijada antes del sorteo".**
 2. **La 6.7.0, el orden que se reparte solo.** La spec, con lo decidido el 12-nov y estas
    correcciones:
    - con el orden prendido, "Las adicionales: Al final" se ve apagada (la adicional va detrás de
