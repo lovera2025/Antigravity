@@ -234,7 +234,7 @@ class ConfigPlano {
   /// ¿Alguien eligió dónde termina la numeración de esta fiesta? Si nunca se
   /// eligió, Acomodar arranca con la última elección de las otras fiestas.
   bool get eligioNumeracion =>
-      numeracionEl != null || numeracion == FinNumeracion.fondo;
+      numeracionEl != null || numeracion != FinNumeracion.escenario;
 
   /// Las mesas fijadas, agrupadas por familia.
   Map<String, List<int>> get fijadasPorAlumno {

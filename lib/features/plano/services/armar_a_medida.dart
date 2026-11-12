@@ -69,7 +69,11 @@ class OpcionesAMedida {
 /// izquierda y, cuando la derecha también sale del escenario
 /// ([FinNumeracion.fondo]), para dónde va su última fila. Con [derAfuera] en
 /// null la derecha vuelve del fondo al escenario, al revés que la izquierda.
-typedef _Recorrido = ({bool izqAdentro, bool? derAfuera});
+///
+/// Con [cruza], fila por fila ([FinNumeracion.filas]): cada fila va entera, de
+/// una punta a la otra cruzando el medio, y [izqAdentro] dice si la primera
+/// arranca en la punta izquierda. [derAfuera] no se mira.
+typedef _Recorrido = ({bool izqAdentro, bool? derAfuera, bool cruza});
 
 /// El salón armado a medida, y cómo salió la cuenta.
 class ArmadoAMedida {
@@ -969,16 +973,22 @@ class ArmarAMedida {
   /// - Al fondo, las dos mitades son independientes: primero los que terminan
   ///   en la punta de afuera de la última fila de la derecha, que es donde el
   ///   jefe espera el último número y donde siguen las mesas nuevas.
+  /// - Fila por fila, dos: la primera fila arrancando en la punta izquierda
+  ///   (el 1 a la izquierda del escenario, como se lee) o en la derecha.
   static List<_Recorrido> _recorridos(FinNumeracion fin) => switch (fin) {
         FinNumeracion.escenario => const [
-            (izqAdentro: true, derAfuera: null),
-            (izqAdentro: false, derAfuera: null),
+            (izqAdentro: true, derAfuera: null, cruza: false),
+            (izqAdentro: false, derAfuera: null, cruza: false),
           ],
         FinNumeracion.fondo => const [
-            (izqAdentro: true, derAfuera: true),
-            (izqAdentro: false, derAfuera: true),
-            (izqAdentro: true, derAfuera: false),
-            (izqAdentro: false, derAfuera: false),
+            (izqAdentro: true, derAfuera: true, cruza: false),
+            (izqAdentro: false, derAfuera: true, cruza: false),
+            (izqAdentro: true, derAfuera: false, cruza: false),
+            (izqAdentro: false, derAfuera: false, cruza: false),
+          ],
+        FinNumeracion.filas => const [
+            (izqAdentro: true, derAfuera: null, cruza: true),
+            (izqAdentro: false, derAfuera: null, cruza: true),
           ],
       };
 
@@ -1005,12 +1015,27 @@ class ArmarAMedida {
   ///   escenario y la derecha de vuelta, desde el fondo.
   /// - Si no, las dos mitades desde el escenario ([FinNumeracion.fondo]), y
   ///   `r.derAfuera` dice para dónde va la última fila de la derecha.
+  /// - Con `r.cruza`, fila por fila ([FinNumeracion.filas]): cada fila entera,
+  ///   de una punta a la otra, y la siguiente de vuelta. Cada lado viene del
+  ///   medio hacia afuera, así que de izquierda a derecha es la izquierda al
+  ///   revés y después la derecha.
   static List<T> _enSerpentina<T>(
     List<({List<T> izq, List<T> der})> filas,
     _Recorrido r,
   ) {
     final orden = <T>[];
     final ultima = filas.length - 1;
+    if (r.cruza) {
+      for (var f = 0; f <= ultima; f++) {
+        final aLaDerecha = f.isEven == r.izqAdentro;
+        orden.addAll(
+          aLaDerecha
+              ? [...filas[f].izq.reversed, ...filas[f].der]
+              : [...filas[f].der.reversed, ...filas[f].izq],
+        );
+      }
+      return orden;
+    }
     for (var f = 0; f <= ultima; f++) {
       final haciaAdentro = (ultima - f).isEven == r.izqAdentro;
       orden.addAll(haciaAdentro ? filas[f].izq.reversed : filas[f].izq);

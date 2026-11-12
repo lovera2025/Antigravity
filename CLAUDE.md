@@ -267,6 +267,22 @@ empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
   hace por pasos, con las mismas comprobaciones (está en el CONTEXTO de la 6.6.0).
 - `tool/barra_prueba_web.dart` no dejaba entrar con PIN desde la 6.5.0 (se lo preguntaba a la nube): arreglado en `armarLados`.
 
+**La 6.6.1: la numeración fila por fila y las adicionales al final** (programada y probada el 11-nov a la noche, versión
+`6.6.1+70`, **SIN PUBLICAR**; `docs/CONTEXTO_v6.6.1_2026-11-11.md`, que empieza con "Para retomar en otro chat" y trae **la
+guía paso a paso para el jefe**). Sin SQL ni migración. Salió de un audio del jefe para el sorteo del 12-nov: quiere las
+mesas principales en las filas de adelante, a todo lo ancho, y las adicionales al fondo.
+- **"Fila por fila"**, la tercera numeración de Acomodar (`FinNumeracion.filas`): cada fila cruza la pasarela y la siguiente
+  vuelve. Ver "El salón".
+- **"Las mesas adicionales: Con su familia · Al final"**, en el cartel del SORTEO. **Viene en "Con su familia"** (el usuario:
+  "que le des la opción, porque por ahí puede que no"). Con "Al final": cuántas quedan pegadas a la principal (Ninguna, 1 o 2)
+  y **Dejar juntas** por familia. Ver "El sorteo sobre el plano".
+- **Lo del cartel no se guarda antes de SORTEAR**; "Fila por fila" sí, con GUARDAR en Acomodar.
+- **El plano y el sorteo de esa fiesta, desde una PC con la 6.6.1:** una con la 6.6.0 no conoce "Fila por fila" (la toma por
+  la de siempre y, al guardar la config del plano, pierde la clave) ni tiene la opción.
+- Probado con un simulacro sobre una copia de la base (`tool/simulacro_adicionales_al_final_test.dart`: sorteando todo lo
+  cargado, principales del 1 al 66 y adicionales del 67 al 79; 200 sorteos por caso, todos pasan el control final) y con las
+  muestras (`tool/adicionales_al_final_muestra_test.dart`). **No se sorteó de verdad con la opción.**
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -481,6 +497,11 @@ ninguna. Por eso lo que entra no depende de esa opción.
   de siempre). `armar`, `acomodar` y `ordenarNumeros` usan el mismo recorrido (`_enSerpentina`): un cambio va en los tres.
   **Los números cambian al guardar, no mientras se acomoda:** si se renumeraran en la sesión, las fijadas quedarían apuntando
   a otra mesa.
+- **O ir fila por fila** (6.6.1, `FinNumeracion.filas`, clave `filas`): cada fila entera, de una punta a la otra cruzando la
+  pasarela, y la siguiente de vuelta; arranca a la izquierda del escenario salvo que a la derecha corte menos. Es un
+  `_Recorrido` con `cruza`, por el mismo `_enSerpentina`. **El cruce de la pasarela es un corte** (lo pone `CasillerosPlano`,
+  sin tocar): una familia junta nunca queda a los dos lados. **Va al final del enum:** una versión que no la conoce la toma
+  por la de siempre. En el botón de Acomodar las tres van con `rotulo` ("Al escenario"): "Junto al escenario" no entraba.
 - **La última numeración elegida queda para las fiestas que vienen** (6.5.1, `NumeracionRecordada`,
   `plano/services/numeracion_recordada.dart`). **Sin tabla ni preferencia:** cada elección va en la `config` del plano de su
   fiesta, con su momento (`numeracion_el`), y la recordada es **la más nueva de los planos que la PC tiene en su base**
@@ -517,6 +538,17 @@ ninguna. Por eso lo que entra no depende de esa opción.
   - La mesa comprada después del sorteo también se puede pedir lejos: `completar` la saltea y va como suelta.
   - Con dos familias con lejos en un salón justo, `_minimaConLejos` busca unas mesas más en vez de decir que no entra.
   - La zona va en el registro con la clave `_zonas` (`test/sorteo_zona_elegida_test.dart`).
+- **Las adicionales al final** (6.6.1): `EntradaSorteoPlano.alFinal` dice, por alumno, cuántas de sus mesas van después de las
+  de todas las familias. Vacío, lo de siempre. Lo arma el cartel (`SorteoConPlano.alFinalSegunElCartel`: la opción, la regla
+  por cantidad y "Dejar juntas"); el servicio solo lo cumple.
+  - **`SorteoConPlano.mesasAlFinal` es la misma cuenta para sortear y para `validar`**: solo en el sorteo entero, solo para
+    la familia sin ninguna mesa, y la principal queda siempre adelante.
+  - En `_entera`, **dos pasadas con el mismo `_sortearEn`**: las de adelante en la capacidad mínima y, con todo lo de antes
+    tapado, las del final desde el casillero que sigue (un pedido aparte, con el id más `#al-final`). **El motor no se tocó.**
+  - `validar` no les pide "todas juntas": las de adelante juntas, las del final juntas entre sí, y **ninguna del final antes
+    que una de adelante**.
+  - Con "Al final", los "lejos" de las familias sin mesa no viajan (`_separacionesQueValen`, en el cartel).
+  - Va en el registro con la clave `_al_final` (`test/sorteo_adicionales_al_final_test.dart` y `…_dialog_test.dart`).
 
 **El salón primero** (6.1.0, en curso; `docs/PLAN_SALON_PRIMERO_2026-10-16.md`): el jefe arma primero el espacio
 vacío y después pone las mesas con un botón.

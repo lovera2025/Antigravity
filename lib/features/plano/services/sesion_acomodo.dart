@@ -681,7 +681,11 @@ class SesionAcomodo {
       r.add(AvisoAcomodo(
         'Los números se ordenan al guardar: quedan del 1 al '
         '${_actual.mesas.length}'
-        '${_fin == FinNumeracion.fondo ? ', con el último al fondo' : ''}. '
+        '${switch (_fin) {
+          FinNumeracion.escenario => '',
+          FinNumeracion.fondo => ', con el último al fondo',
+          FinNumeracion.filas => ', fila por fila',
+        }}. '
         'Ninguna mesa se mueve.',
       ));
     }

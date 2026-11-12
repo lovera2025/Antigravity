@@ -427,7 +427,7 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   style: gris,
                 ),
               if (widget.onFin != null) ...[
-                titulo('LA NUMERACIÓN TERMINA'),
+                titulo('LA NUMERACIÓN'),
                 SegmentedButton<FinNumeracion>(
                   key: const Key('numeracion_fin'),
                   showSelectedIcon: false,
@@ -436,8 +436,17 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   segments: [
+                    // Las tres van lado a lado, con el rótulo corto; si en un
+                    // panel más angosto alguno no entra, se achica en vez de
+                    // partirse en dos renglones.
                     for (final f in FinNumeracion.values)
-                      ButtonSegment(value: f, label: Text(f.texto)),
+                      ButtonSegment(
+                        value: f,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(f.rotulo, maxLines: 1, softWrap: false),
+                        ),
+                      ),
                   ],
                   selected: {widget.fin},
                   onSelectionChanged:
@@ -447,13 +456,21 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                 ),
                 Text(
                   widget.motivoSinFin ??
-                      (widget.fin == FinNumeracion.fondo
-                          ? 'El último número queda al fondo, a la derecha, y '
+                      switch (widget.fin) {
+                        FinNumeracion.fondo =>
+                          'El último número queda al fondo, a la derecha, y '
                               'las mesas que se agreguen siguen ahí. Los '
-                              'números cambian al guardar.'
-                          : 'La izquierda va del escenario al fondo y la '
+                              'números cambian al guardar.',
+                        FinNumeracion.escenario =>
+                          'La izquierda va del escenario al fondo y la '
                               'derecha vuelve: el último número queda junto '
-                              'al escenario.'),
+                              'al escenario.',
+                        FinNumeracion.filas =>
+                          'Cada fila va de una punta a la otra, cruzando la '
+                              'pasarela, y la siguiente vuelve: los primeros '
+                              'números quedan adelante y los últimos al '
+                              'fondo. Los números cambian al guardar.',
+                      },
                   key: const Key('numeracion_explica'),
                   style: gris,
                 ),

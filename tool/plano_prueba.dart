@@ -216,6 +216,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       usarPasto: elegido.usarPasto,
       hastaMesa: elegido.hastaMesa,
       zonas: elegido.zonas,
+      alFinal: elegido.alFinal,
     );
     setState(() {
       final ResultadoSorteoPlano resultado;
@@ -332,6 +333,68 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       _aviso = AvisoDelPlano(
         'Sorteo en esta ventana: ${resultado.asignaciones.length} familias.'
         '${resultado.avisos.isEmpty ? '' : ' ${resultado.avisos.join(' ')}'}',
+      );
+    });
+  }
+
+  /// CON EL CARTEL (6.6.1): el primer sorteo con **el cartel del SORTEO de la app**,
+  /// para recorrer con el mouse "Las mesas adicionales: Con su familia · Al final",
+  /// cuántas quedan pegadas y "Dejar juntas". Después hace lo mismo que la pantalla
+  /// de la fiesta: sortear y el control final.
+  Future<void> _sortearConElCartel() async {
+    final alumnos = alumnosDePrueba();
+    final ahora = DateTime.now().toUtc();
+    final elegido = await mostrarSorteoMesasDialog(
+      context: context,
+      tituloInstitucion: 'VENTANA DE PRUEBA',
+      alumnos: alumnos,
+      avisos: const [],
+      pagos: {
+        for (final a in alumnos)
+          a.id: PagoAlumno(base: 1000, mesas: a.mesaExtraPrecio),
+      },
+      plano: PlanoEvento.nuevo(
+        eventoId: 'prueba',
+        armado: _armado,
+        estilo: EstiloPlano.arquitecto,
+        modo: ModoSorteo.entera,
+        ahora: ahora,
+      ).copyWith(config: _config, ahora: ahora),
+    );
+    if (!mounted || elegido == null) return;
+    final entrada = EntradaSorteoPlano(
+      armado: _armado,
+      config: _config,
+      alumnos: alumnos,
+      separaciones: elegido.separaciones,
+      distancias: elegido.distancias,
+      modo: elegido.modo ?? ModoSorteo.entera,
+      ordenDivisiones: elegido.ordenDivisiones,
+      usarPasto: elegido.usarPasto,
+      hastaMesa: elegido.hastaMesa,
+      zonas: elegido.zonas,
+      alFinal: elegido.alFinal,
+    );
+    setState(() {
+      final ResultadoSorteoPlano resultado;
+      try {
+        resultado = SorteoConPlano.sortear(entrada);
+      } on StateError catch (e) {
+        _aviso = AvisoDelPlano('No entra: ${e.message}', esError: true);
+        return;
+      }
+      final problema = SorteoConPlano.validar(entrada, resultado);
+      if (problema != null) {
+        _aviso = AvisoDelPlano('El control final: $problema', esError: true);
+        return;
+      }
+      _asignaciones = resultado.asignaciones;
+      final delFinal = [
+        for (final l in SorteoConPlano.delFinal(entrada, resultado).values) ...l,
+      ]..sort();
+      _aviso = AvisoDelPlano(
+        'Sorteo con el cartel: ${resultado.asignaciones.length} familias.'
+        '${delFinal.isEmpty ? ' Cada familia con sus mesas juntas.' : ' Al final: ${delFinal.join(', ')}.'}',
       );
     });
   }
@@ -496,6 +559,13 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             key: const Key('prueba_sortear'),
             onPressed: sinMesa ? _sortear : null,
             child: const Text('SORTEAR'),
+          ),
+          // Un ícono y no otro rótulo: arriba ya no entra un botón más.
+          IconButton(
+            key: const Key('prueba_cartel'),
+            tooltip: 'Sortear con el cartel de la app',
+            onPressed: sinMesa ? _sortearConElCartel : null,
+            icon: const Icon(Icons.fact_check_outlined),
           ),
           TextButton(
             key: const Key('prueba_deshacer'),

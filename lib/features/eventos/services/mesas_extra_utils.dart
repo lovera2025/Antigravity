@@ -77,6 +77,18 @@ class SorteoMesasDialogResult {
   /// en las mesas libres del salón, como siempre.
   final bool mesasNuevasAlFondo;
 
+  /// Con plano, entero: "Las mesas adicionales: Al final" (6.6.1). Lo que se
+  /// eligió en el cartel, para volver a abrirlo igual: la opción, cuántas
+  /// adicionales quedan pegadas a la principal (0, 1 o 2) y las familias
+  /// tildadas "dejar juntas".
+  final bool adicionalesAlFinal;
+  final int juntasConLaPrincipal;
+  final Set<String> dejarJuntas;
+
+  /// Lo que eso le pide al sorteo: alumno → cuántas de sus mesas van al final
+  /// (`EntradaSorteoPlano.alFinal`). Vacío si no se eligió.
+  final Map<String, int> alFinal;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
@@ -90,6 +102,10 @@ class SorteoMesasDialogResult {
     this.hastaMesa,
     this.zonas = const {},
     this.mesasNuevasAlFondo = false,
+    this.adicionalesAlFinal = false,
+    this.juntasConLaPrincipal = 0,
+    this.dejarJuntas = const {},
+    this.alFinal = const {},
   });
 }
 

@@ -89,6 +89,17 @@ class EntradaSorteoPlano {
   /// ([DistanciaLejos.enLaZona], 6.5.0).
   final Map<String, Set<int>> zonas;
 
+  /// Alumno → cuántas de sus mesas van **al final**, después de las de todas
+  /// las familias (6.6.1, pedido del jefe el 11-nov-2026: "si son 66 mesas
+  /// principales, la adicional que se vaya agregando a partir de la 67").
+  ///
+  /// Vacío: lo de siempre, cada familia con todas sus mesas juntas. Solo vale
+  /// en el sorteo entero y para las familias que todavía no tienen ninguna
+  /// mesa; la principal queda siempre adelante ([SorteoConPlano.mesasAlFinal]).
+  /// Quién va y con cuántas lo arma el cartel (la opción general, la regla por
+  /// cantidad y las excepciones): acá solo se cumple.
+  final Map<String, int> alFinal;
+
   const EntradaSorteoPlano({
     required this.armado,
     this.config = ConfigPlano.vacia,
@@ -101,6 +112,7 @@ class EntradaSorteoPlano {
     this.usarPasto = false,
     this.hastaMesa,
     this.zonas = const {},
+    this.alFinal = const {},
   });
 
   EntradaSorteoPlano conPasto(bool usar) => EntradaSorteoPlano(
@@ -115,6 +127,7 @@ class EntradaSorteoPlano {
         usarPasto: usar,
         hastaMesa: hastaMesa,
         zonas: zonas,
+        alFinal: alFinal,
       );
 }
 
@@ -185,6 +198,13 @@ class PlanSorteo {
   final int mesas;
   final List<String> avisos;
 
+  /// Con mesas que van al final (6.6.1): cuántas son, y de qué mesa a qué mesa
+  /// van. [hastaMesa] es entonces hasta dónde llegan las de adelante. En 0 y
+  /// null si ninguna va al final.
+  final int mesasAlFinal;
+  final int? alFinalDesde;
+  final int? alFinalHasta;
+
   const PlanSorteo({
     required this.modo,
     this.modoForzado = false,
@@ -196,6 +216,9 @@ class PlanSorteo {
     required this.familias,
     required this.mesas,
     this.avisos = const [],
+    this.mesasAlFinal = 0,
+    this.alFinalDesde,
+    this.alFinalHasta,
   });
 }
 
@@ -314,6 +337,7 @@ class SorteoConPlano {
         familias: plan.$1.familias,
         mesas: plan.$1.mesas,
         avisos: plan.$1.avisos,
+        mesasAlFinal: plan.$1.mesasAlFinal,
       );
     } on _LejosNoEntra {
       return PlanSorteo(
@@ -334,6 +358,72 @@ class SorteoConPlano {
   /// Alguna familia pidió mesas "lejos" (también la que ya tenía y pide lejos
   /// la que compró después).
   static bool _hayLejos(_Base b) => b.pedidos.any((p) => p.separadas > 0);
+
+  // ── Las que van al final (6.6.1) ────────────────────────────────────────
+
+  /// Cuántas de las [mesas] que recibe una familia nueva van al final en este
+  /// sorteo. Es la misma cuenta para sortear y para el control final.
+  ///
+  /// - Solo en el sorteo entero: por división cada bloque es de su división, y
+  ///   "después de todas" no tiene un lugar.
+  /// - La principal queda siempre adelante: como mucho van todas menos una.
+  /// - A quien se le sortea solo la base (la adicional sin pagar) no le va
+  ///   ninguna: llega con una sola mesa.
+  static int mesasAlFinal(EntradaSorteoPlano e, String alumnoId, int mesas) {
+    if (e.modo != ModoSorteo.entera) return 0;
+    final pedidas = e.alFinal[alumnoId] ?? 0;
+    if (pedidas <= 0 || mesas <= 1) return 0;
+    return min(pedidas, mesas - 1);
+  }
+
+  /// Con qué nombre entra al motor el pedido de las mesas del final de una
+  /// familia: es otro pedido, aparte del de sus mesas de adelante.
+  static const _sufijoAlFinal = '#al-final';
+
+  /// Lo que el cartel del sorteo le pide a [EntradaSorteoPlano.alFinal] cuando
+  /// el jefe elige "Al final": de cada familia que todavía no tiene mesa y
+  /// tiene adicionales, van al final todas menos las [juntas] que quedan
+  /// pegadas a la principal (la regla por cantidad: 0, 1 o 2). Las familias de
+  /// [dejarJuntas] (el tilde de cada una) no mandan ninguna.
+  static Map<String, int> alFinalSegunElCartel(
+    Iterable<PedidoSorteo> pedidos, {
+    int juntas = 0,
+    Set<String> dejarJuntas = const {},
+  }) =>
+      {
+        for (final p in pedidos)
+          if (p.esNuevo &&
+              !dejarJuntas.contains(p.alumnoId) &&
+              p.mesas - 1 - juntas > 0)
+            p.alumnoId: p.mesas - 1 - juntas,
+      };
+
+  /// De lo que [r] le dio a cada familia, las mesas que fueron al final:
+  /// alumno → sus números, en orden. Para anotarlo en el registro del sorteo.
+  /// Vacío si no se pidió ninguna.
+  static Map<String, List<int>> delFinal(
+    EntradaSorteoPlano e,
+    ResultadoSorteoPlano r,
+  ) {
+    if (e.alFinal.isEmpty || e.modo != ModoSorteo.entera) return const {};
+    final cas = CasillerosPlano.de(e.armado);
+    final conFijadas = e.config.fijadasPorAlumno;
+    final yaTenia = {
+      for (final x in e.alumnos)
+        if (MesasExtraUtils.numerosMesaDesdeTexto(x.numeroMesa).isNotEmpty) x.id,
+    };
+    final out = <String, List<int>>{};
+    for (final x in r.asignaciones.entries) {
+      if (yaTenia.contains(x.key) || conFijadas.containsKey(x.key)) continue;
+      final n = mesasAlFinal(e, x.key, x.value.length);
+      if (n == 0) continue;
+      final enOrden = [...x.value]..sort(
+          (a, b) => (cas.casillero(a) ?? 0).compareTo(cas.casillero(b) ?? 0),
+        );
+      out[x.key] = enOrden.sublist(enOrden.length - n);
+    }
+    return out;
+  }
 
   /// Sortea. Tira [StateError] si no entra (el diálogo no lo deja llegar acá).
   ///
@@ -561,6 +651,11 @@ class SorteoConPlano {
       }
     }
     final dadaA = <int, String>{};
+    // Para las que van al final (6.6.1): el orden es el de los casilleros (el
+    // pasto va después de las comunes aunque tenga un número más bajo).
+    final cas = CasillerosPlano.de(a);
+    final deAdelante = <int>[];
+    final delFinal = <int>[];
     for (final entrada in r.asignaciones.entries) {
       final id = entrada.key;
       final nums = entrada.value;
@@ -606,7 +701,28 @@ class SorteoConPlano {
       }
       final nueva = suyas.isEmpty && !conFijadas;
       if (!nueva) continue;
+      // Con mesas al final (6.6.1) no se le pide "todas juntas": las de
+      // adelante juntas, y las del final juntas entre sí.
+      final atras = mesasAlFinal(e, id, nums.length);
+      if (atras > 0) {
+        final enOrden = [...nums]..sort(
+            (x, y) => (cas.casillero(x) ?? 0).compareTo(cas.casillero(y) ?? 0),
+          );
+        final adelante = enOrden.sublist(0, enOrden.length - atras);
+        final alFinal = enOrden.sublist(enOrden.length - atras);
+        if (tramosPegados(a, adelante).length > 1) {
+          return 'Las mesas de adelante de una familia no quedaron juntas.';
+        }
+        if (tramosPegados(a, alFinal).length > 1) {
+          return 'Las mesas del final de una familia no quedaron juntas.';
+        }
+        deAdelante.addAll(adelante);
+        delFinal.addAll(alFinal);
+        continue;
+      }
       final pedidas = e.separaciones[id] ?? 0;
+      // Una familia entera y sin "lejos" es toda de adelante.
+      if (pedidas == 0) deAdelante.addAll(nums);
       if (pedidas == 0 && tramosPegados(a, nums).length > 1) {
         return 'Las mesas de una familia no quedaron juntas.';
       }
@@ -615,6 +731,17 @@ class SorteoConPlano {
           MesasExtraUtils.cantidadAlejadasEfectivas(nums.length, pedidas);
       if (!lejosEnElSalon(a, nums, lejos)) {
         return 'Las mesas "lejos" de una familia quedaron tocándose en el salón.';
+      }
+    }
+    // Lo que se pidió con "al final": ninguna de esas mesas puede quedar antes
+    // que una de adelante, en el orden en que se recorre el salón.
+    if (delFinal.isNotEmpty && deAdelante.isNotEmpty) {
+      int lugar(int n) => cas.casillero(n) ?? 0;
+      final ultimaDeAdelante = deAdelante.map(lugar).reduce(max);
+      final primeraDelFinal = delFinal.map(lugar).reduce(min);
+      if (primeraDelFinal < ultimaDeAdelante) {
+        return 'Una mesa de las que iban al final quedó antes que una de '
+            'adelante.';
       }
     }
     return null;
@@ -1040,6 +1167,23 @@ class SorteoConPlano {
             for (final p in b.pedidos)
               if (!b.conFijada.contains(p.alumnoId)) p,
           ];
+    // Las que van al final (6.6.1): de cada familia nueva que las tiene, un
+    // pedido con sus mesas de adelante (la principal y las que quedan juntas) y
+    // otro, aparte, con las del final. El de adelante va sin "lejos": con las
+    // demás al final no hay nada que separar.
+    final adelante = <PedidoSorteo>[];
+    final atras = <PedidoSorteo>[];
+    for (final p in resto) {
+      final n = p.esNuevo ? mesasAlFinal(e, p.alumnoId, p.mesas) : 0;
+      if (n == 0) {
+        adelante.add(p);
+        continue;
+      }
+      adelante.add(PedidoSorteo(alumnoId: p.alumnoId, mesas: p.mesas - n));
+      atras.add(
+        PedidoSorteo(alumnoId: '${p.alumnoId}$_sufijoAlFinal', mesas: n),
+      );
+    }
     var ocupadas = b.ocupadas;
     var deFijos = const <String, List<int>>{};
     var hayLugarParaFijos = true;
@@ -1071,13 +1215,13 @@ class SorteoConPlano {
       // el sorteo sin plano: si no, a quien compró una mesa después se la daba
       // en un hueco del principio del salón en vez de pegada a la suya.
       minima = _minimaCapacidad(
-        resto,
+        adelante,
         ocupadas,
         max(1, b.masAltoAsignado),
         cas.total,
       );
-      if (minima != null && resto.any((p) => p.separadas > 0)) {
-        minima = _minimaConLejos(b, e, resto, ocupadas, minima, cas.total);
+      if (minima != null && adelante.any((p) => p.separadas > 0)) {
+        minima = _minimaConLejos(b, e, adelante, ocupadas, minima, cas.total);
       }
     }
     int? capacidad = minima;
@@ -1086,14 +1230,42 @@ class SorteoConPlano {
       if (pedida != null &&
           pedida >= minima &&
           SorteoMesasMotor.esFactible(
-            pedidos: resto,
+            pedidos: adelante,
             ocupadas: ocupadas,
             capacidad: pedida,
           )) {
         capacidad = pedida;
       }
     }
-    final entra = capacidad != null;
+    // Las del final empiezan en el casillero que sigue al último de adelante:
+    // todo lo de antes se les tapa, también un hueco que haya quedado. Así
+    // ninguna queda con un número más bajo que una de adelante.
+    var ocupadasAtras = const <int>{};
+    int? capacidadAtras;
+    int? alFinalDesde;
+    int? alFinalHasta;
+    if (capacidad != null && atras.isNotEmpty) {
+      ocupadasAtras = {
+        ...ocupadas,
+        for (var c = 1; c <= capacidad; c++) c,
+      };
+      capacidadAtras =
+          _minimaCapacidad(atras, ocupadasAtras, capacidad + 1, cas.total);
+      if (capacidadAtras == null) {
+        avisos.add('Las mesas que van al final no entran después de las de '
+            'adelante: faltan mesas en el salón. Agregá mesas, o dejá más '
+            'familias juntas.');
+      } else {
+        final libres = [
+          for (var c = capacidad + 1; c <= capacidadAtras; c++)
+            if (!ocupadasAtras.contains(c)) c,
+        ];
+        alFinalDesde = cas.numero(libres.first);
+        alFinalHasta = cas.numero(libres.last);
+      }
+    }
+    final entra =
+        capacidad != null && (atras.isEmpty || capacidadAtras != null);
     final plan = PlanSorteo(
       modo: ModoSorteo.entera,
       modoForzado: forzado,
@@ -1103,12 +1275,36 @@ class SorteoConPlano {
       familias: familias,
       mesas: mesas,
       avisos: avisos,
+      mesasAlFinal: atras.fold<int>(0, (s, p) => s + p.mesas),
+      alFinalDesde: alFinalDesde,
+      alFinalHasta: alFinalHasta,
     );
-    if (rng == null || !entra) return (plan, null);
-    final r = {
-      ...deFijos,
-      ..._sortearEn(b, e, resto, ocupadas, capacidad, rng),
-    };
+    if (rng == null || capacidad == null || !entra) return (plan, null);
+    final deAdelante = _sortearEn(b, e, adelante, ocupadas, capacidad, rng);
+    final r = <String, List<int>>{...deFijos, ...deAdelante};
+    if (atras.isNotEmpty && capacidadAtras != null) {
+      // Lo que se dio adelante ya está ocupado, también una "lejos" que haya
+      // caído en su zona, fuera del tramo.
+      final tomadas = {
+        ...ocupadasAtras,
+        for (final l in deAdelante.values) ...l,
+      };
+      if (!SorteoMesasMotor.esFactible(
+        pedidos: atras,
+        ocupadas: tomadas,
+        capacidad: capacidadAtras,
+      )) {
+        throw StateError(
+          'Las mesas que van al final no entraron después de las de adelante.',
+        );
+      }
+      final deAtras = _sortearEn(b, e, atras, tomadas, capacidadAtras, rng);
+      for (final x in deAtras.entries) {
+        final id =
+            x.key.substring(0, x.key.length - _sufijoAlFinal.length);
+        r[id] = [...?r[id], ...x.value];
+      }
+    }
     return (
       plan,
       ResultadoSorteoPlano(asignaciones: _aNumeros(cas, r), avisos: avisos),

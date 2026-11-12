@@ -4012,6 +4012,7 @@ class _DetalleEventoMasivoScreenState
       usarPasto: config.usarPasto,
       hastaMesa: config.hastaMesa,
       zonas: config.zonas,
+      alFinal: config.alFinal,
     );
     final ResultadoSorteoPlano resultado;
     try {
@@ -4064,6 +4065,7 @@ class _DetalleEventoMasivoScreenState
       antes: UltimosSorteados.antesDe(alumnos, numeros),
       lejos: _lejosParaElRegistro(config, numeros),
       zonas: _zonasParaElRegistro(config, numeros),
+      alFinal: _alFinalParaElRegistro(entrada, resultado),
       nuevas: nuevas == null
           ? null
           : {
@@ -4562,6 +4564,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? lejos,
     Map<String, String>? zonas,
     Map<String, String>? nuevas,
+    Map<String, String>? alFinal,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4573,6 +4576,7 @@ class _DetalleEventoMasivoScreenState
         lejos: lejos,
         zonas: zonas,
         nuevas: nuevas == null || nuevas.isEmpty ? null : nuevas,
+        alFinal: alFinal == null || alFinal.isEmpty ? null : alFinal,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );
@@ -4602,6 +4606,18 @@ class _DetalleEventoMasivoScreenState
           e.key: (e.value.toList()..sort()).join(', '),
     };
     return zonas.isEmpty ? null : zonas;
+  }
+
+  /// Con "Las mesas adicionales: Al final" (6.6.1): qué mesas de cada familia
+  /// fueron al final en este sorteo ("68, 69"). Queda escrito en el renglón.
+  /// Null si no se eligió o ninguna fue.
+  Map<String, String>? _alFinalParaElRegistro(
+    EntradaSorteoPlano entrada,
+    ResultadoSorteoPlano resultado,
+  ) {
+    final r = SorteoConPlano.delFinal(entrada, resultado);
+    if (r.isEmpty) return null;
+    return {for (final e in r.entries) e.key: e.value.join(', ')};
   }
 
   Future<void> _restaurarSorteoAnterior() async {

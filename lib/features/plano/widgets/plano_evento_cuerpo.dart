@@ -2041,8 +2041,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           s.elegirFin(f);
           _confirmarDescartar = false;
           hecho(s.faltaOrdenar
-              ? 'La numeración termina ${f == FinNumeracion.fondo ? 'al fondo' : 'junto al escenario'}: '
-                  'los números cambian al guardar. Ninguna mesa se mueve.'
+              ? '${switch (f) {
+                  FinNumeracion.escenario =>
+                    'La numeración termina junto al escenario',
+                  FinNumeracion.fondo => 'La numeración termina al fondo',
+                  FinNumeracion.filas =>
+                    'La numeración va fila por fila, cruzando la pasarela',
+                }}: los números cambian al guardar. Ninguna mesa se mueve.'
               : null);
         }),
         motivoSinVaciar: s.motivoSinVaciar,

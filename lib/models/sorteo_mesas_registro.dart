@@ -57,6 +57,11 @@ class SorteoMesasRegistro {
   /// se agregó ninguna.
   final Map<String, String>? nuevas;
 
+  /// En un sorteo con "Las mesas adicionales: Al final" (6.6.1): alumno → las
+  /// mesas suyas que fueron al final, después de las de todas las familias
+  /// ("68, 69"). `null` si no se eligió o ninguna fue.
+  final Map<String, String>? alFinal;
+
   /// El renglón no lo hizo el jefe con SORTEO: el programa le dio sola la mesa
   /// a quien pagó después del sorteo (`MesaNuevaSola`, 6.5.1). No cuenta como
   /// "el último sorteo" para saber quién llegó después.
@@ -75,6 +80,7 @@ class SorteoMesasRegistro {
     this.lejos,
     this.zonas,
     this.nuevas,
+    this.alFinal,
     this.automatico = false,
     this.hechoPor,
     required this.createdAt,
@@ -88,6 +94,7 @@ class SorteoMesasRegistro {
   static const claveLejos = '_lejos';
   static const claveZonas = '_zonas';
   static const claveNuevas = '_nuevas';
+  static const claveAlFinal = '_al_final';
   static const claveAutomatico = '_auto';
 
   int get alumnos => resultado.length;
@@ -111,6 +118,7 @@ class SorteoMesasRegistro {
     Map<String, String>? lejos;
     Map<String, String>? zonas;
     Map<String, String>? nuevas;
+    Map<String, String>? alFinal;
     var automatico = false;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
@@ -127,6 +135,8 @@ class SorteoMesasRegistro {
             zonas = _mapa(e.value);
           } else if (clave == claveNuevas) {
             nuevas = _mapa(e.value);
+          } else if (clave == claveAlFinal) {
+            alFinal = _mapa(e.value);
           } else if (clave == claveAutomatico) {
             automatico = e.value == true || e.value == 1 || e.value == '1';
           } else if (!clave.startsWith('_')) {
@@ -149,6 +159,7 @@ class SorteoMesasRegistro {
       lejos: lejos,
       zonas: zonas,
       nuevas: nuevas,
+      alFinal: alFinal,
       automatico: automatico,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
@@ -171,6 +182,7 @@ class SorteoMesasRegistro {
         claveLejos: ?lejos,
         claveZonas: ?zonas,
         claveNuevas: ?nuevas,
+        claveAlFinal: ?alFinal,
         if (automatico) claveAutomatico: 1,
       }),
       'alumnos': alumnos,

@@ -98,10 +98,55 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   /// Las zonas que valen: de quien tildó lejos y eligió "Donde yo elija".
   Map<String, Set<int>> get _zonasElegidas => {
         for (final e in _zonas.entries)
-          if (_separaciones.containsKey(e.key) &&
+          if (_separacionesQueValen.containsKey(e.key) &&
               _distancias[e.key] == DistanciaLejos.enLaZona &&
               e.value.isNotEmpty)
             e.key: e.value,
+      };
+
+  // ── Las mesas adicionales, al final (6.6.1) ──
+
+  /// "Las mesas adicionales: Al final" (true) o "Con su familia" (false, lo de
+  /// siempre). Viene en false: el jefe lo elige en cada sorteo.
+  bool _adicionalesAlFinal = false;
+
+  /// Con "Al final": cuántas adicionales quedan pegadas a la principal, para
+  /// todas las familias (0, 1 o 2).
+  int _juntasConLaPrincipal = 0;
+
+  /// Con "Al final": las familias tildadas "dejar juntas".
+  late final Set<String> _dejarJuntas;
+
+  /// Los alumnos que no tienen ninguna mesa: a ellos les vale "Al final".
+  late final Set<String> _sinNingunaMesa;
+
+  /// Vale solo sobre el plano y con toda la escuela junta: por división cada
+  /// bloque es de su división y "después de todas" no tiene un lugar.
+  bool get _alFinalActivo =>
+      _adicionalesAlFinal && _plano != null && _modo == ModoSorteo.entera;
+
+  /// Lo que se le pide al sorteo: alumno → cuántas de sus mesas van al final.
+  Map<String, int> get _alFinal => !_alFinalActivo
+      ? const {}
+      : SorteoConPlano.alFinalSegunElCartel(
+          _pedidos,
+          juntas: _juntasConLaPrincipal,
+          dejarJuntas: _dejarJuntas,
+        );
+
+  /// Los "lejos" que valen. Con "Al final", los de las familias sin mesa no
+  /// cuentan (los reemplazan la regla por cantidad y "dejar juntas"); los de
+  /// quien ya tiene mesa y le falta otra, sí.
+  Map<String, int> get _separacionesQueValen => !_alFinalActivo
+      ? _separaciones
+      : {
+          for (final e in _separaciones.entries)
+            if (!_sinNingunaMesa.contains(e.key)) e.key: e.value,
+        };
+
+  Map<String, DistanciaLejos> get _distanciasQueValen => {
+        for (final id in _separacionesQueValen.keys)
+          id: _distancias[id] ?? DistanciaLejos.cerca,
       };
   late final Set<int> _ocupadas;
   late final CandidatosPorPago _candidatos;
@@ -193,13 +238,14 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         config: _nuevas?.config ?? _plano!.config,
         alumnos: widget.alumnos,
         exclusion: _exclusion,
-        separaciones: _separaciones,
-        distancias: _distancias,
+        separaciones: _separacionesQueValen,
+        distancias: _alFinalActivo ? _distanciasQueValen : _distancias,
         modo: _modo,
         ordenDivisiones: _orden,
         usarPasto: _usarPasto,
         hastaMesa: int.tryParse(_hastaCtrl.text.trim()),
         zonas: _zonasElegidas,
+        alFinal: _alFinal,
       );
 
   /// Lo que va a hacer el sorteo sobre el plano. Se recalcula solo si cambió
@@ -214,9 +260,14 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       _hastaCtrl.text.trim(),
       (ex.sinMesa.toList()..sort()).join(','),
       (ex.soloBase.toList()..sort()).join(','),
-      (_separaciones.entries.map((e) => '${e.key}=${e.value}').toList()..sort())
+      (_separacionesQueValen.entries
+              .map((e) => '${e.key}=${e.value}')
+              .toList()
+            ..sort())
           .join(','),
       (_distancias.entries.map((e) => '${e.key}=${e.value.name}').toList()..sort())
+          .join(','),
+      (_alFinal.entries.map((e) => '${e.key}=${e.value}').toList()..sort())
           .join(','),
       (_zonasElegidas.entries
               .map((e) => '${e.key}=${(e.value.toList()..sort()).join('.')}')
@@ -253,6 +304,8 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     final ex = _exclusion;
     return SorteoMesasMotor.pedidos(
       widget.alumnos,
+      // Los "lejos" tal como están tildados: acá solo cambian cuántas van
+      // sueltas, no quién entra ni con cuántas mesas.
       separaciones: _separaciones,
       sinMesa: ex.sinMesa,
       soloBase: ex.soloBase,
@@ -277,6 +330,13 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     _incluirBase = {...?widget.inicial?.incluirBase};
     _incluirExtras = {...?widget.inicial?.incluirExtras};
     _alFondo = widget.inicial?.mesasNuevasAlFondo ?? true;
+    _adicionalesAlFinal = widget.inicial?.adicionalesAlFinal ?? false;
+    _juntasConLaPrincipal = widget.inicial?.juntasConLaPrincipal ?? 0;
+    _dejarJuntas = {...?widget.inicial?.dejarJuntas};
+    _sinNingunaMesa = {
+      for (final a in widget.alumnos)
+        if (MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isEmpty) a.id,
+    };
     _zonas = {
       for (final e in (widget.inicial?.zonas ?? const <String, Set<int>>{})
           .entries)
@@ -457,6 +517,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       for (final p in pedidos)
         if (p.esNuevo && p.mesas > kMesasJuntasEnElSorteo) p.alumnoId,
     ];
+    final alFinal = _alFinal;
 
     return AlertDialog(
       title: const Text('Sorteo de mesas'),
@@ -629,11 +690,16 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                 const SizedBox(height: 16),
                 _Titulo('Con mesas extra (${conMesasExtra.length})'),
                 Text(
-                  'Van todas juntas. Si alguien pidió separarlas, tildalo y '
-                  'elegí cuántas quedan lejos de su bloque y qué tan lejos.',
+                  _alFinalActivo
+                      ? 'Las adicionales van al final, después de las mesas de '
+                          'todas las familias. Si una familia pidió estar '
+                          'junta, tocá "Dejar juntas".'
+                      : 'Van todas juntas. Si alguien pidió separarlas, tildalo y '
+                          'elegí cuántas quedan lejos de su bloque y qué tan lejos.',
+                  key: const Key('con_mesas_extra_explica'),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
-                if (conMasDeTres.isNotEmpty) ...[
+                if (conMasDeTres.isNotEmpty && !_alFinalActivo) ...[
                   const SizedBox(height: 8),
                   Container(
                     key: const Key('aviso_mas_de_tres'),
@@ -671,6 +737,13 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                     onDistancia: (v) => _cambiarDistancia(a.id, v),
                     faltan: faltanDe[a.id] ?? 0,
                     conPlano: plano != null,
+                    // Con "Al final", la familia sin mesa no se tilda "lejos":
+                    // elige si queda junta.
+                    alFinal: _alFinalActivo && nuevosIds.contains(a.id)
+                        ? alFinal[a.id] ?? 0
+                        : null,
+                    dejarJuntas: _dejarJuntas.contains(a.id),
+                    onDejarJuntas: (v) => _alternar(_dejarJuntas, a.id, v),
                     zona: _zonas[a.id] ?? const {},
                     onElegirZona: plano == null
                         ? null
@@ -730,11 +803,9 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                     context,
                     SorteoMesasDialogResult(
                       capacidadSalon: capacidad ?? 0,
-                      separaciones: Map<String, int>.from(_separaciones),
-                      distancias: {
-                        for (final id in _separaciones.keys)
-                          id: _distancias[id] ?? DistanciaLejos.cerca,
-                      },
+                      separaciones:
+                          Map<String, int>.from(_separacionesQueValen),
+                      distancias: _distanciasQueValen,
                       soloPagado: _soloPagado,
                       incluirBase: Set<String>.from(_incluirBase),
                       incluirExtras: Set<String>.from(_incluirExtras),
@@ -744,6 +815,10 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                       hastaMesa: plano == null ? null : hastaEscrita,
                       zonas: plano == null ? const {} : _zonasElegidas,
                       mesasNuevasAlFondo: plano != null && _alFondo,
+                      adicionalesAlFinal: _alFinalActivo,
+                      juntasConLaPrincipal: _juntasConLaPrincipal,
+                      dejarJuntas: Set<String>.from(_dejarJuntas),
+                      alFinal: _alFinal,
                     ),
                   )
               : null,
@@ -829,6 +904,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
               style: TextStyle(fontSize: 12.5, color: Colors.orange.shade900),
             ),
           ],
+          if (_hayAdicionalesPorSortear) ..._lasAdicionales(plan),
           if (plan.modo == ModoSorteo.bloques) ...[
             const SizedBox(height: 10),
             if (bloquesGuardados)
@@ -935,9 +1011,14 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
-                labelText: 'Usar de la mesa 1 a la',
-                helperText:
-                    minima == null ? null : 'Mínimo la $minima para que entre todo.',
+                labelText: plan.mesasAlFinal > 0
+                    ? 'Las de adelante, de la mesa 1 a la'
+                    : 'Usar de la mesa 1 a la',
+                helperText: minima == null
+                    ? null
+                    : plan.mesasAlFinal > 0
+                        ? 'Mínimo la $minima para que entren las de adelante.'
+                        : 'Mínimo la $minima para que entre todo.',
                 border: const OutlineInputBorder(),
                 errorText: nadaQueSortear || minima == null
                     ? null
@@ -978,6 +1059,121 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         ],
       ),
     );
+  }
+
+  /// Alguna familia que todavía no tiene mesa trae adicionales para sortear:
+  /// solo ahí tiene sentido preguntar dónde van.
+  bool get _hayAdicionalesPorSortear =>
+      _pedidos.any((p) => p.esNuevo && p.mesas > 1);
+
+  /// "Las mesas adicionales: Con su familia · Al final" (6.6.1, pedido del
+  /// jefe el 11-nov-2026). Va debajo de cómo se sortea porque es una decisión
+  /// de todo el sorteo y cambia los números que el cartel muestra ahí mismo.
+  /// Viene en "Con su familia": sin tocar nada, se sortea como siempre.
+  List<Widget> _lasAdicionales(PlanSorteo plan) {
+    // Lo que eligió el jefe, no lo que quedó: si el sorteo se completa entero
+    // a la fuerza, la opción se prende eligiendo "Toda la escuela junta".
+    final entera = _modo == ModoSorteo.entera;
+    final gris = TextStyle(fontSize: 12.5, color: Colors.grey.shade800);
+    final desde = plan.alFinalDesde, hasta = plan.alFinalHasta;
+    return [
+      const SizedBox(height: 12),
+      const Text(
+        'Las mesas adicionales',
+        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 4),
+      Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          ChoiceChip(
+            key: const Key('adicionales_con_su_familia'),
+            label: const Text('Con su familia'),
+            selected: !_alFinalActivo,
+            onSelected: entera
+                ? (_) => _cambiar(() => _adicionalesAlFinal = false)
+                : null,
+          ),
+          ChoiceChip(
+            key: const Key('adicionales_al_final'),
+            label: const Text('Al final, después de las principales'),
+            selected: _alFinalActivo,
+            onSelected: entera
+                ? (_) => _cambiar(() => _adicionalesAlFinal = true)
+                : null,
+          ),
+        ],
+      ),
+      if (!entera) ...[
+        const SizedBox(height: 4),
+        Text(
+          'Para mandarlas al final, elegí "Toda la escuela junta": por '
+          'división, cada bloque es de su división.',
+          key: const Key('adicionales_motivo'),
+          style: gris,
+        ),
+      ] else if (!_alFinalActivo) ...[
+        const SizedBox(height: 4),
+        Text(
+          'Cada familia queda con todas sus mesas juntas, como siempre.',
+          key: const Key('adicionales_explica'),
+          style: gris,
+        ),
+      ] else ...[
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('Quedan pegadas a la principal:', style: gris),
+            SegmentedButton<int>(
+              key: const Key('adicionales_juntas'),
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              segments: const [
+                ButtonSegment(value: 0, label: Text('Ninguna')),
+                ButtonSegment(value: 1, label: Text('1')),
+                ButtonSegment(value: 2, label: Text('2')),
+              ],
+              selected: {_juntasConLaPrincipal},
+              onSelectionChanged: (s) =>
+                  _cambiar(() => _juntasConLaPrincipal = s.first),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          plan.mesasAlFinal == 0
+              ? 'Con lo elegido, ninguna mesa va al final: cada familia queda '
+                  'con todas las suyas juntas.'
+              : !plan.entra || desde == null || hasta == null
+                  ? '${plan.mesasAlFinal == 1 ? '1 mesa va' : '${plan.mesasAlFinal} mesas van'} '
+                      'al final, y no entran después de las de adelante.'
+                  : 'Adelante: de la 1 a la ${plan.hastaMesa} · Al final: '
+                      '${desde == hasta ? 'la $desde' : 'de la $desde a la $hasta'} '
+                      '(${plan.mesasAlFinal == 1 ? '1 mesa' : '${plan.mesasAlFinal} mesas'}).',
+          key: const Key('adicionales_rangos'),
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: plan.mesasAlFinal > 0 && !plan.entra
+                ? Colors.red.shade700
+                : Colors.deepPurple,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Las del final se sortean entre ellas. Si una familia pidió estar '
+          'junta, tocá "Dejar juntas" en su renglón, más abajo.',
+          style: gris,
+        ),
+      ],
+    ];
   }
 
   /// "¿Dónde van las mesas que faltan?" (6.5.1): con el sorteo ya hecho, quien
@@ -1224,6 +1420,15 @@ class _FilaMesasExtra extends StatelessWidget {
   final Set<int> zona;
   final VoidCallback? onElegirZona;
 
+  /// Con "Las mesas adicionales: Al final" (6.6.1) y una familia sin mesa:
+  /// cuántas de las suyas van al final (0 si quedan todas juntas). Null si la
+  /// opción no está elegida o no le toca: ahí el renglón es el de siempre.
+  final int? alFinal;
+
+  /// Tildada "dejar juntas": queda entera, adelante.
+  final bool dejarJuntas;
+  final ValueChanged<bool>? onDejarJuntas;
+
   const _FilaMesasExtra({
     required this.alumno,
     required this.pagoMesas,
@@ -1236,9 +1441,77 @@ class _FilaMesasExtra extends StatelessWidget {
     this.conPlano = false,
     this.zona = const {},
     this.onElegirZona,
+    this.alFinal,
+    this.dejarJuntas = false,
+    this.onDejarJuntas,
   });
 
   static const _ambar = Color(0xFF8A5A00);
+
+  /// El renglón con "Al final": sin el tilde de "lejos". Dice dónde va cada
+  /// mesa y deja elegir que la familia quede junta.
+  Widget _conAlFinal(int mesas, String detalle, int atras) {
+    final adelante = mesas - atras;
+    final String queda;
+    if (atras == 0) {
+      queda = 'Sus $mesas mesas van juntas, adelante.';
+    } else {
+      final cuales = adelante == 1
+          ? 'La principal va adelante'
+          : 'La principal y ${adelante - 1} '
+              '${adelante == 2 ? 'adicional' : 'adicionales'} van juntas, '
+              'adelante';
+      final van = atras == 1
+          ? 'la otra va al final'
+          : 'las otras $atras van al final, juntas entre sí';
+      queda = '$cuales; $van.';
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(alumno.nombreAlumno, overflow: TextOverflow.ellipsis),
+                      Text(
+                        detalle,
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  key: Key('dejar_juntas_${alumno.id}'),
+                  label: const Text('Dejar juntas'),
+                  selected: dejarJuntas,
+                  onSelected: onDejarJuntas,
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              queda,
+              key: Key('explicacion_al_final_${alumno.id}'),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _ambar,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1260,6 +1533,10 @@ class _FilaMesasExtra extends StatelessWidget {
             '${faltan == 1 ? 'falta 1' : 'faltan $faltan'}',
       ?bloqueo,
     ].join(' · ');
+    final atras = alFinal;
+    if (atras != null && sortea && !completa) {
+      return _conAlFinal(mesas, detalle, atras);
+    }
     final marcado = separadas != null;
     final lejos = completa ? faltan : (separadas ?? 0).clamp(1, extras);
     final masDeTres = !completa && mesas > kMesasJuntasEnElSorteo;
