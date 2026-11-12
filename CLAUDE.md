@@ -236,8 +236,7 @@ descartó al escucharlo), y lo que pidió fue que el último número quede al fo
 **La 6.6.0: una sola mesa, el papel corto y el cierre con el OK** (programada el 11-nov, versión `6.6.0+69`). **PUBLICADA el
 11-nov a las 15 hs, con el usuario**: la migración v79 probada sobre una copia de la base real, la foto de la mora "después de
 6.5.1 · antes de 6.6.0" (642 alumnos, sin nada sospechoso), el SQL de `barra_cierres` corrido con los conteos iguales, el tag
-`v6.6.0`, el release con el Setup y el APK, y la web. **Falta que instale las tres PCs y las tablets, y la foto "después de
-6.6.0".** La 6.5.1 quedó instalada en las tres PCs (lo confirmó ese día). Entrada: `docs/CONTEXTO_v6.6.0_2026-11-11.md`, que
+`v6.6.0`, el release con el Setup y el APK, y la web. **Reemplazada esa misma noche por la 6.6.1**: llegó a instalarse en la PC de la casa (en las otras dos, sin confirmar), y la foto "después de 6.6.0" no se sacó (ese tramo lo cubre la de "antes de 6.6.1"). La 6.5.1 quedó instalada en las tres PCs (lo confirmó ese día). Entrada: `docs/CONTEXTO_v6.6.0_2026-11-11.md`, que
 empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
 - **Mover una sola mesa** (sin SQL): con una familia de varias mesas, Mover y Cambiar preguntan "¿Cuál mesa querés mover?"
   (`elegirCualMesa`). Con una sola, el toque decide: una vacía (`CambiosDeMesa.moverUna`) o la de otra familia
@@ -275,7 +274,7 @@ empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
 
 **La 6.6.1: la numeración fila por fila y las adicionales al final** (programada y probada el 11-nov a la noche, versión
 `6.6.1+70`. **PUBLICADA el 11-nov a las 23 hs, con el usuario**: la foto de la mora "antes de 6.6.1" (642 alumnos, sin nada
-sospechoso), el tag `v6.6.1`, el release con el Setup y el APK, y la web. **Falta que instale (primero la PC que sortea) y
+sospechoso), el tag `v6.6.1`, el release con el Setup y el APK, y la web. **El usuario avisa cuando instale en todas las PCs ("mañana te aviso", dicho el 11-nov a la medianoche); falta eso y
 la foto "después de 6.6.1".** `docs/CONTEXTO_v6.6.1_2026-11-11.md`, que empieza con "Para retomar en otro chat" y trae **la
 guía paso a paso para el jefe**). Sin SQL ni migración. **Arregla además la página del celular de la puerta, que en la 6.6.0
 salió incompleta** (ver el último punto de la 6.6.0, arriba). Salió de un audio del jefe para el sorteo del 12-nov: quiere las

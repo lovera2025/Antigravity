@@ -9,6 +9,52 @@ día. Sin SQL y sin migración de la base del equipo (sigue en la v79).
 la PC que sortea (antes del sorteo del 12-nov), después las otras dos y las tablets; y la foto de
 la mora "después de 6.6.1".**
 
+### Cómo quedó al cerrar el 11-nov (a la medianoche)
+
+**El usuario dijo: "Mañana te aviso al instalar en todas las PCs."** Hasta que avise, no dar
+nada por instalado.
+
+Lo hecho ese día en este chat, en orden:
+1. Se transcribió el audio del jefe y se armó el plan (aprobado con el botón, después de dos
+   vueltas: que sea opción, y la regla por cantidad y las excepciones).
+2. Se programó y se probó la 6.6.1 (commit `2c70040`): "Fila por fila" y "Las mesas
+   adicionales: Con su familia · Al final".
+3. El usuario dijo "Publica". Mientras se armaba el instalador mandó la captura del celular con
+   los íconos rotos: se encontró que **la 6.6.0 había salido con la página del celular
+   incompleta**, se le puso el freno al instalador (commit `6fabf66`) y se rehízo el Setup.
+4. Se publicó: foto de la mora, tag, release y web (anotado en `2bfcec4`).
+
+Dónde está cada cosa:
+
+| | Estado |
+|---|---|
+| La 6.6.1 | Publicada. **Sin instalar** en ninguna PC ni tablet (que se sepa) |
+| La 6.6.0 | En la PC de la casa seguro (su base está en la v79); en las otras dos, sin confirmar |
+| Foto "antes de 6.6.1" | Sacada (`a900a524…`), sin nada sospechoso |
+| Foto "después de 6.6.0" | **No se sacó**: nunca se confirmó la 6.6.0 en las tres PCs. Ese tramo lo cubre la de "antes de 6.6.1" |
+| Foto "después de 6.6.1" | **Pendiente**, cuando avise que instaló en todas |
+| SQL | Ninguno pendiente |
+| El sorteo del 12-nov | Sin hacer. Es la primera vez que se usa "Al final" de verdad |
+
+**Cuando avise que instaló:**
+1. Preguntar si fueron las tres PCs y también las tablets, y si la PC que sortea se instaló
+   antes del sorteo.
+2. Sacar la foto "después de 6.6.1" (`supabase/mora_fotos.sql`, sección 2, por el conector) y
+   compararla con `a900a524-77c9-4588-b266-a7e8061d6db1` (sección 3). Si figura un perdón nuevo
+   o una mora que bajó, preguntar antes de alarmarse: el jefe perdona a mano.
+3. Preguntar cómo salió el sorteo: si usó "Fila por fila" y "Al final", cuántas quedaron
+   adelante y si tuvo que mover algo a mano.
+4. Preguntar si probó el celular de la puerta con la 6.6.1 (los íconos) y, si puede, sin
+   internet.
+
+**Para el sorteo, lo que el usuario ya sabe:** el plano de esa escuela tiene 75 mesas y para
+todo lo cargado hacen falta 79; con el candado de lo pagado entraban 47 familias, y el "66 y de
+la 67 en adelante" sale sorteando a todos; y el plano y el sorteo van desde una PC con la 6.6.1.
+
+**En esta PC quedó, fuera de git:** las muestras en `build/muestras_661` y, en
+`build/simulacro_661`, **una copia de la base de verdad** (`copia.db`, con datos de alumnos) y
+la salida del simulacro. Se pueden borrar.
+
 ### Publicada
 
 - **Tag `v6.6.1`** en `6fabf66` y **release** "Junior Eventos 6.6.1" (el último), con

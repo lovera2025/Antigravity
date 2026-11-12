@@ -6,6 +6,16 @@ de la encargada).
 
 ## Para retomar en otro chat
 
+> **Actualizado el 11-nov a la medianoche: la reemplazó la 6.6.1, publicada esa misma noche**
+> (`docs/CONTEXTO_v6.6.1_2026-11-11.md`). Dos cosas de acá abajo quedaron viejas:
+> - **La 6.6.0 salió con la página del celular de la puerta incompleta** (sin la carpeta
+>   `assets`: íconos como cuadraditos, y sin internet no dibuja nada). El instalador se armó por
+>   pasos y `ISCC` se llevó `build\puesto` a medio copiar. Lo arregla la 6.6.1, y el instalador
+>   ahora no compila si falta. **Una PC con la 6.6.0 no sirve para los celulares sin internet.**
+> - **La foto "después de 6.6.0" no se sacó**: nunca se confirmó la 6.6.0 en las tres PCs (en la de
+>   la casa, sí). Ese tramo lo cubre la foto "antes de 6.6.1".
+> - La falla suelta de la suite quedó identificada: `test/chat_de_la_noche_test.dart`.
+
 **Estado: PUBLICADA el 11-nov a las 15 hs, con el usuario ("publicá la nueva versión").
 Falta que instale las tres PCs y las tablets, y la foto de la mora "después de 6.6.0".**
 
