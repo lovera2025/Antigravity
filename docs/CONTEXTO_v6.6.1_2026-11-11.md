@@ -5,11 +5,40 @@ día. Sin SQL y sin migración de la base del equipo (sigue en la v79).
 
 ## Para retomar en otro chat
 
-**Estado: programada y probada el 11-nov a la noche. SIN PUBLICAR.** Es para el sorteo de una
-escuela el 12-nov; publicar se le pregunta al usuario en el momento.
+**Estado: PUBLICADA el 11-nov a las 23 hs, con el usuario ("Publica"). Falta que instale: primero
+la PC que sortea (antes del sorteo del 12-nov), después las otras dos y las tablets; y la foto de
+la mora "después de 6.6.1".**
+
+### Publicada
+
+- **Tag `v6.6.1`** en `6fabf66` y **release** "Junior Eventos 6.6.1" (el último), con
+  `Setup.Junior.Eventos.v6.6.1.exe` (41 MB) y `Junior.Eventos.v6.6.1.apk` (53 MB, versión 6.6.1,
+  firmado con "CN=Junior Eventos", comprobado con `apksigner`). Novedades: "El plano se numera
+  fila por fila y, en el sorteo, las mesas adicionales pueden ir al final. Arregla los íconos del
+  celular de la puerta". El Setup se bajó del release para comprobarlo (el mismo tamaño que el armado).
+- **Web** en Vercel: `arguello-events-q9h532u4d`, producción; `version.json` da 6.6.1/70 y sirve
+  sus letras. La anterior, para volver atrás: `arguello-events-qj0b8gfpx` (la 6.6.0).
+- **La foto de la mora "antes de 6.6.1"** (por el conector de Supabase): 642 alumnos,
+  `foto_id a900a524-77c9-4588-b266-a7e8061d6db1`. No se sabía en qué PCs estaba la 6.6.0 (la de
+  la casa, sí). Comparada con la de antes de la 6.6.0 (`da6aec8c…`): **nada sospechoso**. Dos
+  perdones nuevos (los de ese día) y un alumno al que la mora pendiente le pasó de 0 a 25.200:
+  `mora_cambios` muestra que fue un cobro (cambiaron el saldo y las cuotas pagadas, y el "ya
+  usado" subió 140.350), no una mora que revivió.
+- **El instalador se armó por pasos**, con las comprobaciones: la clave de firma, la página del
+  celular entera antes de `ISCC` (146 archivos en su registro), y `apksigner`.
+- Sin SQL.
+
+### Lo que queda
+
+- **Instalar** (lo hace el usuario y avisa): la PC que sortea primero. La base del equipo no
+  cambia (sigue en la v79; una PC que venga de la 6.5.1 pasa de la 78 a la 79, como con la 6.6.0).
+- **La foto de la mora "después de 6.6.1"**, con las tres PCs instaladas y abiertas, y la
+  comparación con `a900a524…`.
+- Preguntarle cómo salió el sorteo con "Fila por fila" y "Al final".
 
 > Frase para retomar: "Seguimos con la 6.6.1: leé 'Para retomar en otro chat' de
-> docs/CONTEXTO_v6.6.1_2026-11-11.md y preguntame si ya se publicó y cómo salió el sorteo."
+> docs/CONTEXTO_v6.6.1_2026-11-11.md. Está publicada desde el 11-nov a la noche; preguntame
+> qué instalé y cómo salió el sorteo."
 
 ### La 6.6.0 salió con la página del celular incompleta (lo arregla esta versión)
 

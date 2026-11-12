@@ -274,8 +274,11 @@ empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
 - `tool/barra_prueba_web.dart` no dejaba entrar con PIN desde la 6.5.0 (se lo preguntaba a la nube): arreglado en `armarLados`.
 
 **La 6.6.1: la numeración fila por fila y las adicionales al final** (programada y probada el 11-nov a la noche, versión
-`6.6.1+70`, **SIN PUBLICAR**; `docs/CONTEXTO_v6.6.1_2026-11-11.md`, que empieza con "Para retomar en otro chat" y trae **la
-guía paso a paso para el jefe**). Sin SQL ni migración. Salió de un audio del jefe para el sorteo del 12-nov: quiere las
+`6.6.1+70`. **PUBLICADA el 11-nov a las 23 hs, con el usuario**: la foto de la mora "antes de 6.6.1" (642 alumnos, sin nada
+sospechoso), el tag `v6.6.1`, el release con el Setup y el APK, y la web. **Falta que instale (primero la PC que sortea) y
+la foto "después de 6.6.1".** `docs/CONTEXTO_v6.6.1_2026-11-11.md`, que empieza con "Para retomar en otro chat" y trae **la
+guía paso a paso para el jefe**). Sin SQL ni migración. **Arregla además la página del celular de la puerta, que en la 6.6.0
+salió incompleta** (ver el último punto de la 6.6.0, arriba). Salió de un audio del jefe para el sorteo del 12-nov: quiere las
 mesas principales en las filas de adelante, a todo lo ancho, y las adicionales al fondo.
 - **"Fila por fila"**, la tercera numeración de Acomodar (`FinNumeracion.filas`): cada fila cruza la pasarela y la siguiente
   vuelve. Ver "El salón".
