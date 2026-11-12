@@ -293,7 +293,8 @@ mesas principales en las filas de adelante, a todo lo ancho, y las adicionales a
 
 **La 6.6.2: los papeles sin datos de cobro, y el orden por cumplimiento** (programada y probada el 12-nov, versión `6.6.2+71`.
 **PUBLICADA el 12-nov a las 14:37, con el usuario**: la foto de la mora "antes de 6.6.2" (642 alumnos, sin nada sospechoso), el
-tag `v6.6.2`, el release con el Setup y el APK, y la web. **Falta que instale y la foto "después de 6.6.2"**;
+tag `v6.6.2`, el release con el Setup y el APK, y la web. **Reemplazada una hora después por la 6.7.0**: llegó a instalarse
+solo en la PC de la casa, y su foto "después" es la de la 6.7.0;
 `docs/CONTEXTO_v6.6.2_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que no se probó**; el pedido
 entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migración.
 - **Si se corta la luz mientras se arma el instalador, se compila de cero** (pasó el 12-nov): borrar `build\puesto`, y también
@@ -319,10 +320,13 @@ entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migrac
   y el azar solo desempata; tolerancia 0 días; ninguna mesa cambia de número; un historial con una oración por familia, sin
   decir "mora" ni "deuda".
 
-**La 6.7.0: "Cumplimiento debido", la preferencia por cumplimiento** (programada el 12-nov a la tarde, versión `6.7.0+72`,
-**en la rama y SIN PUBLICAR**; `docs/CONTEXTO_v6.7.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está
-**lo que falta, en orden, y lo que no se probó**). Sin SQL ni migración. El usuario creía que el tilde ya estaba hecho en la
-6.6.2 y lo pidió esa misma tarde.
+**La 6.7.0: "Cumplimiento debido", la preferencia por cumplimiento** (programada el 12-nov a la tarde, versión `6.7.0+72`.
+**PUBLICADA el 12-nov a las 15:47, con el usuario**: la foto de la mora "antes de 6.7.0" (642 alumnos, ningún cambio contra
+la de "antes de 6.6.2"), el tag `v6.7.0`, el release con el Setup y el APK, y la web. **Falta que instale, primero la PC que
+sortea, y la foto "después de 6.7.0"**, que cubre también la 6.6.1 y la 6.6.2 (la 6.6.2 está solo en la PC de la casa);
+`docs/CONTEXTO_v6.7.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está **lo que falta, en orden**).
+Sin SQL ni migración. Las novedades dicen "Nuevas capacidades en el modo jefe, en el plano": el usuario eligió no nombrar
+el cumplimiento, porque las ve cualquiera. Él creía que el tilde ya estaba hecho en la 6.6.2 y lo pidió esa misma tarde.
 - **Un tilde en PLANO → PERSONALIZAR → Mesas: "Cumplimiento debido"** (el nombre lo eligió él; "Mesas por orden" lo
   confundía con el orden de los números). Prendido, cada familia queda con su mesa, de la que mejor cumplió a la que peor,
   desde la pasarela hacia afuera. "Ver la lista y el porqué" muestra quién quedó dónde, con su oración.
@@ -344,7 +348,9 @@ entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migrac
 - **Las mesas al costado de la pista cuentan como primera línea** (lo confirmó el 12-nov, mirando el dibujo).
 - **Sin modo jefe el tilde no aparece**, a propósito: la pantalla no dice "cumplimiento" a quien no es el jefe.
 - Probado con sus tests, con la pantalla entera en memoria, con un simulacro sobre una copia de la base (200 sorteos de
-  verdad por columnas y 200 por filas) y **recorrido con el mouse** en `tool/plano_prueba.dart` (12-nov). **Sin publicar.**
+  verdad por columnas y 200 por filas) y **recorrido con el mouse** en `tool/plano_prueba.dart` (12-nov). **No se usó
+  todavía en un sorteo de verdad.**
+- **El plano y el tilde, desde una PC con la 6.7.0:** una anterior ve esas mesas como fijadas comunes y no tiene el tilde.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

@@ -6,28 +6,45 @@ equipo sigue en la v79). Viene de `docs/CONTEXTO_v6.6.2_2026-11-12.md` y del ped
 
 ## Para retomar en otro chat
 
-**Estado (12-nov, tarde, segundo chat): la 6.7.0 está PROGRAMADA, recorrida con el mouse y con la
-opción "Por columnas · Por filas" sumada. SIN PUBLICAR: se arma el instalador y se publica con su
-"publicá".**
+**Estado: la 6.7.0 está PUBLICADA (12-nov, 15:47, con el usuario: "Sí, publicá"), con la opción
+"Por columnas · Por filas". Falta que instale, primero la PC que sortea, y la foto de la mora
+"después".**
 
 | | Estado |
 |---|---|
 | La 6.6.2 (papeles, candado, tótem a pantalla completa) | **Publicada** el 12-nov a las 14:37. **Instalada solo en la PC de su casa** (lo dijo el 12-nov a la tarde) |
-| La 6.7.0: el tilde "Cumplimiento debido" | **Programada, en la rama.** Versión `6.7.0+72` en `pubspec.yaml` y en el `.iss`. **Sin publicar** |
-| "Por columnas · Por filas", debajo del tilde | **Programado el 12-nov a la tarde** (él contestó "Ambas" y "que salga hoy así") |
+| La 6.7.0: el tilde "Cumplimiento debido" | **PUBLICADA el 12-nov a las 15:47.** Versión `6.7.0+72`. Sin instalar |
+| "Por columnas · Por filas", debajo del tilde | **Programado el 12-nov a la tarde** (él contestó "Ambas" y "que salga hoy así"); va en la 6.7.0 |
 | La corrida **entera** de pruebas, con la opción | **4.581 pruebas, todas pasan.** El análisis no marca errores ni nada en lo tocado |
 | El recorrido con el mouse (`tool/plano_prueba.dart`) | **Hecho, dos veces**: el tilde solo y con la opción. Capturas en `build/recorrido_670/` |
 | El simulacro con la fiesta que se sorteaba ese día | Hecho por columnas y **por filas**: 200 sorteos de verdad cada uno, todos bien |
-| Foto de la mora "antes de 6.7.0" | Sin sacar (la de "antes de 6.6.2" es de las 14 hs, `5202bec8…`) |
+| Foto de la mora "antes de 6.7.0" | Sacada (`1ce863c0…`, 642 alumnos). Contra la de "antes de 6.6.2": **ningún cambio** |
 | El sorteo de esa fiesta | **Todavía no se hizo** (lo dijo el 12-nov a la tarde): espera el tilde |
+
+### Cómo se publicó
+
+- **Foto de la mora "antes de 6.7.0"** (`1ce863c0…`, 642 alumnos, por el conector). La comparación con
+  la de "antes de 6.6.2" (`5202bec8…`, una hora y media antes) no lista a nadie.
+- **Tag `v6.7.0`** en `1a873c1`. **Release** "Junior Eventos 6.7.0" con
+  `Setup.Junior.Eventos.v6.7.0.exe` (41.103.325 bytes) y `Junior.Eventos.v6.7.0.apk` (53.303.456
+  bytes, arm64, firmado con "CN=Junior Eventos", comprobado con `apksigner`). Los tamaños subidos
+  son los de los archivos de esta PC.
+- **Las novedades dicen "Nuevas capacidades en el modo jefe, en el plano"**: las ve cualquiera al
+  actualizar, y él eligió no nombrar el cumplimiento.
+- **Web** en Vercel: `arguello-events-op84nn0r4`, producción; `version.json` da 6.7.0/72. La
+  anterior, para volver atrás desde Vercel: `arguello-events-8k44vrk77` (la 6.6.2).
+- **El instalador se armó por pasos**, con las comprobaciones: la página del celular entera antes
+  de `ISCC` (146 archivos en su registro, como en la 6.6.1 y la 6.6.2), la clave de firma y
+  `apksigner`. Los registros de cada paso, en `build/armado_670/`.
 
 ### Lo que falta, en orden
 
-1. **Publicar la 6.7.0, con su OK** (lo dio para la 6.6.2, no para esta): foto de la mora, el
-   instalador por pasos, el APK, tag, release y web. El paso a paso, con lo del corte de luz, en
-   "Cómo se publicó" de `docs/CONTEXTO_v6.6.2_2026-11-12.md`.
-2. Que instale, **primero la PC que sortea**, y las fotos de la mora "después".
-3. Después: el tilde en una fiesta con sorteo por división (hoy no se prende, y lo dice).
+1. Que instale, **primero la PC que sortea** (el plano y el tilde, desde una PC con la 6.7.0).
+2. Cuando avise: preguntar qué PCs y tablets, sacar la foto de la mora "después de 6.7.0"
+   (`supabase/mora_fotos.sql`, sección 2) y compararla (sección 3). Cubre también la 6.6.1 y la
+   6.6.2, que no tienen su "después".
+3. Preguntarle cómo salió el sorteo con el tilde, y con cuál recorrido.
+4. Después: el tilde en una fiesta con sorteo por división (hoy no se prende, y lo dice).
 
 ### Lo que contestó el 12-nov a la tarde
 
