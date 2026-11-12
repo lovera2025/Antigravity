@@ -540,16 +540,15 @@ class PintorPlano extends CustomPainter {
         _mesaNeon(canvas, c, r, info, foco);
     }
 
-    // Las marcas salen del dato y no del estado: una mesa fijada que ya tiene
-    // familia sigue mostrando el candado, y una libre que quedó ocupada, la
-    // raya.
+    // Una libre que quedó ocupada sigue mostrando la raya. El candado se ve
+    // solo mientras la fijada espera a su familia ([InfoMesa.conCandado]).
     // La que se dejó libre para alguien ("Profes", 6.5.0) lleva ese nombre y
     // no la raya de "no se usa".
     final reservada = info.nombreDeReservada;
     if (nivel.adornos) {
       if (m.pasto) _marcaPasto(canvas, c, r);
       if (info.libre && reservada == null) _marcaLibre(canvas, c, r);
-      if (info.fijadaPara != null) _candado(canvas, c, r);
+      if (info.conCandado) _candado(canvas, c, r);
     }
 
     if (nivel.numeros) _numero(canvas, m, c, r, info, foco);

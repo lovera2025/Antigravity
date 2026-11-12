@@ -401,9 +401,11 @@ void main() {
       final linea = fiesta.lineaDeLaPlanilla!.split('\n');
       expect(linea, hasLength(2));
       expect(linea.first, startsWith('Sorteo del 12/11/2026'));
-      expect(linea.first, endsWith('· Jefe · 29 familias'));
+      // El papel no dice quién sorteó (12-nov-2026).
+      expect(linea.first, endsWith('hs · 29 familias'));
       expect(linea.last, startsWith('Los que faltaban: '));
-      expect(linea.last, endsWith('· Jefe · 5 familias'));
+      expect(linea.last, endsWith('hs · 5 familias'));
+      expect(fiesta.lineaDeLaPlanilla, isNot(contains('Jefe')));
 
       // ── 4. A uno de los que faltaban lo mudan de mesa ────────────────────
       final aDonde = fiesta.mesaLibre();

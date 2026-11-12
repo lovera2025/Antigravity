@@ -291,6 +291,25 @@ mesas principales en las filas de adelante, a todo lo ancho, y las adicionales a
   cargado, principales del 1 al 66 y adicionales del 67 al 79; 200 sorteos por caso, todos pasan el control final) y con las
   muestras (`tool/adicionales_al_final_muestra_test.dart`). **No se sorteó de verdad con la opción.**
 
+**La 6.6.2: los papeles sin datos de cobro, y el orden por cumplimiento** (programada y probada el 12-nov, versión `6.6.2+71`,
+**SIN PUBLICAR**; `docs/CONTEXTO_v6.6.2_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que no se
+probó**; el pedido entero, en `docs/SPEC_frente_por_cumplimiento_2026-11-12.md`). Sin SQL ni migración.
+- **Ningún papel del sorteo dice "sin pagar", quién sorteó ni cuántos cambios hubo** (pedido del usuario): la línea es "Sorteo
+  del 12/11/2026 21:40 hs" (`RegistroSorteo.lineaParaPlanilla`), SIN MESA va en rojo y nada más, y la planilla para repartir
+  no dice "· lejos · en la zona elegida". Los cambios se siguen contando y se ven en PLANO → HISTORIAL. **En un PDF el texto
+  sale palabra por palabra: para comprobar que algo no está se busca cada palabra, no la frase.**
+- **El candado se ve solo mientras la fijada espera a su familia** (`InfoMesa.conCandado`, una regla para la pantalla y el
+  papel). Entregada, es una mesa más; si la ocupa otra familia, el candado sigue. El dato no cambia. El usuario no quiere
+  ocuparse del candado: **no ofrecerle un botón para sacarlo** (lo rechazó).
+- **El orden por cumplimiento: programado solo el servicio, sin pantalla** (`eventos/services/cumplimiento_de_cuotas.dart`:
+  `CumplimientoDeCuotas`, `PlanDeLaFiesta`, `OrdenPorCumplimiento`, `fraseDelPuesto`). Sale de los pagos, nunca de los campos
+  de la mora. La app no lo llama todavía. **La lista de una fiesta se saca con `tool/orden_del_frente_test.dart` sobre una
+  copia de la base, lleva nombres y cómo pagó cada uno, y va a `build/`, nunca a git.** El 12-nov se entregó una para fijar
+  las mesas a mano.
+- **Decidido por el usuario el 12-nov para el orden que se reparte solo (6.7.0, solo en el plan):** recorre todo el salón, de
+  la pasarela hacia afuera, y el azar solo desempata; tolerancia 0 días; ninguna mesa cambia de número; un historial con una
+  oración por familia, sin decir "mora" ni "deuda". Las correcciones a la spec, en el contexto.
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y

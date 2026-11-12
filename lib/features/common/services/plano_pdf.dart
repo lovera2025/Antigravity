@@ -384,7 +384,7 @@ class PlanoPdf {
                       mesa(libre: true, reservada: true),
                       'Reservada: no es de un alumno',
                     ),
-                  if (estado.mesas.any((i) => i.fijadaPara != null))
+                  if (estado.mesas.any((i) => i.conCandado))
                     item(mesa(fijada: true), 'Fijada antes del sorteo'),
                   if (resumen.sillasExtra > 0)
                     item(mesa(llena: true, sillasExtra: 1), 'Lleva sillas extra'),
@@ -1010,7 +1010,9 @@ class _DibujoPlano extends pw.Widget {
         conflicto: info.estado == EstadoMesa.conflicto,
         libre: info.libre,
         reservada: info.nombreDeReservada != null,
-        fijada: info.fijadaPara != null,
+        // Una fijada que ya se entregó es una mesa más (12-nov-2026), como en
+        // la pantalla: la marca queda para la que todavía espera a su familia.
+        fijada: info.conCandado,
         pasto: m.pasto,
         sillasExtra: info.sillasExtra,
         conSillas: conSillas,

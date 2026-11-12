@@ -56,11 +56,14 @@ void main() {
     expect(r.cambiosAMano, 0);
     expect(
       RegistroSorteo.lineaParaPlanilla(r),
-      'Sorteo del 12/11/2026 21:40 hs · Jefe',
+      'Sorteo del 12/11/2026 21:40 hs',
     );
   });
 
-  test('si alguien cambió mesas a mano después, se cuentan', () {
+  // Desde el 12-nov-2026 el papel no dice quién sorteó ni cuántos cambios hubo
+  // (pedido del usuario): se siguen contando, y se ven en PLANO → HISTORIAL.
+  test('si alguien cambió mesas a mano después, se cuentan, y el papel no lo dice',
+      () {
     final registros = [
       _registro(
         TipoRegistroSorteo.sorteo,
@@ -76,7 +79,7 @@ void main() {
     expect(r.cambiosAMano, 2);
     expect(
       RegistroSorteo.lineaParaPlanilla(r),
-      'Sorteo del 12/11/2026 21:40 hs · Jefe · 2 cambios a mano después',
+      'Sorteo del 12/11/2026 21:40 hs',
     );
   });
 
@@ -107,7 +110,7 @@ void main() {
     expect(r.cambiosAMano, 0);
     expect(
       RegistroSorteo.lineaParaPlanilla(r),
-      'Sorteo deshecho el 12/11/2026 22:40 hs · María',
+      'Sorteo deshecho el 12/11/2026 22:40 hs',
     );
   });
 
@@ -170,21 +173,20 @@ void main() {
       expect(r.enPie, [primero, segundo]);
       expect(
         RegistroSorteo.lineaParaPlanilla(r),
-        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
-        'Los que faltaban: 20/11/2026 18:05 hs · María · 1 familia',
+        'Sorteo del 12/11/2026 21:40 hs · 3 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · 1 familia',
       );
     });
 
-    test('los cambios a mano se dicen al final', () {
+    test('los cambios a mano no se dicen en el papel', () {
       final r = RegistroSorteo.resumir(
         [primero, segundo],
         [...alumnos.take(3), _alumno('d', '31')],
       );
       expect(
         RegistroSorteo.lineaParaPlanilla(r),
-        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
-        'Los que faltaban: 20/11/2026 18:05 hs · María · 1 familia'
-        ' · 1 cambio a mano después',
+        'Sorteo del 12/11/2026 21:40 hs · 3 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · 1 familia',
       );
     });
 
@@ -201,8 +203,8 @@ void main() {
       );
       expect(
         RegistroSorteo.lineaParaPlanilla(r),
-        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
-        'Los que faltaban: 21/11/2026 18:05 hs · Jefe · 2 familias'
+        'Sorteo del 12/11/2026 21:40 hs · 3 familias\n'
+        'Los que faltaban: 21/11/2026 18:05 hs · 2 familias'
         ' (antes, otro sorteo: 1 familia)',
       );
     });
@@ -228,7 +230,7 @@ void main() {
       // El papel muestra las mesas del primer sorteo: es el que nombra.
       expect(
         RegistroSorteo.lineaParaPlanilla(r),
-        'Sorteo del 12/11/2026 21:40 hs · Jefe',
+        'Sorteo del 12/11/2026 21:40 hs',
       );
     });
   });

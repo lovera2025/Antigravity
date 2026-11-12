@@ -283,7 +283,9 @@ class PlanillaSorteo {
       // Un número que no se entiende: se muestra tal cual, como la grilla.
       mesaPrincipal = crudo;
     } else if (sinPagarBase) {
-      mesaPrincipal = 'sin mesa (sin pagar)';
+      // El papel no dice "sin pagar" (pedido del usuario, 12-nov-2026): el rojo
+      // de SIN MESA ya lo dice.
+      mesaPrincipal = 'sin mesa';
       sinMesa = true;
     } else {
       mesaPrincipal = 'sin asignar';
@@ -297,7 +299,6 @@ class PlanillaSorteo {
       for (final t in tramos.skip(1)) _tramoExtra(t, pasto, separada: true),
     ];
     final extras = SalonMesas.mesasExtra(a);
-    final sinPagarMesas = pago != null && !pago.pagoMesas;
     final String adicional;
     if (partes.isNotEmpty) {
       // Lo que se pidió, solo si de verdad quedó separada.
@@ -305,16 +306,11 @@ class PlanillaSorteo {
           ? '${partes.join(' · ')} · lejos · ${lejos.texto}'
           : partes.join(' · ');
     } else if (extras > 0 && principal == null) {
-      adicional = extras == 1
-          ? '1 mesa extra${sinPagarMesas ? ' (sin pagar)' : ''}'
-          : '$extras mesas extra${sinPagarMesas ? ' (sin pagar)' : ''}';
+      adicional = extras == 1 ? '1 mesa extra' : '$extras mesas extra';
     } else {
       adicional = '-';
     }
-    var alerta = SalonMesas.avisoMesas(a);
-    if (alerta != null && sinPagarMesas && alerta.startsWith('le falta')) {
-      alerta = '$alerta (sin pagar)';
-    }
+    final alerta = SalonMesas.avisoMesas(a);
 
     // ── Con cena y generales en la principal ──────────────────────────────
     final ocupacion = SalonMesas.ocupacion(a);
@@ -343,7 +339,6 @@ class PlanillaSorteo {
 
     // ── Sillas extra: "2P · 1A" ───────────────────────────────────────────
     final sillasExtra = SalonMesas.sillasExtra(a);
-    final sinPagarSillas = pago != null && sillasExtra > 0 && !pago.pagoSillas;
     String sillas;
     if (sillasExtra == 0) {
       sillas = '-';
@@ -363,7 +358,6 @@ class PlanillaSorteo {
       final sinLugar = sillasExtra - sillasPrincipal - enAdicional;
       if (sinLugar > 0) sillas = '$sillas · (!) $sinLugar sin lugar';
     }
-    if (sinPagarSillas) sillas = '$sillas (sin pagar)';
 
     // ── Acompañantes, uno por renglón ─────────────────────────────────────
     final nombres = [

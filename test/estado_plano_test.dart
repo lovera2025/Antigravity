@@ -198,7 +198,7 @@ void main() {
   group('fijadas, libres y familias en la misma mesa', () {
     final armado = ArmadosPredefinidos.normal2aPagina3();
 
-    test('fijada para la familia que la ocupa: sigue marcada, sin conflicto',
+    test('fijada para la familia que la ocupa: sin conflicto y ya sin candado',
         () {
       final a = _fam('a', [10, 11], division: '5° A');
       final e = EstadoPlano.desde(
@@ -210,6 +210,21 @@ void main() {
       expect(e.info(10).fijadaPara?.id, 'a');
       expect(e.info(11).fijadaPara?.id, 'a');
       expect(e.info(10).principal, isTrue);
+      // 12-nov-2026: entregada, es una mesa más. El candado no queda a la
+      // vista, ni en la pantalla ni en el papel.
+      expect(e.info(10).conCandado, isFalse);
+      expect(e.info(11).conCandado, isFalse);
+    });
+
+    test('el candado se ve mientras la fijada espera a su familia', () {
+      final e = EstadoPlano.desde(
+        armado: armado,
+        ocupantes: const [],
+        fijadas: {10: _fam('a', const [])},
+      );
+      expect(e.info(10).estado, EstadoMesa.fijada);
+      expect(e.info(10).conCandado, isTrue);
+      expect(e.info(12).conCandado, isFalse);
     });
 
     test('fijada para una familia y ocupada por otra: conflicto', () {
@@ -221,6 +236,8 @@ void main() {
       expect(e.info(10).estado, EstadoMesa.conflicto);
       expect(e.info(10).fijadaPara?.id, 'a');
       expect(e.info(10).ocupante?.id, 'b');
+      // Un conflicto hay que verlo: ahí el candado sigue.
+      expect(e.info(10).conCandado, isTrue);
     });
 
     test('una mesa libre con familia: conflicto, y sigue marcada libre', () {

@@ -170,7 +170,9 @@ class PlanillaSorteoPdf {
       notas: notas,
       repartos: repartos,
       pasto: pasto,
-      lejos: lejos,
+      // La que se reparte no dice que a una familia la separaron a propósito
+      // ("· lejos · en la zona elegida"): solo los números (12-nov-2026).
+      lejos: interna ? lejos : const {},
     );
 
     final secciones = soloUltimos
@@ -346,13 +348,10 @@ class PlanillaSorteoPdf {
         '${SalonMesas.sillasPorMesa * r.mesas}',
         detalle: '${SalonMesas.sillasPorMesa} por mesa',
       ),
-      t.tarjeta(
-        'Sillas extra',
-        '${r.sillasExtra - r.sillasSinPagar}',
-        detalle: r.sillasSinPagar > 0 ? '+${r.sillasSinPagar} sin pagar' : null,
-      ),
+      // Ningún papel del sorteo dice "sin pagar" (12-nov-2026).
+      t.tarjeta('Sillas extra', '${r.sillasExtra - r.sillasSinPagar}'),
       t.tarjeta('Con cena', '${r.conCena}', detalle: 'egresados y acompañantes'),
-      t.tarjeta('Sin mesa', '${r.sinMesa}', detalle: 'sin pagar la cuota base'),
+      t.tarjeta('Sin mesa', '${r.sinMesa}'),
       t.tarjeta(
         'Sillas a confirmar',
         '${r.repartosPendientes}',
@@ -681,15 +680,11 @@ class PlanillaSorteoPdf {
   static pw.Widget _celdaMesa(PlanillaTema t, FilaPlanillaSorteo f) {
     if (int.tryParse(f.mesaPrincipal) == null) {
       if (f.sinMesa) {
-        return pw.Column(
-          mainAxisSize: pw.MainAxisSize.min,
-          children: [
-            pw.Text(
-              'SIN MESA',
-              style: t.estilo(size: 8.5, negrita: true, color: t.rojo),
-            ),
-            pw.Text('sin pagar', style: t.estilo(size: 7.5, color: t.rojo)),
-          ],
+        // Solo "SIN MESA", en rojo: el color ya lo dice todo (12-nov-2026).
+        return pw.Text(
+          'SIN MESA',
+          textAlign: pw.TextAlign.center,
+          style: t.estilo(size: 8.5, negrita: true, color: t.rojo),
         );
       }
       return pw.Text(

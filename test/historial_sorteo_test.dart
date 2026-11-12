@@ -94,7 +94,9 @@ void main() {
   });
 
   group('la línea de la planilla', () {
-    test('cuenta los cambios con motivo y, aparte, los hechos a mano', () {
+    // Los cuenta el resumen; el papel no los dice (12-nov-2026).
+    test('los cambios con motivo y los hechos a mano se cuentan, y no van al papel',
+        () {
       final r = RegistroSorteo.resumir(
         [sorteo],
         [
@@ -109,7 +111,12 @@ void main() {
       expect(r.cambiosAMano, 1);
       expect(
         RegistroSorteo.lineaParaPlanilla(r),
-        endsWith(' · Jefe · 1 cambio con motivo · 1 cambio a mano después'),
+        allOf(
+          startsWith('Sorteo del '),
+          endsWith(' hs'),
+          isNot(contains('Jefe')),
+          isNot(contains('cambio')),
+        ),
       );
     });
 

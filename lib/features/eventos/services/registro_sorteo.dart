@@ -241,14 +241,15 @@ class RegistroSorteo {
     );
   }
 
-  static String _quien(SorteoMesasRegistro r) =>
-      r.hechoPor?.trim().isNotEmpty == true ? ' · ${r.hechoPor}' : '';
-
   static String _familias(int n) => n == 1 ? '1 familia' : '$n familias';
 
-  /// Lo que va arriba de la planilla: "Sorteo del 12/11/2026 21:40 hs · Jefe",
-  /// con los cambios con motivo y los hechos a mano si los hay. `null` si no
-  /// hay ningún sorteo registrado.
+  /// Lo que va arriba de la planilla y del plano en papel: "Sorteo del
+  /// 12/11/2026 21:40 hs". `null` si no hay ningún sorteo registrado.
+  ///
+  /// **No dice quién lo hizo ni cuántos cambios hubo después** (pedido del
+  /// usuario, 12-nov-2026): ese papel se reparte. Los cambios con motivo se
+  /// ven donde corresponde, en PLANO → HISTORIAL, y [ResumenRegistroSorteo] los
+  /// sigue contando.
   ///
   /// Si después del sorteo se sorteó a los que faltaban, son **dos renglones**
   /// (separados por un salto de línea), cada uno con sus familias: el primer
@@ -260,39 +261,27 @@ class RegistroSorteo {
     // queda ninguno, se dice lo último que pasó (que se deshizo).
     final u = enPie.isNotEmpty ? enPie.last : resumen.ultimo;
     if (u == null) return null;
-    final String texto;
     if (enPie.length > 1) {
-      texto = '${_primerSorteo(enPie.first)}\n${_losQueFaltaban(enPie)}';
-    } else {
-      final cuando = ArTime.formatFechaHora(u.createdAt);
-      final que = switch (u.tipo) {
-        TipoRegistroSorteo.sorteo => 'Sorteo del $cuando',
-        TipoRegistroSorteo.deshacer => 'Sorteo deshecho el $cuando',
-        TipoRegistroSorteo.restaurar => 'Sorteo restaurado el $cuando',
-      };
-      texto = '$que${_quien(u)}';
+      return '${_primerSorteo(enPie.first)}\n${_losQueFaltaban(enPie)}';
     }
-    final m = resumen.cambiosConMotivo;
-    final conMotivo = m == 0
-        ? ''
-        : ' · $m ${m == 1 ? 'cambio' : 'cambios'} con motivo';
-    final n = resumen.cambiosAMano;
-    final aMano = n == 0
-        ? ''
-        : ' · $n ${n == 1 ? 'cambio' : 'cambios'} a mano después';
-    return '$texto$conMotivo$aMano';
+    final cuando = ArTime.formatFechaHora(u.createdAt);
+    return switch (u.tipo) {
+      TipoRegistroSorteo.sorteo => 'Sorteo del $cuando',
+      TipoRegistroSorteo.deshacer => 'Sorteo deshecho el $cuando',
+      TipoRegistroSorteo.restaurar => 'Sorteo restaurado el $cuando',
+    };
   }
 
-  /// "Sorteo del 12/11/2026 21:40 hs · Jefe · 128 familias".
+  /// "Sorteo del 12/11/2026 21:40 hs · 128 familias".
   static String _primerSorteo(SorteoMesasRegistro r) {
     final cuando = ArTime.formatFechaHora(r.createdAt);
     final que = r.tipo == TipoRegistroSorteo.restaurar
         ? 'Sorteo restaurado el'
         : 'Sorteo del';
-    return '$que $cuando${_quien(r)} · ${_familias(r.alumnos)}';
+    return '$que $cuando · ${_familias(r.alumnos)}';
   }
 
-  /// "Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias". Si entre el
+  /// "Los que faltaban: 20/11/2026 18:05 hs · 5 familias". Si entre el
   /// primer sorteo y este hubo otros, dice cuántos y de cuántas familias.
   static String _losQueFaltaban(List<SorteoMesasRegistro> enPie) {
     final r = enPie.last;
@@ -305,6 +294,6 @@ class RegistroSorteo {
         ? ''
         : ' (antes, ${medio.length == 1 ? 'otro sorteo' : '${medio.length} sorteos más'}: '
             '${_familias(medio.fold<int>(0, (s, x) => s + x.alumnos))})';
-    return '$que $cuando${_quien(r)} · ${_familias(r.alumnos)}$antes';
+    return '$que $cuando · ${_familias(r.alumnos)}$antes';
   }
 }

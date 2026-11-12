@@ -95,7 +95,8 @@ class InfoMesa {
   final int sillasExtra;
 
   /// La familia para la que está fijada (antes del sorteo). Se conserva
-  /// aunque la mesa ya tenga familia: el candado se sigue viendo.
+  /// aunque la mesa ya tenga familia: es lo que dice la config del plano. El
+  /// candado, en cambio, se dibuja según [conCandado].
   final OcupantePlano? fijadaPara;
 
   /// Se dejó libre a propósito. Se conserva aunque esté ocupada (y entonces
@@ -128,6 +129,18 @@ class InfoMesa {
   });
 
   OcupantePlano? get ocupante => ocupantes.isEmpty ? null : ocupantes.first;
+
+  /// La mesa lleva el candado, en la pantalla y en el papel: mientras **espera**
+  /// a la familia para la que se fijó, o si la tiene otra (un conflicto que
+  /// hay que ver).
+  ///
+  /// Una fijada que ya se entregó es una mesa más (pedido del usuario, 12-nov-
+  /// 2026: "¿cuándo debería importarme sacar o poner el candado?"). Hasta la
+  /// 6.6.1 el candado quedaba para siempre, y se notaba a quién se le había
+  /// elegido la mesa. Qué se fijó y por qué sigue en PLANO → HISTORIAL.
+  bool get conCandado =>
+      fijadaPara != null &&
+      (ocupantes.isEmpty || estado == EstadoMesa.conflicto);
 
   /// El nombre que lleva una mesa reservada ([reservada]), si de verdad está
   /// libre: una que quedó ocupada o fijada es un conflicto y se muestra así.

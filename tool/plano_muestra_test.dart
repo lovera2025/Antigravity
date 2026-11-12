@@ -139,7 +139,12 @@ List<_Caso> _casos() {
         armado: p3,
         ocupantes: familiasP3,
         libres: {76, 77, 78},
-        fijadas: {60: fija},
+        // La 60 espera a su familia: lleva el candado. La de la última
+        // familia ya se entregó: es una mesa más (6.6.2).
+        fijadas: {
+          60: fija,
+          familiasP3.last.numeros.first: familiasP3.last,
+        },
       ),
       resaltadaP3.numeros.toSet(),
     ),

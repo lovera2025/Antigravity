@@ -117,7 +117,7 @@ void main() {
             plano,
             estilo: estilo,
             blancoYNegro: bn,
-            lineaSorteo: 'Sorteo del 12/11/2026 21:40 hs · Jefe',
+            lineaSorteo: 'Sorteo del 12/11/2026 21:40 hs',
             generada: _cuando,
           );
           expect(paginasDelPdf(bytes), 1, reason: '${estilo.name} bn=$bn');
@@ -305,6 +305,28 @@ void main() {
       expect(texto.contains('Pasto'), isFalse, reason: 'Pasto');
       expect(texto.contains('Libre'), isFalse, reason: 'Libre');
       expect(texto.contains('Fijada'), isFalse, reason: 'Fijada');
+    });
+
+    test('una fijada que ya se entregó es una mesa más: sin marca ni leyenda',
+        () async {
+      // 12-nov-2026: el papel se reparte, y no dice a quién se le fijó la
+      // mesa. La que todavía espera a su familia sí se marca.
+      PlanoDeLaFiesta con({required bool entregada}) => PlanoDeLaFiesta.desde(
+            armado: pagina3,
+            config: const ConfigPlano(
+              fijadas: {7: MesaFijada(alumnoId: 'fija', motivo: 'orden')},
+            ),
+            alumnos: [
+              ...familias(1, 5),
+              alumno('fija', 'RÍOS, MATEO', mesas: entregada ? [7] : const []),
+            ],
+          );
+      final entregada = contenidoDelPdf(await sinLetras(con(entregada: true)));
+      expect(entregada.contains('Fijada'), isFalse, reason: 'entregada');
+      expect(entregada.contains('fijada'), isFalse, reason: 'el resumen');
+      expect(entregada.contains('(RÍOS)') || entregada.contains('OS)'), isTrue);
+      final esperando = contenidoDelPdf(await sinLetras(con(entregada: false)));
+      expect(esperando.contains('Fijada'), isTrue, reason: 'esperando');
     });
 
     test('un apellido con signos que la letra no tiene no frena el PDF',

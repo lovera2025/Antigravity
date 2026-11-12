@@ -145,7 +145,8 @@ void main() {
 
     test('sin nada pagado de la base y sin mesa: fila roja', () {
       final f = PlanillaSorteo.fila(_alumno('a'), pago: PagoAlumno.nada);
-      expect(f.mesaPrincipal, 'sin mesa (sin pagar)');
+      // El papel no dice "sin pagar" (12-nov-2026): el rojo ya lo dice.
+      expect(f.mesaPrincipal, 'sin mesa');
       expect(f.sinMesa, isTrue);
       expect(f.ocupacionPrincipal, isNull);
     });
@@ -156,18 +157,20 @@ void main() {
       expect(f.sinMesa, isFalse);
     });
 
-    test('mesas extra todavía sin número, y "(sin pagar)" si están en \$0', () {
+    test('mesas extra todavía sin número, sin "(sin pagar)" aunque estén en \$0',
+        () {
       expect(PlanillaSorteo.fila(_alumno('a', extras: 1)).adicional, '1 mesa extra');
       expect(
         PlanillaSorteo.fila(
           _alumno('a', extras: 2),
           pago: const PagoAlumno(base: 30000),
         ).adicional,
-        '2 mesas extra (sin pagar)',
+        '2 mesas extra',
       );
     });
 
-    test('si le falta una mesa lo avisa, con "(sin pagar)" si no la pagó', () {
+    test('si le falta una mesa lo avisa, sin "(sin pagar)" aunque no la haya pagado',
+        () {
       expect(
         PlanillaSorteo.fila(_alumno('a', mesas: [12], extras: 1)).alertaMesas,
         '(!) le falta 1 mesa',
@@ -177,7 +180,7 @@ void main() {
           _alumno('a', mesas: [12], extras: 1),
           pago: const PagoAlumno(base: 30000),
         ).alertaMesas,
-        '(!) le falta 1 mesa (sin pagar)',
+        '(!) le falta 1 mesa',
       );
     });
   });
@@ -225,12 +228,13 @@ void main() {
       expect(f.reparto, RepartoSillas.noAplica);
     });
 
-    test('las que no entran se marcan, y "(sin pagar)" si están en \$0', () {
+    test('las que no entran se marcan, sin "(sin pagar)" aunque estén en \$0',
+        () {
       final f = PlanillaSorteo.fila(
         _alumno('a', mesas: [5], sillas: 3),
         pago: const PagoAlumno(base: 30000),
       );
-      expect(f.sillas, '2P · (!) 1 sin lugar (sin pagar)');
+      expect(f.sillas, '2P · (!) 1 sin lugar');
     });
 
     test('con el reparto que eligió la familia: 1P · 2A y confirmado', () {
@@ -656,6 +660,36 @@ void main() {
           final interna = version == VersionPlanillaSorteo.interna;
           expect(texto.contains('(TELÉFONO)'), interna, reason: '$version');
           expect(texto.contains('(OBSERVACIONES)'), interna, reason: '$version');
+        }
+      });
+
+      test('ningún papel dice "sin pagar", quién sorteó ni cuántos cambios hubo',
+          () async {
+        // Pedido del usuario, 12-nov-2026: el papel se reparte. SIN MESA va en
+        // rojo y nada más.
+        final alumnos = [
+          _alumno('a', nombre: 'ACOSTA, LUCÍA', mesas: [12]),
+          _alumno('b', nombre: 'LÓPEZ, IVÁN', extras: 2, sillas: 2),
+        ];
+        for (final version in VersionPlanillaSorteo.values) {
+          for (final vertical in [true, false]) {
+            final texto = contenidoDelPdf(await PlanillaSorteoPdf.construir(
+              evento: evento,
+              alumnos: alumnos,
+              pagos: {'a': _pagoTodo, 'b': PagoAlumno.nada},
+              lineaSorteo: 'Sorteo del 12/11/2026 21:40 hs',
+              version: version,
+              vertical: vertical,
+              generada: DateTime(2026, 11, 12, 21, 30),
+            ));
+            // El PDF escribe palabra por palabra: se busca cada una.
+            expect(texto.contains('(SIN)'), isTrue, reason: '$version');
+            expect(texto.contains('(MESA)'), isTrue, reason: '$version');
+            for (final no in ['pagar', 'Jefe', 'motivo', 'mano']) {
+              expect(texto.contains('($no)'), isFalse, reason: '$version: $no');
+              expect(texto.contains('($no'), isFalse, reason: '$version: $no');
+            }
+          }
         }
       });
 
