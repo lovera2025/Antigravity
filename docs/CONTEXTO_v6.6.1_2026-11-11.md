@@ -11,6 +11,32 @@ escuela el 12-nov; publicar se le pregunta al usuario en el momento.
 > Frase para retomar: "Seguimos con la 6.6.1: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.6.1_2026-11-11.md y preguntame si ya se publicó y cómo salió el sorteo."
 
+### La 6.6.0 salió con la página del celular incompleta (lo arregla esta versión)
+
+El 11-nov a las 21 hs el usuario mandó una captura del celular de la puerta: **los íconos eran
+cuadraditos vacíos**. La página instalada con la 6.6.0 (`{app}\puesto`) tenía 16 archivos en
+vez de 146: **le faltaba toda la carpeta `assets`** (la letra de los íconos, la del texto, las
+demás letras y los fondos).
+
+- **Lo que se ve:** con internet en el celular, el texto aparece (la letra baja de Google) y
+  los íconos no. **Sin internet, esa página no dibuja nada** (la trampa de la 6.2.1: sin su
+  Roboto, Flutter web espera a `fonts.gstatic.com`). En el salón no hay internet.
+- **Por qué pasó:** el instalador de la 6.6.0 se armó por pasos (el script no entra en los 10
+  minutos de la herramienta) y `ISCC` se llevó `build\puesto` a medio copiar. La línea con el
+  asterisco se lleva lo que haya, sin avisar.
+- **El freno, doble:** el `.iss` nombra tres archivos de la página (`FontManifest.json`, la
+  letra de los íconos y `Roboto-Regular.ttf`): **si falta uno, el instalador no compila**. Y
+  `build_installer.ps1` comprueba lo mismo antes de llamarlo. `test/instalador_puesto_test.dart`
+  cuida las dos cosas.
+- **Comprobado con la 6.6.1:** el registro de `ISCC` lista los 146 archivos de la página; y la
+  página, servida por `tool/central_prueba_test.dart` y abierta en un navegador, muestra todos
+  los íconos y pide las letras a la central (ningún pedido a `gstatic`).
+- **Hasta instalar la 6.6.1, una PC con la 6.6.0 no sirve para los celulares de la puerta sin
+  internet.** La app de la PC, el tótem y Recepción en la PC no tienen el problema.
+- Al armar el instalador por pasos: después de `flutter build web … -o build\puesto`, mirar que
+  estén esos tres archivos **antes** de `ISCC`, y guardar su registro (`> build\iscc.log`) para
+  contar los archivos de `build\puesto`.
+
 ### De dónde salió
 
 Un audio del jefe del 11-nov, para el sorteo del día siguiente (transcripto en la PC, automático):

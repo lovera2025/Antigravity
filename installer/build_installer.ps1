@@ -40,6 +40,22 @@ Write-Host ">> flutter build web -t lib/puesto_main.dart --no-web-resources-cdn"
 flutter build web --release -t lib/puesto_main.dart --no-web-resources-cdn -o "$puesto"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# La página tiene que estar ENTERA antes de armar el instalador. La 6.6.0 (11-nov-2026)
+# se armó por pasos y el instalador se llevó la carpeta a medio copiar: sin "assets", el
+# celular mostraba cuadraditos en vez de íconos y sin internet no dibujaba nada. Quien
+# arme el instalador por pasos corre esta misma comprobación antes de ISCC (el .iss
+# además no compila si faltan).
+$faltan = @(
+    "assets\FontManifest.json",
+    "assets\fonts\MaterialIcons-Regular.otf",
+    "assets\assets\fonts\Roboto-Regular.ttf",
+    "main.dart.js",
+    "index.html"
+) | Where-Object { -not (Test-Path (Join-Path $puesto $_)) }
+if ($faltan) {
+    Write-Error "La página del celular quedó incompleta en build\puesto. Falta: $($faltan -join ', '). No se arma el instalador."
+}
+
 $iscc = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"

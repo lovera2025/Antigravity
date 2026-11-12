@@ -54,6 +54,13 @@ Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignore
 ; La página del celular de la puerta (build_installer.ps1 la arma en build\puesto).
 ; La central la busca en la carpeta "puesto" al lado del programa (paginaDelCelularProvider).
 Source: "..\build\puesto\*"; DestDir: "{app}\puesto"; Excludes: "*.symbols"; Flags: ignoreversion recursesubdirs createallsubdirs
+; EL FRENO: la línea de arriba se lleva lo que haya, también una carpeta a medio copiar. La 6.6.0 salió así
+; (11-nov-2026): la página sin "assets", o sea sin la letra de los íconos (cuadraditos vacíos en el celular) y
+; sin la del texto, que sin internet no deja dibujar nada. Estas tres van con su nombre: si falta una, el
+; instalador NO compila ("Source file does not exist"). No sacarlas ni ponerles skipifsourcedoesntexist.
+Source: "..\build\puesto\assets\FontManifest.json"; DestDir: "{app}\puesto\assets"; Flags: ignoreversion
+Source: "..\build\puesto\assets\fonts\MaterialIcons-Regular.otf"; DestDir: "{app}\puesto\assets\fonts"; Flags: ignoreversion
+Source: "..\build\puesto\assets\assets\fonts\Roboto-Regular.ttf"; DestDir: "{app}\puesto\assets\assets\fonts"; Flags: ignoreversion
 
 [Icons]
 ; Icono del acceso = app .exe (recursos) — coherente con el instalador (mismo app_icon en el build).

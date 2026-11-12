@@ -34,6 +34,43 @@ void main() {
     expect(iss, contains(r'Type: filesandordirs; Name: "{app}\puesto"'));
   });
 
+  // La 6.6.0 (11-nov-2026) salió con la página a medio copiar: sin la letra de
+  // los íconos (cuadraditos en el celular) ni la del texto (sin internet, nada).
+  // La línea con el asterisco se lleva lo que haya; estas van con su nombre, y
+  // si falta una el instalador no compila.
+  test('no se arma con la página del celular a medio copiar', () {
+    const obligatorios = [
+      r'assets\FontManifest.json',
+      r'assets\fonts\MaterialIcons-Regular.otf',
+      r'assets\assets\fonts\Roboto-Regular.ttf',
+    ];
+    for (final archivo in obligatorios) {
+      final linea = iss.split('\n').map((l) => l.trim()).singleWhere(
+            (l) => l.startsWith('Source: "..\\build\\puesto\\$archivo"'),
+            orElse: () => '',
+          );
+      expect(linea, isNotEmpty, reason: 'el instalador no nombra $archivo');
+      expect(
+        linea,
+        isNot(contains('skipifsourcedoesntexist')),
+        reason: 'si falta $archivo, tiene que frenar',
+      );
+      // Y el script lo comprueba antes de llamar al instalador.
+      expect(armar, contains('"$archivo"'));
+    }
+    expect(
+      armar.indexOf('quedó incompleta'),
+      inInclusiveRange(
+        armar.indexOf('flutter build web'),
+        armar.indexOf(r'& $iscc'),
+      ),
+      reason: 'la comprobación va entre armar la página y el instalador',
+    );
+    // La letra del texto viene con la app: sin ella, sin internet no dibuja.
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, contains('assets/fonts/Roboto-Regular.ttf'));
+  });
+
   test('abre en el cortafuegos los puertos que prueba la central, para la red '
       'que sea', () {
     // La línea de [Run] que crea la regla, no los comentarios.

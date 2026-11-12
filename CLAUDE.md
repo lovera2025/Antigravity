@@ -265,6 +265,12 @@ empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
   hasta que instalen la 6.6.0).
 - **`installer\build_installer.ps1` tarda más que el tope de 10 minutos de la herramienta de Claude** y se corta a mitad: se
   hace por pasos, con las mismas comprobaciones (está en el CONTEXTO de la 6.6.0).
+- **La 6.6.0 salió con la página del celular de la puerta incompleta** (lo vio el usuario el 11-nov a la noche: íconos como
+  cuadraditos): `ISCC` se llevó `build\puesto` a medio copiar, sin la carpeta `assets`. Con internet se ve el texto y no los
+  íconos; **sin internet no dibuja nada**. La arregla la 6.6.1, y el instalador ahora **no compila** si faltan
+  `FontManifest.json`, la letra de los íconos o `Roboto-Regular.ttf` de la página (tres líneas con nombre en el `.iss`; el
+  script lo comprueba antes; `test/instalador_puesto_test.dart`). **Por pasos: mirar esos tres archivos antes de `ISCC` y
+  contar en su registro los archivos de `build\puesto`.** Una PC con la 6.6.0 no sirve para los celulares sin internet.
 - `tool/barra_prueba_web.dart` no dejaba entrar con PIN desde la 6.5.0 (se lo preguntaba a la nube): arreglado en `armarLados`.
 
 **La 6.6.1: la numeración fila por fila y las adicionales al final** (programada y probada el 11-nov a la noche, versión
