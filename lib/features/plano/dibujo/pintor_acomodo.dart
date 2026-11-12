@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
+import '../services/cruz_de_alineado.dart';
 import '../services/editar_armado.dart';
 import '../services/manijas.dart';
 import '../services/medir_salon.dart';
@@ -23,8 +24,16 @@ class PintorAcomodo extends CustomPainter {
     this.centroPlayon,
     this.playon,
     this.medidaSector,
+    this.cruz,
     this.zoom,
   }) : super(repaint: zoom);
+
+  /// La cruz para alinear, mientras se arrastra (6.7.1). Null: no se dibuja.
+  final CruzDeAlineado? cruz;
+
+  /// El verde de "quedó en línea". No sale del tema: tiene que leerse igual en
+  /// los cuatro estilos, encima de lo resaltado.
+  static const _enLinea = Color(0xFF1D9E75);
 
   final ArmadoSalon armado;
   final String hoja;
@@ -68,6 +77,26 @@ class PintorAcomodo extends CustomPainter {
 
     // Un píxel de la pantalla, en este lienzo (que el zoom agranda).
     final px = 1 / (zoom?.value.getMaxScaleOnAxis() ?? 1.0);
+
+    // La cruz va debajo de todo lo demás: dos líneas de borde a borde de la
+    // hoja, por el medio de lo que se arrastra. Verde y más gruesa cuando
+    // queda en línea con otra cosa.
+    final x = cruz;
+    if (x != null && x.hoja == hoja) {
+      Paint linea(bool enLinea) => Paint()
+        ..strokeWidth = (enLinea ? 2.5 : 1.2) * px
+        ..color = enLinea ? _enLinea : tema.resaltado.withValues(alpha: 0.55);
+      canvas.drawLine(
+        encuadre.aPantalla(Offset(x.x, h.caja.y)),
+        encuadre.aPantalla(Offset(x.x, h.caja.abajo)),
+        linea(x.enLineaX),
+      );
+      canvas.drawLine(
+        encuadre.aPantalla(Offset(h.caja.x, x.y)),
+        encuadre.aPantalla(Offset(h.caja.derecha, x.y)),
+        linea(x.enLineaY),
+      );
+    }
 
     final c = playon;
     if (c != null && c.puntos.length >= 3) {
@@ -254,5 +283,6 @@ class PintorAcomodo extends CustomPainter {
       old.centroPlayon != centroPlayon ||
       !identical(old.playon, playon) ||
       old.medidaSector != medidaSector ||
+      !identical(old.cruz, cruz) ||
       old.zoom != zoom;
 }

@@ -51,6 +51,9 @@ const _sorteos = int.fromEnvironment('sorteos', defaultValue: 200);
 final _recorrido =
     RecorridoDelOrden.desde(const String.fromEnvironment('recorrido'));
 
+/// `adicionales=final`: primero todas las principales, después las adicionales.
+const _alFinal = String.fromEnvironment('adicionales') == 'final';
+
 String _dia(DateTime? d) => d == null
     ? '—'
     : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
@@ -330,23 +333,38 @@ void main() {
     // Sin nombres: en cada mesa va el puesto de su familia. No guarda nada.
     final armado = f.plano?.armadoONull;
     if (armado != null && armado.mesas.isNotEmpty) {
-      final cambio = OrdenEnElSalon.prender(
-        eventoId: f.id,
-        armado: armado,
-        config: f.plano!.config,
-        alumnos: f.alumnos,
-        pagos: f.pagos,
-        hoyAr: corte,
-        ahora: DateTime.utc(2026, 11, 12, 18),
-        recorrido: _recorrido,
-        por: 'herramienta',
+      // Lo mismo que hace el cartel del SORTEO con el tilde (6.7.1): lo pagado
+      // como viene ("solo lo pagado") y la fiesta como si nadie tuviera mesa.
+      final exclusion = exclusionSorteo(
+        candidatos: candidatosPorPago(f.alumnos, pagado),
+        soloPagado: true,
       );
-      if (cambio.config == null) {
+      final sinMesas = [
+        for (final a in f.alumnos)
+          (a.numeroMesa ?? '').trim().isEmpty ? a : a.copyWith(numeroMesa: ''),
+      ];
+      OrdenParaElSorteo calcular(List<ContratoAlumno> alumnos) =>
+          OrdenEnElSalon.paraElSorteo(
+            eventoId: f.id,
+            armado: armado,
+            config: f.plano!.config.copyWith(bloques: const []),
+            alumnos: alumnos,
+            pagos: f.pagos,
+            hoyAr: corte,
+            ahora: DateTime.utc(2026, 11, 12, 18),
+            exclusion: exclusion,
+            recorrido: _recorrido,
+            adicionalesAlFinal: _alFinal,
+            por: 'herramienta',
+          );
+      final cambio = calcular(sinMesas);
+      if (!cambio.sePuede) {
         print('El salón por orden no se puede: ${cambio.problema}');
       } else {
-        print('El recorrido: ${_recorrido.rotulo.toLowerCase()}.');
+        print('El recorrido: ${_recorrido.rotulo.toLowerCase()}'
+            '${_alFinal ? ', con las adicionales al final' : ''}.');
         final paso = MesasDelPaso.de(armado, recorrido: _recorrido)!;
-        final lugares = cambio.config!.frente!.lugares;
+        final lugares = cambio.configAGuardar!.frente!.lugares;
         final enMesa = <int, LugarPorOrden>{
           for (final l in lugares)
             for (final n in l.mesas) n: l,
@@ -405,36 +423,71 @@ void main() {
         // Y el SORTEO de siempre, con el candado de lo pagado, sobre ese
         // plano: tiene que entregarle a cada familia la mesa que le fijó el
         // orden, y pasar el control final. Lo mismo que corre la app.
-        final entrada = EntradaSorteoPlano(
-          armado: armado,
-          config: cambio.config!,
-          alumnos: f.alumnos,
-          exclusion: exclusionSorteo(
-            candidatos: candidatosPorPago(f.alumnos, pagado),
-            soloPagado: true,
-          ),
-          modo: f.plano!.modoSorteo,
-        );
+        final entrada = OrdenEnElSalon.entrada(cambio, armado: armado);
         final plan = SorteoConPlano.preparar(entrada);
         expect(plan.entra, isTrue, reason: plan.avisos.join(' · '));
-        var distintas = 0;
         for (var semilla = 1; semilla <= _sorteos; semilla++) {
           final r = SorteoConPlano.sortear(entrada, random: Random(semilla));
           expect(SorteoConPlano.validar(entrada, r), isNull,
               reason: 'semilla $semilla');
-          for (final l in lugares) {
-            final suyas = (r.asignaciones[l.alumnoId] ?? const <int>[]).toSet();
-            if (suyas.length != l.mesas.length ||
-                !suyas.containsAll(l.mesas)) {
-              distintas++;
-            }
-          }
+          expect(OrdenEnElSalon.noCumple(cambio, r), isNull,
+              reason: 'semilla $semilla');
         }
-        expect(distintas, 0,
-            reason: 'alguna familia no recibió la mesa que le fijó el orden');
-        print('$_sorteos sorteos de verdad sobre ese plano '
-            '(${f.plano!.modoSorteo.clave}): todos pasan el control final y '
-            'cada familia recibe la mesa que le fijó el orden.');
+        print('$_sorteos sorteos de verdad con el salón vacío: todos pasan el '
+            'control final y cada familia recibe la mesa que le tocó por orden.');
+
+        // Con el sorteo ya hecho: primero un sorteo común, al azar, y después
+        // el tilde. Tiene que reacomodar a todas igual que con el salón vacío,
+        // sin que nadie pierda una mesa.
+        var cambiaron = 0;
+        for (var semilla = 1; semilla <= _sorteos; semilla++) {
+          final comun = EntradaSorteoPlano(
+            armado: armado,
+            config: (OrdenEnElSalon.sinFijadasDelOrden(f.plano!.config) ??
+                    f.plano!.config)
+                .copyWith(bloques: const []),
+            alumnos: sinMesas,
+            exclusion: exclusion,
+          );
+          final azar = SorteoConPlano.sortear(comun, random: Random(semilla));
+          final sorteados = [
+            for (final a in sinMesas)
+              azar.asignaciones[a.id] == null
+                  ? a
+                  : a.copyWith(
+                      numeroMesa: MesasExtraUtils.formatearAsignacionMesas(
+                        azar.asignaciones[a.id]!,
+                      ),
+                    ),
+          ];
+          final otra = calcular(sorteados);
+          expect(otra.sePuede, isTrue, reason: otra.problema);
+          final e2 = OrdenEnElSalon.entrada(otra, armado: armado);
+          expect(SorteoConPlano.preparar(e2).entra, isTrue);
+          final r2 = SorteoConPlano.sortear(e2, random: Random(semilla + 7));
+          expect(SorteoConPlano.validar(e2, r2), isNull,
+              reason: 'semilla $semilla');
+          expect(OrdenEnElSalon.noCumple(otra, r2), isNull,
+              reason: 'semilla $semilla');
+          for (final a in sorteados) {
+            final antes =
+                MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length;
+            if (antes == 0) continue;
+            final despues = r2.asignaciones[a.id]?.length ?? antes;
+            expect(despues, greaterThanOrEqualTo(antes),
+                reason: 'una familia perdió mesas (semilla $semilla)');
+          }
+          // Queda igual que sorteando por cumplimiento con el salón vacío.
+          for (final l in lugares) {
+            expect(otra.lugares[l.alumnoId], l.mesas,
+                reason: 'semilla $semilla');
+          }
+          cambiaron += otra.cambian;
+        }
+        print('$_sorteos reacomodos sobre un sorteo común ya hecho: todos pasan '
+            'el control final, nadie pierde mesas y queda igual que con el '
+            'salón vacío (en promedio cambian de mesa '
+            '${(cambiaron / _sorteos).round()} familias).');
       }
     } else {
       print('La fiesta no tiene un plano con mesas guardado.');

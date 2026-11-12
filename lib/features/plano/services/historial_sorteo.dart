@@ -5,6 +5,7 @@ import '../../../models/sorteo_mesas_registro.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/registro_sorteo.dart';
 import 'cambios_de_mesa.dart';
+import 'orden_en_el_salon.dart';
 
 enum TipoRenglonHistorial {
   sorteo,
@@ -15,6 +16,9 @@ enum TipoRenglonHistorial {
   deshacer,
   fijada,
   libre,
+
+  /// El sorteo por cumplimiento (6.7.1): lleva "Ver el porqué".
+  porOrden,
 }
 
 /// Un renglón del Historial: algo que se hizo con las mesas de la fiesta.
@@ -176,26 +180,24 @@ class HistorialSorteo {
     }
 
     // Las fijadas, una por familia (se fijan todas sus mesas juntas).
-    // Las que puso el salón "por orden" (6.7.0) van en un solo renglón, sin
-    // nombres: el Historial lo abre cualquiera, y quién quedó dónde y por qué
-    // lo ve el jefe en "Ver el orden".
     final fijadasPorFamilia = <String, List<int>>{};
-    final porOrden = <String>{};
     for (final e in config.fijadas.entries) {
-      if (e.value.esPorOrden) {
-        porOrden.add(e.value.alumnoId);
-        continue;
-      }
+      // Lo que dejó el tilde de la 6.7.0: el sorteo lo limpia solo.
+      if (e.value.esPorOrden) continue;
       fijadasPorFamilia.putIfAbsent(e.value.alumnoId, () => []).add(e.key);
     }
-    if (porOrden.isNotEmpty) {
+    // El sorteo por cumplimiento (6.7.1) va en un solo renglón, sin nombres: el
+    // Historial lo abre cualquiera. Quién quedó dónde y por qué lo ve el jefe
+    // con "Ver el porqué". Solo mientras alguna familia sigue en su mesa.
+    if (OrdenEnElSalon.vigente(config, alumnos)) {
+      final frente = config.frente!;
       renglones.add(RenglonHistorial(
-        tipo: TipoRenglonHistorial.fijada,
-        cuando: config.frente?.el,
+        tipo: TipoRenglonHistorial.porOrden,
+        cuando: frente.el,
         titulo: 'Las mesas se ubicaron por orden: '
-            '${porOrden.length == 1 ? '1 familia' : '${porOrden.length} familias'}',
+            '${_familias(frente.lugares.where((l) => l.mesas.isNotEmpty).length)}',
         detalle: const [],
-        quien: config.frente?.por,
+        quien: frente.por,
       ));
     }
     for (final e in fijadasPorFamilia.entries) {

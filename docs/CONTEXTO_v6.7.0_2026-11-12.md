@@ -6,6 +6,10 @@ equipo sigue en la v79). Viene de `docs/CONTEXTO_v6.6.2_2026-11-12.md` y del ped
 
 ## Para retomar en otro chat
 
+> **Lo que siguió ese mismo día está en `docs/CONTEXTO_v6.7.1_2026-11-12.md`:** el usuario probó la
+> 6.7.0 y pidió que el tilde fuera al cartel del SORTEO y no al plano. Lo de abajo describe la 6.7.0
+> como salió.
+
 **Estado: la 6.7.0 está PUBLICADA (12-nov, 15:47, con el usuario: "Sí, publicá"), con la opción
 "Por columnas · Por filas". Falta que instale, primero la PC que sortea, y la foto de la mora
 "después".**

@@ -38,7 +38,6 @@ import 'package:arguello_events/features/plano/repositories/predios_repository.d
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
-import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
@@ -1476,201 +1475,83 @@ void main() {
 
   // Fijar y dejar libre cambian el plano; cambiar y mudar cambian los números
   // de mesa de las familias, con su renglón en el Historial.
-  group('Personalizar: Cumplimiento debido', () {
-    Map<String, dynamic> pago(double monto, {String concepto = 'Cuota Base'}) =>
-        {
-          'id': 'p-$concepto-$monto',
-          'concepto': concepto,
-          'monto': monto,
-          'monto_gross': monto,
-          'fecha_pago': '2026-06-10T15:00:00.000Z',
-          'created_at': '2026-06-10T15:00:00.000Z',
-          'anulado': 0,
-        };
+  // "Cumplimiento debido" se tilda en el cartel del SORTEO (6.7.1): en el
+  // plano no queda nada, salvo el porqué en el Historial.
+  group('Cumplimiento debido', () {
+    /// El plano de una fiesta que se sorteó con el tilde: cada familia de
+    /// [_sorteada] con su lugar y su oración.
+    ConfigPlano conOrden() => ConfigPlano(
+          frente: OrdenDelPlano(
+            prendido: true,
+            el: _ahora,
+            por: 'Jefe',
+            lugares: const [
+              LugarPorOrden(
+                alumnoId: 'sosa',
+                puesto: 1,
+                grupo: 1,
+                mesas: [20],
+                frase: 'Nunca pagó tarde y terminó de pagar el 8 de abril.',
+              ),
+              LugarPorOrden(
+                alumnoId: 'gomez',
+                puesto: 2,
+                grupo: 2,
+                mesas: [8, 9],
+                frase: 'Pagó tarde 1 cuota: 20 días de atraso en total.',
+              ),
+            ],
+          ),
+        );
 
-    /// SOSA canceló todo; GÓMEZ pagó dos cuotas y su mesa adicional; VEGA no
-    /// pagó nada.
-    void conPagos(_Mundo mundo) => mundo.contratos.pagos = {
-          'sosa': [pago(300000)],
-          'gomez': [pago(60000), pago(70000, concepto: 'Mesa extra (1/1)')],
-        };
-
-    testWidgets('prenderlo le fija a cada familia su mesa, por orden, y lo '
-        'guarda', (tester) async {
-      final mundo =
-          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
+    testWidgets('en el plano no hay tilde ni recorrido', (tester) async {
+      await _abrir(tester, alumnos: _sinSortear());
       await _personalizar(tester);
+      expect(find.byKey(const Key('por_orden')), findsNothing);
+      expect(find.byKey(const Key('por_orden_recorrido')), findsNothing);
       expect(find.byKey(const Key('ver_el_orden')), findsNothing);
-      await _guardar(tester, 'por_orden');
+      expect(find.text('Cumplimiento debido'), findsNothing);
+    });
 
-      final config = mundo.guardado.config;
-      final paso = MesasDelPaso.de(mundo.guardado.armado)!;
-      final mejor = paso.enOrden.first;
-      // SOSA, que canceló, va a la mejor mesa; GÓMEZ, a la que sigue, con su
-      // adicional detrás. VEGA no pagó nada: no entra.
-      expect(config.fijadasPorAlumno['sosa'], [mejor]);
-      expect(config.fijadasPorAlumno['gomez'], hasLength(2));
-      expect(config.fijadasPorAlumno['gomez'],
-          contains(paso.detras(paso.enOrden[1])));
-      expect(config.fijadasPorAlumno.containsKey('vega'), isFalse);
-      expect(config.fijadas.values.every((f) => f.esPorOrden), isTrue);
-      expect(config.frente!.prendido, isTrue);
-      expect(config.frente!.por, isNotEmpty);
-      expect([for (final l in config.frente!.lugares) l.alumnoId],
-          ['sosa', 'gomez']);
-      expect(_dicho(tester), startsWith('Cumplimiento debido: quedaron ubicadas 2 familias'));
-      // No le dio la mesa a nadie: eso lo hace SORTEO.
-      expect(mundo.contratos.asignaciones, isEmpty);
-      // Ninguna mesa cambió de número.
+    testWidgets('el Historial lo dice en un renglón sin nombres, con "Ver el '
+        'porqué"', (tester) async {
+      await _abrir(tester, config: conOrden());
+      await _guardar(tester, 'historial');
       expect(
-        [for (final m in mundo.guardado.armado.mesas) m.numero],
-        [for (final m in _armado().mesas) m.numero],
+        find.text('Las mesas se ubicaron por orden: 2 familias'),
+        findsOneWidget,
       );
-    });
-
-    testWidgets('viene por columnas; eligiendo "Por filas" antes de tildar, se '
-        'reparte así y queda guardado', (tester) async {
-      final mundo =
-          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
-      await _personalizar(tester);
-      String dice() => tester
-          .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
-          .data!;
-      expect(dice(), startsWith('Primero toda la columna'));
-
-      await tester.tap(find.text('Por filas'));
+      await tester.tap(find.byKey(const Key('ver_el_porque')));
       await _asentar(tester);
-      expect(dice(), startsWith('Primero toda la fila'));
-      // Elegir no guarda nada: se usa al tildar.
-      expect(mundo.planos.guardados, isEmpty);
-
-      await _guardar(tester, 'por_orden');
-      final config = mundo.guardado.config;
-      expect(config.frente!.prendido, isTrue);
-      expect(config.frente!.recorrido, RecorridoDelOrden.filas);
-      final paso = MesasDelPaso.de(
-        mundo.guardado.armado,
-        recorrido: RecorridoDelOrden.filas,
-      )!;
-      expect(config.fijadasPorAlumno['sosa'], [paso.enOrden.first]);
-      expect(_dicho(tester),
-          startsWith('Cumplimiento debido: quedaron ubicadas 2 familias, por filas'));
-
-      await _guardar(tester, 'ver_el_orden');
-      expect(
-        tester.widget<Text>(find.byKey(const Key('orden_resumen'))).data,
-        startsWith('2 familias ubicadas por filas'),
-      );
-    });
-
-    testWidgets('prendido, tocar el otro recorrido lo reparte de nuevo',
-        (tester) async {
-      final mundo =
-          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
-      await _personalizar(tester);
-      await _guardar(tester, 'por_orden');
-      expect(mundo.guardado.config.frente!.recorrido,
-          RecorridoDelOrden.columnas);
-      final antes = mundo.planos.guardados.length;
-
-      await tester.tap(find.text('Por filas'));
-      await _asentar(tester);
-      expect(mundo.planos.guardados.length, antes + 1);
-      expect(mundo.guardado.config.frente!.prendido, isTrue);
-      expect(mundo.guardado.config.frente!.recorrido, RecorridoDelOrden.filas);
-      expect(mundo.guardado.config.fijadas.values.every((f) => f.esPorOrden),
-          isTrue);
-
-      // Apagado, el botón recuerda el último elegido.
-      await _guardar(tester, 'por_orden');
-      expect(mundo.guardado.config.frente!.prendido, isFalse);
-      expect(mundo.guardado.config.frente!.recorrido, RecorridoDelOrden.filas);
-      expect(mundo.guardado.config.fijadas, isEmpty);
-      expect(
-        tester
-            .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
-            .data,
-        startsWith('Primero toda la fila'),
-      );
-    });
-
-    testWidgets('lo elegido antes de tildar no pisa lo que se cambió con el '
-        'tilde prendido', (tester) async {
-      final mundo =
-          await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
-      await _personalizar(tester);
-      String dice() => tester
-          .widget<Text>(find.byKey(const Key('por_orden_recorrido_dice')))
-          .data!;
-      await tester.tap(find.text('Por filas'));
-      await _asentar(tester);
-      await _guardar(tester, 'por_orden');
-      await tester.tap(find.text('Por columnas'));
-      await _asentar(tester);
-      expect(mundo.guardado.config.frente!.recorrido,
-          RecorridoDelOrden.columnas);
-      expect(dice(), startsWith('Primero toda la columna'));
-
-      await _guardar(tester, 'por_orden');
-      expect(mundo.guardado.config.frente!.prendido, isFalse);
-      expect(dice(), startsWith('Primero toda la columna'));
-    });
-
-    testWidgets('la lista dice quién quedó dónde y por qué',
-        (tester) async {
-      await _abrir(tester, alumnos: _sinSortear(), antes: conPagos);
-      await _personalizar(tester);
-      await _guardar(tester, 'por_orden');
-      await _guardar(tester, 'ver_el_orden');
 
       expect(find.byKey(const Key('orden_1')), findsOneWidget);
       expect(find.byKey(const Key('orden_2')), findsOneWidget);
-      expect(find.byKey(const Key('orden_3')), findsNothing);
-      expect(find.textContaining('SOSA, LUZ · mesa '), findsOneWidget);
-      expect(find.textContaining('GÓMEZ, SOFÍA · mesas '), findsOneWidget);
-      expect(find.textContaining('Nunca pagó tarde'), findsNWidgets(2));
+      expect(find.textContaining('SOSA, LUZ · mesa 20'), findsOneWidget);
+      expect(find.textContaining('GÓMEZ, SOFÍA · mesas 8 y 9'), findsOneWidget);
+      expect(find.textContaining('Nunca pagó tarde'), findsOneWidget);
       expect(
         tester.widget<Text>(find.byKey(const Key('orden_resumen'))).data,
         startsWith('2 familias ubicadas por columnas'),
       );
     });
 
-    testWidgets('apagarlo saca esas mesas fijadas y deja las puestas a mano',
+    testWidgets('sin modo jefe el renglón está, pero no el porqué',
         (tester) async {
-      final mundo = await _abrir(
-        tester,
-        alumnos: _sinSortear(),
-        config: const ConfigPlano(
-          fijadas: {40: MesaFijada(alumnoId: 'vega', motivo: 'Silla de ruedas')},
-        ),
-        antes: conPagos,
+      await _abrir(tester, esJefe: false, config: conOrden());
+      await _guardar(tester, 'historial');
+      expect(
+        find.text('Las mesas se ubicaron por orden: 2 familias'),
+        findsOneWidget,
       );
-      await _personalizar(tester);
-      await _guardar(tester, 'por_orden');
-      expect(mundo.guardado.config.fijadas.length, 4);
-      await _guardar(tester, 'por_orden');
-
-      expect(mundo.guardado.config.fijadas.keys, [40]);
-      expect(mundo.guardado.config.fijadas[40]!.motivo, 'Silla de ruedas');
-      expect(mundo.guardado.config.frente!.prendido, isFalse);
-      expect(_dicho(tester), startsWith('Cumplimiento debido, apagado'));
+      expect(find.byKey(const Key('ver_el_porque')), findsNothing);
     });
 
-    testWidgets('con la fiesta ya sorteada no se prende, y dice por qué',
+    testWidgets('con el sorteo deshecho, el Historial ya no lo dice',
         (tester) async {
-      final mundo = await _abrir(tester, antes: conPagos);
-      await _personalizar(tester);
-      await _guardar(tester, 'por_orden');
-
-      final (titulo, texto) = _cartel(tester);
-      expect(titulo, 'No se puede');
-      expect(texto, contains('deshacer el sorteo'));
-      expect(mundo.planos.guardados, isEmpty);
-    });
-
-    testWidgets('sin modo jefe el tilde no está', (tester) async {
-      await _abrir(tester, esJefe: false, alumnos: _sinSortear());
-      expect(find.byKey(const Key('por_orden')), findsNothing);
+      await _abrir(tester, alumnos: _sinSortear(), config: conOrden());
+      await _guardar(tester, 'historial');
+      expect(find.textContaining('se ubicaron por orden'), findsNothing);
+      expect(find.byKey(const Key('ver_el_porque')), findsNothing);
     });
   });
 

@@ -1,17 +1,20 @@
-// El salón "por orden" (6.7.0): al prenderlo, cada familia queda con su mesa
-// fijada, de la que mejor cumplió a la que peor, desde la pasarela hacia
-// afuera; y el SORTEO de siempre se las entrega. Con familias inventadas.
+// "Cumplimiento debido" (6.7.1): al sortear con el tilde del cartel, cada
+// familia recibe su mesa de la que mejor cumplió a la que peor, desde la
+// pasarela hacia afuera; y con el sorteo ya hecho, las reacomoda sin que nadie
+// pierda una mesa. Con familias inventadas y el sorteo de verdad.
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/salon_mesas.dart';
-import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
+import 'package:arguello_events/features/eventos/services/ultimos_sorteados.dart';
+import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
 import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'helpers/salon_de_prueba.dart';
 
@@ -65,13 +68,13 @@ final _ahora = DateTime.utc(2026, 11, 12, 18);
 
 /// F1 canceló en abril; F2 está al día y adelantó una; F3 está al día y tiene
 /// una mesa adicional paga; F4 pagó tarde; F5 no pagó nada de la base.
-final _alumnos = [
-  _f(1),
-  _f(2),
-  _f(3, conAdicional: true),
-  _f(4),
-  _f(5),
-];
+List<ContratoAlumno> _alumnos({Map<int, String> mesas = const {}}) => [
+      _f(1, mesa: mesas[1]),
+      _f(2, mesa: mesas[2]),
+      _f(3, conAdicional: true, mesa: mesas[3]),
+      _f(4, mesa: mesas[4]),
+      _f(5, mesa: mesas[5]),
+    ];
 
 Map<String, List<Map<String, dynamic>>> _pagos() => {
       _id(1): [_pago(4, 8, 270000)],
@@ -81,89 +84,96 @@ Map<String, List<Map<String, dynamic>>> _pagos() => {
       _id(5): [],
     };
 
-CambioDeConfig prender({
+/// Lo pagado como lo deja el cartel del SORTEO: "solo lo pagado".
+ExclusionSorteo _exclusion(
+  List<ContratoAlumno> alumnos,
+  Map<String, List<Map<String, dynamic>>> pagos,
+) =>
+    exclusionSorteo(
+      candidatos: candidatosPorPago(alumnos, pagosPorAlumno(alumnos, pagos)),
+      soloPagado: true,
+    );
+
+OrdenParaElSorteo calcular({
   ConfigPlano config = ConfigPlano.vacia,
   List<ContratoAlumno>? alumnos,
   Map<String, List<Map<String, dynamic>>>? pagos,
   bool conPaso = true,
   RecorridoDelOrden recorrido = RecorridoDelOrden.columnas,
-}) =>
-    OrdenEnElSalon.prender(
-      eventoId: _evento,
-      armado: salonDePrueba(conPasarela: conPaso, conEscenario: conPaso),
-      config: config,
-      alumnos: alumnos ?? _alumnos,
-      pagos: pagos ?? _pagos(),
-      hoyAr: _hoy,
-      ahora: _ahora,
-      recorrido: recorrido,
-      por: 'Jefe',
-    );
+  bool alFinal = false,
+  int juntas = 0,
+  ModoSorteo modo = ModoSorteo.entera,
+}) {
+  final a = alumnos ?? _alumnos();
+  final p = pagos ?? _pagos();
+  return OrdenEnElSalon.paraElSorteo(
+    eventoId: _evento,
+    armado: salonDePrueba(conPasarela: conPaso, conEscenario: conPaso),
+    config: config,
+    alumnos: a,
+    pagos: p,
+    hoyAr: _hoy,
+    ahora: _ahora,
+    exclusion: _exclusion(a, p),
+    modo: modo,
+    recorrido: recorrido,
+    adicionalesAlFinal: alFinal,
+    juntasConLaPrincipal: juntas,
+    por: 'Jefe',
+  );
+}
 
-Map<int, String> _de(ConfigPlano c) =>
-    {for (final e in c.fijadas.entries) e.key: e.value.alumnoId};
+Map<int, List<int>> _lugares(OrdenParaElSorteo o) => {
+      for (var n = 1; n <= 20; n++)
+        if (o.lugares[_id(n)] != null) n: o.lugares[_id(n)]!,
+    };
+
+/// Sortea de verdad con el orden puesto y exige el control final.
+ResultadoSorteoPlano _sortear(OrdenParaElSorteo o, {int semilla = 1}) {
+  final e = OrdenEnElSalon.entrada(o, armado: salonDePrueba());
+  expect(SorteoConPlano.preparar(e).entra, isTrue);
+  final r = SorteoConPlano.sortear(e, random: Random(semilla));
+  expect(SorteoConPlano.validar(e, r), isNull, reason: 'semilla $semilla');
+  expect(OrdenEnElSalon.noCumple(o, r), isNull, reason: 'semilla $semilla');
+  return r;
+}
 
 void main() {
   test('la familia con adicional paga tiene dos mesas', () {
-    expect(SalonMesas.mesas(_alumnos[2]), 2);
+    expect(SalonMesas.mesas(_alumnos()[2]), 2);
   });
 
-  group('prender', () {
+  group('con el salón vacío', () {
     test('el que mejor cumplió, pegado a la pasarela; la adicional, detrás', () {
-      final c = prender();
-      expect(c.sePuede, isTrue);
+      final o = calcular();
+      expect(o.sePuede, isTrue);
       // El salón, de mejor a peor: 2, 3, 7, 6, 10, 11 y después las de afuera.
-      expect(_de(c.config!), {
-        2: _id(1),
-        3: _id(2),
-        7: _id(3),
-        8: _id(3), // detrás de la 7
-        6: _id(4),
+      expect(_lugares(o), {
+        1: [2],
+        2: [3],
+        3: [7, 8], // la 8 está detrás de la 7
+        4: [6],
       });
-      expect(c.config!.fijadas.values.every((f) => f.esPorOrden), isTrue);
-      expect(c.config!.fijadas.values.map((f) => f.motivo).toSet(),
-          {'Por orden'});
+      expect(o.ubicadas, 4);
+      expect(o.cambian, 0);
     });
 
-    test('por filas: la fila del escenario primero, de la pasarela hacia '
-        'afuera', () {
-      final c = prender(recorrido: RecorridoDelOrden.filas);
-      expect(c.sePuede, isTrue);
-      // El salón, de mejor a peor: 2, 3, 1, 4 y después la segunda fila.
-      expect(_de(c.config!), {
-        2: _id(1),
-        3: _id(2),
-        1: _id(3),
-        8: _id(3), // la 1 no tiene nada detrás: la más cercana de su lado
-        4: _id(4),
-      });
-      expect(c.config!.frente!.recorrido, RecorridoDelOrden.filas);
-      // El orden de las familias es el mismo: cambia solo qué mesa va primero.
-      expect(
-        [for (final l in c.config!.frente!.lugares) l.alumnoId],
-        [for (final l in prender().config!.frente!.lugares) l.alumnoId],
-      );
+    test('quien no pagó nada de la base no entra', () {
+      final o = calcular();
+      expect(o.lugares.containsKey(_id(5)), isFalse);
+      expect(o.exclusionDelSorteo.sinMesa, contains(_id(5)));
     });
 
-    test('prendido, elegir el otro recorrido lo reparte de nuevo', () {
-      final columnas = prender().config!;
-      final filas = prender(
-        config: columnas,
-        recorrido: RecorridoDelOrden.filas,
-      ).config!;
-      expect(_de(filas),
-          _de(prender(recorrido: RecorridoDelOrden.filas).config!));
-      expect(filas.fijadas.values.every((f) => f.esPorOrden), isTrue);
-      // Y de vuelta.
-      expect(_de(prender(config: filas).config!), _de(columnas));
-    });
-
-    test('ninguna mesa cambia de número: el armado no se toca', () {
-      expect(prender().armado, isNull);
+    test('las mesas se fijan solo para el sorteo: no se guardan', () {
+      final o = calcular();
+      final delSorteo = o.configDelSorteo!;
+      expect(delSorteo.fijadas.keys.toSet(), {2, 3, 7, 8, 6});
+      expect(delSorteo.fijadas.values.every((f) => f.esPorOrden), isTrue);
+      expect(o.configAGuardar!.fijadas, isEmpty);
     });
 
     test('queda guardado quién, dónde y por qué', () {
-      final orden = prender().config!.frente!;
+      final orden = calcular().configAGuardar!.frente!;
       expect(orden.prendido, isTrue);
       expect(orden.por, 'Jefe');
       expect(orden.el, _ahora);
@@ -178,154 +188,97 @@ void main() {
       expect(orden.lugares.map((l) => l.grupo), [1, 1, 1, 2]);
     });
 
-    test('quien no pagó nada de la base no entra: el sorteo no le da mesa', () {
-      final c = prender().config!;
-      expect(c.fijadas.values.any((f) => f.alumnoId == _id(5)), isFalse);
-      expect(c.frente!.lugares.any((l) => l.alumnoId == _id(5)), isFalse);
+    test('por filas: la fila del escenario primero', () {
+      final o = calcular(recorrido: RecorridoDelOrden.filas);
+      // El salón, de mejor a peor: 2, 3, 1, 4 y después la segunda fila.
+      expect(_lugares(o), {
+        1: [2],
+        2: [3],
+        3: [1, 8], // la 1 no tiene nada detrás: la más cercana de su lado
+        4: [4],
+      });
+      expect(o.configAGuardar!.frente!.recorrido, RecorridoDelOrden.filas);
     });
 
     test('la adicional sin pagar no se ubica: solo la del contrato', () {
       final pagos = _pagos()..[_id(3)] = _alDia(7);
-      final c = prender(pagos: pagos).config!;
-      expect(c.fijadasPorAlumno[_id(3)], hasLength(1));
+      final o = calcular(pagos: pagos);
+      expect(o.lugares[_id(3)], hasLength(1));
+      expect(o.exclusionDelSorteo.soloBase, contains(_id(3)));
+    });
+
+    test('adicionales al final: primero las principales de todos', () {
+      final o = calcular(alFinal: true);
+      // F3 tiene su principal en su lugar (la 7) y la adicional después de
+      // la última principal (la 6): la que sigue en el salón es la 10.
+      expect(_lugares(o), {
+        1: [2],
+        2: [3],
+        3: [7, 10],
+        4: [6],
+      });
+      // Con una pegada a la principal, queda como siempre.
+      expect(_lugares(calcular(alFinal: true, juntas: 1))[3], [7, 8]);
     });
 
     test('lo fijado a mano y lo libre no se tocan', () {
-      const aMano = MesaFijada(alumnoId: 'x', motivo: 'Silla de ruedas');
-      final c = prender(
+      final o = calcular(
         config: ConfigPlano(
           fijadas: {2: MesaFijada(alumnoId: _id(4), motivo: 'Silla de ruedas')},
           libres: const {3: MesaLibre()},
         ),
-      ).config!;
-      expect(aMano.esPorOrden, isFalse);
+      );
       // F4 se queda con la suya y sale del orden; nadie va a la 3.
-      expect(c.fijadas[2]!.alumnoId, _id(4));
-      expect(c.fijadas[2]!.motivo, 'Silla de ruedas');
-      expect(c.fijadas.containsKey(3), isFalse);
-      expect(c.frente!.lugares.any((l) => l.alumnoId == _id(4)), isFalse);
-      expect(c.fijadas[7]!.alumnoId, _id(1));
-      expect(c.libres.keys, [3]);
+      expect(o.lugares.containsKey(_id(4)), isFalse);
+      expect(o.lugares[_id(1)], [7]);
+      expect(o.lugares.values.expand((l) => l), isNot(contains(3)));
+      expect(o.configDelSorteo!.fijadas[2]!.motivo, 'Silla de ruedas');
+      expect(o.configAGuardar!.fijadas.keys, [2]);
+      expect(o.configAGuardar!.libres.keys, [3]);
+      // Y el sorteo le entrega a F4 su fijada.
+      expect(_sortear(o).asignaciones[_id(4)], [2]);
     });
 
-    test('prender otra vez da lo mismo: los empates no cambian', () {
+    test('calcular otra vez da lo mismo: los empates no cambian', () {
       final muchos = [for (var i = 1; i <= 10; i++) _f(i)];
       final pagos = {for (var i = 1; i <= 10; i++) _id(i): _alDia(7)};
-      final uno = prender(alumnos: muchos, pagos: pagos).config!;
-      final otro = prender(
-        config: uno,
-        alumnos: muchos.reversed.toList(),
-        pagos: pagos,
-      ).config!;
-      expect(_de(otro), _de(uno));
-      expect(uno.fijadas, hasLength(10));
+      final uno = calcular(alumnos: muchos, pagos: pagos);
+      final otro = calcular(alumnos: muchos.reversed.toList(), pagos: pagos);
+      expect(_lugares(otro), _lugares(uno));
+      expect(uno.ubicadas, 10);
     });
 
     test('si faltan mesas, las últimas familias quedan sin lugar', () {
       final muchos = [for (var i = 1; i <= 14; i++) _f(i)];
       final pagos = {for (var i = 1; i <= 14; i++) _id(i): _alDia(7)};
-      final orden = prender(alumnos: muchos, pagos: pagos).config!.frente!;
-      expect(orden.lugares.where((l) => l.mesas.isNotEmpty), hasLength(12));
-      expect(orden.lugares.skip(12).every((l) => l.mesas.isEmpty), isTrue);
-    });
-
-    test('con familias ya con mesa no se puede', () {
-      final c = prender(alumnos: [..._alumnos.skip(1), _f(1, mesa: '4')]);
-      expect(c.sePuede, isFalse);
-      expect(c.problema, contains('deshacer el sorteo'));
-    });
-
-    test('prendido y ya sorteado, cambiar el recorrido tampoco se puede', () {
-      final prendido = prender().config!;
-      final c = prender(
-        config: prendido,
-        alumnos: [_f(1, mesa: '2'), ..._alumnos.skip(1)],
-        recorrido: RecorridoDelOrden.filas,
-      );
-      expect(c.sePuede, isFalse);
-      expect(c.problema, startsWith('Ya se sorteó con esto tildado'));
+      final o = calcular(alumnos: muchos, pagos: pagos);
+      expect(o.ubicadas, 12);
+      final e = OrdenEnElSalon.entrada(o, armado: salonDePrueba());
+      expect(SorteoConPlano.preparar(e).entra, isFalse);
     });
 
     test('sin pasarela ni escenario no se puede', () {
-      final c = prender(conPaso: false);
-      expect(c.sePuede, isFalse);
-      expect(c.problema, contains('pasarela'));
+      final o = calcular(conPaso: false);
+      expect(o.sePuede, isFalse);
+      expect(o.problema, contains('pasarela'));
     });
 
-    test('sin nadie con algo pagado no se puede', () {
-      expect(prender(pagos: const {}).sePuede, isFalse);
+    test('sin nadie para ubicar no se puede', () {
+      expect(calcular(pagos: const {}).sePuede, isFalse);
     });
 
-    test('con el sorteo por división todavía no se puede', () {
-      final c = OrdenEnElSalon.prender(
-        eventoId: _evento,
-        armado: salonDePrueba(),
-        config: ConfigPlano.vacia,
-        alumnos: _alumnos,
-        pagos: _pagos(),
-        hoyAr: _hoy,
-        ahora: _ahora,
-        modo: ModoSorteo.bloques,
-      );
-      expect(c.sePuede, isFalse);
-      expect(c.problema, contains('por división'));
-    });
-  });
-
-  group('apagar', () {
-    test('saca lo que puso el orden y deja lo fijado a mano', () {
-      final prendido = prender(
-        config: ConfigPlano(
-          fijadas: {2: MesaFijada(alumnoId: _id(4), motivo: 'Silla de ruedas')},
-        ),
-      ).config!;
-      final c = OrdenEnElSalon.apagar(config: prendido, alumnos: _alumnos);
-      expect(c.sePuede, isTrue);
-      expect(_de(c.config!), {2: _id(4)});
-      expect(c.config!.frente!.prendido, isFalse);
-      expect(c.config!.frente!.lugares, isEmpty);
-    });
-
-    test('el recorrido elegido queda: el botón lo recuerda', () {
-      final prendido = prender(recorrido: RecorridoDelOrden.filas).config!;
-      final c = OrdenEnElSalon.apagar(config: prendido, alumnos: _alumnos);
-      expect(c.config!.fijadas, isEmpty);
-      expect(c.config!.frente!.recorrido, RecorridoDelOrden.filas);
-      expect(
-        ConfigPlano.fromJson(c.config!.toJson()).frente!.recorrido,
-        RecorridoDelOrden.filas,
-      );
-    });
-
-    test('con el sorteo hecho no se puede: lo guardado queda', () {
-      final prendido = prender().config!;
-      final c = OrdenEnElSalon.apagar(
-        config: prendido,
-        alumnos: [_f(1, mesa: '2'), ..._alumnos.skip(1)],
-      );
-      expect(c.sePuede, isFalse);
+    test('por división todavía no se puede', () {
+      final o = calcular(modo: ModoSorteo.bloques);
+      expect(o.sePuede, isFalse);
+      expect(o.problema, contains('por división'));
     });
   });
 
   group('el sorteo de siempre lo entrega', () {
-    test('cada familia recibe la mesa que le fijó el orden, y nadie más', () {
-      final pagos = _pagos();
-      final config = prender(pagos: pagos).config!;
-      final exclusion = exclusionSorteo(
-        candidatos:
-            candidatosPorPago(_alumnos, pagosPorAlumno(_alumnos, pagos)),
-        soloPagado: true,
-      );
-      final e = EntradaSorteoPlano(
-        armado: salonDePrueba(),
-        config: config,
-        alumnos: _alumnos,
-        exclusion: exclusion,
-      );
-      expect(SorteoConPlano.preparar(e).entra, isTrue);
+    test('cada familia recibe la mesa que le tocó, y nadie más', () {
+      final o = calcular();
       for (var semilla = 1; semilla <= 40; semilla++) {
-        final r = SorteoConPlano.sortear(e, random: Random(semilla));
-        expect(SorteoConPlano.validar(e, r), isNull, reason: 'semilla $semilla');
+        final r = _sortear(o, semilla: semilla);
         expect(r.asignaciones[_id(1)], [2]);
         expect(r.asignaciones[_id(2)], [3]);
         expect(r.asignaciones[_id(3)]!.toSet(), {7, 8});
@@ -334,63 +287,220 @@ void main() {
       }
     });
 
-    test('por filas también: cada familia recibe la mesa que le fijó el orden',
-        () {
-      final pagos = _pagos();
-      final config =
-          prender(pagos: pagos, recorrido: RecorridoDelOrden.filas).config!;
-      final e = EntradaSorteoPlano(
-        armado: salonDePrueba(),
-        config: config,
-        alumnos: _alumnos,
-        exclusion: exclusionSorteo(
-          candidatos:
-              candidatosPorPago(_alumnos, pagosPorAlumno(_alumnos, pagos)),
-          soloPagado: true,
-        ),
-      );
-      expect(SorteoConPlano.preparar(e).entra, isTrue);
+    test('por filas y con las adicionales al final, también', () {
+      final o = calcular(recorrido: RecorridoDelOrden.filas, alFinal: true);
       for (var semilla = 1; semilla <= 40; semilla++) {
-        final r = SorteoConPlano.sortear(e, random: Random(semilla));
-        expect(SorteoConPlano.validar(e, r), isNull, reason: 'semilla $semilla');
-        expect(r.asignaciones[_id(1)], [2]);
-        expect(r.asignaciones[_id(2)], [3]);
-        expect(r.asignaciones[_id(3)]!.toSet(), {1, 8});
-        expect(r.asignaciones[_id(4)], [4]);
-        expect(r.asignaciones.containsKey(_id(5)), isFalse);
+        final r = _sortear(o, semilla: semilla);
+        for (final e in o.lugares.entries) {
+          expect(r.asignaciones[e.key]!.toSet(), e.value.toSet());
+        }
       }
     });
 
-    test('quien paga entre el tilde y el sorteo entra, en una mesa que quedó '
-        'libre', () {
-      final pagos = _pagos();
-      final config = prender(pagos: pagos).config!;
-      // F5 paga su primera cuota después de prender el orden.
-      pagos[_id(5)] = [_pago(11, 12, 30000)];
-      final e = EntradaSorteoPlano(
-        armado: salonDePrueba(),
-        config: config,
-        alumnos: _alumnos,
-        exclusion: exclusionSorteo(
-          candidatos:
-              candidatosPorPago(_alumnos, pagosPorAlumno(_alumnos, pagos)),
-          soloPagado: true,
+    test('si el sorteo le diera otra mesa, se nota', () {
+      final o = calcular();
+      final mal = ResultadoSorteoPlano(asignaciones: {
+        _id(1): [3],
+        _id(2): [2],
+        _id(3): [7, 8],
+        _id(4): [6],
+      });
+      expect(OrdenEnElSalon.noCumple(o, mal), isNotNull);
+    });
+  });
+
+  group('con el sorteo ya hecho, reacomoda', () {
+    // Un sorteo común dejó a cada una en cualquier lado.
+    final sentados = {1: '12', 2: '9', 3: '5, 4', 4: '1'};
+
+    test('queda igual que sorteando así con el salón vacío', () {
+      final o = calcular(alumnos: _alumnos(mesas: sentados));
+      expect(o.sePuede, isTrue);
+      expect(_lugares(o), _lugares(calcular()));
+      expect(o.cambian, 4);
+      for (var semilla = 1; semilla <= 40; semilla++) {
+        final r = _sortear(o, semilla: semilla);
+        expect(r.asignaciones[_id(1)], [2]);
+        expect(r.asignaciones[_id(3)]!.toSet(), {7, 8});
+      }
+    });
+
+    test('quien ya está en su lugar no cuenta como cambio', () {
+      final o = calcular(
+        alumnos: _alumnos(mesas: {1: '2', 2: '3', 3: '7, 8', 4: '1'}),
+      );
+      expect(o.cambian, 1);
+    });
+
+    test('nadie pierde una mesa que ya tiene, aunque no la haya pagado', () {
+      // F3 tiene sus dos mesas y la adicional sin pagar.
+      final pagos = _pagos()..[_id(3)] = _alDia(7);
+      final o = calcular(alumnos: _alumnos(mesas: sentados), pagos: pagos);
+      expect(o.lugares[_id(3)], hasLength(2));
+      expect(o.exclusionDelSorteo.soloBase, isNot(contains(_id(3))));
+      expect(_sortear(o).asignaciones[_id(3)], hasLength(2));
+    });
+
+    test('quien tiene mesa sin haber pagado la base se reacomoda, al final',
+        () {
+      final o = calcular(alumnos: _alumnos(mesas: {...sentados, 5: '11'}));
+      expect(o.lugares[_id(5)], hasLength(1));
+      expect(o.configAGuardar!.frente!.lugares.last.alumnoId, _id(5));
+      expect(o.exclusionDelSorteo.sinMesa, isNot(contains(_id(5))));
+      expect(_sortear(o).asignaciones[_id(5)], o.lugares[_id(5)]);
+    });
+
+    test('la mesa fijada a mano y ya entregada queda donde está', () {
+      final o = calcular(
+        alumnos: _alumnos(mesas: {...sentados, 4: '2'}),
+        config: ConfigPlano(
+          fijadas: {2: MesaFijada(alumnoId: _id(4), motivo: 'Silla de ruedas')},
         ),
       );
-      final r = SorteoConPlano.sortear(e, random: Random(3));
-      expect(SorteoConPlano.validar(e, r), isNull);
-      expect(r.asignaciones[_id(1)], [2]);
-      final suya = r.asignaciones[_id(5)]!.single;
-      expect(config.fijadas.containsKey(suya), isFalse);
+      expect(o.lugares.containsKey(_id(4)), isFalse);
+      expect(o.lugares.values.expand((l) => l), isNot(contains(2)));
+      final r = _sortear(o);
+      expect(r.asignaciones.containsKey(_id(4)), isFalse,
+          reason: 'no se le dio nada nuevo');
+    });
+
+    test('quien recibió una mesa nueva al fondo se reacomoda como las demás',
+        () {
+      final o = calcular(
+        alumnos: _alumnos(mesas: sentados),
+        config: ConfigPlano(
+          fijadas: {
+            1: MesaFijada(alumnoId: _id(4), motivo: MesasNuevasAlFondo.motivo),
+          },
+        ),
+      );
+      expect(o.lugares[_id(4)], [6]);
+      expect(o.configAGuardar!.fijadas, isEmpty);
+    });
+
+    test('con el sorteo hecho por división todavía no se puede', () {
+      final o = calcular(
+        alumnos: _alumnos(mesas: sentados),
+        config: const ConfigPlano(
+          bloques: [BloqueDivision('5a', 1, 2)],
+        ),
+      );
+      expect(o.sePuede, isFalse);
+      expect(o.problema, contains('por división'));
+    });
+
+    test('deshacer solo ese sorteo devuelve a cada una a su mesa de antes', () {
+      final antes = _alumnos(mesas: sentados);
+      final o = calcular(alumnos: antes);
+      final r = _sortear(o);
+      final numeros = {
+        for (final e in r.asignaciones.entries) e.key: e.value.join(', '),
+      };
+      final registro = SorteoMesasRegistro(
+        id: 'r1',
+        eventoId: _evento,
+        tipo: TipoRegistroSorteo.sorteo,
+        resultado: numeros,
+        antes: UltimosSorteados.antesDe(antes, numeros),
+        reacomodo: true,
+        createdAt: _ahora,
+      );
+      // El renglón va y vuelve con la marca.
+      final leido = SorteoMesasRegistro.fromMap(registro.toMap());
+      expect(leido.reacomodo, isTrue);
+      final despues = [
+        for (final a in antes)
+          numeros[a.id] == null ? a : a.copyWith(numeroMesa: numeros[a.id]),
+      ];
+      final u = UltimosSorteados.de([leido], despues)!;
+      expect(u.noSeTocan, isEmpty);
+      expect(u.aGuardar, {
+        _id(1): '12',
+        _id(2): '9',
+        _id(3): '5, 4',
+        _id(4): '1',
+      });
+    });
+
+    test('si a otra familia la mudaron a una mesa de antes, no se deshace a '
+        'medias', () {
+      final antes = _alumnos(mesas: sentados);
+      final o = calcular(alumnos: antes);
+      final numeros = {
+        for (final e in _sortear(o).asignaciones.entries)
+          e.key: e.value.join(', '),
+      };
+      final registro = SorteoMesasRegistro(
+        id: 'r1',
+        eventoId: _evento,
+        tipo: TipoRegistroSorteo.sorteo,
+        resultado: numeros,
+        antes: UltimosSorteados.antesDe(antes, numeros),
+        reacomodo: true,
+        createdAt: _ahora,
+      );
+      // Después del reacomodo, F5 recibió a mano la 12, que era de F1.
+      final despues = [
+        for (final a in antes)
+          a.id == _id(5)
+              ? a.copyWith(numeroMesa: '12')
+              : a.copyWith(numeroMesa: numeros[a.id]),
+      ];
+      final u = UltimosSorteados.de([registro], despues)!;
+      expect(u.aGuardar, isEmpty);
+      expect(u.noSeTocan, hasLength(4));
+      expect(u.noSeTocan.first.motivo,
+          'su mesa de antes ya la tiene otra familia');
+    });
+  });
+
+  group('lo que dejó el tilde de la 6.7.0', () {
+    final vieja = ConfigPlano(
+      fijadas: {
+        2: MesaFijada(alumnoId: _id(1), motivo: MesaFijada.motivoPorOrden),
+        9: MesaFijada(alumnoId: _id(4), motivo: 'Silla de ruedas'),
+      },
+      frente: OrdenDelPlano(
+        prendido: true,
+        lugares: [
+          LugarPorOrden(
+              alumnoId: _id(1), puesto: 1, grupo: 1, mesas: const [2], frase: ''),
+        ],
+      ),
+    );
+
+    test('las mesas que fijaba antes de sortear se limpian solas', () {
+      final limpia = OrdenEnElSalon.sinFijadasDelOrden(vieja)!;
+      expect(limpia.fijadas.keys, [9]);
+      expect(OrdenEnElSalon.sinFijadasDelOrden(limpia), isNull);
+      expect(OrdenEnElSalon.sinFijadasDelOrden(ConfigPlano.vacia), isNull);
+    });
+
+    test('un sorteo entero sin el tilde apaga el porqué', () {
+      final c = OrdenEnElSalon.apagado(vieja)!;
+      expect(c.frente!.prendido, isFalse);
+      expect(c.frente!.lugares, isEmpty);
+      expect(OrdenEnElSalon.apagado(c), isNull);
+      expect(OrdenEnElSalon.apagado(ConfigPlano.vacia), isNull);
+    });
+
+    test('el porqué vale mientras alguna familia sigue en su mesa', () {
+      expect(OrdenEnElSalon.vigente(vieja, _alumnos()), isFalse,
+          reason: 'nadie tiene mesa: no se sorteó, o se deshizo');
+      expect(OrdenEnElSalon.vigente(vieja, _alumnos(mesas: {1: '2'})), isTrue);
+      expect(OrdenEnElSalon.vigente(vieja, _alumnos(mesas: {1: '5'})), isFalse);
+      expect(
+        OrdenEnElSalon.vigente(ConfigPlano.vacia, _alumnos(mesas: {1: '2'})),
+        isFalse,
+      );
     });
   });
 
   group('viaja con el plano', () {
-    test('la config va y vuelve con el orden y sus fijadas', () {
-      final c = prender().config!;
+    test('lo guardado va y vuelve con el orden', () {
+      final c = calcular().configAGuardar!;
       final vuelta = ConfigPlano.fromJson(c.toJson());
-      expect(_de(vuelta), _de(c));
-      expect(vuelta.fijadas.values.every((f) => f.esPorOrden), isTrue);
+      expect(vuelta.fijadas, isEmpty);
       final o = vuelta.frente!;
       expect(o.prendido, isTrue);
       expect(o.el, _ahora);
@@ -400,15 +510,12 @@ void main() {
     });
 
     test('el recorrido va y vuelve; por columnas no escribe la clave', () {
-      final columnas = prender().config!;
+      final columnas = calcular().configAGuardar!;
       expect(columnas.toJson(), isNot(contains('recorrido')));
-      expect(ConfigPlano.fromJson(columnas.toJson()).frente!.recorrido,
-          RecorridoDelOrden.columnas);
-      final filas = prender(recorrido: RecorridoDelOrden.filas).config!;
+      final filas = calcular(recorrido: RecorridoDelOrden.filas).configAGuardar!;
       expect(filas.toJson(), contains('"recorrido":"filas"'));
-      final vuelta = ConfigPlano.fromJson(filas.toJson());
-      expect(vuelta.frente!.recorrido, RecorridoDelOrden.filas);
-      expect(_de(vuelta), _de(filas));
+      expect(ConfigPlano.fromJson(filas.toJson()).frente!.recorrido,
+          RecorridoDelOrden.filas);
       // Una clave que no se conoce es "por columnas": nunca un plano roto.
       expect(
         ConfigPlano.fromJson('{"frente": {"general": true, "recorrido": "x"}}')
@@ -418,7 +525,7 @@ void main() {
       );
     });
 
-    test('una fiesta que nunca lo prendió no lleva la clave', () {
+    test('una fiesta que nunca lo usó no lleva la clave', () {
       expect(ConfigPlano.vacia.frente, isNull);
       expect(ConfigPlano.vacia.toJson(), isNot(contains('frente')));
       expect(ConfigPlano.fromJson(ConfigPlano.vacia.toJson()).frente, isNull);

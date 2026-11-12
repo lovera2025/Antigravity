@@ -440,12 +440,13 @@ class EditarArmado {
 
   /// Corre un sector hasta dejar su esquina de arriba a la izquierda en
   /// ([x], [y]), de a un cuarto de metro contando desde [desde] (o desde donde
-  /// está).
+  /// está). Sin [ajustar], justo ahí (para dejarlo en línea con otro, 6.7.1).
   static ArmadoSalon moverSector(
     ArmadoSalon a,
     int indice,
     double x,
     double y, {
+    bool ajustar = true,
     ({double x, double y})? desde,
   }) =>
       _conSector(
@@ -453,8 +454,8 @@ class EditarArmado {
         indice,
         (s) => s.copyWith(
           caja: RectPlano(
-            _ajustar(a, x, desde?.x ?? s.caja.x),
-            _ajustar(a, y, desde?.y ?? s.caja.y),
+            ajustar ? _ajustar(a, x, desde?.x ?? s.caja.x) : x,
+            ajustar ? _ajustar(a, y, desde?.y ?? s.caja.y) : y,
             s.caja.ancho,
             s.caja.alto,
           ),

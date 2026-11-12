@@ -26,7 +26,9 @@ import '../plano/services/mesas_nuevas_al_fondo.dart';
 import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
+import '../plano/services/orden_en_el_salon.dart';
 import '../plano/services/sorteo_con_plano.dart';
+import '../plano/widgets/ver_el_orden_dialog.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
@@ -500,6 +502,14 @@ class _DetalleEventoMasivoScreenState
           config: plano?.config ?? ConfigPlano.vacia,
           alumnos: _alumnos,
         ),
+        // El porqué de cada familia (6.7.1) lo ve solo el jefe.
+        onVerElPorque: plano?.config.frente == null
+            ? null
+            : () => mostrarElOrden(
+                  context,
+                  orden: plano!.config.frente!,
+                  alumnos: _alumnos,
+                ),
         soloJefe: !ref.read(esRolJefeProvider),
       );
     } catch (e) {
@@ -3746,6 +3756,9 @@ class _DetalleEventoMasivoScreenState
         inicial: elegido,
         novedad: novedad,
         plano: plano,
+        // Para el tilde "Cumplimiento debido" del cartel (6.7.1).
+        eventoId: eventoId,
+        pagosCrudos: pagosCrudos,
       );
       if (config == null || !mounted) return;
 
@@ -3754,10 +3767,8 @@ class _DetalleEventoMasivoScreenState
       // plano, también las divisiones y el plano mismo (mesas fijas o libres).
       setState(() => _isLoading = true);
       final frescos = await repo.getByEvento(eventoId);
-      final pagosFrescos = pagosPorAlumno(
-        frescos,
-        await _pagosPorContrato(repo, frescos),
-      );
+      final crudosFrescos = await _pagosPorContrato(repo, frescos);
+      final pagosFrescos = pagosPorAlumno(frescos, crudosFrescos);
       // El plano se vuelve a pedir a la nube: si la otra PC fijó una mesa con
       // el diálogo abierto, todavía puede no haber bajado, y sortear con el de
       // esta PC le pisaría el cambio (el plano sube como una fila entera).
@@ -3791,7 +3802,13 @@ class _DetalleEventoMasivoScreenState
                 'los datos actualizados: revisalos y volvé a tocar SORTEAR.';
         continue;
       }
-      await _ejecutarSorteo(frescos, config, pagosFrescos, planoFresco);
+      await _ejecutarSorteo(
+        frescos,
+        config,
+        pagosFrescos,
+        planoFresco,
+        crudosFrescos,
+      );
       return;
     }
   }
@@ -3838,6 +3855,7 @@ class _DetalleEventoMasivoScreenState
     SorteoMesasDialogResult config,
     Map<String, PagoAlumno> pagos,
     PlanoEvento? plano,
+    Map<String, List<Map<String, dynamic>>> pagosCrudos,
   ) async {
     if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
@@ -3859,6 +3877,7 @@ class _DetalleEventoMasivoScreenState
           plano,
           autoSyncCheckpoint,
           pagos,
+          pagosCrudos,
         );
         return;
       }
@@ -3972,20 +3991,54 @@ class _DetalleEventoMasivoScreenState
     PlanoEvento plano,
     DateTime checkpoint,
     Map<String, PagoAlumno> pagos,
+    Map<String, List<Map<String, dynamic>>> pagosCrudos,
   ) async {
     if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
+    // Lo que dejó el tilde de la 6.7.0 (fijaba las mesas antes de sortear, a
+    // la vista) no entra al sorteo ni se vuelve a guardar.
+    final configBase =
+        OrdenEnElSalon.sinFijadasDelOrden(plano.config) ?? plano.config;
+    // "Cumplimiento debido" (6.7.1): se calcula acá, al sortear, con lo recién
+    // leído. Le fija a cada familia su mesa solo para esta corrida; el sorteo
+    // de siempre se las entrega. Con el sorteo ya hecho, reacomoda.
+    OrdenParaElSorteo? orden;
+    if (config.porCumplimiento) {
+      orden = OrdenEnElSalon.paraElSorteo(
+        eventoId: widget.evento.id,
+        armado: plano.armado,
+        config: configBase,
+        alumnos: alumnos,
+        pagos: pagosCrudos,
+        hoyAr: ArTime.nowAr(),
+        ahora: ArTime.nowUtc(),
+        exclusion: exclusion,
+        modo: config.modo!,
+        recorrido: config.recorrido,
+        usarPasto: config.usarPasto,
+        adicionalesAlFinal: config.adicionalesAlFinal,
+        juntasConLaPrincipal: config.juntasConLaPrincipal,
+        por: quienOpera(ref),
+      );
+      if (!orden.sePuede) {
+        if (mounted) {
+          await _avisarSorteo('No se guardó nada', orden.problema!);
+        }
+        return;
+      }
+    }
     // Con el sorteo ya hecho, las mesas que faltan van en mesas nuevas, al
     // fondo (6.5.1): se agregan al salón y quedan fijadas para su familia, y el
     // sorteo de siempre se las entrega. Es la misma cuenta que mostró el
     // cartel, con los datos recién leídos.
     PlanMesasNuevas? nuevas;
-    if (config.mesasNuevasAlFondo &&
+    if (orden == null &&
+        config.mesasNuevasAlFondo &&
         MesasNuevasAlFondo.motivoSinMesasNuevas(plano.armado, alumnos) ==
             null) {
       final plan = MesasNuevasAlFondo.planear(
         armado: plano.armado,
-        config: plano.config,
+        config: configBase,
         alumnos: alumnos,
         pedidos: SorteoMesasMotor.pedidos(
           alumnos,
@@ -3999,21 +4052,34 @@ class _DetalleEventoMasivoScreenState
       );
       if (!plan.vacio) nuevas = plan;
     }
-    final configDelPlano = nuevas?.config ?? plano.config;
-    final entrada = EntradaSorteoPlano(
-      armado: nuevas?.armado ?? plano.armado,
-      config: configDelPlano,
-      alumnos: alumnos,
-      exclusion: exclusion,
-      separaciones: config.separaciones,
-      distancias: config.distancias,
-      modo: config.modo!,
-      ordenDivisiones: config.ordenDivisiones,
-      usarPasto: config.usarPasto,
-      hastaMesa: config.hastaMesa,
-      zonas: config.zonas,
-      alFinal: config.alFinal,
+    // Lo que se guarda del plano. Un sorteo entero sin el tilde no deja escrito
+    // el porqué de otro.
+    final nadieTeniaMesa = alumnos.every(
+      (a) => MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isEmpty,
     );
+    final sinOrden = nuevas?.config ?? configBase;
+    final configDelPlano = orden?.configAGuardar ??
+        (nadieTeniaMesa ? OrdenEnElSalon.apagado(sinOrden) ?? sinOrden : sinOrden);
+    final entrada = orden != null
+        ? OrdenEnElSalon.entrada(
+            orden,
+            armado: plano.armado,
+            usarPasto: config.usarPasto,
+          )
+        : EntradaSorteoPlano(
+            armado: nuevas?.armado ?? plano.armado,
+            config: sinOrden,
+            alumnos: alumnos,
+            exclusion: exclusion,
+            separaciones: config.separaciones,
+            distancias: config.distancias,
+            modo: config.modo!,
+            ordenDivisiones: config.ordenDivisiones,
+            usarPasto: config.usarPasto,
+            hastaMesa: config.hastaMesa,
+            zonas: config.zonas,
+            alFinal: config.alFinal,
+          );
     final ResultadoSorteoPlano resultado;
     try {
       resultado = SorteoConPlano.sortear(entrada);
@@ -4054,6 +4120,20 @@ class _DetalleEventoMasivoScreenState
       }
       return;
     }
+    // Con "Cumplimiento debido", además: cada familia en la mesa que le tocó.
+    final noCumple =
+        orden == null ? null : OrdenEnElSalon.noCumple(orden, resultado);
+    if (noCumple != null) {
+      debugPrint('Sorteo por cumplimiento frenado: $noCumple');
+      if (mounted) {
+        await _avisarSorteo(
+          'No se guardó nada',
+          'El control final encontró un problema y el sorteo no se guardó: '
+              '$noCumple',
+        );
+      }
+      return;
+    }
 
     final numeros = {
       for (final e in resultado.asignaciones.entries)
@@ -4066,6 +4146,9 @@ class _DetalleEventoMasivoScreenState
       lejos: _lejosParaElRegistro(config, numeros),
       zonas: _zonasParaElRegistro(config, numeros),
       alFinal: _alFinalParaElRegistro(entrada, resultado),
+      // Con familias ya sentadas, el tilde las cambió de lugar: queda dicho,
+      // para que deshacer solo este sorteo las devuelva a donde estaban.
+      reacomodo: orden != null && orden.cambian > 0,
       nuevas: nuevas == null
           ? null
           : {
@@ -4565,6 +4648,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? zonas,
     Map<String, String>? nuevas,
     Map<String, String>? alFinal,
+    bool reacomodo = false,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4577,6 +4661,7 @@ class _DetalleEventoMasivoScreenState
         zonas: zonas,
         nuevas: nuevas == null || nuevas.isEmpty ? null : nuevas,
         alFinal: alFinal == null || alFinal.isEmpty ? null : alFinal,
+        reacomodo: reacomodo,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );

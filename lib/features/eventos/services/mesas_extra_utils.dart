@@ -89,6 +89,12 @@ class SorteoMesasDialogResult {
   /// (`EntradaSorteoPlano.alFinal`). Vacío si no se eligió.
   final Map<String, int> alFinal;
 
+  /// Con plano: "Cumplimiento debido" (6.7.1). Las mesas van de la familia que
+  /// mejor cumplió a la que peor, en el [recorrido] elegido
+  /// (`OrdenEnElSalon.paraElSorteo`).
+  final bool porCumplimiento;
+  final RecorridoDelOrden recorrido;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
@@ -106,6 +112,8 @@ class SorteoMesasDialogResult {
     this.juntasConLaPrincipal = 0,
     this.dejarJuntas = const {},
     this.alFinal = const {},
+    this.porCumplimiento = false,
+    this.recorrido = RecorridoDelOrden.columnas,
   });
 }
 

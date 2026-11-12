@@ -351,6 +351,35 @@ el cumplimiento, porque las ve cualquiera. Él creía que el tilde ya estaba hec
   verdad por columnas y 200 por filas) y **recorrido con el mouse** en `tool/plano_prueba.dart` (12-nov). **No se usó
   todavía en un sorteo de verdad.**
 - **El plano y el tilde, desde una PC con la 6.7.0:** una anterior ve esas mesas como fijadas comunes y no tiene el tilde.
+- **Lo de arriba es la 6.7.0 como salió. La 6.7.1 lo cambió** (el tilde pasó al cartel del SORTEO): ver abajo.
+
+**La 6.7.1: "Cumplimiento debido" en el cartel del SORTEO, y la cruz para alinear** (programada el 12-nov a la tarde,
+versión `6.7.1+73`, **en la rama y SIN PUBLICAR: falta su "publicá"**; `docs/CONTEXTO_v6.7.1_2026-11-12.md`, que empieza
+con "Para retomar en otro chat" y dice **lo que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
+6.7.0: al tildar en el plano las mesas ya aparecían repartidas ("se pierde la emoción") y el cartel se confundía.
+- **El tilde va en el cartel del SORTEO, no en el plano** (`sorteo_mesas_dialog.dart`, `por_cumplimiento`). Antes de
+  sortear el plano se ve vacío; al apretar SORTEAR se reparte, salen los números en la grilla y después se ve el plano.
+  Tildado, debajo: **Por columnas · Por filas**; se esconde por división, "hasta qué mesa", "lejos" y las mesas nuevas al
+  fondo; **queda "Las mesas adicionales: Con su familia · Al final"** (le gusta: primero todas las principales).
+- **Las fijadas "Por orden" son solo para esa corrida del sorteo: no se guardan** (`OrdenEnElSalon.paraElSorteo`:
+  `configDelSorteo` y `configAGuardar`). Lo que queda es `frente` (quién, dónde y por qué). Por eso deshacer el sorteo
+  deja el salón vacío, sin candados. **El motor del sorteo sigue sin tocarse.**
+- **Con el sorteo ya hecho, reacomoda** sin deshacerlo: las familias que entran al orden van al sorteo como si no
+  tuvieran mesa. **Nadie pierde una mesa.** Se queda donde está quien tiene una fijada a mano, quien está de baja y quien
+  tiene más mesas que las pagas y menos que las del contrato (al motor solo se le puede pedir "la base" o "todas").
+- **El renglón de un reacomodo lleva `_reacomodo`** (`SorteoMesasRegistro.reacomodo`): con eso `UltimosSorteados`
+  devuelve a cada familia a su mesa de antes al deshacer "solo lo último"; si alguna ya la tiene otra, no toca a ninguna.
+- **En el plano no queda nada del cumplimiento**, salvo en HISTORIAL: "Las mesas se ubicaron por orden: N familias", con
+  **VER EL PORQUÉ** solo en modo jefe y mientras alguna familia siga en su mesa (`OrdenEnElSalon.vigente`).
+- **Lo que dejó el tilde de la 6.7.0 se limpia solo al sortear** (`sinFijadasDelOrden`, `apagado`).
+- **La cruz para alinear** (`plano/services/cruz_de_alineado.dart`, en Acomodar): mientras se arrastra una mesa o un
+  sector, dos líneas por su medio; verde y gruesa cuando queda en línea. Un sector se alinea con sectores y con el medio
+  del playón; una mesa, con mesas. **A menos de medio paso de la línea queda justo en línea**: de a un cuarto de metro
+  podía no caer nunca ahí. Él quería "esa cruz en el mouse", no guías que peguen ni botones de alinear.
+- **Antes de publicar quiere las capturas de cada prueba** (está en el celular): se sacan en `tool/plano_prueba.dart`,
+  que tiene el cartel de verdad (también con familias sentadas) y un ícono de Historial. **La grilla de verdad no se
+  puede abrir en el sandbox.**
+- Sigue pendiente el tilde con el sorteo **por división**.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

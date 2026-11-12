@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
@@ -10,6 +11,7 @@ import '../../plano/modelo/armado_salon.dart';
 import '../../plano/services/cambios_de_mesa.dart';
 import '../../plano/services/divisiones.dart';
 import '../../plano/services/mesas_nuevas_al_fondo.dart';
+import '../../plano/services/orden_en_el_salon.dart';
 import '../../plano/services/sorteo_con_plano.dart';
 import '../../plano/widgets/elegir_zona_dialog.dart';
 import '../services/mesas_extra_utils.dart';
@@ -39,6 +41,8 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
   SorteoMesasDialogResult? inicial,
   String? novedad,
   PlanoEvento? plano,
+  String? eventoId,
+  Map<String, List<Map<String, dynamic>>>? pagosCrudos,
 }) {
   return showDialog<SorteoMesasDialogResult>(
     context: context,
@@ -50,6 +54,8 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
       inicial: inicial,
       novedad: novedad,
       plano: plano,
+      eventoId: eventoId,
+      pagosCrudos: pagosCrudos,
     ),
   );
 }
@@ -69,6 +75,14 @@ class SorteoMesasDialog extends StatefulWidget {
   final String? novedad;
   final PlanoEvento? plano;
 
+  /// Para "Cumplimiento debido" (6.7.1): la fiesta y los pagos uno por uno,
+  /// de donde sale quién cumplió mejor. Sin ellos, el tilde no aparece.
+  final String? eventoId;
+  final Map<String, List<Map<String, dynamic>>>? pagosCrudos;
+
+  /// El día de hoy en Argentina. Solo para las pruebas.
+  final DateTime? hoyAr;
+
   const SorteoMesasDialog({
     super.key,
     required this.tituloInstitucion,
@@ -78,6 +92,9 @@ class SorteoMesasDialog extends StatefulWidget {
     this.inicial,
     this.novedad,
     this.plano,
+    this.eventoId,
+    this.pagosCrudos,
+    this.hoyAr,
   });
 
   @override
@@ -126,13 +143,69 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       _adicionalesAlFinal && _plano != null && _modo == ModoSorteo.entera;
 
   /// Lo que se le pide al sorteo: alumno → cuántas de sus mesas van al final.
-  Map<String, int> get _alFinal => !_alFinalActivo
+  /// Con "Cumplimiento debido" no se le pide nada: ya lo repartió el orden.
+  Map<String, int> get _alFinal => !_alFinalActivo || _cumplimiento
       ? const {}
       : SorteoConPlano.alFinalSegunElCartel(
           _pedidos,
           juntas: _juntasConLaPrincipal,
           dejarJuntas: _dejarJuntas,
         );
+
+  // ── Cumplimiento debido (6.7.1) ──
+
+  /// El tilde. Viene destildado: el jefe lo elige en cada sorteo.
+  bool _porCumplimiento = false;
+  RecorridoDelOrden _recorrido = RecorridoDelOrden.columnas;
+  String? _claveOrden;
+  OrdenParaElSorteo? _ordenMemo;
+
+  /// Se ofrece sobre el plano y con los pagos a mano.
+  bool get _ofreceCumplimiento =>
+      _plano != null && widget.eventoId != null && widget.pagosCrudos != null;
+
+  bool get _cumplimiento => _porCumplimiento && _ofreceCumplimiento;
+
+  /// El plano sin lo que dejó el tilde de la 6.7.0, que fijaba las mesas antes
+  /// de sortear: con eso adentro el cartel creía que no quedaba nada por dar.
+  ConfigPlano get _config {
+    final c = _plano!.config;
+    return OrdenEnElSalon.sinFijadasDelOrden(c) ?? c;
+  }
+
+  /// Quién va a qué mesa por cumplimiento, con lo elegido en el cartel. Null
+  /// si el tilde no está.
+  OrdenParaElSorteo? get _ordenPorCumplimiento {
+    if (!_cumplimiento) return null;
+    final ex = _exclusion;
+    final clave = [
+      _recorrido.clave,
+      _usarPasto,
+      _alFinalActivo,
+      _juntasConLaPrincipal,
+      (ex.sinMesa.toList()..sort()).join(','),
+      (ex.soloBase.toList()..sort()).join(','),
+    ].join('|');
+    if (clave != _claveOrden || _ordenMemo == null) {
+      _claveOrden = clave;
+      _ordenMemo = OrdenEnElSalon.paraElSorteo(
+        eventoId: widget.eventoId!,
+        armado: _plano!.armado,
+        config: _config,
+        alumnos: widget.alumnos,
+        pagos: widget.pagosCrudos!,
+        hoyAr: widget.hoyAr ?? ArTime.nowAr(),
+        ahora: DateTime.now().toUtc(),
+        exclusion: ex,
+        modo: _modo,
+        recorrido: _recorrido,
+        usarPasto: _usarPasto,
+        adicionalesAlFinal: _alFinalActivo,
+        juntasConLaPrincipal: _juntasConLaPrincipal,
+      );
+    }
+    return _ordenMemo;
+  }
 
   /// Los "lejos" que valen. Con "Al final", los de las familias sin mesa no
   /// cuentan (los reemplazan la regla por cantidad y "dejar juntas"); los de
@@ -195,10 +268,13 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   /// que se elija: con esto se decide si se muestra la pregunta.
   Map<String, int> get _faltantes {
     final plano = _plano;
-    if (plano == null || _motivoSinMesasNuevas != null) return const {};
+    // Con "Cumplimiento debido" no hay mesas nuevas: se reacomoda el salón.
+    if (plano == null || _cumplimiento || _motivoSinMesasNuevas != null) {
+      return const {};
+    }
     return MesasNuevasAlFondo.faltantes(
       armado: plano.armado,
-      config: plano.config,
+      config: _config,
       pedidos: _pedidos,
     );
   }
@@ -207,7 +283,10 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   /// mesas libres", si no se puede o si no falta ninguna.
   PlanMesasNuevas? get _nuevas {
     final plano = _plano;
-    if (plano == null || !_alFondo || _motivoSinMesasNuevas != null) {
+    if (plano == null ||
+        _cumplimiento ||
+        !_alFondo ||
+        _motivoSinMesasNuevas != null) {
       return null;
     }
     final ex = _exclusion;
@@ -219,7 +298,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       _claveNuevas = clave;
       final plan = MesasNuevasAlFondo.planear(
         armado: plano.armado,
-        config: plano.config,
+        config: _config,
         alumnos: widget.alumnos,
         pedidos: _pedidos,
         llegada: llegadaPorPago(widget.pagos),
@@ -233,9 +312,23 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   /// las hay.
   ArmadoSalon get _armado => _nuevas?.armado ?? _plano!.armado;
 
-  EntradaSorteoPlano _entrada() => EntradaSorteoPlano(
+  EntradaSorteoPlano _entrada() {
+    // Con "Cumplimiento debido" el orden ya dice quién va a qué mesa: al
+    // sorteo de siempre le queda entregarlas.
+    final orden = _ordenPorCumplimiento;
+    if (orden != null && orden.sePuede) {
+      return OrdenEnElSalon.entrada(
+        orden,
+        armado: _plano!.armado,
+        usarPasto: _usarPasto,
+      );
+    }
+    return _entradaDeSiempre();
+  }
+
+  EntradaSorteoPlano _entradaDeSiempre() => EntradaSorteoPlano(
         armado: _armado,
-        config: _nuevas?.config ?? _plano!.config,
+        config: _nuevas?.config ?? _config,
         alumnos: widget.alumnos,
         exclusion: _exclusion,
         separaciones: _separacionesQueValen,
@@ -253,6 +346,10 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   PlanSorteo _plan() {
     final ex = _exclusion;
     final clave = [
+      _cumplimiento,
+      _recorrido.clave,
+      _alFinalActivo,
+      _juntasConLaPrincipal,
       _modo.name,
       _alFondo,
       _orden.join(','),
@@ -330,6 +427,8 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     _incluirBase = {...?widget.inicial?.incluirBase};
     _incluirExtras = {...?widget.inicial?.incluirExtras};
     _alFondo = widget.inicial?.mesasNuevasAlFondo ?? true;
+    _porCumplimiento = widget.inicial?.porCumplimiento ?? false;
+    _recorrido = widget.inicial?.recorrido ?? RecorridoDelOrden.columnas;
     _adicionalesAlFinal = widget.inicial?.adicionalesAlFinal ?? false;
     _juntasConLaPrincipal = widget.inicial?.juntasConLaPrincipal ?? 0;
     _dejarJuntas = {...?widget.inicial?.dejarJuntas};
@@ -481,9 +580,17 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
               'corregilo en Editar alumno para que vayan en el mismo bloque.',
     ];
     final hayAvisos = widget.avisos.isNotEmpty || avisosPlano.isNotEmpty;
+    // Con "Cumplimiento debido": no hay "hasta qué mesa", y con el sorteo ya
+    // hecho alcanza con que alguna familia cambie de mesa.
+    final orden = _ordenPorCumplimiento;
+    final reacomoda = orden != null && orden.sePuede && orden.cambian > 0;
     final puedeSortear = !_planoIlegible &&
-        !demanda.vacia &&
-        (plan == null ? factible : plan.entra && hastaOk) &&
+        (orden == null
+            ? !demanda.vacia &&
+                (plan == null ? factible : plan.entra && hastaOk)
+            : orden.sePuede &&
+                (plan?.entra ?? false) &&
+                (!demanda.vacia || reacomoda)) &&
         (!hayAvisos || _revisado);
 
     final activos = _activos;
@@ -551,9 +658,12 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      demanda.vacia
-                          ? 'No queda nadie por sortear'
-                          : 'Se van a sortear ${demanda.total} mesas',
+                      reacomoda
+                          ? 'Se reacomoda el salón'
+                          : demanda.vacia
+                              ? 'No queda nadie por sortear'
+                              : 'Se van a sortear ${demanda.total} mesas',
+                      key: const Key('sorteo_resumen'),
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -583,7 +693,13 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                         '· ${exclusion.soloBase.length} con mesas extra sin '
                         'pagar: solo la mesa base',
                       ),
-                    if (conMesa > 0)
+                    if (reacomoda)
+                      Text(
+                        '· ${orden.cambian == 1 ? '1 familia cambia' : '${orden.cambian} familias cambian'} '
+                        'de mesa. Nadie pierde mesas.',
+                        key: const Key('sorteo_reacomoda'),
+                      )
+                    else if (conMesa > 0)
                       Text('· $conMesa alumno(s) ya tienen mesa: se respetan'),
                     if (reservadosBaja > 0)
                       Text(
@@ -686,7 +802,9 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
-              if (conMesasExtra.isNotEmpty) ...[
+              // Con "Cumplimiento debido" no hay "lejos": la adicional va
+              // detrás de su principal, o al final.
+              if (conMesasExtra.isNotEmpty && !_cumplimiento) ...[
                 const SizedBox(height: 16),
                 _Titulo('Con mesas extra (${conMesasExtra.length})'),
                 Text(
@@ -803,22 +921,35 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                     context,
                     SorteoMesasDialogResult(
                       capacidadSalon: capacidad ?? 0,
-                      separaciones:
-                          Map<String, int>.from(_separacionesQueValen),
-                      distancias: _distanciasQueValen,
+                      // Con "Cumplimiento debido" el lugar lo decide el orden:
+                      // no viajan los "lejos", las zonas ni "hasta qué mesa".
+                      separaciones: _cumplimiento
+                          ? const {}
+                          : Map<String, int>.from(_separacionesQueValen),
+                      distancias:
+                          _cumplimiento ? const {} : _distanciasQueValen,
                       soloPagado: _soloPagado,
                       incluirBase: Set<String>.from(_incluirBase),
                       incluirExtras: Set<String>.from(_incluirExtras),
                       modo: plano == null ? null : _modo,
                       ordenDivisiones: List<String>.from(_orden),
                       usarPasto: _usarPasto,
-                      hastaMesa: plano == null ? null : hastaEscrita,
-                      zonas: plano == null ? const {} : _zonasElegidas,
-                      mesasNuevasAlFondo: plano != null && _alFondo,
+                      hastaMesa: plano == null || _cumplimiento
+                          ? null
+                          : hastaEscrita,
+                      zonas: plano == null || _cumplimiento
+                          ? const {}
+                          : _zonasElegidas,
+                      mesasNuevasAlFondo:
+                          plano != null && _alFondo && !_cumplimiento,
                       adicionalesAlFinal: _alFinalActivo,
                       juntasConLaPrincipal: _juntasConLaPrincipal,
-                      dejarJuntas: Set<String>.from(_dejarJuntas),
+                      dejarJuntas: _cumplimiento
+                          ? const {}
+                          : Set<String>.from(_dejarJuntas),
                       alFinal: _alFinal,
+                      porCumplimiento: _cumplimiento,
+                      recorrido: _recorrido,
                     ),
                   )
               : null,
@@ -887,16 +1018,19 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
             'Salón: ${armado.nombre}',
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
+          if (_ofreceCumplimiento) ..._elCumplimiento(),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              chip('Por división, cada una junta', ModoSorteo.bloques),
-              chip('Toda la escuela junta', ModoSorteo.entera),
-            ],
-          ),
-          if (plan.modoForzado) ...[
+          // Con "Cumplimiento debido" va toda la escuela junta.
+          if (!_cumplimiento)
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                chip('Por división, cada una junta', ModoSorteo.bloques),
+                chip('Toda la escuela junta', ModoSorteo.entera),
+              ],
+            ),
+          if (plan.modoForzado && !_cumplimiento) ...[
             const SizedBox(height: 8),
             Text(
               'Ya hay mesas repartidas y el plano no tiene bloques guardados: '
@@ -905,7 +1039,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
             ),
           ],
           if (_hayAdicionalesPorSortear) ..._lasAdicionales(plan),
-          if (plan.modo == ModoSorteo.bloques) ...[
+          if (plan.modo == ModoSorteo.bloques && !_cumplimiento) ...[
             const SizedBox(height: 10),
             if (bloquesGuardados)
               Text(
@@ -1004,7 +1138,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                   ),
                 ),
           ],
-          if (plan.modo == ModoSorteo.entera) ...[
+          if (plan.modo == ModoSorteo.entera && !_cumplimiento) ...[
             const SizedBox(height: 12),
             TextField(
               controller: _hastaCtrl,
@@ -1062,9 +1196,66 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   }
 
   /// Alguna familia que todavía no tiene mesa trae adicionales para sortear:
-  /// solo ahí tiene sentido preguntar dónde van.
+  /// solo ahí tiene sentido preguntar dónde van. Con "Cumplimiento debido"
+  /// vale también para quien ya tiene mesa: se reacomodan todas.
   bool get _hayAdicionalesPorSortear =>
-      _pedidos.any((p) => p.esNuevo && p.mesas > 1);
+      _pedidos.any((p) => p.esNuevo && p.mesas > 1) ||
+      (_ordenPorCumplimiento?.lugares.values.any((l) => l.length > 1) ?? false);
+
+  /// El tilde "Cumplimiento debido" (6.7.1) y, tildado, el recorrido. Va en el
+  /// cartel y no en el plano: el salón se ve repartido recién al sortear.
+  List<Widget> _elCumplimiento() {
+    final orden = _ordenPorCumplimiento;
+    final problema = orden?.problema;
+    return [
+      CheckboxListTile(
+        key: const Key('por_cumplimiento'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const Text(
+          'Cumplimiento debido',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          problema ?? 'Las mejores mesas, para quien mejor cumplió.',
+          key: const Key('por_cumplimiento_dice'),
+          style: problema == null
+              ? null
+              : TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.red.shade700,
+                ),
+        ),
+        value: _porCumplimiento,
+        onChanged: (v) => _cambiar(() {
+          _porCumplimiento = v == true;
+          // Por división todavía no: tildado, va toda la escuela junta.
+          if (_porCumplimiento) _modo = ModoSorteo.entera;
+        }),
+      ),
+      // Las mismas pastillas con tilde que el resto del cartel: en un botón de
+      // dos partes, sobre este fondo, no se notaba cuál estaba elegido.
+      if (_cumplimiento)
+        Padding(
+          key: const Key('cumplimiento_recorrido'),
+          padding: const EdgeInsets.only(left: 40),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final r in RecorridoDelOrden.values)
+                ChoiceChip(
+                  key: Key('cumplimiento_${r.clave}'),
+                  label: Text(r.rotulo),
+                  selected: _recorrido == r,
+                  onSelected: (_) => _cambiar(() => _recorrido = r),
+                ),
+            ],
+          ),
+        ),
+    ];
+  }
 
   /// "Las mesas adicionales: Con su familia · Al final" (6.6.1, pedido del
   /// jefe el 11-nov-2026). Va debajo de cómo se sortea porque es una decisión
@@ -1147,6 +1338,13 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
           ],
         ),
         const SizedBox(height: 6),
+        if (_cumplimiento)
+          Text(
+            'Primero todas las principales; después, las adicionales.',
+            key: const Key('adicionales_por_cumplimiento'),
+            style: gris,
+          )
+        else ...[
         Text(
           plan.mesasAlFinal == 0
               ? 'Con lo elegido, ninguna mesa va al final: cada familia queda '
@@ -1172,6 +1370,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
           'junta, tocá "Dejar juntas" en su renglón, más abajo.',
           style: gris,
         ),
+        ],
       ],
     ];
   }

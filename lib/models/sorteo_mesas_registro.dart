@@ -67,6 +67,12 @@ class SorteoMesasRegistro {
   /// "el último sorteo" para saber quién llegó después.
   final bool automatico;
 
+  /// En un sorteo por cumplimiento con familias ya sentadas (6.7.1): a las
+  /// que tenían mesa **las cambió de lugar**, no les sumó. [antes] dice dónde
+  /// estaba cada una, y deshacer solo este renglón las devuelve ahí. Sin esta
+  /// marca, un "antes" que no es parte de lo que dejó el sorteo no se toca.
+  final bool reacomodo;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -82,6 +88,7 @@ class SorteoMesasRegistro {
     this.nuevas,
     this.alFinal,
     this.automatico = false,
+    this.reacomodo = false,
     this.hechoPor,
     required this.createdAt,
   });
@@ -96,6 +103,7 @@ class SorteoMesasRegistro {
   static const claveNuevas = '_nuevas';
   static const claveAlFinal = '_al_final';
   static const claveAutomatico = '_auto';
+  static const claveReacomodo = '_reacomodo';
 
   int get alumnos => resultado.length;
 
@@ -120,6 +128,7 @@ class SorteoMesasRegistro {
     Map<String, String>? nuevas;
     Map<String, String>? alFinal;
     var automatico = false;
+    var reacomodo = false;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
       if (decodificado is Map) {
@@ -139,6 +148,8 @@ class SorteoMesasRegistro {
             alFinal = _mapa(e.value);
           } else if (clave == claveAutomatico) {
             automatico = e.value == true || e.value == 1 || e.value == '1';
+          } else if (clave == claveReacomodo) {
+            reacomodo = e.value == true || e.value == 1 || e.value == '1';
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -161,6 +172,7 @@ class SorteoMesasRegistro {
       nuevas: nuevas,
       alFinal: alFinal,
       automatico: automatico,
+      reacomodo: reacomodo,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -184,6 +196,7 @@ class SorteoMesasRegistro {
         claveNuevas: ?nuevas,
         claveAlFinal: ?alFinal,
         if (automatico) claveAutomatico: 1,
+        if (reacomodo) claveReacomodo: 1,
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

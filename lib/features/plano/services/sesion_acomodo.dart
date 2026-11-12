@@ -4,6 +4,7 @@ import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
 import '../modelo/numeracion.dart';
 import 'armar_a_medida.dart';
+import 'cruz_de_alineado.dart';
 import 'editar_armado.dart';
 import 'medir_salon.dart';
 import 'numeracion_recordada.dart';
@@ -251,8 +252,18 @@ class SesionAcomodo {
   /// paso para Deshacer.
   void empezarArrastre() {
     _previa = null;
+    _cruz = null;
     _antesDeArrastrar ??= _actual;
   }
+
+  /// La cruz para alinear (6.7.1): se ve mientras se arrastra una mesa o un
+  /// sector, y se va al soltar.
+  CruzDeAlineado? get cruz => _cruz;
+  CruzDeAlineado? _cruz;
+
+  /// A menos de medio paso de quedar en línea con otra cosa, queda justo en
+  /// línea: de a un cuarto de metro podía no caer nunca ahí.
+  double get _margenDeLaCruz => _actual.aUnidades(EditarArmado.ajusteM / 2);
 
   /// Lleva la mesa hacia ([x], [y]): se corre de a un cuarto de metro
   /// contando desde donde estaba al empezar a arrastrarla.
@@ -266,6 +277,22 @@ class SesionAcomodo {
       y,
       desde: (x: antes.x, y: antes.y),
     );
+    final falta = CruzDeAlineado.loQueFalta(
+      _actual,
+      mesa: numero,
+      margen: _margenDeLaCruz,
+    );
+    final m = _actual.mesa(numero);
+    if (m != null && (falta.dx != 0 || falta.dy != 0)) {
+      _actual = EditarArmado.mover(
+        _actual,
+        numero,
+        m.x + falta.dx,
+        m.y + falta.dy,
+        ajustar: false,
+      );
+    }
+    _cruz = CruzDeAlineado.de(_actual, mesa: numero);
   }
 
   void arrastrarSector(int indice, double x, double y) {
@@ -279,6 +306,22 @@ class SesionAcomodo {
       y,
       desde: (x: caja.x, y: caja.y),
     );
+    final falta = CruzDeAlineado.loQueFalta(
+      _actual,
+      sector: indice,
+      margen: _margenDeLaCruz,
+    );
+    if (falta.dx != 0 || falta.dy != 0) {
+      final c = _actual.sectores[indice].caja;
+      _actual = EditarArmado.moverSector(
+        _actual,
+        indice,
+        c.x + falta.dx,
+        c.y + falta.dy,
+        ajustar: false,
+      );
+    }
+    _cruz = CruzDeAlineado.de(_actual, sector: indice);
   }
 
   // ── Las manijas (6.1.0, "el salón primero") ──────────────────────────────
@@ -323,6 +366,7 @@ class SesionAcomodo {
   void terminarArrastre() {
     final antes = _antesDeArrastrar;
     _antesDeArrastrar = null;
+    _cruz = null;
     if (antes == null || identical(antes, _actual)) return;
     // Mientras se arrastraba la hoja solo crecía, para que el dibujo no
     // saltara. Al soltar queda del tamaño que hace falta.

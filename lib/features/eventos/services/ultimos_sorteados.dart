@@ -195,6 +195,8 @@ class UltimosSorteados {
     final tenian = <String, String>{};
     final quedan = <String, String>{};
     final noSeTocan = <FamiliaQueNoSeToca>[];
+    // Las que el sorteo cambió de lugar (un reacomodo).
+    final movidas = <String>{};
     var otrosConMesa = 0;
 
     for (final a in alumnos) {
@@ -221,8 +223,13 @@ class UltimosSorteados {
       }
       final antes = teniaAntes(a.id);
       if (!dejo.containsAll(antes)) {
-        noSeToca('no quedó anotado qué mesa tenía antes');
-        continue;
+        // Un reacomodo (6.7.1) la cambió de lugar y dejó anotado dónde
+        // estaba: vuelve ahí, si su mesa de antes sigue libre (se mira abajo).
+        if (!sorteo.reacomodo || sorteo.antes?[a.id] == null) {
+          noSeToca('no quedó anotado qué mesa tenía antes');
+          continue;
+        }
+        movidas.add(a.id);
       }
       if (_iguales(antes, dejo)) continue;
       tenian[a.id] = a.numeroMesa!.trim();
@@ -235,6 +242,36 @@ class UltimosSorteados {
         final queda = escrito.isNotEmpty ? escrito : _texto(antes);
         aGuardar[a.id] = queda;
         quedan[a.id] = queda;
+      }
+    }
+    // Las que vuelven a su mesa de antes: solo si, con todo deshecho, ninguna
+    // mesa queda de dos familias (por ejemplo, porque a otra la mudaron
+    // después a una de esas). Si pasa, ninguna de las movidas se toca: volver
+    // a medias dejaría el salón peor.
+    if (movidas.isNotEmpty) {
+      final deQuien = <int, String>{};
+      var choca = false;
+      for (final a in alumnos) {
+        final queda = aGuardar.containsKey(a.id)
+            ? MesasExtraUtils.numerosMesaDesdeTexto(aGuardar[a.id])
+            : MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa);
+        for (final n in queda) {
+          if (deQuien.containsKey(n)) choca = true;
+          deQuien[n] = a.id;
+        }
+      }
+      if (choca) {
+        for (final id in movidas) {
+          if (!aGuardar.containsKey(id)) continue;
+          aGuardar.remove(id);
+          tenian.remove(id);
+          quedan.remove(id);
+          noSeTocan.add(FamiliaQueNoSeToca(
+            alumnoId: id,
+            nombre: nombres[id] ?? '',
+            motivo: 'su mesa de antes ya la tiene otra familia',
+          ));
+        }
       }
     }
     noSeTocan.sort((x, y) => x.nombre.compareTo(y.nombre));

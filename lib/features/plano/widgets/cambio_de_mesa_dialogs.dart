@@ -533,6 +533,7 @@ Future<void> mostrarHistorialSorteo({
   required BuildContext context,
   required HistorialSorteo historial,
   void Function(MovimientoMesas movimiento)? onDeshacer,
+  VoidCallback? onVerElPorque,
   bool soloJefe = false,
 }) =>
     showDialog<void>(
@@ -540,6 +541,7 @@ Future<void> mostrarHistorialSorteo({
       builder: (_) => HistorialSorteoDialog(
         historial: historial,
         onDeshacer: soloJefe ? null : onDeshacer,
+        onVerElPorque: soloJefe ? null : onVerElPorque,
         soloJefe: soloJefe,
       ),
     );
@@ -547,12 +549,17 @@ Future<void> mostrarHistorialSorteo({
 class HistorialSorteoDialog extends StatelessWidget {
   final HistorialSorteo historial;
   final void Function(MovimientoMesas movimiento)? onDeshacer;
+
+  /// "Ver el porqué" del renglón del sorteo por cumplimiento (6.7.1): la
+  /// lista de cada familia con su motivo. Null: sin el botón (no es el jefe).
+  final VoidCallback? onVerElPorque;
   final bool soloJefe;
 
   const HistorialSorteoDialog({
     super.key,
     required this.historial,
     this.onDeshacer,
+    this.onVerElPorque,
     this.soloJefe = false,
   });
 
@@ -565,6 +572,7 @@ class HistorialSorteoDialog extends StatelessWidget {
         TipoRenglonHistorial.deshacer => Icons.undo,
         TipoRenglonHistorial.fijada => Icons.lock_outline,
         TipoRenglonHistorial.libre => Icons.block,
+        TipoRenglonHistorial.porOrden => Icons.format_list_numbered,
       };
 
   @override
@@ -632,6 +640,13 @@ class HistorialSorteoDialog extends StatelessWidget {
                                 onDeshacer!(r.movimiento!);
                               },
                               child: const Text('DESHACER'),
+                            ),
+                          if (onVerElPorque != null &&
+                              r.tipo == TipoRenglonHistorial.porOrden)
+                            TextButton(
+                              key: const Key('ver_el_porque'),
+                              onPressed: onVerElPorque,
+                              child: const Text('VER EL PORQUÉ'),
                             ),
                         ],
                       ),

@@ -32,6 +32,7 @@ import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
+import 'package:arguello_events/features/plano/services/historial_sorteo.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
 import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
 import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
@@ -389,18 +390,25 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
   /// para recorrer con el mouse "Las mesas adicionales: Con su familia · Al final",
   /// cuántas quedan pegadas y "Dejar juntas". Después hace lo mismo que la pantalla
   /// de la fiesta: sortear y el control final.
+  ///
+  /// Desde la 6.7.1 el cartel trae el tilde **"Cumplimiento debido"**: tildado,
+  /// reparte de la familia que mejor cumplió a la que peor (con los pagos
+  /// inventados de [pagosDePrueba]). Sirve con el salón vacío y con familias ya
+  /// sentadas (ahí reacomoda), con la misma cuenta que la pantalla de la fiesta.
   Future<void> _sortearConElCartel() async {
-    final alumnos = alumnosDePrueba();
+    final alumnos = _alumnos;
     final ahora = DateTime.now().toUtc();
+    final pagos = {
+      for (final a in alumnos)
+        a.id: PagoAlumno(base: 1000, mesas: a.mesaExtraPrecio),
+    };
+    final crudos = pagosDePrueba();
     final elegido = await mostrarSorteoMesasDialog(
       context: context,
       tituloInstitucion: 'VENTANA DE PRUEBA',
       alumnos: alumnos,
       avisos: const [],
-      pagos: {
-        for (final a in alumnos)
-          a.id: PagoAlumno(base: 1000, mesas: a.mesaExtraPrecio),
-      },
+      pagos: pagos,
       plano: PlanoEvento.nuevo(
         eventoId: 'prueba',
         armado: _armado,
@@ -408,21 +416,59 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
         modo: ModoSorteo.entera,
         ahora: ahora,
       ).copyWith(config: _config, ahora: ahora),
+      eventoId: 'prueba',
+      pagosCrudos: crudos,
     );
     if (!mounted || elegido == null) return;
-    final entrada = EntradaSorteoPlano(
-      armado: _armado,
-      config: _config,
-      alumnos: alumnos,
-      separaciones: elegido.separaciones,
-      distancias: elegido.distancias,
-      modo: elegido.modo ?? ModoSorteo.entera,
-      ordenDivisiones: elegido.ordenDivisiones,
-      usarPasto: elegido.usarPasto,
-      hastaMesa: elegido.hastaMesa,
-      zonas: elegido.zonas,
-      alFinal: elegido.alFinal,
+    final exclusion = exclusionSorteo(
+      candidatos: candidatosPorPago(alumnos, pagos),
+      soloPagado: elegido.soloPagado,
+      incluirBase: elegido.incluirBase,
+      incluirExtras: elegido.incluirExtras,
     );
+    OrdenParaElSorteo? orden;
+    if (elegido.porCumplimiento) {
+      orden = OrdenEnElSalon.paraElSorteo(
+        eventoId: 'prueba',
+        armado: _armado,
+        config: _config,
+        alumnos: alumnos,
+        pagos: crudos,
+        hoyAr: DateTime(2026, 11, 12),
+        ahora: ahora,
+        exclusion: exclusion,
+        modo: elegido.modo ?? ModoSorteo.entera,
+        recorrido: elegido.recorrido,
+        usarPasto: elegido.usarPasto,
+        adicionalesAlFinal: elegido.adicionalesAlFinal,
+        juntasConLaPrincipal: elegido.juntasConLaPrincipal,
+        por: 'Prueba',
+      );
+      if (!orden.sePuede) {
+        setState(() => _aviso = AvisoDelPlano(orden!.problema!, esError: true));
+        return;
+      }
+    }
+    final entrada = orden != null
+        ? OrdenEnElSalon.entrada(
+            orden,
+            armado: _armado,
+            usarPasto: elegido.usarPasto,
+          )
+        : EntradaSorteoPlano(
+            armado: _armado,
+            config: _config,
+            alumnos: alumnos,
+            exclusion: exclusion,
+            separaciones: elegido.separaciones,
+            distancias: elegido.distancias,
+            modo: elegido.modo ?? ModoSorteo.entera,
+            ordenDivisiones: elegido.ordenDivisiones,
+            usarPasto: elegido.usarPasto,
+            hastaMesa: elegido.hastaMesa,
+            zonas: elegido.zonas,
+            alFinal: elegido.alFinal,
+          );
     setState(() {
       final ResultadoSorteoPlano resultado;
       try {
@@ -431,12 +477,21 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
         _aviso = AvisoDelPlano('No entra: ${e.message}', esError: true);
         return;
       }
-      final problema = SorteoConPlano.validar(entrada, resultado);
+      final problema = SorteoConPlano.validar(entrada, resultado) ??
+          (orden == null ? null : OrdenEnElSalon.noCumple(orden, resultado));
       if (problema != null) {
         _aviso = AvisoDelPlano('El control final: $problema', esError: true);
         return;
       }
-      _asignaciones = resultado.asignaciones;
+      _asignaciones = {...?_asignaciones, ...resultado.asignaciones};
+      if (orden != null) {
+        _config = orden.configAGuardar!;
+        _aviso = AvisoDelPlano(
+          'Sorteo por cumplimiento: ${orden.ubicadas} familias.'
+          '${orden.cambian == 0 ? '' : ' ${orden.cambian} cambiaron de mesa.'}',
+        );
+        return;
+      }
       final delFinal = [
         for (final l in SorteoConPlano.delFinal(entrada, resultado).values) ...l,
       ]..sort();
@@ -446,6 +501,25 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       );
     });
   }
+
+  /// El Historial de la app, con "Ver el porqué" del sorteo por cumplimiento.
+  /// En esta ventana no hay registros: se ve lo que sale del plano.
+  void _historial() => mostrarHistorialSorteo(
+        context: context,
+        historial: HistorialSorteo.armar(
+          registros: const [],
+          movimientos: const [],
+          config: _config,
+          alumnos: _alumnos,
+        ),
+        onVerElPorque: _config.frente == null
+            ? null
+            : () => mostrarElOrden(
+                  context,
+                  orden: _config.frente!,
+                  alumnos: _alumnos,
+                ),
+      );
 
   /// Un cambio de lo que se configura del plano, como lo deja la pantalla de la app:
   /// acá se queda en esta ventana.
@@ -612,8 +686,14 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
           IconButton(
             key: const Key('prueba_cartel'),
             tooltip: 'Sortear con el cartel de la app',
-            onPressed: sinMesa ? _sortearConElCartel : null,
+            onPressed: _sortearConElCartel,
             icon: const Icon(Icons.fact_check_outlined),
+          ),
+          IconButton(
+            key: const Key('prueba_historial'),
+            tooltip: 'Historial',
+            onPressed: _historial,
+            icon: const Icon(Icons.history),
           ),
           TextButton(
             key: const Key('prueba_deshacer'),
@@ -744,32 +824,6 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             'CAMBIAR',
           ),
           onGuardarArmado: _guardarSalon,
-          // "Mesas por orden" (6.7.0), con la misma cuenta que la pantalla de
-          // la app: fija las mesas; SORTEAR, arriba, las entrega.
-          onPorOrden: (prender, recorrido) => _aplicar(
-            prender
-                ? OrdenEnElSalon.prender(
-                    eventoId: 'prueba',
-                    armado: _armado,
-                    config: _config,
-                    alumnos: _alumnos,
-                    pagos: pagosDePrueba(),
-                    hoyAr: DateTime(2026, 11, 12),
-                    ahora: DateTime.now().toUtc(),
-                    recorrido: recorrido,
-                    por: 'Prueba',
-                  )
-                : OrdenEnElSalon.apagar(config: _config, alumnos: _alumnos),
-            prender
-                ? 'Cumplimiento debido: quedaron ubicadas. Miralas en el plano; con SORTEAR '
-                    'se les entrega la mesa.'
-                : 'Cumplimiento debido, apagado: ya no hay mesas ubicadas.',
-          ),
-          onVerElOrden: () {
-            final orden = _config.frente;
-            if (orden == null) return;
-            mostrarElOrden(context, orden: orden, alumnos: _alumnos);
-          },
         ),
       ),
     );
