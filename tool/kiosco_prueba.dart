@@ -10,6 +10,7 @@
 // KIOSCO. El runner de Windows es el de la app: el canal del kiosco
 // (`windows/runner/kiosco.cpp`) es el de verdad.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -20,6 +21,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:arguello_events/core/services/preferencias_de_la_ventana.dart';
 import 'package:arguello_events/features/totem/services/puente_ficha.dart';
 import 'package:arguello_events/features/totem/totem_display.dart';
+import 'package:arguello_events/features/totem/totem_orientation.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/services/supabase_service.dart';
 
@@ -28,6 +30,12 @@ const _evento = 'deadbeef-0000-4000-8000-00000000c10c';
 
 /// Lo que la ventana del tótem le pidió guardar a la principal, en orden.
 final _pedidosDelTotem = ValueNotifier<List<String>>(const []);
+
+/// Con `--dart-define=auto=true` el arnés corre solo, sin mouse: abre el tótem,
+/// el tótem "gira" (guarda su orientación) y cada ventana dice por la consola lo
+/// que hizo. Sirve para comprobar el puente de las preferencias con las dos
+/// ventanas de verdad.
+const _auto = bool.fromEnvironment('auto');
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +48,17 @@ Future<void> main(List<String> args) async {
     // Como en la app: esta ventana no escribe el archivo de preferencias, se lo
     // pide a la principal (6.9.0).
     PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia);
+    if (_auto) {
+      unawaited(Future<void>.delayed(const Duration(seconds: 4), () async {
+        final antes = await TotemOrientationStore.load(_evento);
+        await TotemOrientationStore.save(_evento, TotemOrientation.vertical);
+        final despues = await TotemOrientationStore.load(_evento);
+        // ignore: avoid_print
+        print('AUTO-TOTEM: guardó la orientación por el puente '
+            '(porElPuente=${PreferenciasDeLaVentana.porElPuente}); '
+            'antes leía ${antes.name}, ahora lee ${despues.name}');
+      }));
+    }
     runApp(
       ProviderScope(
         overrides: [supabaseProvider.overrideWithValue(nube)],
@@ -68,6 +87,11 @@ Future<void> main(List<String> args) async {
       final clave = '${pedido['clave']}';
       final esDelTotem = PreferenciasDeLaVentana.prefijosDelTotem
           .any((p) => clave.startsWith(p) && clave.length == p.length + 36);
+      if (_auto) {
+        // ignore: avoid_print
+        print('AUTO-PRINCIPAL: el tótem pidió guardar "$clave" = '
+            '"${pedido['valor']}" -> ${esDelTotem ? 'se guardaría' : 'RECHAZADO'}');
+      }
       _pedidosDelTotem.value = [
         ..._pedidosDelTotem.value,
         '${esDelTotem ? 'la principal lo guardaría' : 'RECHAZADO'}: '
@@ -93,6 +117,14 @@ class _Principal extends StatefulWidget {
 
 class _PrincipalState extends State<_Principal> {
   int? _totem;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_auto) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_abrir()));
+    }
+  }
 
   Future<void> _abrir() async {
     final id = _totem;
