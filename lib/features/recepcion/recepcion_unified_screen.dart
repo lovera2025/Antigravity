@@ -14,6 +14,7 @@ import 'chat/hoja_chat.dart' show BotonChat;
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
 import 'services/puerta_del_evento.dart';
+import 'widgets/otra_fiesta_en_la_tele.dart';
 import 'widgets/panel_puerta.dart';
 import 'widgets/sumar_celular.dart';
 import 'widgets/vista_del_totem.dart';
@@ -417,9 +418,9 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
                 ),
               );
             }).toList(),
-            onChanged: (value) {
-              ref.read(selectedEventProvider.notifier).select(value);
-            },
+            // Si la tele ya está con otra fiesta, pregunta antes de moverla.
+            onChanged: (value) =>
+                elegirEventoEnRecepcion(context, ref, value, eventos: eventos),
             isExpanded: true,
           );
         },

@@ -39,7 +39,14 @@ class SelectedEventNotifier extends Notifier<String?> {
   @override
   String? build() => null;
 
-  void select(String? eventoId) {
+  /// Elige el evento que se mira en esta PC.
+  ///
+  /// Con [moverLaTele] en `false` el tótem se queda con la fiesta que tenía: es
+  /// "solo mirar acá". Recepción lo pregunta antes cuando la tele ya está con
+  /// otra fiesta (`elegirEventoEnRecepcion`): hasta la 6.8.0 un clic en el
+  /// desplegable cambiaba la tele del salón sin avisar, y como la lista va por
+  /// fecha, la fiesta de mañana queda pegada a la de hoy (revisión del 13-nov).
+  void select(String? eventoId, {bool moverLaTele = true}) {
     if (state == eventoId) return;
     state = eventoId;
 
@@ -51,7 +58,7 @@ class SelectedEventNotifier extends Notifier<String?> {
     // Si se limpia la selección no se toca el tótem a propósito: dejar la
     // pantalla del salón en blanco a mitad de un evento es peor que que muestre
     // el anterior un rato.
-    if (eventoId != null && KioskLauncher.isTotemActive) {
+    if (moverLaTele && eventoId != null && KioskLauncher.isTotemActive) {
       KioskLauncher.setEvento(eventoId);
     }
   }

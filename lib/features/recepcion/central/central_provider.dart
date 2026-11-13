@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/pc_despierta.dart';
 import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
 import '../../../models/silla_puerta.dart';
@@ -237,8 +238,14 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   }) =>
       _resolvedorDe(eventoId).resolver(pedido, puesto, conLista: puerta);
 
+  /// Con la central prendida, la notebook no se duerme: los celulares dependen
+  /// de ella aunque nadie la toque en toda la noche ([PcDespierta]).
+  PcDespierta? _despierta;
+
   @override
   EstadoCentral build() {
+    // Se arma acá: al cerrarse, Riverpod no deja leer otros providers.
+    _despierta = PcDespierta(avisar: ref.read(avisarUsoAlSistemaProvider));
     ref.onDispose(() => unawaited(_soltar()));
     return const EstadoCentral();
   }
@@ -277,6 +284,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       return;
     }
     _central = central;
+    _despierta?.mantener(true);
     // Desde el contenedor y no con `ref.listen`: Riverpod pausa lo que escucha
     // un provider cuando nadie lo mira, y la central tiene que seguir mandando
     // la lista aunque Recepción esté cerrada.
@@ -373,6 +381,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   Future<void> _soltar() async {
     final central = _central;
     _central = null;
+    _despierta?.mantener(false);
     _lista?.close();
     _lista = null;
     _evento?.close();

@@ -8,6 +8,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 import '../../core/services/cuerpo_del_broadcast.dart';
+import '../../core/services/pc_despierta.dart';
 import '../../core/services/totem_config_cache.dart';
 import 'providers/clave_totem_provider.dart';
 import 'services/lista_del_totem.dart';
@@ -164,6 +165,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   /// Disk IO de Supabase del 23-sep. Al volver a mostrarse retoma y recarga.
   bool _pausado = false;
 
+  /// Solo en la ventana de la tele: que la notebook no se duerma mientras se ve.
+  PcDespierta? _despierta;
+
   // ── Reconexión ────────────────────────────────────────────────────────────
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
@@ -218,7 +222,13 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     // Solo en su propia ventana. Montado en la ventana principal (la ruta
     // `/totem_display`) le sacaría a esa ventana el manejador que contesta la
     // ficha del evento: hay uno solo por ventana.
-    if (widget.windowId != null) _setupInterWindowChannel();
+    if (widget.windowId != null) {
+      _setupInterWindowChannel();
+      // La ventana de la tele: mientras está a la vista, la notebook no apaga
+      // la pantalla ni se suspende aunque nadie la toque (`PcDespierta`).
+      _despierta = PcDespierta(avisar: ref.read(avisarUsoAlSistemaProvider))
+        ..mantener(true);
+    }
     _esperarFicha();
     _pedirFicha();
     _iniciarFichaPeriodica();
@@ -492,6 +502,8 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   Future<void> _pausar() async {
     await _kiosco?.salir();
     if (_pausado || !mounted) return;
+    // Escondida no hay tele que cuidar: la PC vuelve a su plan de energía.
+    _despierta?.mantener(false);
     _reconciliarTimer?.cancel();
     _reconnectTimer?.cancel();
     _fichaTimer?.cancel();
@@ -515,6 +527,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       _reproductor.reiniciar();
       _reconnectAttempts = 0;
     });
+    _despierta?.mantener(true);
     _connect();
     // Mientras estuvo escondido pudo cambiar: un sorteo, un alumno nuevo.
     _pedirFicha();
@@ -717,6 +730,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
 
   @override
   void dispose() {
+    _despierta?.mantener(false);
     _broadcastChannel?.unsubscribe();
     _reconnectTimer?.cancel();
     _ocultarControlesTimer?.cancel();

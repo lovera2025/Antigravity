@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/instalacion_id.dart';
+import '../../../core/services/pc_despierta.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../recepcion/central/direcciones_red.dart';
 import '../providers/barra_del_jefe_provider.dart';
@@ -159,9 +160,14 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   /// Se lee al armar: al cerrarse, Riverpod no deja leer otros providers.
   late AvisoALaRed _aviso;
 
+  /// Con la central prendida, la notebook de la barra no se duerme: las tablets
+  /// dependen de ella aunque nadie la toque ([PcDespierta]).
+  PcDespierta? _despierta;
+
   @override
   EstadoCentralBarra build() {
     _aviso = ref.read(avisoALaRedProvider);
+    _despierta = PcDespierta(avisar: ref.read(avisarUsoAlSistemaProvider));
     ref.onDispose(() => unawaited(_soltar()));
     return const EstadoCentralBarra();
   }
@@ -193,6 +199,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
       return;
     }
     _central = central;
+    _despierta?.mantener(true);
     final busqueda = RespondeBusqueda(eventoId: eventoId, puertoCentral: puerto);
     final contesta = await busqueda.escuchar(
       puerto: ref.read(puertoBusquedaBarraProvider),
@@ -235,6 +242,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   Future<void> _soltar() async {
     final central = _central;
     _central = null;
+    _despierta?.mantener(false);
     if (central != null && _aviso.salida == central.difundirDeEstaPc) _aviso.salida = null;
     _busqueda?.cerrar();
     _busqueda = null;

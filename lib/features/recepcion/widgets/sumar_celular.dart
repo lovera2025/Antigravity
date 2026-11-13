@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../models/evento.dart';
 import '../central/central_provider.dart';
 import '../central/central_puerta.dart';
+import '../providers/recepcion_provider.dart';
+import '../services/puerta_del_evento.dart';
 
 /// "CELULARES · 2" en la barra de Recepción de la PC: abre la ventana para
 /// sumar un celular a la puerta ([VentanaSumarCelular]) y dice cuántos hay
@@ -85,9 +88,69 @@ class _VentanaSumarCelularState extends ConsumerState<VentanaSumarCelular> {
   }
 
   Future<void> _prender() async {
+    // La central es una sola: prenderla para esta fiesta apaga la de la otra, y
+    // sus celulares quedan afuera hasta escanear de nuevo. Hasta la 6.8.0 pasaba
+    // con solo abrir esta ventana con otro evento elegido (revisión del 13-nov).
+    final estado = ref.read(centralDeLaPuertaProvider);
+    if (estado.prendida &&
+        estado.eventoId != null &&
+        estado.eventoId != widget.eventoId) {
+      final pasarla = await _preguntarPorLaOtra(estado);
+      if (!mounted) return;
+      if (pasarla != true) {
+        Navigator.pop(context);
+        return;
+      }
+    }
     setState(() => _prendiendo = true);
     await ref.read(centralDeLaPuertaProvider.notifier).prender(widget.eventoId);
     if (mounted) setState(() => _prendiendo = false);
+  }
+
+  String _nombreDe(String eventoId) {
+    final eventos = ref.read(eventosActivosProvider).value ?? const <Evento>[];
+    for (final e in eventos) {
+      if (e.id == eventoId) return etiquetaEventoRecepcion(e);
+    }
+    return 'otra fiesta';
+  }
+
+  Future<bool?> _preguntarPorLaOtra(EstadoCentral estado) {
+    final n = estado.conectados;
+    final conectados = switch (n) {
+      0 => 'Ahora no tiene ningún celular conectado.',
+      1 => 'Tiene 1 celular conectado.',
+      _ => 'Tiene $n celulares conectados.',
+    };
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        key: const Key('celulares_de_otra_fiesta'),
+        title: const Text('Los celulares están con otra fiesta'),
+        content: Text(
+          'La central de los celulares está prendida para:\n'
+          '${_nombreDe(estado.eventoId!)}\n'
+          '$conectados\n\n'
+          'Si la pasás a:\n'
+          '${_nombreDe(widget.eventoId)}\n'
+          'los celulares de la otra se desconectan y tienen que escanear el '
+          'QR de nuevo.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('celulares_dejarla'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('DEJARLA COMO ESTÁ'),
+          ),
+          FilledButton(
+            key: const Key('celulares_pasarla'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('PASARLA A ESTA'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cambiarCodigo() async {

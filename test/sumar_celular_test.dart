@@ -15,16 +15,19 @@ import 'package:arguello_events/features/recepcion/recepcion_unified_screen.dart
 import 'helpers/puerta_en_memoria.dart';
 
 class _CentralDePrueba extends CentralDeLaPuerta {
-  _CentralDePrueba(this.alPrender);
+  _CentralDePrueba(this.alPrender, {this.alAbrir = const EstadoCentral()});
 
   /// Cómo queda al prenderla.
   EstadoCentral alPrender;
+
+  /// Cómo está al abrir Recepción: apagada, o ya prendida (para otra fiesta).
+  final EstadoCentral alAbrir;
   final prendidas = <String>[];
   final reanudadas = <String>[];
   var cambios = 0;
 
   @override
-  EstadoCentral build() => const EstadoCentral();
+  EstadoCentral build() => alAbrir;
 
   @override
   Future<void> prender(String eventoId) async {
@@ -75,8 +78,12 @@ void main() {
 
   late _CentralDePrueba central;
 
-  Future<void> abrir(WidgetTester tester, EstadoCentral alPrender) async {
-    central = _CentralDePrueba(alPrender);
+  Future<void> abrir(
+    WidgetTester tester,
+    EstadoCentral alPrender, {
+    EstadoCentral alAbrir = const EstadoCentral(),
+  }) async {
+    central = _CentralDePrueba(alPrender, alAbrir: alAbrir);
     final mundo = PuertaEnMemoria(supabase, alumnos: [
       alumnoDePrueba('c1', 'PÉREZ, JUAN', mesas: [12]),
     ]);
@@ -189,6 +196,64 @@ void main() {
     await abrirVentana(tester);
     expect(find.text('No se pudo abrir la central en esta PC.'), findsOneWidget);
     expect(find.text('PROBAR DE NUEVO'), findsOneWidget);
+  });
+
+  // La central es una sola. Hasta la 6.8.0, abrir CELULARES con otro evento
+  // elegido apagaba la de la fiesta y dejaba a sus celulares afuera, sin lista
+  // y sin poder marcar (revisión del 13-nov).
+  group('con la central prendida para otra fiesta', () {
+    final ahora = DateTime.now();
+    final deLaOtra = EstadoCentral(
+      eventoId: eventoParticular,
+      codigo: '7310',
+      puerto: 8787,
+      direcciones: const ['192.168.0.10'],
+      puestos: [
+        for (final n in ['Juli', 'Mati'])
+          PuestoConectado(
+            celular: n,
+            nombre: n,
+            conectado: true,
+            ultimaVez: ahora,
+            marcados: 10,
+          ),
+      ],
+    );
+    final cartel = find.byKey(const Key('celulares_de_otra_fiesta'));
+
+    testWidgets('CELULARES pregunta antes de pasarla, y dice cuántos se cortan',
+        (tester) async {
+      await abrir(tester, _prendida(), alAbrir: deLaOtra);
+      await abrirVentana(tester);
+
+      expect(cartel, findsOneWidget);
+      expect(find.textContaining('Tiene 2 celulares conectados.'), findsOneWidget);
+      expect(central.prendidas, isEmpty, reason: 'todavía no tocó la central');
+    });
+
+    testWidgets('DEJARLA COMO ESTÁ: no la toca y cierra la ventana',
+        (tester) async {
+      await abrir(tester, _prendida(), alAbrir: deLaOtra);
+      await abrirVentana(tester);
+      await tester.tap(find.byKey(const Key('celulares_dejarla')));
+      await asentar(tester);
+
+      expect(central.prendidas, isEmpty);
+      expect(cartel, findsNothing);
+      expect(find.text('SUMAR UN CELULAR'), findsNothing);
+    });
+
+    testWidgets('PASARLA A ESTA: recién ahí la prende para esta fiesta',
+        (tester) async {
+      await abrir(tester, _prendida(), alAbrir: deLaOtra);
+      await abrirVentana(tester);
+      await tester.tap(find.byKey(const Key('celulares_pasarla')));
+      await asentar(tester);
+
+      expect(central.prendidas, [eventoMasivo]);
+      expect(find.text('SUMAR UN CELULAR'), findsOneWidget);
+      expect(find.textContaining('4821', findRichText: true), findsOneWidget);
+    });
   });
 
   testWidgets('cambiar el código pregunta antes, y muestra el nuevo',
