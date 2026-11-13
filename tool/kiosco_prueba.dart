@@ -17,12 +17,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/services/preferencias_de_la_ventana.dart';
+import 'package:arguello_events/features/totem/services/puente_ficha.dart';
 import 'package:arguello_events/features/totem/totem_display.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/services/supabase_service.dart';
 
 /// Un evento inventado: no existe en la nube ni en la PC.
 const _evento = 'deadbeef-0000-4000-8000-00000000c10c';
+
+/// Lo que la ventana del tótem le pidió guardar a la principal, en orden.
+final _pedidosDelTotem = ValueNotifier<List<String>>(const []);
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +37,9 @@ Future<void> main(List<String> args) async {
     // A ningún lado: la conexión falla al instante, como sin internet.
     final nube = SupabaseClient('http://127.0.0.1:9', 'anon-de-prueba');
     DesktopMultiWindow.setMethodHandler((call, _) async => null);
+    // Como en la app: esta ventana no escribe el archivo de preferencias, se lo
+    // pide a la principal (6.9.0).
+    PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia);
     runApp(
       ProviderScope(
         overrides: [supabaseProvider.overrideWithValue(nube)],
@@ -50,7 +58,26 @@ Future<void> main(List<String> args) async {
   }
 
   // La ventana principal no tiene ficha ni lista que darle: contesta nada.
-  DesktopMultiWindow.setMethodHandler((call, _) async => null);
+  // Lo que el tótem pide guardar (GIRAR, la config) **se anota acá y se muestra,
+  // sin escribir el archivo**: el arnés comparte el archivo de preferencias con
+  // el programa instalado en esta PC, y no hay que tocárselo.
+  DesktopMultiWindow.setMethodHandler((call, _) async {
+    if (call.method != PuenteFichaTotem.metodoGuardar) return null;
+    try {
+      final pedido = jsonDecode(call.arguments as String) as Map;
+      final clave = '${pedido['clave']}';
+      final esDelTotem = PreferenciasDeLaVentana.prefijosDelTotem
+          .any((p) => clave.startsWith(p) && clave.length == p.length + 36);
+      _pedidosDelTotem.value = [
+        ..._pedidosDelTotem.value,
+        '${esDelTotem ? 'la principal lo guardaría' : 'RECHAZADO'}: '
+            '$clave = ${'${pedido['valor']}'.length > 40 ? '(${'${pedido['valor']}'.length} letras)' : pedido['valor']}',
+      ];
+      return esDelTotem ? 'ok' : null;
+    } catch (_) {
+      return null;
+    }
+  });
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: _Principal(),
@@ -114,6 +141,19 @@ class _PrincipalState extends State<_Principal> {
             OutlinedButton(
               onPressed: _totem == null ? null : _esconderEnUnRato,
               child: const Text('Esconder el tótem en 5 s (como Recepción)'),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Lo que el tótem pidió guardar (GIRAR lo pide):',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            ValueListenableBuilder<List<String>>(
+              valueListenable: _pedidosDelTotem,
+              builder: (_, pedidos, _) => Text(
+                pedidos.isEmpty ? 'Todavía nada.' : pedidos.join('\n'),
+                key: const Key('pedidos_del_totem'),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),

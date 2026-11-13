@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/totem_config.dart';
+import 'preferencias_de_la_ventana.dart';
 
 /// Guarda la última [TotemConfig] conocida de cada evento en disco.
 ///
@@ -12,7 +12,10 @@ import '../../models/totem_config.dart';
 /// medio del evento. Con esto arranca con lo último que vio y, cuando el
 /// stream conecta, se actualiza sola.
 ///
-/// Misma mecánica que [UserRoleCache]: SharedPreferences + JSON.
+/// **Pasa por [PreferenciasDeLaVentana], nunca por `SharedPreferences` a mano:**
+/// esto corre también en la ventana del tótem, que no puede escribir el archivo
+/// de preferencias (lo pisaría entero con una copia vieja). Ahí guardar es
+/// pedírselo a la ventana principal.
 class TotemConfigCache {
   static const _keyPrefix = 'totem_config_v1_';
 
@@ -20,8 +23,10 @@ class TotemConfigCache {
 
   static Future<void> save(TotemConfig config) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key(config.eventoId), jsonEncode(config.toJson()));
+      await PreferenciasDeLaVentana.guardar(
+        _key(config.eventoId),
+        jsonEncode(config.toJson()),
+      );
     } catch (e) {
       debugPrint('TotemConfigCache.save: $e');
     }
@@ -29,8 +34,7 @@ class TotemConfigCache {
 
   static Future<TotemConfig?> load(String eventoId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_key(eventoId));
+      final raw = await PreferenciasDeLaVentana.leer(_key(eventoId));
       if (raw == null) return null;
       final map = jsonDecode(raw) as Map<String, dynamic>;
       // El evento_id lo imponemos nosotros: si el JSON viniera corrupto o de
@@ -45,8 +49,7 @@ class TotemConfigCache {
 
   static Future<void> clear(String eventoId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_key(eventoId));
+      await PreferenciasDeLaVentana.guardar(_key(eventoId), null);
     } catch (e) {
       debugPrint('TotemConfigCache.clear: $e');
     }

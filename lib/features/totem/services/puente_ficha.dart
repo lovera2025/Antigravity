@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/services/preferencias_de_la_ventana.dart';
 import '../../../models/evento.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
@@ -42,6 +45,11 @@ class PuenteFichaTotem {
   /// la vuelve a pedir.
   static const metodoClaveMala = 'clave_totem_mala';
 
+  /// La ventana del tótem le pide a la principal que guarde una preferencia
+  /// suya (la config guardada, cómo quedó girada): no escribe el archivo ella,
+  /// porque lo pisaría entero con una copia vieja (`PreferenciasDeLaVentana`).
+  static const metodoGuardar = 'guardar_preferencia';
+
   /// La ventana principal es siempre la 0.
   static const ventanaPrincipal = 0;
 
@@ -73,6 +81,7 @@ class PuenteFichaTotem {
     Future<String?> Function(String eventoId)? clave,
     Future<void> Function(String eventoId)? claveMala,
   }) async {
+    if (call.method == metodoGuardar) return _guardarPreferencia(call.arguments);
     const metodos = {metodo, metodoLista, metodoClave, metodoClaveMala};
     if (!metodos.contains(call.method)) return null;
     final eventoId = call.arguments;
@@ -94,6 +103,35 @@ class PuenteFichaTotem {
       debugPrint('No se pudo contestar "${call.method}" al tótem: $e');
       return null;
     }
+  }
+
+  /// En la ventana principal: guarda la preferencia que pidió la del tótem.
+  /// Contesta "ok" si la guardó; null si no era una de las suyas o vino mal.
+  static Future<String?> _guardarPreferencia(Object? argumentos) async {
+    try {
+      if (argumentos is! String) return null;
+      final pedido = jsonDecode(argumentos);
+      if (pedido is! Map) return null;
+      final guardo = await PreferenciasDeLaVentana.guardarLoDelTotem(
+        pedido['clave'],
+        pedido['valor'],
+      );
+      return guardo ? 'ok' : null;
+    } catch (e) {
+      debugPrint('No se pudo guardar la preferencia del tótem: $e');
+      return null;
+    }
+  }
+
+  /// En la ventana del tótem: le pide a la principal que guarde [valor] en
+  /// [clave] (null: que la saque). Es lo que usa `PreferenciasDeLaVentana` en
+  /// esa ventana, que no escribe el archivo. Tira si no llegó.
+  static Future<void> guardarPreferencia(String clave, String? valor) async {
+    await DesktopMultiWindow.invokeMethod(
+      ventanaPrincipal,
+      metodoGuardar,
+      jsonEncode({'clave': clave, 'valor': valor}),
+    );
   }
 
   /// En la ventana del tótem: pide quién ya entró según esta PC. Null si no

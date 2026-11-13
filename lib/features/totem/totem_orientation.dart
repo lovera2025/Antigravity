@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/services/preferencias_de_la_ventana.dart';
 
 /// Cómo se acomoda el tótem en pantalla.
 ///
@@ -40,6 +41,11 @@ enum TotemOrientation {
 
 /// Recuerda la orientación elegida por evento, para que el tótem abra como
 /// quedó la última vez en ese salón.
+///
+/// **Pasa por [PreferenciasDeLaVentana], nunca por `SharedPreferences` a mano:**
+/// la guarda la ventana del tótem (GIRAR), que no puede escribir el archivo de
+/// preferencias, y la lee la principal al abrirla. Guardada por la principal,
+/// las dos ven lo mismo.
 class TotemOrientationStore {
   static const _keyPrefix = 'totem_orient_v1_';
 
@@ -47,8 +53,9 @@ class TotemOrientationStore {
 
   static Future<TotemOrientation> load(String eventoId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return TotemOrientation.desdeNombre(prefs.getString(_key(eventoId)));
+      return TotemOrientation.desdeNombre(
+        await PreferenciasDeLaVentana.leer(_key(eventoId)),
+      );
     } catch (e) {
       debugPrint('TotemOrientationStore.load: $e');
       return TotemOrientation.auto;
@@ -57,8 +64,7 @@ class TotemOrientationStore {
 
   static Future<void> save(String eventoId, TotemOrientation orientacion) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key(eventoId), orientacion.name);
+      await PreferenciasDeLaVentana.guardar(_key(eventoId), orientacion.name);
     } catch (e) {
       debugPrint('TotemOrientationStore.save: $e');
     }

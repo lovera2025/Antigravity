@@ -28,6 +28,7 @@ import 'features/totem/totem_display.dart';
 import 'features/totem/providers/clave_totem_provider.dart';
 import 'features/totem/providers/tiempos_a_mano_provider.dart';
 import 'features/totem/services/lista_de_la_pc.dart';
+import 'core/services/preferencias_de_la_ventana.dart';
 import 'features/totem/services/puente_ficha.dart';
 import 'features/eventos/repositories/contratos_repository.dart';
 import 'features/eventos/repositories/eventos_repository.dart';
@@ -72,6 +73,11 @@ void main(List<String> args) async {
     DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
       return null;
     });
+
+    // Esta ventana no escribe el archivo de preferencias: lo pisaría entero con
+    // su copia, que es la del momento en que se abrió, y se llevaría puesta la
+    // sesión de la principal. Lo que guarda, se lo pide a la principal.
+    PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia);
 
     runApp(
       ProviderScope(
