@@ -28,6 +28,8 @@ import '../../core/services/kiosk_launcher.dart';
 import '../../core/services/user_role_cache.dart';
 import '../../core/services/app_update_checker.dart';
 import 'widgets/actualizar_app.dart';
+import 'widgets/alertas_del_delegado.dart';
+import '../delegado/delegado_providers.dart';
 import 'widgets/encabezado_del_inicio.dart';
 import '../common/utils/cortes_pantalla.dart';
 import '../recepcion/providers/recepcion_provider.dart';
@@ -191,6 +193,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryGold = Color(0xFFD4AF37);
     final statsAsync = ref.watch(dashboardStatsProvider);
+    // Con algo de los delegados para traer no se dice "todo bajo control".
+    final hayDelDelegado =
+        ref.watch(avisosDelDelegadoProvider).value?.isNotEmpty ?? false;
     final appRole = ref.watch(appRoleProvider);
     final modoJefe = appRole.esJefe || ref.watch(adminAuthProvider).esModoJefe;
     final modoCaja = appRole.esCaja;
@@ -325,6 +330,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                           const SizedBox(height: 20),
 
+                          // Lo que mandaron los delegados por el link (6.8.0).
+                          // Lo ve cualquiera, y se toca: abre esa fiesta.
+                          const AlertasDelDelegado(),
                           if (modoJefe)
                             statsAsync.when(
                               skipLoadingOnReload: true,
@@ -334,12 +342,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     .toList();
                                 return operationalAlerts.isNotEmpty
                                     ? _buildAlertas(operationalAlerts, isDark)
-                                    : _buildTodoOk(isDark, primaryGold);
+                                    : (hayDelDelegado
+                                        ? const SizedBox.shrink()
+                                        : _buildTodoOk(isDark, primaryGold));
                               },
                               loading: () => const SizedBox.shrink(),
                               error: (e, _) => const SizedBox.shrink(),
                             )
-                          else
+                          else if (!hayDelDelegado)
                             _buildTodoOk(isDark, primaryGold),
                           const SizedBox(height: 20),
 

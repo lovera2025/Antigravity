@@ -89,6 +89,7 @@ import 'widgets/perdonar_mora_alumno_dialog.dart';
 import 'widgets/congelar_mora_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
 import 'retiro_entradas_screen.dart';
+import '../delegado/delegado_providers.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 
 /// Evita dispose de controllers mientras el route del diálogo aún se desmonta.
@@ -105,7 +106,15 @@ void _deferDisposeTextControllers(Iterable<TextEditingController> controllers) {
 class DetalleEventoMasivoScreen extends ConsumerStatefulWidget {
   final Evento evento;
 
-  const DetalleEventoMasivoScreen({super.key, required this.evento});
+  /// Abrir ya la revisión de lo que mandaron los delegados (6.8.0). Así se
+  /// llega desde la alerta del Centro de Comando.
+  final bool abrirLoDelDelegado;
+
+  const DetalleEventoMasivoScreen({
+    super.key,
+    required this.evento,
+    this.abrirLoDelDelegado = false,
+  });
 
   @override
   ConsumerState<DetalleEventoMasivoScreen> createState() =>
@@ -223,6 +232,11 @@ class _DetalleEventoMasivoScreenState
     _fetchDatos();
     _cargarRespaldoSorteo();
     _setupRealtime();
+    if (widget.abrirLoDelDelegado) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _abrirAcompanantesYMusica(traerDelLink: true);
+      });
+    }
     _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
       tablas,
     ) {
@@ -1365,6 +1379,10 @@ class _DetalleEventoMasivoScreenState
           alumnosConMora: alumnosConMora.length,
           onEntradas: _abrirRetiroEntradas,
           onAcompanantesYMusica: _abrirAcompanantesYMusica,
+          hayParaTraer: ref.watch(avisosDelDelegadoProvider).value?.any(
+                    (a) => a.eventoId == widget.evento.id,
+                  ) ??
+              false,
         );
         // Los contadores y REGISTRAR se llevan lo que piden; el grupo de la
         // fiesta usa lo que sobra, y si no le alcanza para los nombres muestra
@@ -4428,7 +4446,7 @@ class _DetalleEventoMasivoScreenState
   /// Lo carga solo el jefe. El renglón ya llega apagado sin modo jefe; acá
   /// están las otras dos llaves: al abrir y, otra vez, justo antes de guardar.
   /// Lo que decide —qué se carga y qué no— está en `planilla_delegado.dart`.
-  Future<void> _abrirAcompanantesYMusica() async {
+  Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {
     void soloJefe() {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4475,6 +4493,11 @@ class _DetalleEventoMasivoScreenState
         alumnos: alumnos,
         onGuardarArchivo: guardarPlanillaDelegado,
         onElegirArchivo: elegirPlanillaDelegado,
+        // El link del delegado (6.8.0): la sección de abajo del Excel.
+        link: ref.read(linkDelDelegadoProvider),
+        urlDelLink: urlDelLinkDelDelegado,
+        traerAlAbrir: traerDelLink,
+        onTrajo: () => ref.invalidate(avisosDelDelegadoProvider),
         onImportar: (cambios) async {
           if (!ref.read(esRolJefeProvider)) {
             throw StateError(kSoloEnModoJefe);

@@ -140,7 +140,9 @@ void main() {
     // Los acompañantes son filas de la lista de la puerta: con la fiesta ya
     // sorteada, cargarlos sin avisarle dejaría a Recepción sin esas personas.
     final fiesta = leer(pantallaFiesta);
-    final i = fiesta.indexOf('Future<void> _abrirAcompanantesYMusica() async {');
+    final i = fiesta.indexOf(
+      'Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {',
+    );
     final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
     final guardado = cuerpo.indexOf('cargarAcompanantesYMusica(');
     final puerta = cuerpo.indexOf('.trasLosAlumnos(');

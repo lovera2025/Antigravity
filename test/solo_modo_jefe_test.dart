@@ -425,6 +425,43 @@ void main() {
     expect(fuente, contains('onDeleted: !esJefe'));
   });
 
+  test('el link del delegado se maneja solo desde la ventana del jefe', () {
+    // Crear el link, apagarlo, sacar a un delegado y aceptar lo que mandaron
+    // pasan todos por `linkDelDelegadoProvider`. Solo lo lee la pantalla de la
+    // fiesta, y adentro de la función que ya tiene las llaves del modo jefe:
+    // así lo del link queda detrás de las mismas tres llaves que el Excel.
+    final quienes = <String>{
+      for (final f in Directory('lib').listSync(recursive: true))
+        if (f is File &&
+            f.path.endsWith('.dart') &&
+            f.readAsStringSync().contains('linkDelDelegadoProvider'))
+          f.path.replaceAll('\\', '/'),
+    };
+    expect(quienes, {
+      'lib/features/delegado/delegado_providers.dart',
+      pantallaFiesta,
+    });
+    final fiesta = leer(pantallaFiesta);
+    final i = fiesta.indexOf(
+      'Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {',
+    );
+    final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
+    expect('linkDelDelegadoProvider'.allMatches(fiesta), hasLength(1));
+    expect(cuerpo, contains('link: ref.read(linkDelDelegadoProvider),'));
+    // Y aceptar lo del link guarda por el mismo `onImportar` del Excel: la
+    // ventana no tiene otro camino a la grilla.
+    final ventana =
+        leer('lib/features/eventos/widgets/acompanantes_musica_dialog.dart');
+    expect('widget.onImportar('.allMatches(ventana), hasLength(1));
+    expect(ventana, isNot(contains('contratosRepositoryProvider')));
+    expect(ventana, isNot(contains('cargarAcompanantesYMusica')));
+    // La alerta del inicio llega por la misma función, con sus llaves.
+    expect(
+      fiesta,
+      contains('if (mounted) _abrirAcompanantesYMusica(traerDelLink: true);'),
+    );
+  });
+
   test('el Excel del delegado lo carga solo el jefe, con las tres llaves', () {
     // 1. El renglón de PLANILLAS llega apagado sin modo jefe.
     final barra =
@@ -432,7 +469,9 @@ void main() {
     expect(barra, contains('accion: esJefe ? onAcompanantesYMusica : null,'));
 
     final fiesta = leer(pantallaFiesta);
-    final i = fiesta.indexOf('Future<void> _abrirAcompanantesYMusica() async {');
+    final i = fiesta.indexOf(
+      'Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {',
+    );
     expect(i, greaterThanOrEqualTo(0));
     final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
     // 2. Al abrir.

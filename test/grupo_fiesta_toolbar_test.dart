@@ -154,7 +154,7 @@ void main() {
     await tester.tap(find.byKey(const Key('fiesta_planillas')));
     await tester.pumpAndSettle();
     expect(
-      find.text('Excel para el delegado: exportar e importar'),
+      find.text('Excel o link para los delegados'),
       findsOneWidget,
     );
     // Va después de las planillas para imprimir.
@@ -227,7 +227,7 @@ void main() {
       // El motivo reemplaza al detalle de siempre, y es el único del menú.
       expect(find.text('Solo en modo jefe'), findsOneWidget);
       expect(
-        find.text('Excel para el delegado: exportar e importar'),
+        find.text('Excel o link para los delegados'),
         findsNothing,
       );
       await tester.tap(find.text('Acompañantes y música'), warnIfMissed: false);

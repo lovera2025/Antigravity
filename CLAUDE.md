@@ -354,8 +354,8 @@ el cumplimiento, porque las ve cualquiera. Él creía que el tilde ya estaba hec
 - **Lo de arriba es la 6.7.0 como salió. La 6.7.1 lo cambió** (el tilde pasó al cartel del SORTEO): ver abajo.
 
 **La 6.7.1: "Cumplimiento debido" en el cartel del SORTEO, y la cruz para alinear** (programada el 12-nov a la tarde,
-versión `6.7.1+73`, **en la rama y SIN PUBLICAR: falta su "publicá"**, que quedó sin contestar al cortar el chat, igual
-que si el "Por filas" corregido es lo que quería y qué dicen las novedades; el instalador de la 6.7.1 no se armó;
+**no se publica sola: el usuario decidió el 12-nov que sale todo junto en la 6.8.0** (ver abajo). Quedan abiertas dos
+preguntas para antes de publicar: si el "Por filas" corregido es lo que quería y qué dicen las novedades;
 `docs/CONTEXTO_v6.7.1_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que falta, en orden, y lo
 que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
 6.7.0: al tildar en el plano las mesas ya aparecían repartidas ("se pierde la emoción") y el cartel se confundía.
@@ -385,6 +385,39 @@ que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
   que tiene el cartel de verdad (también con familias sentadas) y un ícono de Historial. **La grilla de verdad no se
   puede abrir en el sandbox.**
 - Sigue pendiente el tilde con el sorteo **por división**.
+
+**La 6.8.0: el link del delegado, y todo lo de la 6.7.1** (programada el 12-nov a la noche, versión `6.8.0+74`, **en la rama
+y SIN PUBLICAR**: 61 reglas contra el SQL y 4.670 pruebas pasan, y el recorrido de punta a punta está hecho; `docs/CONTEXTO_v6.8.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está **lo que falta,
+en orden, y lo que no se probó**). **Un SQL en la nube, solo de agregar, sin correr**
+(`supabase/migrations/20261113120000_link_delegado.sql`); **sin migración en las PCs**. El usuario pidió algo más fácil que
+el Excel para acompañantes y música, y seguro; lo fue decidiendo con una maqueta y pidió probarlo en un sandbox antes de
+integrarlo.
+- **Convive con el Excel**, que no cambió. PLANILLAS → "Acompañantes y música" tiene debajo **LINK PARA LOS DELEGADOS**
+  (`link_del_delegado_panel.dart`): un link **por evento masivo**, con día y hora límite y cuántos delegados (1 a 5).
+- **La página** (`?delegado&clave=…`, `lib/features/delegado/pagina/`): sin usuario y **sin código**. Los alumnos activos
+  por división; **Guardar** en cada alumno y **Enviar** abajo, una sola vez, con un aviso y una casilla. 2 acompañantes, ni
+  uno más; música hasta 300 letras. Lo ya cargado en el programa va gris y no se toca. **Varios delegados no se pisan**:
+  el alumno que cargó uno queda a su nombre.
+- **A la grilla entra solo lo que el jefe acepta.** TRAER LO CARGADO abre el "Antes de guardar" de siempre
+  (`PlanillaDelegado.comparar`, con `LecturaPlanilla.delLink`) y **ACEPTAR Y CARGAR guarda por el `onImportar` del Excel**:
+  la ventana no tiene otro camino a la grilla (`test/solo_modo_jefe_test.dart`).
+- **Todo va por funciones de la nube; las tres tablas (`links_delegado`, `celulares_delegado`, `cargas_delegado`) están
+  cerradas del todo** y no son de la base de las PCs. Nada de `lib/features/delegado/` lee una tabla, y la página no usa
+  el reloj del celular: el límite lo decide y lo escribe la nube (`test/link_delegado_cerrado_test.dart`). El SQL **nunca
+  escribe en `contratos_alumnos`**.
+- **Las reglas se prueban contra el mismo archivo de la migración**, en un Postgres de prueba:
+  `tool/delegado_sandbox/` (`npm install` y `node pruebas.mjs`; `node_modules` no va a git). **Un cambio al SQL del link
+  se corre ahí antes de darlo por bueno.**
+- **El aviso no tiene reloj** (`avisosDelDelegadoProvider`): se pregunta al arrancar y al volver a la ventana. Salta
+  cuando un delegado **envía** (o vence con algo sin traer), nunca por cada guardado. Es una alerta **que se toca** en
+  ALERTAS del Centro de Comando (`alertas_del_delegado.dart`): abre el evento masivo directo en la revisión
+  (`DetalleEventoMasivoScreen(abrirLoDelDelegado: true)`). Y un punto en PLANILLAS.
+- De punta a punta: `tool/link_delegado_prueba.dart` compilado como la web y servido por
+  `tool/delegado_sandbox/servidor.mjs` (la página y la ventana de verdad, contra el Postgres de prueba).
+- **Una llamada a una función de la nube lleva siempre `params`, aunque no mande ninguno**: sin eso la librería manda
+  `null` de cuerpo y la llamada falla sin error a la vista (así el aviso del inicio no llegaba).
+- **El SQL en la nube y la página en una dirección de prueba de Vercel se le piden al usuario uno por uno y en el
+  momento.** No crear links hasta que las PCs tengan la 6.8.0 y el SQL esté corrido.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

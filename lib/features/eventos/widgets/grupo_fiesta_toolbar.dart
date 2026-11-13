@@ -55,6 +55,10 @@ class GrupoFiestaToolbar extends StatelessWidget {
   /// jefe: sin él queda a la vista, apagado, con [kSoloEnModoJefe].
   final VoidCallback onAcompanantesYMusica;
 
+  /// Los delegados mandaron acompañantes y música por el link y todavía no
+  /// se trajo (6.8.0): un punto en PLANILLAS, y lo dice su renglón.
+  final bool hayParaTraer;
+
   const GrupoFiestaToolbar({
     super.key,
     required this.compacto,
@@ -71,6 +75,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
     required this.alumnosConMora,
     required this.onEntradas,
     required this.onAcompanantesYMusica,
+    this.hayParaTraer = false,
   });
 
   /// El ancho que piden los cuatro botones con su nombre. Con menos, van solo
@@ -236,16 +241,26 @@ class GrupoFiestaToolbar extends StatelessWidget {
             color: Colors.deepPurple,
             titulo: 'Acompañantes y música',
             detalle: esJefe
-                ? 'Excel para el delegado: exportar e importar'
-                : kSoloEnModoJefe,
+                ? (hayParaTraer
+                    ? 'Los delegados mandaron algo: traelo acá'
+                    : 'Excel o link para los delegados')
+                : (hayParaTraer
+                    ? 'Los delegados mandaron algo. $kSoloEnModoJefe'
+                    : kSoloEnModoJefe),
           ),
         ],
-        child: _cara(
-          context,
-          icono: Icons.print_outlined,
-          nombre: 'PLANILLAS',
-          conNombre: conNombres,
-          conFlecha: true,
+        // El punto va adentro del botón: encima se comería el toque.
+        child: Badge(
+          key: const Key('fiesta_planillas_punto'),
+          isLabelVisible: hayParaTraer,
+          smallSize: 10,
+          child: _cara(
+            context,
+            icono: Icons.print_outlined,
+            nombre: 'PLANILLAS',
+            conNombre: conNombres,
+            conFlecha: true,
+          ),
         ),
       );
 

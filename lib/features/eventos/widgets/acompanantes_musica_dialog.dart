@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../../../models/contrato_alumno.dart';
+import '../../delegado/datos/link_del_delegado.dart';
 import '../services/planilla_delegado.dart';
 import '../services/planilla_delegado_bloqueo.dart';
+import 'link_del_delegado_panel.dart';
 
 /// El nombre del archivo que se le manda al delegado.
 String nombreArchivoPlanillaDelegado(String institucion) {
@@ -29,6 +32,13 @@ String nombreArchivoPlanillaDelegado(String institucion) {
 /// - [onImportar]: guarda los cambios (todos o ninguno) y devuelve, si hay,
 ///   algo más para decir. Si tira, no se guardó nada.
 ///
+/// **El link del delegado** (6.8.0): con [link], debajo del Excel va la sección
+/// LINK PARA LOS DELEGADOS (`LinkDelDelegadoPanel`). TRAER LO CARGADO muestra
+/// el mismo "Antes de guardar", armado con lo que cargaron por el link; lo
+/// que todavía no enviaron va aparte, con un tilde para incluirlo. Guardar es
+/// el mismo [onImportar]: del alumno solo entran acompañantes y música.
+/// Después se le avisa a la nube qué se trajo, y eso no frena nada.
+///
 /// Devuelve `true` al cerrarse si se importó algo.
 class AcompanantesMusicaDialog extends StatefulWidget {
   final String eventoId;
@@ -41,6 +51,22 @@ class AcompanantesMusicaDialog extends StatefulWidget {
   final Future<Uint8List?> Function() onElegirArchivo;
   final Future<String?> Function(List<CambioDelegado> cambios) onImportar;
 
+  /// El link del delegado de esta fiesta. Null: la sección no se muestra.
+  final LinkDelDelegado? link;
+
+  /// El link completo que se copia, a partir de la clave.
+  final String Function(String clave)? urlDelLink;
+
+  /// Abrir ya en la revisión de lo que mandaron (se llega así desde la
+  /// alerta del Centro de Comando).
+  final bool traerAlAbrir;
+
+  /// Para las pruebas: cómo se elige el límite.
+  final ElegirLimite? elegirLimite;
+
+  /// Lo que se hace después de traer, cuando ya cambió lo que hay para traer.
+  final VoidCallback? onTrajo;
+
   const AcompanantesMusicaDialog({
     super.key,
     required this.eventoId,
@@ -49,6 +75,11 @@ class AcompanantesMusicaDialog extends StatefulWidget {
     required this.onGuardarArchivo,
     required this.onElegirArchivo,
     required this.onImportar,
+    this.link,
+    this.urlDelLink,
+    this.traerAlAbrir = false,
+    this.elegirLimite,
+    this.onTrajo,
   });
 
   @override
@@ -69,6 +100,31 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
   bool _importo = false;
   String? _dicho;
   bool _dichoEsError = false;
+
+  /// Lo que cargaron los delegados, si el simulacro viene del link.
+  List<CargaDelDelegado>? _cargas;
+  bool _incluirSinEnviar = false;
+  final _panel = GlobalKey<LinkDelDelegadoPanelState>();
+
+  bool get _delLink => _cargas != null;
+
+  /// Lo cargado por quien todavía no apretó Enviar.
+  List<CargaDelDelegado> get _sinEnviar =>
+      [for (final c in _cargas ?? const <CargaDelDelegado>[]) if (!c.entregado) c];
+
+  /// Lo que entra en la revisión: lo enviado y, si se tildó, lo demás.
+  List<CargaDelDelegado> get _incluidas => [
+        for (final c in _cargas ?? const <CargaDelDelegado>[])
+          if (c.entregado || _incluirSinEnviar) c,
+      ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.traerAlAbrir && widget.link != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _traerDelLink());
+    }
+  }
 
   @override
   void dispose() {
@@ -151,11 +207,63 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
     }
   }
 
+  /// TRAER LO CARGADO: lee lo que cargaron los delegados y arma la revisión.
+  /// No guarda nada.
+  Future<void> _traerDelLink() async {
+    final link = widget.link;
+    if (link == null || _ocupado) return;
+    setState(() => _ocupado = true);
+    try {
+      final cargas = await link.cargas(widget.eventoId);
+      if (!mounted) return;
+      setState(() {
+        _dicho = null;
+        _entendido = false;
+        _incluirSinEnviar = false;
+        _cargas = cargas;
+        _simulacro = _simulacroDelLink();
+      });
+    } catch (_) {
+      if (mounted) {
+        _decir(
+          'No se pudo traer lo cargado: hace falta internet. Probá de nuevo.',
+          error: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  ResultadoPlanilla _simulacroDelLink() => PlanillaDelegado.comparar(
+        lectura: lecturaDeLasCargas(
+          eventoId: widget.eventoId,
+          fiesta: widget.institucion,
+          cargas: _incluidas,
+        ),
+        alumnos: _alumnos,
+        eventoId: widget.eventoId,
+        institucion: widget.institucion,
+      );
+
   Future<void> _importar() async {
     final cambios = _simulacro!.cambios;
+    final link = widget.link;
+    final traidas = _delLink ? [for (final c in _incluidas) c.alumnoId] : null;
     setState(() => _ocupado = true);
     try {
       final algoMas = await widget.onImportar(cambios);
+      // Ya está guardado. Avisarle a la nube qué se trajo no puede frenar ni
+      // deshacer nada: si falla, la alerta sigue hasta la próxima.
+      var avisado = true;
+      if (traidas != null && link != null) {
+        try {
+          await link.cambiar(widget.eventoId, 'traido', idsTraidos(traidas));
+        } catch (_) {
+          avisado = false;
+        }
+        widget.onTrajo?.call();
+      }
       if (!mounted) return;
       final porId = {for (final c in cambios) c.alumno.id: c};
       setState(() {
@@ -171,11 +279,14 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                 : a,
         ];
         _simulacro = null;
+        _cargas = null;
       });
       _decir(
         'Se cargaron ${cambios.length} alumno(s). Suben a la nube y llegan a '
-        'las otras PCs.${algoMas == null ? '' : ' $algoMas'}',
+        'las otras PCs.${algoMas == null ? '' : ' $algoMas'}'
+        '${avisado ? '' : ' No se le pudo avisar a la nube que ya se trajo: la alerta puede seguir un rato.'}',
       );
+      unawaited(_panel.currentState?.recargar());
     } catch (_) {
       if (mounted) {
         _decir(
@@ -262,6 +373,16 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
       'acompañantes y la música de cada uno.',
       style: Theme.of(context).textTheme.bodySmall,
     ),
+    if (widget.link != null)
+      LinkDelDelegadoPanel(
+        key: _panel,
+        link: widget.link!,
+        eventoId: widget.eventoId,
+        fiesta: widget.institucion,
+        urlDelLink: widget.urlDelLink ?? (clave) => clave,
+        onTraer: _traerDelLink,
+        elegirLimite: widget.elegirLimite ?? elegirLimiteConSelectores,
+      ),
     if (_dicho != null)
       _aviso(
         _dicho!,
@@ -283,6 +404,11 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
     }
     final pisan = r.cambios.where((c) => c.pisaAlgo).toList();
     final conComa = r.cambios.where((c) => c.conComa).length;
+    final cargo = {
+      for (final c in _cargas ?? const <CargaDelDelegado>[])
+        c.alumnoId: c.cargo ?? 'alguien a quien se sacó',
+    };
+    final sinEnviar = _sinEnviar;
     return [
       Row(
         children: [
@@ -359,15 +485,18 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                         child: Text(
                           '${PlanillaDelegado.nombreLimpio(c.alumno)} · '
                           '${c.leido}'
-                          '${c.conComa ? '  (con coma: una sola persona)' : ''}',
+                          '${c.conComa ? '  (con coma: una sola persona)' : ''}'
+                          '${cargo[c.alumno.id] == null ? '' : '  · lo cargó ${cargo[c.alumno.id]}'}',
                           style: const TextStyle(fontSize: 13),
                         ),
                       ),
                   ],
                   if (r.cambios.isEmpty && r.revisar.isEmpty)
-                    const Text(
-                      'El Excel no trae nada nuevo para cargar.',
-                      style: TextStyle(fontSize: 13),
+                    Text(
+                      _delLink
+                          ? 'No hay nada nuevo para cargar.'
+                          : 'El Excel no trae nada nuevo para cargar.',
+                      style: const TextStyle(fontSize: 13),
                     ),
                 ],
               ),
@@ -380,6 +509,24 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
           '$conComa casillero(s) traen una coma. La coma no separa: se tomó '
           'como una sola persona. Miralos arriba antes de importar.',
           color: Colors.orange,
+        ),
+      if (sinEnviar.isNotEmpty)
+        CheckboxListTile(
+          key: const Key('delegado_incluir_sin_enviar'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(
+            'Incluir también lo que todavía no enviaron '
+            '(${sinEnviar.length} alumno(s))',
+          ),
+          value: _incluirSinEnviar,
+          onChanged: _ocupado
+              ? null
+              : (v) => setState(() {
+                    _incluirSinEnviar = v == true;
+                    _entendido = false;
+                    _simulacro = _simulacroDelLink();
+                  }),
         ),
       if (pisan.isNotEmpty)
         CheckboxListTile(
@@ -448,6 +595,7 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                     ? null
                     : () => setState(() {
                         _simulacro = null;
+                        _cargas = null;
                         _dicho = null;
                       }),
                 child: const Text('VOLVER'),
@@ -458,8 +606,10 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                   onPressed: _ocupado || !sePuede ? null : _importar,
                   child: Text(
                     r.cambios.isEmpty
-                        ? 'NADA PARA IMPORTAR'
-                        : 'IMPORTAR ${r.cambios.length} ALUMNO(S)',
+                        ? (_delLink ? 'NADA PARA CARGAR' : 'NADA PARA IMPORTAR')
+                        : _delLink
+                            ? 'ACEPTAR Y CARGAR ${r.cambios.length} ALUMNO(S)'
+                            : 'IMPORTAR ${r.cambios.length} ALUMNO(S)',
                   ),
                 ),
             ],

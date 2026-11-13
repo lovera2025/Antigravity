@@ -1,0 +1,10 @@
+{
+  "name": "delegado-sandbox",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Prueba aparte del link del delegado. No es parte del programa.",
+  "dependencies": {
+    "@electric-sql/pglite": "0.2.17"
+  }
+}

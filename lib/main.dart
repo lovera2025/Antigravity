@@ -22,6 +22,7 @@ import 'features/dashboard/dashboard_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/cotizacion/public_selection_screen.dart';
 import 'features/recepcion/lista_invitados_screen.dart';
+import 'features/delegado/pagina/delegado_app.dart';
 import 'features/recepcion/repositories/invitados_repository.dart';
 import 'features/totem/totem_display.dart';
 import 'features/totem/providers/clave_totem_provider.dart';
@@ -100,6 +101,9 @@ void main(List<String> args) async {
   final bool isBuscar = kIsWeb && currentUrl.contains('buscar');
   final bool isLista = kIsWeb && currentUrl.contains('lista');
   final bool isTotem = kIsWeb && currentUrl.contains('totem');
+  // El link del delegado (6.8.0). Su clave es hexadecimal: no puede traer
+  // ninguna de las palabras de arriba, y ninguna otra ruta dice "delegado".
+  final bool isDelegado = kIsWeb && currentUrl.contains('delegado');
 
   // Initialize Supabase para AMBAS ramas (evita crashes)
   try {
@@ -135,7 +139,13 @@ void main(List<String> args) async {
     });
   }
 
-  if (isCatalog) {
+  if (isDelegado) {
+    runApp(
+      ProviderScope(
+        child: DelegadoApp(clave: Uri.base.queryParameters['clave'] ?? ''),
+      ),
+    );
+  } else if (isCatalog) {
     debugPrint('V4 >>> LANZANDO SECTOR PÚBLICO: URL=$currentUrl');
     runApp(const ProviderScope(child: CatalogApp()));
   } else if (isTotem) {

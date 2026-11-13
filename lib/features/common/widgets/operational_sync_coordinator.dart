@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../dashboard/providers/dashboard_provider.dart';
+import '../../delegado/delegado_providers.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../../plano/services/mesa_nueva_sola_de_la_app.dart';
 
@@ -101,6 +102,9 @@ class _OperationalSyncCoordinatorState
     unawaited(_autocierreCajas());
     if (!mounted) return;
     await ref.read(syncEngineProvider).bajarAlArrancar();
+    // Lo que mandaron los delegados por el link (6.8.0): se pregunta al
+    // arrancar y al volver a la ventana, nunca con un reloj.
+    if (mounted) ref.invalidate(avisosDelDelegadoProvider);
     // Con lo del día ya bajado: si a alguien le toca una mesa sola (pagó
     // después del sorteo, sin internet o en otra PC), se le da (6.5.1).
     if (mounted && _desktop) ref.read(vigiaDeLaMesaNuevaProvider).alArrancar();
@@ -109,7 +113,8 @@ class _OperationalSyncCoordinatorState
   Future<void> _alMirar() async {
     unawaited(_autocierreCajas());
     if (!mounted || !_appResumed) return;
-    await ref.read(syncEngineProvider).bajarAlMirar();
+    final bajo = await ref.read(syncEngineProvider).bajarAlMirar();
+    if (bajo && mounted) ref.invalidate(avisosDelDelegadoProvider);
   }
 
   /// Bajó algo distinto de lo que había: las pantallas abiertas se rehacen.

@@ -43,12 +43,18 @@ class RenglonDelegado {
   final String acompanantes;
   final String musica;
 
+  /// Los acompañantes ya separados, uno por persona. Así llegan del link del
+  /// delegado (6.8.0), donde cada uno tiene su casillero: no se parten por
+  /// ningún signo. Null: es un casillero del Excel, y se separa [acompanantes].
+  final List<String>? nombres;
+
   const RenglonDelegado({
     required this.fila,
     required this.codigo,
     required this.alumno,
     required this.acompanantes,
     required this.musica,
+    this.nombres,
   });
 }
 
@@ -65,17 +71,23 @@ class LecturaPlanilla {
   /// Por qué no se pudo leer, en palabras. Null si se leyó.
   final String? problema;
 
+  /// No viene de un Excel: es lo que cargaron los delegados por el link
+  /// (6.8.0). Cambia cómo se dicen algunas cosas, no lo que se carga.
+  final bool delLink;
+
   const LecturaPlanilla({
     required this.eventoId,
     required this.institucion,
     required this.renglones,
     this.problema,
+    this.delLink = false,
   });
 
   const LecturaPlanilla.ilegible(String this.problema)
       : eventoId = null,
         institucion = null,
-        renglones = const [];
+        renglones = const [],
+        delLink = false;
 }
 
 /// Lo que se le cargaría a un alumno.
@@ -88,10 +100,15 @@ class CambioDelegado {
   /// La música que quedaría. Null: el Excel no la cambia.
   final String? musica;
 
+  /// En el Excel una coma en un casillero merece un aviso. En el link cada
+  /// acompañante tiene su casillero y la coma es parte del nombre.
+  final bool avisarComa;
+
   const CambioDelegado({
     required this.alumno,
     required this.acompanantes,
     required this.musica,
+    this.avisarComa = true,
   });
 
   /// El alumno ya tenía algo distinto en lo que se cambia: hay que mostrarlo
@@ -104,7 +121,8 @@ class CambioDelegado {
   /// Algún acompañante vino con una coma. La coma no separa (los nombres del
   /// sistema son "APELLIDO, NOMBRE"), así que se tomó como una sola persona:
   /// queda marcado para que alguien lo mire.
-  bool get conComa => (acompanantes ?? const []).any((n) => n.contains(','));
+  bool get conComa =>
+      avisarComa && (acompanantes ?? const []).any((n) => n.contains(','));
 
   /// Cómo se leyó el renglón, para la ventana de antes de guardar.
   String get leido => [
@@ -509,13 +527,18 @@ class PlanillaDelegado {
           revisar.add(
             RevisarDelegado(
               quien,
-              'su código no es de esta institución. No se carga.',
+              lectura.delLink
+                  ? 'ya no está en esta fiesta. No se carga.'
+                  : 'su código no es de esta institución. No se carga.',
             ),
           );
           continue;
         }
         a = deEseCodigo.single;
-        if (r.alumno.isNotEmpty &&
+        // En el link el alumno se toca, no se escribe: el nombre viene de la
+        // nube solo para decirlo, y manda el id.
+        if (!lectura.delLink &&
+            r.alumno.isNotEmpty &&
             _llave(r.alumno) != _llave(nombreLimpio(a))) {
           revisar.add(
             RevisarDelegado(
@@ -550,7 +573,9 @@ class PlanillaDelegado {
         revisar.add(RevisarDelegado(nombre, 'está dado de baja. No se carga.'));
         continue;
       }
-      final acomp = separarAcompanantes(r.acompanantes);
+      final acomp = r.nombres != null
+          ? limpios(r.nombres!)
+          : separarAcompanantes(r.acompanantes);
       // Más del máximo no entra, salvo que sea lo que el alumno ya tiene
       // cargado (una excepción del jefe, que salió así en la planilla).
       if (acomp.length > kMaxAcompanantes &&
@@ -582,7 +607,8 @@ class PlanillaDelegado {
 
     // Ni un renglón es de acá: el Excel es de otra institución, aunque le
     // hayan borrado el renglón que lo decía.
-    if (lectura.renglones.isNotEmpty &&
+    if (!lectura.delLink &&
+        lectura.renglones.isNotEmpty &&
         ajenos == lectura.renglones.length) {
       return ResultadoPlanilla.rechazado(
         'Este Excel es de $deOtra y estás en $institucion. No se importó nada.',
@@ -609,7 +635,8 @@ class PlanillaDelegado {
           RevisarDelegado(
             nombreLimpio(a),
             'ya tiene ${tenia.length} acompañantes cargados, más que el '
-            'máximo: no se toca desde el Excel.',
+            'máximo: no se toca desde '
+            '${lectura.delLink ? 'el link' : 'el Excel'}.',
           ),
         );
         continue;
@@ -625,6 +652,7 @@ class PlanillaDelegado {
           alumno: a,
           acompanantes: cambiaAcomp ? acomp : null,
           musica: cambiaMusica ? musica : null,
+          avisarComa: !lectura.delLink,
         ),
       );
     }
