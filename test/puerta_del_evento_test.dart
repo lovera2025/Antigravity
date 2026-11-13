@@ -129,6 +129,11 @@ void main() {
           ['LÓPEZ, MARTA', 'SOSA, ELENA']);
       // "55" no es una mesa de nadie, y con dos cifras no se mira el DNI.
       expect(p.buscar('55'), isEmpty);
+      // Un número de 19 cifras o más no entra en un entero: buscaba con
+      // `int.parse`, tiraba, y como esto corre al dibujar la lista quedaba en
+      // gris (revisión del 13-nov).
+      expect(p.buscar('12345678901234567890'), isEmpty);
+      expect(p.buscar('99999999999999999999999999 perez'), isEmpty);
     });
   });
 

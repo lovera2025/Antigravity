@@ -141,9 +141,7 @@ class InvitadosRepository {
     await db.insert('invitados', data, conflictAlgorithm: ConflictAlgorithm.replace);
     await SyncQueue.enqueue(tabla: 'invitados', operacion: SyncOperation.insert, registroId: id, payload: data);
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data, SyncOperation.insert, id);
-    }
+    unawaited(_subirYa(id));
 
     _notifyChanges(eventoId);
     return id;
@@ -351,9 +349,7 @@ class InvitadosRepository {
       _notifyChanges(eventoId);
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately({'id': id}, SyncOperation.delete, id);
-    }
+    unawaited(_subirYa(id));
   }
 
   /// Marca un invitado como ingresado (check-in).
@@ -483,8 +479,17 @@ class InvitadosRepository {
   /// llegaba nunca a la nube. Y la saca solo si sigue siendo la que se leyó
   /// ([SyncQueue.markCompleted]): un cambio hecho mientras subía queda para el
   /// motor.
+  ///
+  /// **Es el único camino para subir ya algo de la puerta** (6.9.0). Agregar a
+  /// mano, eliminar, destrabar el DNI y vaciar la lista subían por otro, que al
+  /// terminar borraba de la cola todo lo de esa persona: si justo la habían
+  /// marcado, ese ingreso no subía nunca (revisión del 13-nov;
+  /// `test/puerta_cola_no_se_pierde_test.dart`).
   Future<void> _subirYa(String invitadoId) async {
     if (_connectivity.currentStatus != AppConnectivity.online) return;
+    // Mismo blindaje que el resto: un id que no es UUID le saca un 22P02 a
+    // Supabase.
+    if (invitadoId.length != 36) return;
     try {
       final db = await LocalDatabase.instance;
       final rows = await db.query(
@@ -496,6 +501,8 @@ class InvitadosRepository {
       if (rows.isEmpty) return;
       final entrada = SyncQueueEntry.fromMap(rows.first);
       final datos = Map<String, dynamic>.from(entrada.payload);
+      final evento = datos['evento_id'];
+      if (evento is String && evento.length != 36) return;
       switch (entrada.operacion) {
         case SyncOperation.insert:
           await _supabase.from('invitados').upsert(datos);
@@ -587,13 +594,25 @@ class InvitadosRepository {
     if (_connectivity.currentStatus == AppConnectivity.online) {
       Future.microtask(() async {
         try {
-          await _supabase.from('invitados').delete().eq('evento_id', eventoId);
+          // Los borrados que esperan, como están ahora. Después de borrar en la
+          // nube se saca cada uno **solo si sigue siendo el que se leyó**: si
+          // mientras tanto la fila se volvió a crear (un masivo que se vuelve a
+          // sortear usa los mismos ids), su entrada ya es otra y tiene que subir.
           final dbInner = await LocalDatabase.instance;
-          await dbInner.transaction((txn) async {
-            for (final row in rows) {
-              await txn.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', row['id']]);
-            }
-          });
+          final ids = {for (final row in rows) row['id'] as String};
+          final enCola = await dbInner.query(
+            '_sync_queue',
+            where: 'tabla = ? AND operacion = ?',
+            whereArgs: ['invitados', SyncOperation.delete.name],
+          );
+          final leidas = [
+            for (final e in enCola.map(SyncQueueEntry.fromMap))
+              if (ids.contains(e.registroId)) e,
+          ];
+          await _supabase.from('invitados').delete().eq('evento_id', eventoId);
+          for (final e in leidas) {
+            await SyncQueue.markCompleted(e.id!, leidaCon: e.createdAt);
+          }
         } catch (e) {
           debugPrint('⚠️ Sync vaciar evento fallido: $e');
         }
@@ -637,19 +656,7 @@ class InvitadosRepository {
       _notifyChanges(row.first['evento_id'] as String);
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      Future.microtask(() async {
-        try {
-          await _supabase.from('invitados')
-              .update({'intentos_fallidos': 0, 'updated_at': now})
-              .eq('id', invitadoId);
-          final dbInner = await LocalDatabase.instance;
-          await dbInner.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', invitadoId]);
-        } catch (e) {
-          debugPrint('⚠️ Sync reset fallido: $e');
-        }
-      });
-    }
+    unawaited(_subirYa(invitadoId));
   }
 
   // ── SYNC ──────────────────────────────────────────────────────────────────
@@ -736,10 +743,12 @@ class InvitadosRepository {
     }
   }
 
-  /// Fuerza un refresh de invitados de un evento desde la nube.
-  Future<void> forceRefresh(String eventoId) async {
+  /// Fuerza un refresh de invitados de un evento desde la nube. **Devuelve si
+  /// bajó**: sin internet no baja nada, y quien lo pidió a mano tiene que
+  /// saberlo (hasta la 6.8.0 Recepción decía "Lista actualizada" igual).
+  Future<bool> forceRefresh(String eventoId) async {
     final db = await LocalDatabase.instance;
-    await _pullByEvento(db, eventoId);
+    return _pullByEvento(db, eventoId);
   }
 
   /// Baja la lista de la puerta del evento entera, para "Lista para trabajar
@@ -807,35 +816,6 @@ class InvitadosRepository {
 
     channel.subscribe();
     return channel;
-  }
-
-  void _syncImmediately(Map<String, dynamic> data, SyncOperation op, String id) {
-    // Blindaje final: No intentar sync si el ID es malformado
-    if (id.length != 36 || (data['evento_id'] != null && (data['evento_id'] as String).length != 36)) {
-      debugPrint('🚫 Sync: Saltando sync inmediato para ID malformado ($id)');
-      return;
-    }
-
-    Future.microtask(() async {
-      try {
-        switch (op) {
-          case SyncOperation.insert:
-            await _supabase.from('invitados').upsert(data);
-            break;
-          case SyncOperation.update:
-            final updateData = Map<String, dynamic>.from(data)..remove('id');
-            await _supabase.from('invitados').update(updateData).eq('id', id);
-            break;
-          case SyncOperation.delete:
-            await _supabase.from('invitados').delete().eq('id', id);
-            break;
-        }
-        final db = await LocalDatabase.instance;
-        await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', id]);
-      } catch (e) {
-        debugPrint('⚠️ Sync invitado fallido: $e');
-      }
-    });
   }
 
 

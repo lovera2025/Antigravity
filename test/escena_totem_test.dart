@@ -11,6 +11,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
+import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
@@ -211,6 +212,44 @@ void main() {
           expect(find.textContaining('YA LLEGARON'), findsNothing);
         });
       }
+
+      // El link del delegado deja escribir hasta 300 letras de música. Sin
+      // tope, el texto bajaba de a renglones y la escena entera se achicaba
+      // para entrar: el nombre y la mesa quedaban chicos (revisión del 13-nov).
+      testWidgets('una música larguísima ocupa dos renglones, no achica la llegada',
+          (tester) async {
+        const larga = 'Quiero entrar con el tema de la banda que tocó en el '
+            'cumple de mi prima, la versión en vivo del estadio, desde el '
+            'minuto dos, y después que siga con el otro que le pedí al DJ por '
+            'mensaje la semana pasada, el de la película, sin la parte lenta';
+        final ficha = FichaTotem.desdePuerta(
+          eventoMasivo,
+          PuertaDelEvento.masivo(
+            alumnos: [
+              alumnoDePrueba('perez', 'PÉREZ, JUAN MARTÍN',
+                  mesas: [12], musica: larga),
+            ],
+            repartos: const {},
+            invitados: const [],
+          ),
+        );
+        await _montar(
+          tester,
+          EscenaTotem(
+            estilo: estilo,
+            cfg: _masivo,
+            quieta: true,
+            llegada: _llegada([filaDe('perez', 0, ficha)], ficha: ficha),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final musica = tester.widget<Text>(find.text(larga));
+        expect(musica.maxLines, kRenglonesDeLaMusica);
+        expect(musica.overflow, TextOverflow.ellipsis);
+        final alto = tester.getSize(find.text(larga)).height;
+        final unRenglon = musica.style!.fontSize!;
+        expect(alto, lessThan(unRenglon * 3.2), reason: 'dos renglones como mucho');
+      });
 
       testWidgets('la espera de un particular, con su QR', (tester) async {
         await _montar(

@@ -674,8 +674,10 @@ class ConsultaPuerta {
 
   bool _coincidePalabra(PersonaPuerta p, String palabra) {
     if (!_soloCifras.hasMatch(palabra)) return p._buscable.contains(palabra);
-    final numero = int.parse(palabra);
-    if (p._mesas.contains(numero)) return true;
+    // `tryParse`: con 19 cifras o más (un código de barras, un dedo apoyado)
+    // `int.parse` tira, y esto corre al dibujar: la lista quedaba en gris.
+    final numero = int.tryParse(palabra);
+    if (numero != null && p._mesas.contains(numero)) return true;
     if (palabra.length < 4) return false;
     return p.dni.replaceAll(RegExp(r'\D'), '').contains(palabra);
   }

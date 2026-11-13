@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../services/foto_guardada.dart' show esperaDeReintentoDeLaFoto;
 import 'tu_fondo.dart';
 
 /// El shader de "Tu fondo" (`pubspec.yaml`, `shaders:`).
@@ -18,6 +19,12 @@ const shaderTuFondo = 'shaders/totem_tu_fondo.frag';
 /// Las suelta al cambiar de imagen y en [dispose]: son las imágenes más
 /// grandes del tótem (una story de 1080 × 1920 son unos 8 MB en la placa).
 class CargaDelFondo extends ChangeNotifier {
+  CargaDelFondo({this.espera = esperaDeReintentoDeLaFoto});
+
+  /// Cuánto se espera antes de volver a pedir un fondo que no cargó. Solo las
+  /// pruebas lo cambian.
+  final Duration Function(int intentos) espera;
+
   ImageProvider? _de;
   ImageStream? _stream;
   ImageStreamListener? _oyente;
@@ -47,10 +54,31 @@ class CargaDelFondo extends ChangeNotifier {
     _soltar();
     _de = proveedor;
     _fallo = false;
+    _intentos = 0;
     if (proveedor == null) {
       notifyListeners();
       return;
     }
+    _pedir(proveedor);
+  }
+
+  /// Cuántas veces falló este fondo, para espaciar los reintentos.
+  int _intentos = 0;
+  Timer? _reintento;
+
+  /// Pide la imagen. **Si falla, vuelve a pedirla sola** a los 15 y a los 30
+  /// segundos y después cada minuto, mientras siga siendo el fondo: hasta la
+  /// 6.8.0 un fondo que no bajaba la primera vez (el wifi del salón) quedaba
+  /// así toda la noche, con la tele en la apariencia del tipo de evento
+  /// (revisión del 13-nov).
+  void _pedir(ImageProvider proveedor) {
+    final redimensionada = ResizeImage(
+      proveedor,
+      width: ladoMaximo,
+      height: ladoMaximo,
+      policy: ResizeImagePolicy.fit,
+      allowUpscaling: false,
+    );
     final oyente = ImageStreamListener(
       (info, _) {
         if (_soltada) {
@@ -68,17 +96,23 @@ class CargaDelFondo extends ChangeNotifier {
         debugPrint('El fondo del tótem no se pudo cargar; va la apariencia '
             'del tipo de evento: $e');
         _fallo = true;
-        if (!_soltada) notifyListeners();
+        if (_soltada) return;
+        notifyListeners();
+        // El caché de imágenes se queda con el fallo: hay que sacarlo de ahí
+        // para que el próximo pedido vuelva a intentar de verdad.
+        unawaited(redimensionada.evict());
+        _reintento?.cancel();
+        _reintento = Timer(espera(_intentos++), () {
+          _reintento = null;
+          if (_soltada || !identical(_de, proveedor)) return;
+          final viejo = _oyente;
+          if (viejo != null) _stream?.removeListener(viejo);
+          _pedir(proveedor);
+        });
       },
     );
     _oyente = oyente;
-    _stream = ResizeImage(
-      proveedor,
-      width: ladoMaximo,
-      height: ladoMaximo,
-      policy: ResizeImagePolicy.fit,
-      allowUpscaling: false,
-    ).resolve(ImageConfiguration.empty)
+    _stream = redimensionada.resolve(ImageConfiguration.empty)
       ..addListener(oyente);
   }
 
@@ -107,6 +141,8 @@ class CargaDelFondo extends ChangeNotifier {
   }
 
   void _soltar() {
+    _reintento?.cancel();
+    _reintento = null;
     final oyente = _oyente;
     if (oyente != null) _stream?.removeListener(oyente);
     _stream = null;

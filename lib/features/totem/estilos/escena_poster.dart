@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/contenido_bienvenida.dart';
+import '../widgets/imagen_que_reintenta.dart';
 import 'escena_totem.dart';
 import 'fuentes_totem.dart';
 import 'totem_estilo.dart';
@@ -26,10 +27,10 @@ class EscenaPoster extends EscenaEstilo {
           child: Transform.scale(
             // Zoom lento, de ida y vuelta.
             scale: 1.04 + 0.04 * math.sin(d.reloj * 0.1),
-            child: Image(
-              image: foto,
+            child: ImagenQueReintenta(
+              imagen: foto,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              siFalla: const SizedBox.shrink(),
             ),
           ),
         ),

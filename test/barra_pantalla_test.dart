@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
+import 'package:arguello_events/features/barra/services/papel_de_la_barra.dart';
 import 'package:arguello_events/features/barra/widgets/vender_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
@@ -473,6 +474,28 @@ void main() {
     await tocar(tester, find.byKey(const Key('imprimir-todo-junto')));
     expect(prueba.barra.valesGuardados, hasLength(1));
     expect(find.textContaining('no tiene papel'), findsNothing);
+  });
+
+  // Hasta la 6.8.0 decía "¿La impresora está prendida y cerca?" también cuando el
+  // equipo nunca había elegido una (revisión del 13-nov).
+  testWidgets('sin impresora elegida en este equipo, el vale lo dice así', (tester) async {
+    prueba.papel.sinElegir = true;
+    await abrir(tester);
+    await tocar(tester, producto(cerveza));
+    await tocar(tester, find.byKey(const Key('pagar_efectivo')));
+    await tocar(tester, find.byKey(const Key('cobro_confirmar')));
+    await tocar(tester, find.byKey(const Key('forma-todo-junto')));
+    await tocar(tester, find.byKey(const Key('imprimir-todo-junto')));
+    expect(find.text(kSinImpresoraElegida), findsOneWidget);
+    expect(find.textContaining('prendida y cerca'), findsNothing);
+    expect(prueba.barra.valesGuardados, isEmpty);
+    expect(prueba.barra.ventasGuardadas, hasLength(1), reason: 'la venta igual quedó');
+
+    // Elegida la impresora, el mismo botón saca el vale.
+    prueba.papel.sinElegir = false;
+    await tocar(tester, find.byKey(const Key('imprimir-todo-junto')));
+    expect(prueba.barra.valesGuardados, hasLength(1));
+    expect(find.text(kSinImpresoraElegida), findsNothing);
   });
 
   testWidgets('si la base no guarda, lo dice y la cuenta queda', (tester) async {

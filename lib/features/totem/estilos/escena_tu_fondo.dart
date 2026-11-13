@@ -284,6 +284,9 @@ class EscenaTuFondo extends EscenaEstilo {
             Flexible(
               child: Text(
                 c.musica!,
+                // Como en las demás apariencias: dos renglones como mucho.
+                maxLines: kRenglonesDeLaMusica,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: FuentesTotem.linea,
                   fontSize: u * 0.9,

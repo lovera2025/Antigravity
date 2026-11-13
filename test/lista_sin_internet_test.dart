@@ -64,6 +64,36 @@ void main() {
           'Lista para trabajar sin internet · al día 21:32 · 3 ingresos subiendo');
     });
 
+    // Hasta la 6.8.0 las sillas de la noche no se contaban: decía "Todo subido"
+    // con sillas esperando en la cola (revisión del 13-nov).
+    test('las sillas de la noche que esperan subir también se dicen', () {
+      DatosSinInternet con({int ingresos = 0, int sillas = 0, bool red = true}) =>
+          DatosSinInternet(
+            hayInternet: red,
+            alDia: _alDia,
+            fotoGuardada: true,
+            sinSubir: ingresos,
+            sillasSinSubir: sillas,
+          );
+
+      expect(_estado(con(sillas: 2)).texto,
+          'Lista para trabajar sin internet · al día 21:32 · 2 sillas subiendo');
+      expect(_estado(con(sillas: 1)).texto, endsWith('· 1 silla subiendo'));
+      expect(_estado(con(ingresos: 3, sillas: 2)).texto,
+          endsWith('· 3 ingresos y 2 sillas subiendo'));
+      expect(_estado(con(sillas: 2)).texto, isNot(contains('Todo subido')));
+      expect(_detalle(_estado(con(sillas: 2)), 'Sillas sin subir'), '2, subiendo');
+
+      final sinRed = _estado(con(ingresos: 1, sillas: 4, red: false));
+      expect(sinRed.texto,
+          endsWith('1 ingreso y 4 sillas sin subir: se suben solos al volver'));
+
+      // Sin sillas esperando, todo se dice como siempre.
+      final sinSillas = _estado(con());
+      expect(sinSillas.texto, endsWith('· Todo subido'));
+      expect(sinSillas.detalle.any((r) => r.$1 == 'Sillas sin subir'), isFalse);
+    });
+
     test('un evento sin foto también está listo', () {
       final e = _estado(DatosSinInternet(hayInternet: true, alDia: _alDia));
       expect(e.tipo, TipoSinInternet.lista);

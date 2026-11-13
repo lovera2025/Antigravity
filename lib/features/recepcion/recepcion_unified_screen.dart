@@ -19,6 +19,14 @@ import 'widgets/panel_puerta.dart';
 import 'widgets/sumar_celular.dart';
 import 'widgets/vista_del_totem.dart';
 
+/// Lo que dice el botón de actualizar la lista cuando bajó de la nube.
+const kListaActualizada = 'Lista actualizada';
+
+/// Y cuando no pudo bajar: no se dice "actualizada" si no lo está.
+const kListaSinActualizar =
+    'No se pudo traer la lista de la nube: no hay conexión. '
+    'Se ve lo que tiene esta PC.';
+
 class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
   const RecepcionUnifiedScreen({super.key});
 
@@ -586,14 +594,25 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
   Future<void> _refreshList(String eventoId) async {
     try {
       final repo = ref.read(invitadosRepositoryProvider);
-      await repo.forceRefresh(eventoId);
+      final bajo = await repo.forceRefresh(eventoId);
       ref.invalidate(invitadosStreamProvider(eventoId));
       ref.invalidate(statsEventoProvider(eventoId));
       // En un masivo, también los alumnos de la base de la PC.
       ref.invalidate(alumnosDeLaPuertaProvider(eventoId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lista actualizada'), backgroundColor: Colors.green, duration: Duration(seconds: 1)),
+          bajo
+              ? const SnackBar(
+                  content: Text(kListaActualizada),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 1),
+                )
+              // No bajó nada: decirlo, en vez de un "actualizada" que no es.
+              : const SnackBar(
+                  content: Text(kListaSinActualizar),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
         );
       }
     } catch (e) {

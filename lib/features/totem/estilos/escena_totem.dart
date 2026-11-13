@@ -15,6 +15,7 @@ import '../services/contenido_bienvenida.dart';
 import '../services/cuadro_del_salon.dart';
 import '../services/foto_guardada.dart';
 import '../services/plano_de_la_llegada.dart';
+import '../widgets/imagen_que_reintenta.dart';
 import 'escena_cristal.dart';
 import 'escena_gala.dart';
 import 'escena_neon.dart';
@@ -1421,10 +1422,10 @@ class FotoEvento extends StatelessWidget {
         size: medida,
         child: imagen == null
             ? logo
-            : Image(
-                image: imagen,
+            : ImagenQueReintenta(
+                imagen: imagen,
                 fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => logo,
+                siFalla: logo,
               ),
       );
     }
@@ -1438,10 +1439,10 @@ class FotoEvento extends StatelessWidget {
           child: SizedBox.expand(
             child: imagen == null
                 ? logo
-                : Image(
-                    image: imagen,
+                : ImagenQueReintenta(
+                    imagen: imagen,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => logo,
+                    siFalla: logo,
                   ),
           ),
         ),
@@ -1616,6 +1617,10 @@ Widget letraPorLetra(String texto, TextStyle estilo, double progreso,
 /// Lo de abajo del nombre: con quién viene o a quién acompaña.
 String? conQuienDe(ContenidoBienvenida c) => c.conQuien ?? c.acompanaA;
 
+/// Cuántos renglones ocupa la música en la tele, como mucho. Lo que no entra
+/// termina en puntos suspensivos: el tema entero lo tiene el DJ en su lista.
+const kRenglonesDeLaMusica = 2;
+
 /// La música, debajo de la mesa. Las sillas ya no van en el salón (6.4.0):
 /// las ve la recepcionista.
 Widget musicaDeLaLlegada(
@@ -1642,6 +1647,12 @@ Widget musicaDeLaLlegada(
               child: Text(
                 c.musica!,
                 textAlign: TextAlign.center,
+                // Dos renglones como mucho. El link del delegado deja escribir
+                // hasta 300 letras, y un texto así bajaba de a renglones hasta
+                // que la escena entera se achicaba para entrar: el nombre y la
+                // mesa quedaban chicos en la tele (revisión del 13-nov).
+                maxLines: kRenglonesDeLaMusica,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: familia,
                   fontStyle: estiloMusica,

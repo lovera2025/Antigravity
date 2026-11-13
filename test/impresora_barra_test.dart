@@ -475,6 +475,21 @@ void main() {
       expect(papel.sinPapel, isFalse);
       expect(siNoSalio(papel, 'otra cosa'), 'otra cosa');
     });
+
+    // Hasta la 6.8.0 un equipo sin impresora elegida decía "¿está prendida y cerca?".
+    test('PapelPorBluetooth: sin impresora elegida, dice eso y no otra cosa', () async {
+      SharedPreferences.setMockInitialValues({});
+      final papel = PapelPorBluetooth(impresora); // nunca se conectó a ninguna
+      expect(await papel.imprimir(const [TextoTicket('hola')]), isFalse);
+      expect(papel.sinImpresora, isTrue);
+      expect(papel.sinPapel, isFalse);
+      expect(siNoSalio(papel, 'otra cosa'), kSinImpresoraElegida);
+
+      await impresora.conectar('tp');
+      expect(await papel.imprimir(const [TextoTicket('hola')]), isTrue);
+      expect(papel.sinImpresora, isFalse);
+      expect(siNoSalio(papel, 'otra cosa'), 'otra cosa');
+    });
   });
 
   group('la impresora de este equipo', () {

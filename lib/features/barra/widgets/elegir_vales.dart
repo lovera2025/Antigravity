@@ -9,7 +9,8 @@ import '../cuentas/vales_de_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
 import '../impresion/ticket_esc_pos.dart';
-import '../services/papel_de_la_barra.dart' show kSinPapel;
+import '../services/papel_de_la_barra.dart'
+    show kSinImpresoraElegida, kSinPapel;
 
 /// Manda un papel a la impresora. True si salió.
 typedef ImprimirPapel = Future<bool> Function(List<LineaTicket> lineas);
@@ -85,6 +86,9 @@ class ElegirVales extends StatefulWidget {
   /// Si el vale que no salió fue porque la impresora dijo que no tiene papel.
   final bool Function()? sinPapel;
 
+  /// Si no salió porque este equipo no tiene impresora elegida.
+  final bool Function()? sinImpresora;
+
   const ElegirVales({
     super.key,
     required this.venta,
@@ -95,6 +99,7 @@ class ElegirVales extends StatefulWidget {
     this.anotar,
     this.yaSalieron = const [],
     this.sinPapel,
+    this.sinImpresora,
   });
 
   @override
@@ -199,7 +204,9 @@ class _ElegirValesState extends State<ElegirVales> {
       } else {
         _aviso = widget.sinPapel?.call() == true
             ? kSinPapel
-            : 'No salió el vale. ¿La impresora está prendida y cerca? Tocá de nuevo.';
+            : (widget.sinImpresora?.call() == true
+                ? kSinImpresoraElegida
+                : 'No salió el vale. ¿La impresora está prendida y cerca? Tocá de nuevo.');
       }
     });
     return salio;

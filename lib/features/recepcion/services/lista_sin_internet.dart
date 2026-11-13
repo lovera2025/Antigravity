@@ -37,6 +37,11 @@ class DatosSinInternet {
   /// Ingresos marcados en esta PC que todavía no subieron.
   final int sinSubir;
 
+  /// Sillas de la noche sumadas o quitadas en esta PC que todavía no subieron
+  /// (`sillas_puerta`). Hasta la 6.8.0 no se contaban: la línea decía "Todo
+  /// subido" con sillas esperando (revisión del 13-nov).
+  final int sillasSinSubir;
+
   const DatosSinInternet({
     required this.hayInternet,
     this.alDia,
@@ -45,6 +50,7 @@ class DatosSinInternet {
     this.fotoGuardada,
     this.fondoGuardado,
     this.sinSubir = 0,
+    this.sillasSinSubir = 0,
   });
 
   DatosSinInternet copyWith({
@@ -57,6 +63,7 @@ class DatosSinInternet {
     bool? fondoGuardado,
     bool sinFondo = false,
     int? sinSubir,
+    int? sillasSinSubir,
   }) =>
       DatosSinInternet(
         hayInternet: hayInternet ?? this.hayInternet,
@@ -67,6 +74,7 @@ class DatosSinInternet {
         fondoGuardado:
             sinFondo ? null : (fondoGuardado ?? this.fondoGuardado),
         sinSubir: sinSubir ?? this.sinSubir,
+        sillasSinSubir: sillasSinSubir ?? this.sillasSinSubir,
       );
 }
 
@@ -136,7 +144,14 @@ class EstadoSinInternet {
             : '${miles(d.sinSubir)}, '
                 '${d.hayInternet ? 'subiendo' : 'se suben solos al volver'}',
       ),
+      if (d.sillasSinSubir > 0)
+        (
+          'Sillas sin subir',
+          '${miles(d.sillasSinSubir)}, '
+              '${d.hayInternet ? 'subiendo' : 'se suben solas al volver'}',
+        ),
     ];
+    final espera = _loQueEsperaSubir(d);
     EstadoSinInternet es(TipoSinInternet t, String texto) =>
         EstadoSinInternet(t, texto, detalle);
 
@@ -153,9 +168,7 @@ class EstadoSinInternet {
         d.alDia == null
             ? 'se sigue con lo de esta PC'
             : 'se sigue con lo de esta PC (al día ${_cuando(d.alDia!, ahora)})',
-        if (d.sinSubir > 0)
-          '${d.sinSubir == 1 ? '1 ingreso' : '${miles(d.sinSubir)} ingresos'} '
-              'sin subir: se suben solos al volver',
+        if (espera != null) '$espera sin subir: se suben solos al volver',
       ];
       return es(TipoSinInternet.sinInternet, partes.join(' · '));
     }
@@ -190,8 +203,20 @@ class EstadoSinInternet {
     return es(
       TipoSinInternet.lista,
       'Lista para trabajar sin internet · al día ${_cuando(alDia, ahora)} · '
-      '${d.sinSubir == 0 ? 'Todo subido' : '${d.sinSubir == 1 ? '1 ingreso' : '${miles(d.sinSubir)} ingresos'} subiendo'}',
+      '${espera == null ? 'Todo subido' : '$espera subiendo'}',
     );
+  }
+
+  /// "3 ingresos", "2 sillas" o "3 ingresos y 2 sillas": lo que esta PC anotó y
+  /// todavía no subió. Null si no espera nada.
+  static String? _loQueEsperaSubir(DatosSinInternet d) {
+    final partes = [
+      if (d.sinSubir > 0)
+        d.sinSubir == 1 ? '1 ingreso' : '${miles(d.sinSubir)} ingresos',
+      if (d.sillasSinSubir > 0)
+        d.sillasSinSubir == 1 ? '1 silla' : '${miles(d.sillasSinSubir)} sillas',
+    ];
+    return partes.isEmpty ? null : partes.join(' y ');
   }
 
   static String _hora(DateTime t) {
@@ -228,6 +253,8 @@ class EstadoSinInternet {
   }
 }
 
+Future<int> _ningunaSilla(String eventoId) async => 0;
+
 /// Con qué se pone al día un evento. La app usa los de la base, la nube y la
 /// carpeta de fotos de la PC (`accesosPuertaProvider`); los tests, unos en
 /// memoria.
@@ -249,6 +276,9 @@ class AccesosPuerta {
   final Future<bool> Function(String url, String eventoId) fondoGuardado;
 
   final Future<int> Function(String eventoId) contarSinSubir;
+
+  /// Cuántas sillas de la noche esperan subir. Sin esto, ninguna.
+  final Future<int> Function(String eventoId) contarSillasSinSubir;
   final Future<DateTime?> Function(String eventoId) leerAlDia;
   final Future<void> Function(String eventoId, DateTime cuando) anotarAlDia;
   final DateTime Function() ahora;
@@ -261,6 +291,7 @@ class AccesosPuerta {
     required this.guardarFondo,
     required this.fondoGuardado,
     required this.contarSinSubir,
+    this.contarSillasSinSubir = _ningunaSilla,
     this.leerAlDia = AlDiaDeLaPuerta.leer,
     this.anotarAlDia = AlDiaDeLaPuerta.anotar,
     this.ahora = DateTime.now,
@@ -473,8 +504,10 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
   Future<void> recontar() async {
     try {
       final n = await accesos.contarSinSubir(eventoId);
-      if (!_cerrada && n != _datos.sinSubir) {
-        _poner(_datos.copyWith(sinSubir: n));
+      final sillas = await accesos.contarSillasSinSubir(eventoId);
+      if (!_cerrada &&
+          (n != _datos.sinSubir || sillas != _datos.sillasSinSubir)) {
+        _poner(_datos.copyWith(sinSubir: n, sillasSinSubir: sillas));
       }
     } catch (e) {
       debugPrint('No se pudo contar lo que espera subir: $e');

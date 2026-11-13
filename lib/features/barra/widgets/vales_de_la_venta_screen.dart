@@ -190,6 +190,7 @@ class _ValesDeLaVentaScreenState extends ConsumerState<ValesDeLaVentaScreen> {
                     imprimir: papel.imprimir,
                     yaSalieron: widget.yaSalieron,
                     sinPapel: () => papel.sinPapel,
+                    sinImpresora: () => papel.sinImpresora,
                     anotar: (vale) => anotarValeQueSalio(ref, venta: v, caja: widget.caja, vale: vale),
                     alImprimir: (todo) => setState(() => _todoImpreso = todo),
                   ),

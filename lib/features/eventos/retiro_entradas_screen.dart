@@ -16,6 +16,7 @@ import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
 import '../common/utils/subir_ya.dart';
+import '../common/utils/texto_busqueda.dart';
 import '../entradas/services/en_caja.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
@@ -867,10 +868,12 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       );
 
   Widget _vistaMostrador() {
-    final q = _busqueda.text.trim().toLowerCase();
+    // Sin acentos y con las palabras en cualquier orden, como el resto de los
+    // buscadores: con "gomez" no aparecía "GÓMEZ" (revisión del 13-nov).
+    final q = _busqueda.text.trim();
     final visibles = q.isEmpty
         ? _alumnos
-        : _alumnos.where((a) => a.nombreAlumno.toLowerCase().contains(q)).toList();
+        : _alumnos.where((a) => coincideTextoBusqueda([a.nombreAlumno], q)).toList();
     return Column(
       children: [
         Padding(

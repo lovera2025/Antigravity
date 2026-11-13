@@ -79,6 +79,33 @@ Future<void> _abrir(WidgetTester tester, String nombre) async {
 }
 
 void main() {
+  // Con "gomez" no aparecía "GÓMEZ": el buscador del mostrador comparaba letra
+  // por letra (revisión del 13-nov).
+  testWidgets('el buscador del mostrador encuentra sin acentos y en cualquier orden',
+      (tester) async {
+    await _montar(tester);
+    Future<void> buscar(String texto) async {
+      await tester.enterText(find.byType(TextField).first, texto);
+      await _pasar(tester);
+    }
+
+    await buscar('gomez');
+    expect(find.text('GÓMEZ, ANA'), findsOneWidget);
+    expect(find.text('PÉREZ, JUAN'), findsNothing);
+
+    await buscar('juan perez');
+    expect(find.text('PÉREZ, JUAN'), findsOneWidget);
+    expect(find.text('GÓMEZ, ANA'), findsNothing);
+
+    await buscar('LÓPEZ');
+    expect(find.text('LÓPEZ, SOFÍA'), findsOneWidget);
+
+    await buscar('');
+    for (final nombre in ['PÉREZ, JUAN', 'LÓPEZ, SOFÍA', 'GÓMEZ, ANA']) {
+      expect(find.text(nombre), findsOneWidget);
+    }
+  });
+
   group('el mostrador, sin Cobros', () {
     testWidgets('si debe: "que pase por caja", sin cobrar ni editar, y queda en En caja',
         (tester) async {

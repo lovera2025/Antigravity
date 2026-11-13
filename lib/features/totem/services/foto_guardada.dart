@@ -33,6 +33,11 @@ ImageProvider? fondoDelEvento(TotemConfig cfg) {
   );
 }
 
+/// Cuánto se espera para volver a pedir una foto o un fondo que no cargó: 15 y
+/// 30 segundos, y de ahí cada minuto.
+Duration esperaDeReintentoDeLaFoto(int intentos) =>
+    Duration(seconds: switch (intentos) { <= 0 => 15, 1 => 30, _ => 60 });
+
 /// La foto del evento guardada en la PC (sección 5 de la 6.0.0).
 ///
 /// Antes era `NetworkImage`: sin internet el tótem caía al logo. Ahora la foto
@@ -69,6 +74,12 @@ class FotoGuardada extends ImageProvider<FotoGuardada> {
     final fotos = key.fotos ?? FotosDelTotem.enLaPc;
     final bytes = await fotos.bytes(key.url, eventoId: key.eventoId);
     if (bytes == null) {
+      // Que el fallo no quede guardado: el caché de imágenes de Flutter se
+      // queda con una carga que falló mientras viva el programa, y con eso
+      // una foto que no bajó la primera vez (el wifi del salón) no se volvía
+      // a pedir en toda la noche (revisión del 13-nov). Sacándola, la próxima
+      // vez que alguien la pida se intenta de nuevo (`ImagenQueReintenta`).
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
       throw StateError('${fotos.que} no está en la PC y no se pudo bajar');
     }
     return decode(await ui.ImmutableBuffer.fromUint8List(bytes));

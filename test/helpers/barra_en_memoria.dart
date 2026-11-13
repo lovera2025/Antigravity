@@ -383,6 +383,12 @@ class PapelEnMemoria implements PapelDeLaBarra {
   @override
   bool sinPapel = false;
 
+  /// Este equipo no tiene impresora elegida: no sale nada, y se dice eso.
+  bool sinElegir = false;
+
+  @override
+  bool sinImpresora = false;
+
   @override
   Future<EstadoImpresora> preparar() async {
     preparadas++;
@@ -392,7 +398,8 @@ class PapelEnMemoria implements PapelDeLaBarra {
   @override
   Future<bool> imprimir(List<LineaTicket> lineas) async {
     sinPapel = sinRollo;
-    if (sinRollo || !anda) return false;
+    sinImpresora = sinElegir && !sinRollo;
+    if (sinRollo || sinElegir || !anda) return false;
     enCrudo.add(lineas);
     papeles.add([
       for (final l in lineas)

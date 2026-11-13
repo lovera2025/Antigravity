@@ -1,15 +1,17 @@
 // "Tu fondo" (`fondo_propio.dart`): la imagen del evento como fondo, con su
 // animación (el shader `totem_tu_fondo.frag`) y, si el shader no anda, quieta;
 // una story en una tele horizontal, entera al medio; y la carga de la imagen.
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
+import 'package:arguello_events/features/totem/services/foto_guardada.dart'
+    show esperaDeReintentoDeLaFoto;
 import 'package:arguello_events/models/totem_config.dart';
 
 import 'helpers/fondo_de_prueba.dart';
@@ -245,5 +247,90 @@ void main() {
       expect(carga.imagen, isNull);
       carga.dispose();
     });
+
+    // Hasta la 6.8.0 un fondo que no bajaba la primera vez (el wifi del salón)
+    // quedaba así toda la noche (revisión del 13-nov).
+    testWidgets('si falla, la vuelve a pedir sola hasta que carga',
+        (tester) async {
+      late Uint8List png;
+      await tester.runAsync(() async => png = await pngDePrueba());
+      final fondo = _FallaAlPrincipio(png, fallas: 2);
+      final carga =
+          CargaDelFondo(espera: (_) => const Duration(milliseconds: 40));
+      await tester.runAsync(() async {
+        carga.cargar(fondo);
+        for (var i = 0; i < 100 && carga.imagen == null; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      expect(fondo.pedidos, 3, reason: 'dos que fallaron y la que cargó');
+      expect(carga.imagen, isNotNull);
+      expect(carga.fallo, isFalse);
+
+      // Con la imagen puesta no se pide más.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      expect(fondo.pedidos, 3);
+      carga.dispose();
+    });
+
+    testWidgets('al cambiar de fondo o soltarla, deja de reintentar',
+        (tester) async {
+      final roto = _FallaAlPrincipio(Uint8List(0), fallas: 1000);
+      final carga =
+          CargaDelFondo(espera: (_) => const Duration(milliseconds: 40));
+      await tester.runAsync(() async {
+        carga.cargar(roto);
+        for (var i = 0; i < 50 && !carga.fallo; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      expect(carga.fallo, isTrue);
+      carga.cargar(null);
+      final hastaAca = roto.pedidos;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      expect(roto.pedidos, hastaAca);
+      carga.dispose();
+    });
+
+    test('la espera entre reintentos: 15 y 30 segundos, y después cada minuto',
+        () {
+      expect(
+        [for (var i = 0; i < 5; i++) esperaDeReintentoDeLaFoto(i).inSeconds],
+        [15, 30, 60, 60, 60],
+      );
+    });
   });
+}
+
+/// Un fondo que no carga las primeras [fallas] veces que se lo pide, como una
+/// imagen que no baja hasta que vuelve el wifi.
+class _FallaAlPrincipio extends ImageProvider<_FallaAlPrincipio> {
+  _FallaAlPrincipio(this.png, {required this.fallas});
+
+  final Uint8List png;
+  final int fallas;
+  int pedidos = 0;
+
+  @override
+  Future<_FallaAlPrincipio> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_FallaAlPrincipio>(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _FallaAlPrincipio key,
+    ImageDecoderCallback decode,
+  ) {
+    pedidos++;
+    final falla = pedidos <= fallas;
+    return MultiFrameImageStreamCompleter(
+      codec: falla
+          ? Future<ui.Codec>.error(StateError('todavía no baja'))
+          : ui.ImmutableBuffer.fromUint8List(png).then(decode),
+      scale: 1,
+    );
+  }
 }

@@ -9,6 +9,7 @@ import '../../totem/providers/totem_config_provider.dart';
 import '../../totem/services/foto_guardada.dart';
 import '../../totem/widgets/totem_local.dart' show eventoMasivoProvider;
 import '../repositories/invitados_repository.dart';
+import '../repositories/sillas_puerta_repository.dart';
 import '../services/lista_sin_internet.dart';
 
 /// Con qué se pone al día un evento en esta PC: la lista de la puerta, los
@@ -16,6 +17,7 @@ import '../services/lista_sin_internet.dart';
 /// subida. Los tests lo reemplazan.
 final accesosPuertaProvider = Provider<AccesosPuerta>((ref) {
   final invitados = ref.watch(invitadosRepositoryProvider);
+  final sillas = ref.watch(sillasPuertaRepositoryProvider);
   final motor = ref.watch(syncEngineProvider);
   return AccesosPuerta(
     bajarLista: invitados.bajarListaDelEvento,
@@ -30,6 +32,9 @@ final accesosPuertaProvider = Provider<AccesosPuerta>((ref) {
         FotosDelTotem.fondosEnLaPc.estaGuardada(url, eventoId: eventoId),
     contarSinSubir: (eventoId) async =>
         (await invitados.idsSinSubir(eventoId)).length,
+    // Las sillas de la noche también esperan subir: sin contarlas, la línea
+    // decía "Todo subido" con sillas en la cola.
+    contarSillasSinSubir: sillas.sinSubir,
   );
 });
 

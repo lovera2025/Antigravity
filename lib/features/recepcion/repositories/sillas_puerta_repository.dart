@@ -45,6 +45,20 @@ class SillasPuertaRepository {
     return [for (final f in filas) SillaPuerta.fromMap(f)];
   }
 
+  /// Cuántas sillas del evento (sumadas o quitadas) esperan subir a la nube.
+  /// Para "Todo subido" de Recepción: sin esto decía que no faltaba nada con
+  /// sillas en la cola.
+  Future<int> sinSubir(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final filas = await db.rawQuery(
+      'SELECT COUNT(DISTINCT q.registro_id) AS n FROM _sync_queue q '
+      'JOIN sillas_puerta s ON s.id = q.registro_id '
+      "WHERE q.tabla = 'sillas_puerta' AND s.evento_id = ?",
+      [eventoId],
+    );
+    return (filas.first['n'] as int?) ?? 0;
+  }
+
   /// Anota una silla nueva y la encola.
   Future<SillaPuerta> anotar({
     required String eventoId,

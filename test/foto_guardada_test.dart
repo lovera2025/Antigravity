@@ -268,5 +268,32 @@ void main() {
       expect(await error.future.timeout(const Duration(seconds: 10)),
           isA<StateError>());
     });
+
+    // El caché de imágenes de Flutter se queda con una carga que falló. Hasta
+    // la 6.8.0, la foto que no bajaba la primera vez no se pedía más en toda
+    // la noche, aunque volviera internet (revisión del 13-nov).
+    test('lo que no bajó la primera vez se puede volver a pedir, y carga',
+        () async {
+      red.hayInternet = false;
+      final foto = FotoGuardada(_v2, eventoId: _otro, fotos: fotos);
+      final error = Completer<Object>();
+      foto.resolve(ImageConfiguration.empty).addListener(
+            ImageStreamListener((_, _) {}, onError: (e, _) => error.complete(e)),
+          );
+      await error.future.timeout(const Duration(seconds: 10));
+      // La microtarea que la saca del caché de imágenes.
+      await Future<void>.delayed(Duration.zero);
+
+      red.hayInternet = true;
+      final cargo = Completer<ImageInfo>();
+      foto.resolve(ImageConfiguration.empty).addListener(
+            ImageStreamListener(
+              (info, _) => cargo.complete(info),
+              onError: (e, _) => cargo.completeError(e),
+            ),
+          );
+      final info = await cargo.future.timeout(const Duration(seconds: 10));
+      expect(info.image.width, 1);
+    });
   });
 }
