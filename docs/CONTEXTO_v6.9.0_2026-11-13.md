@@ -4,6 +4,15 @@
 
 ## Para retomar en otro chat
 
+**Dónde quedó (13-nov, al cortar el chat):** la Parte A entera y la etapa 1 de la Parte B están **guardadas en la
+rama** (7 commits, el último de código `c5521e0`; **sin subir a GitHub**: se guardan en esta PC hasta que el usuario
+diga). **La etapa 2 (las cuentas) no tiene ningún archivo escrito**: quedó decidido cómo se hace (ver "Etapa 2", abajo)
+y se empieza por ahí. Antes de cortar se comprobó que nada quedó a medias: el repositorio sin cambios sueltos, **la
+suite entera pasa (4.803 pruebas, 280 archivos, 7 tandas)** y el análisis de lo nuevo no da errores.
+
+**Nada de esto está en las PCs ni en la nube**: no se publicó, no se instaló, no se corrió ningún SQL, no se tocó la
+base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.yaml`: se sube a `6.9.0` al publicar.
+
 **Qué es.** Una sola versión, la 6.9.0, con dos partes y en este orden (plan aprobado por el usuario el 13-nov):
 
 - **Parte A — los arreglos de la noche.** Lo que encontró la revisión del 13-nov sobre la 6.8.0
@@ -25,11 +34,25 @@
 
 **Lo que sigue, en orden:**
 
-1. Terminar la Parte B, etapa 1 (los datos): ver "Parte B".
-2. Etapa 2 (las cuentas).
+1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
+2. **Etapa 2 (las cuentas): empezar acá.** Sin pantallas; va sin preguntar. Con su commit.
 3. **Frenar: la maqueta** de PRECIOS, VENDER, el comprobante, VENTAS, cerrar la caja y ENTRADAS del cierre, y su OK.
+   Interactiva, sobre una copia fiel de las pantallas de hoy; se le abre al usuario (no vio nada todavía).
 4. Etapas 3 a 6 del spec.
 5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
+
+**Pendiente de la Parte A, antes de publicar:** las capturas con el mouse de los carteles nuevos (el permiso para
+manejar la ventana de prueba se pidió y no se aprobó esa noche: volver a pedirlo), y lo de "Lo que no se probó".
+
+**Cómo se trabaja acá** (lo que hizo falta aprender en este chat):
+
+- La suite entera se corre por tandas de 40 archivos, sin los tres tests que consultan la nube
+  (`verify_supabase_content_test`, `query_supabase_id_test`, `search_supabase_broad_test`): entera en un solo comando
+  no entra. Tarda unos 4 minutos.
+- Los archivos tienen fin de línea de Windows: un test que lee código lo normaliza (`.replaceAll('\r\n', '\n')`).
+- Los cambios de varias líneas a archivos grandes (`local_database.dart`, `sync_engine.dart`) se hicieron con un
+  script escrito a un archivo y corrido, no con texto pegado en la consola.
+- Cada commit: el mensaje en un archivo y `git commit -F`. Sin nombres de alumnos (el repositorio es público).
 
 ## Parte A — lo hecho
 
@@ -181,7 +204,78 @@ real (el de la v79 es el modelo), con la app instalada cerrada: se le pide al us
 **Con la v80 en la rama, no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen la 79). Los
 arneses `tool/*_prueba.dart` que no abren la base sí se pueden correr.
 
-### Etapa 2, las cuentas — sigue esto
+**Después de la etapa 1 se corrió la suite entera: 4.803 pruebas, todas pasan.**
 
-`lib/features/entradas/cuentas/`, puras y sin pantalla (sección 5 del spec): el precio de hoy, las de los lugares
-adicionales (cuántas le quedan a cada familia), los números del talonario y el cierre de una caja.
+### Etapa 2, las cuentas — sigue esto (decidido, sin ningún archivo escrito)
+
+`lib/features/entradas/cuentas/`, puras y sin pantalla ni base (sección 5 del spec). **Se usa lo de la barra, no se
+escribe otro:** `centavos`, `deCentavos` y `pesos` (`barra/cuentas/pesos.dart`), `MedioBarra`, `PartidoMixto` y
+`CobroBarra` (`barra/cuentas/cobro_barra.dart`), `diferenciaEnPalabras` (`barra/cuentas/cierre_de_barra.dart`).
+Cinco archivos:
+
+1. **`precio_de_entradas.dart`** — `PrecioDeEntradas`: `hoyEnArgentina()` (`ArTime.nowAr()`), `rigeLaAnticipada(c,
+   hoyAr)` (el día `AAAA-MM-DD` de `hoyAr` contra `anticipada_hasta`, **inclusive**, comparado como texto con
+   `ConfigEntradas.diaDe`), `deHoy(c, hoyAr)` (null sin precio) y `deLugar(c)` (**siempre sobre el valor de la
+   entrada, nunca sobre la anticipada**, con `RenglonEntradas.precioCon`).
+2. **`lugares_de_la_familia.dart`** — `anulacionesPorVenta(anulaciones)` (id de la venta → su anulación) y
+   `LugaresDeLaFamilia`: `leCorresponden` (`RetiroEntradas.entradasDe(alumno).alCincuenta`), `compradas` (sus renglones
+   `lugar` en ventas no anuladas) y `quedan` (con piso en cero). `compradasPorFamilia(ventas, anulaciones)` (id del
+   alumno → cantidad) es lo que después muestra la entrega ("8 al 50 % (compró 3)"). **No se guarda: se cuenta cada vez.**
+3. **`numeros_de_entradas.dart`** — `NumerosDeEntradas`:
+   - `deLasVentas(ventas, anulaciones, {salvo})`: comprador → tramos. Cuentan los de una venta que cuenta y los de una
+     **anulada sin devolver** (con el nombre más "(venta anulada, sin devolver)"); los de una anulada **con
+     devolución** quedan libres.
+   - `ocupados({entregados, ventas, anulaciones, salvoVenta})`: lo de `RetiroEntradas.tramosDeOtros` más lo vendido,
+     juntando las listas de un mismo nombre. **Es el `deOtros` de `errorTramos` para la venta y para la entrega**: así
+     "El 1043 ya se le dio a…" sirve para los dos (enchufarlo en la entrega es de la etapa 6).
+   - `error({tramos, cantidad, ocupados})`: sin números, null (son opcionales). Si están bien escritos y no son tantos
+     como entradas: "Son N números y la venta lleva M entradas." Todo lo demás lo decide
+     `RetiroEntradas.errorTramos(tramos:, generales: cantidad, deOtros: ocupados)`: mismas reglas y palabras.
+   - `repetidos({ventas, anulaciones, entregados})`: los que quedaron en dos ventas (o en una venta y una entrega) por
+     vender en dos equipos sin internet: "El 1043 está en dos ventas (A y B): revisar". Solo avisa.
+4. **`pedido_de_entradas.dart`** — `PedidoDeEntradas`, lo que decide VENDER sin pantalla: la config y el día, la
+   familia (o nadie), cuántas de lugar (con tope en las que le quedan) y cuántas sueltas, el descuento a mano (solo si
+   puede), el comprador y los números. Da los renglones (nombres: "Entrada", "Entrada anticipada", "Entrada de lugar
+   adicional (50 %)"), el total, `falta` (por qué no se puede confirmar, en palabras: sin precio, sin nombre y
+   apellido —dos palabras, como `erroresQuienRetira`—, sin entradas, los números mal) y `venta(caja, numero, cobro)`,
+   que arma `VentaEntradas.nueva` desde un `CobroBarra` igual que `vender_screen.dart:224-237` de la barra
+   (`efectivo: cobro.efectivo`, `transferencia: cobro.transfiere`, `recibe: cobro.recibeQueCuenta`, `recargo`,
+   `recargoPct: cobro.recargoPctQueQueda`).
+5. **`cierre_de_entradas.dart`** — `CierreDeEntradas`, con la forma de `CierreDeBarra` y escrito nuevo: cuántas
+   sueltas y de lugar y su plata (lo que no se pueda leer de los renglones va a "otras", por la cantidad y el total de
+   la venta), efectivo, transferencia, mixtos, con transferencia, recargos aparte, **descuentos a mano** en su renglón;
+   **una anulada no cuenta, tampoco en el efectivo que tiene que haber**; `efectivoEsperado` = cambio inicial + efectivo
+   de las que cuentan; `diferenciaCon(contado)`. `de(caja, ventas, anulaciones)` y `deLaFiesta(cajas, ventas,
+   anulaciones)`. **Anulado después del cierre:** la anulación con `created_at` posterior al `cerrada_at` de su caja va
+   en `efectivoAnuladoDespues` y `transferenciaAnuladaDespues` (el criterio de `anuladoDespuesDelCierre`, no la
+   función). Y `ResumenDeCajaEntradas(caja, cuentas)`: **la diferencia de una caja cerrada es la que se anotó al
+   cerrar**, no una cuenta de ahora.
+
+**Tests de la etapa 2** (sección 10 del spec), cada uno con una rotura a propósito:
+
+- `entradas_cuentas_test`: sin precio, null; el último día de la anticipada rige; al otro día, el valor; **a
+  medianoche de Argentina, no de UTC** (`ArTime.toAr(DateTime.utc(2026, 11, 29, 1, 30))` todavía es el 28). 14 lugares
+  y 3 compradas, quedan 11; una anulada las devuelve; no se venden más de las que quedan; el precio del lugar sale del
+  valor. La venta cierra con los tres medios y con recargo; cada caso de 5.3 tira.
+- `entradas_numeros_test`: contra una entrega sin cargo, contra otra venta, contra una anulada sin devolver; una
+  anulada con devolución los libera; la entrega tampoco deja repetir uno vendido (con `RetiroEntradas.errorTramos` y
+  `ocupados`); los repetidos entre dos ventas.
+- `cierre_de_entradas_test`: una anulada no cuenta en el efectivo; los descuentos a mano en su renglón; anulada
+  después de cerrar, el cierre queda y va la línea aparte.
+
+`test/venta_entradas_no_toca_test.dart` ya mira `lib/features/entradas/cuentas`: nada de ahí puede nombrar
+`saldo_deudor`, `RepartoDeSillas`, `sillas_puerta` ni lo demás de su lista (importar `retiro_entradas.dart` y
+`contrato_alumno.dart` sí se puede).
+
+### La maqueta (después de la etapa 2, y ahí se frena)
+
+PRECIOS, VENDER, el comprobante, VENTAS, cerrar la caja y ENTRADAS del cierre (secciones 6 a 9 del spec). Va sobre
+una copia fiel de las pantallas de hoy (`RetiroEntradasScreen`, `EntradasHomeScreen`, el cierre por sector), con los
+accesos a la vista (por dónde se llega a cada cosa). **Se le muestra y se espera su OK antes de las etapas 3 a 6.**
+
+### Para preguntarle al jefe (ninguna frena el trabajo)
+
+Si el vendedor puede descontar solo; si la transferencia lleva recargo; si el número del talonario es obligatorio; si
+"Pago verificado" lo tilda solo él; si se vende la noche de la fiesta y desde cuántos equipos; y si la silla que se
+compra esa noche en la barra lleva además su entrada al 50 %. Hoy cada una es un dato de PRECIOS o una regla que se
+cambia sin reprogramar.

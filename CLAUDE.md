@@ -428,6 +428,47 @@ integrarlo.
 - **No crear links hasta que las PCs tengan la 6.8.0.** Falta, con la versión instalada: crear un link de verdad, abrirlo
   en un celular desde WhatsApp y aceptar desde el programa.
 
+**La 6.9.0, EN CURSO y SIN PUBLICAR: los arreglos de la noche y la venta de entradas** (plan aprobado el 13-nov;
+`docs/CONTEXTO_v6.9.0_2026-11-13.md`, que empieza con "Para retomar en otro chat": ahí está **dónde quedó, lo que sigue
+y lo que no se probó**). Una sola versión, cuando el usuario diga. `pubspec.yaml` sigue en `6.8.0+74`. Los commits
+están en esta PC, **sin subir a GitHub**.
+- **Parte A, programada y guardada entera** (sin SQL ni migración): 8 de los 9 problemas de la revisión del 13-nov
+  (`docs/SPEC_arreglos_antes_de_las_fiestas_2026-11-13.md`, con la segunda revisión al final) y ocho chicos.
+  **El P6 (la mesa "principal" con "Al final") no se toca: un sorteo hecho queda como está** (decisión del usuario).
+- **Parte B, la venta de entradas** (`docs/SPEC_venta_de_entradas_2026-11-13.md`): **hecha la etapa 1** (los datos:
+  cinco tablas nuevas, v80, `lib/features/entradas/datos/`, el motor y el SQL
+  `supabase/migrations/20261113200000_venta_de_entradas.sql`, **sin correr**). **Sigue la etapa 2** (las cuentas,
+  `lib/features/entradas/cuentas/`, sin ningún archivo todavía; el diseño está en el CONTEXTO) **y después la maqueta
+  de las pantallas: ahí se frena y se espera el OK del usuario** antes de las etapas 3 a 6.
+- **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
+  salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
+  aparece algo de eso. Una venta nunca se edita: anular es otra fila.
+- **La base del equipo va por la v80: no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen
+  la 79). Los arneses que no abren la base sí.
+- Lo que la Parte A dejó como regla:
+  - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
+    (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
+    seguidas se abriría la caja equivocada.
+  - **La ventana del tótem no escribe las preferencias** (`PreferenciasDeLaVentana`): cada ventana es otro proceso y
+    en Windows cada guardado reescribe el archivo entero con su copia; pisaba la sesión. Le pide a la principal por el
+    puente (`guardar_preferencia`), que guarda solo `totem_config_v1_<evento>` y `totem_orient_v1_<evento>`. Un test
+    lee los archivos de esa ventana y falla si alguno usa `SharedPreferences` a mano.
+  - **`totemConfigProvider` nunca emite la config de fábrica ante un error** y reintenta hasta leerla una vez;
+    Personalizar no guarda si la fila de la nube ya no es la que se abrió (`sigueComoSeAbrio`).
+  - **En la puerta, todo lo que sube ya va por `_subirYa` con `markCompleted(leidaCon:)`**: `_syncImmediately` no
+    existe más (borraba de la cola un ingreso hecho mientras subía otra cosa de esa persona).
+  - **El aviso entre equipos tiene sus nombres en `core/services/pulso_entre_equipos.dart`**; la web lo manda al
+    anotar un paso del cierre de la barra, y la tablet que espera el OK baja solo `barra_cierres`
+    (`SyncEngine.bajarCierresDeLaBarra`) mientras espera.
+  - **`PcDespierta`** le avisa a Windows cada 30 s que hay uso mientras la tele está a la vista o una central
+    prendida (sin nada que soltar). No alcanza con la tapa cerrada.
+  - Recepción pregunta antes de pasar la tele o la central de los celulares a otra fiesta (`elegirEventoEnRecepcion`).
+  - `tool/kiosco_prueba.dart --dart-define=auto=true` corre solo, sin mouse, y no escribe las preferencias del
+    programa instalado (comparte ese archivo: `%APPDATA%\Junior Eventos\Junior Eventos\shared_preferences.json`).
+- **Falta antes de publicar:** las capturas con el mouse de los carteles nuevos (el usuario las quiere ver), la
+  migración v80 sobre una copia de la base real (con la app cerrada: se le pide), la foto de la mora, el SQL con su OK.
+  **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la versión.**
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -464,7 +505,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 79 en la rama, con `barra_cierres`; las PCs tienen la 78) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 80 en la rama, con las cinco tablas de la venta de entradas; las PCs tienen la 79) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
