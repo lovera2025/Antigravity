@@ -304,8 +304,12 @@ class KioskLauncher {
   /// Envía un mensaje de refresco general al Tótem.
   static Future<void> notifyUpdate() => _invocar('refresh');
 
-  /// Notifica que se ha vaciado o reseteado la lista de invitados
-  static Future<void> notifyListReset() => _invocar('list_reset');
+  /// Notifica que se ha vaciado o reseteado la lista de invitados de
+  /// [eventoId]. **Va con el evento:** el puente es uno para toda la PC, y sin
+  /// él vaciar la lista de otra fiesta le vaciaba la suya a la tele
+  /// (`avisoEsDeEsteEvento`, del lado del tótem).
+  static Future<void> notifyListReset([String? eventoId]) =>
+      _invocar('list_reset', eventoId);
 
   /// Notifica un check-in específico para que el tótem reaccione al instante.
   static Future<void> notifyGuestCheckin(Map<String, dynamic> guestJson) =>

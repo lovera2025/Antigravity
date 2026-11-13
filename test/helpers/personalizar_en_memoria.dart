@@ -30,6 +30,28 @@ class RepoTotemEnMemoria extends Fake implements TotemConfigRepository {
   /// Si guardar falla, como sin internet.
   bool fallar = false;
 
+  /// Si lo de la nube ya no es lo que Personalizar abrió (lo cambió otra PC, o
+  /// se abrió antes de terminar de leer).
+  bool cambioEnLaNube = false;
+
+  /// Cuántas veces se preguntó antes de guardar.
+  var preguntas = 0;
+
+  @override
+  Future<bool> sigueComoSeAbrio(TotemConfig abierta) async {
+    preguntas++;
+    if (fallar) {
+      throw Exception('SocketException: Failed host lookup: supabase.co');
+    }
+    return !cambioEnLaNube;
+  }
+
+  /// Las fotos que se borraron.
+  var fotosBorradas = 0;
+
+  @override
+  Future<void> borrarImagen(String eventoId) async => fotosBorradas++;
+
   @override
   Future<TotemConfig> guardar(TotemConfig cfg) async {
     if (fallar) {

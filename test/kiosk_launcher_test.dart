@@ -37,8 +37,12 @@ class _VentanasDeMentira implements VentanasTotem {
       throw Exception('no llegó');
     }
     llegaron.add('$id:$metodo');
+    argumentos.add(args);
     return null;
   }
+
+  /// Con qué llegó cada mensaje, en el mismo orden que [llegaron].
+  final argumentos = <dynamic>[];
 
   @override
   Future<List<int>> abiertas() async {
@@ -136,6 +140,14 @@ void main() {
         await avisar();
         expect(KioskLauncher.isTotemActive, isTrue);
       }
+    });
+
+    // El puente es uno para toda la PC: sin el evento, vaciar la lista de otra
+    // fiesta le vaciaba la suya a la tele (revisión del 13-nov).
+    test('vaciar la lista viaja con su fiesta', () async {
+      await KioskLauncher.notifyListReset(_eventoB);
+      expect(ventanas.llegaron, ['1:list_reset']);
+      expect(ventanas.argumentos.single, _eventoB);
     });
 
     test('con la ventana cerrada, sí se la olvida', () async {

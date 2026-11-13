@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +46,59 @@ class TotemConfigRepository {
 
   static String? mimeDe(String extension) =>
       tiposPermitidos[normalizarExtension(extension)];
+
+  /// Cuánto se espera la lectura de antes de guardar ([sigueComoSeAbrio]).
+  static const esperaDeLaLectura = Duration(seconds: 5);
+
+  /// Lo que no cuenta para saber si dos configs son la misma: cuándo y quién la
+  /// guardó, y los segundos de la llegada, que esa noche se cambian a mano
+  /// desde Recepción sin pasar por Personalizar ([guardarTiempos]).
+  static const _noCuentan = {
+    'updated_at',
+    'updated_by',
+    'llegada_nombre_seg',
+    'llegada_camino_seg',
+  };
+
+  /// Si [enLaNube] (null: el evento no tiene fila) es la misma config que
+  /// [abierta], la que Personalizar mostró al abrirse.
+  static bool mismaConfig(TotemConfig abierta, TotemConfig? enLaNube) {
+    Map<String, dynamic> loQueCuenta(TotemConfig c) =>
+        // Ida y vuelta por el JSON: así las dos pasan por el mismo camino,
+        // venga una de la caché y la otra de la nube.
+        TotemConfig.fromJson(c.toJson()).toJson()
+          ..removeWhere((clave, _) => _noCuentan.contains(clave));
+    final a = loQueCuenta(abierta);
+    final b = loQueCuenta(enLaNube ?? TotemConfig.defaults(abierta.eventoId));
+    return jsonEncode(a) == jsonEncode(b);
+  }
+
+  /// Si lo guardado en la nube sigue siendo [abierta], lo que Personalizar
+  /// mostró al abrirse. **Personalizar lo pregunta antes de guardar, y si no,
+  /// no guarda:** guarda la fila entera, así que abierto sobre algo viejo o
+  /// sobre los valores de fábrica (la config todavía no se había leído, o la
+  /// cambió otra PC: la tabla no está en Realtime) pisaba en la nube la foto,
+  /// el fondo, la apariencia y los textos (revisión del 13-nov).
+  ///
+  /// **Tira si no se pudo leer** (sin internet): sin saber qué hay, no se
+  /// guarda. Si cambió, deja en esta PC lo de la nube, para que al volver a
+  /// abrir Personalizar se parta de eso.
+  Future<bool> sigueComoSeAbrio(TotemConfig abierta) async {
+    final fila = await _client
+        .from('totem_config')
+        .select()
+        .eq('evento_id', abierta.eventoId)
+        .maybeSingle()
+        .timeout(esperaDeLaLectura);
+    final enLaNube = fila == null ? null : TotemConfig.fromJson(fila);
+    if (mismaConfig(abierta, enLaNube)) return true;
+    if (enLaNube != null) {
+      await TotemConfigCache.save(enLaNube);
+    } else {
+      await TotemConfigCache.clear(abierta.eventoId);
+    }
+    return false;
+  }
 
   /// Guarda la config del evento y devuelve la versión persistida.
   Future<TotemConfig> guardar(TotemConfig cfg) async {

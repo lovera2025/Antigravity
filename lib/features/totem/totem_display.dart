@@ -402,13 +402,19 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
           if (!_pausado) _connect(); // Volver a leer ya
           return null;
         case 'list_reset':
-          _handleListReset();
+          // El puente es de toda la PC: lo de otra fiesta no vacía esta.
+          if (avisoEsDeEsteEvento(call.arguments, _eventoId)) {
+            _handleListReset();
+          }
           return null;
         case 'guest_checkin':
           if (call.arguments != null && !_pausado) {
             final data = jsonDecode(call.arguments as String);
             final guest = Invitado.fromJson(data);
-            _handleManualIncoming(guest, porElPuente: true);
+            // Ni el que entró a otra fiesta se saluda en esta.
+            if (avisoEsDeEsteEvento(guest.eventoId, _eventoId)) {
+              _handleManualIncoming(guest, porElPuente: true);
+            }
           }
           return null;
         case 'guest_removed':

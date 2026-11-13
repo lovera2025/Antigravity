@@ -313,7 +313,7 @@ class InvitadosRepository {
     // si se fue la lista entera es un reset; si son pocos, uno por uno.
     if (plan.sobrantes.isNotEmpty) {
       if (plan.sinSorteo) {
-        if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
+        if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset(eventoId);
         unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
       } else {
         for (final sobra in plan.sobrantes) {
@@ -579,7 +579,7 @@ class InvitadosRepository {
     // El aviso vive acá y no en la pantalla que llamó: hay varias superficies
     // que vacían listas, y la que se olvide la línea deja el salón proyectando
     // gente que ya no existe.
-    if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
+    if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset(eventoId);
     unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
 
     _notifyChanges(eventoId);

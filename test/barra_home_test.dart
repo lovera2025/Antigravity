@@ -52,6 +52,27 @@ void main() {
       final lista = fiestasParaLaBarra(e, {'a', 'b', 'c', 'vieja'}, DateTime(2026, 11, 3, 22));
       expect([for (final f in lista) f.id], ['a', 'b', 'c']);
     });
+
+    // La fiesta pasa las 00:00 y las cajas se cierran de madrugada: hasta la 6.8.0,
+    // a medianoche la fiesta desaparecía y nadie podía volver a su caja.
+    test('la de anoche sigue de madrugada, hasta el mediodía', () {
+      final e = [
+        fiestaDePrueba('anoche', 'ANOCHE', DateTime(2026, 11, 14, 21)),
+        fiestaDePrueba('hoy', 'HOY', DateTime(2026, 11, 15, 21)),
+      ];
+      List<String> a(DateTime ahora) =>
+          [for (final f in fiestasParaLaBarra(e, {'anoche', 'hoy'}, ahora)) f.id];
+
+      expect(a(DateTime(2026, 11, 14, 23, 59)), ['anoche', 'hoy']);
+      expect(a(DateTime(2026, 11, 15, 0, 1)), ['anoche', 'hoy'], reason: 'recién pasó la medianoche');
+      expect(a(DateTime(2026, 11, 15, 6)), ['anoche', 'hoy'], reason: 'el cierre de la caja');
+      expect(a(DateTime(2026, 11, 15, 11, 59)), ['anoche', 'hoy']);
+      // Con dos fiestas seguidas, la segunda noche la de anoche ya no está: si
+      // estuviera, saldría primera y se abriría la caja en la fiesta equivocada.
+      expect(a(DateTime(2026, 11, 15, 12)), ['hoy']);
+      expect(a(DateTime(2026, 11, 15, 21)), ['hoy']);
+      expect(a(DateTime(2026, 11, 16, 3)), ['hoy'], reason: 'la madrugada de la segunda');
+    });
   });
 
   Future<ProviderContainer> abrir(

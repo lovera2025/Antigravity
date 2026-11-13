@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
@@ -19,6 +21,41 @@ Invitado _inv(String id, {bool adentro = true}) => Invitado(
 List<String> _ids(Iterable<Invitado> lista) => [for (final i in lista) i.id];
 
 void main() {
+  // El puente entre ventanas es uno para toda la PC (revisión del 13-nov).
+  group('un aviso por el puente, ¿es de esta fiesta?', () {
+    test('el de esta fiesta, sí; el de otra, no', () {
+      expect(avisoEsDeEsteEvento('evento-a', 'evento-a'), isTrue);
+      expect(avisoEsDeEsteEvento('evento-b', 'evento-a'), isFalse);
+    });
+
+    test('sin evento se toma como propio', () {
+      expect(avisoEsDeEsteEvento(null, 'evento-a'), isTrue);
+      expect(avisoEsDeEsteEvento('', 'evento-a'), isTrue);
+      expect(avisoEsDeEsteEvento(7, 'evento-a'), isTrue);
+    });
+
+    test('la ventana del tótem lo pregunta al vaciar y al ingresar', () {
+      final fuente =
+          File('lib/features/totem/totem_display.dart').readAsStringSync();
+      String caso(String nombre) {
+        final desde = fuente.indexOf("case '$nombre':");
+        expect(desde, isNot(-1), reason: 'falta el caso $nombre');
+        return fuente.substring(desde, fuente.indexOf('return null;', desde));
+      }
+
+      expect(caso('list_reset'), contains('avisoEsDeEsteEvento('));
+      expect(caso('guest_checkin'), contains('avisoEsDeEsteEvento('));
+    });
+
+    test('quien avisa que se vació la lista dice de qué fiesta', () {
+      final fuente = File(
+        'lib/features/recepcion/repositories/invitados_repository.dart',
+      ).readAsStringSync();
+      expect(fuente, contains('notifyListReset(eventoId)'));
+      expect(fuente, isNot(contains('notifyListReset()')));
+    });
+  });
+
   group('si la lectura va en silencio', () {
     test('la primera siempre', () {
       expect(lecturaEnSilencio(primera: true), isTrue);
@@ -427,6 +464,44 @@ void main() {
       expect(sala.cola, isEmpty);
       sala.leyo([_inv('a', adentro: false)], ahora: en(3));
       expect(sala.ingresados, isEmpty);
+    });
+
+    // La revisión del 13-nov (6.8.0): después de vaciar, la nube tarda unos
+    // segundos en enterarse. El tótem leía antes, encontraba a todos adentro sin
+    // haberlos "visto" y los saludaba de nuevo, uno por uno.
+    test('vaciar con la fiesta empezada: nadie se saluda de nuevo', () {
+      final sala = IngresosTotem();
+      final gente = [for (var i = 0; i < 50; i++) _inv('p$i')];
+      sala.leyo(gente, ahora: t0);
+      expect(sala.cola, isEmpty);
+
+      sala.vaciar();
+      sala.leyo(gente, ahora: en(20)); // la nube todavía los trae
+      expect(sala.cola, isEmpty, reason: 'ya habían entrado: van callados');
+      expect(sala.ingresados, hasLength(50));
+
+      sala.leyo(const [], ahora: en(40)); // la nube ya se enteró
+      expect(sala.ingresados, isEmpty);
+      expect(sala.cola, isEmpty);
+    });
+
+    test('el silencio después de vaciar es de una sola lectura', () {
+      final sala = IngresosTotem()..leyo([_inv('a')], ahora: t0);
+      sala.vaciar();
+      sala.leyo(const [], ahora: en(20));
+      sala.leyo([_inv('nuevo')], ahora: en(40));
+      expect(saludados(sala), ['nuevo']);
+    });
+
+    test('después de vaciar, el que entra por el aviso se saluda igual', () {
+      final sala = IngresosTotem()..leyo([_inv('a')], ahora: t0);
+      sala.vaciar();
+      sala.aviso(_inv('z'), porElPuente: true, ahora: en(1));
+      expect(saludados(sala), ['z']);
+      // Y la lectura callada que sigue no lo saca ni lo repite.
+      sala.leyo(const [], ahora: en(20));
+      expect(_ids(sala.ingresados), ['z']);
+      expect(sala.cola, isEmpty);
     });
 
     test('al cambiar de fiesta o volver de estar escondido, arranca callado',

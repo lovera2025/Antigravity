@@ -2,6 +2,7 @@
 // la vista del tótem de verdad con "Ver una llegada", ventana al centro en la PC
 // y hoja a pantalla completa en tablet y celular. Se monta entero, con la nube
 // reemplazada por los mismos providers que usa la app.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/forma_foto.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
+import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
 import 'package:arguello_events/features/totem/totem_orientation.dart';
 import 'package:arguello_events/features/totem/widgets/link_totem_navegador.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
@@ -1005,5 +1007,119 @@ void main() {
     expect(find.textContaining('supabase'), findsNothing);
     expect(find.byType(PersonalizarTotem), findsOneWidget);
     expect(repo.guardadas, isEmpty);
+  });
+
+  // Personalizar guarda la fila entera. Abierto sobre algo viejo, o sobre los
+  // valores de fábrica porque la config todavía no se había leído, pisaba en la
+  // nube la foto, el fondo y los textos (revisión del 13-nov).
+  group('lo de la nube no se pisa', () {
+    testWidgets('antes de guardar pregunta si sigue como se abrió',
+        (tester) async {
+      final repo = await _abrir(tester);
+      expect(repo.preguntas, 0);
+      await _guardar(tester);
+      expect(repo.preguntas, 1);
+      expect(repo.guardadas, hasLength(1));
+    });
+
+    testWidgets('si cambió, no guarda nada, lo dice y no cierra',
+        (tester) async {
+      final repo = await _abrir(
+        tester,
+        guardada: TotemConfig(
+          eventoId: eventoMasivo,
+          titulo: 'PROMOCIÓN 2026',
+          imagenUrl: 'https://nube.test/totem/foto.png?v=1',
+          fondoUrl: 'https://nube.test/totem/fondo.png?v=1',
+        ),
+      );
+      repo.cambioEnLaNube = true;
+      await tester.tap(_tarjeta(EstiloTotem.gala));
+      await tester.pump();
+      await _guardar(tester);
+
+      expect(repo.guardadas, isEmpty);
+      expect(repo.fotosBorradas, 0);
+      expect(repo.fondosBorrados, 0);
+      expect(repo.fondosSubidos, isEmpty);
+      expect(find.text(PersonalizarTotem.cambioEnLaNube), findsOneWidget);
+      expect(find.byType(PersonalizarTotem), findsOneWidget);
+      expect(find.text('Tótem actualizado.'), findsNothing);
+    });
+
+    testWidgets('si no se puede leer la nube, tampoco guarda', (tester) async {
+      final repo = await _abrir(tester);
+      repo.fallar = true;
+      await _guardar(tester);
+      expect(repo.preguntas, 1);
+      expect(repo.guardadas, isEmpty);
+      expect(find.text(PersonalizarTotem.errorAlGuardar), findsOneWidget);
+    });
+
+    final conTodo = TotemConfig(
+      eventoId: eventoMasivo,
+      titulo: 'PROMOCIÓN 2026',
+      subtitulo: 'Colegio de prueba',
+      imagenUrl: 'https://nube.test/totem/foto.png?v=3',
+      fondoUrl: 'https://nube.test/totem/fondo.png?v=2',
+      estilo: 'gala',
+      mostrarMusica: false,
+      fotoTamano: 180,
+      ubicacionY: -40,
+    );
+
+    test('la misma config, venga de la caché o de la nube', () {
+      final deLaCache = TotemConfig.fromJson(
+        jsonDecode(jsonEncode(conTodo.toJson())) as Map<String, dynamic>,
+      );
+      expect(TotemConfigRepository.mismaConfig(conTodo, deLaCache), isTrue);
+      expect(TotemConfigRepository.mismaConfig(deLaCache, conTodo), isTrue);
+    });
+
+    test('abierta sobre los valores de fábrica, con fila en la nube: no', () {
+      // El caso de la revisión: la config no se había leído todavía.
+      expect(
+        TotemConfigRepository.mismaConfig(
+          TotemConfig.defaults(eventoMasivo),
+          conTodo,
+        ),
+        isFalse,
+      );
+    });
+
+    test('sin fila en la nube: igual a los valores de fábrica y a nada más',
+        () {
+      expect(
+        TotemConfigRepository.mismaConfig(
+          TotemConfig.defaults(eventoMasivo),
+          null,
+        ),
+        isTrue,
+      );
+      expect(TotemConfigRepository.mismaConfig(conTodo, null), isFalse);
+    });
+
+    test('un cambio de otra PC se nota', () {
+      for (final otra in [
+        conTodo.copyWith(titulo: 'OTRO TÍTULO'),
+        conTodo.copyWith(limpiarImagen: true),
+        conTodo.copyWith(estilo: 'neon'),
+        conTodo.copyWith(mostrarMusica: true),
+      ]) {
+        expect(TotemConfigRepository.mismaConfig(conTodo, otra), isFalse);
+      }
+    });
+
+    test('los segundos de la llegada cambiados a mano esa noche no cuentan',
+        () {
+      // Se cambian desde Recepción sin pasar por Personalizar, que parte de
+      // esos y no los pisa.
+      final conOtrosSegundos =
+          conTodo.copyWith(llegadaNombreSeg: 9, llegadaCaminoSeg: 14);
+      expect(
+        TotemConfigRepository.mismaConfig(conTodo, conOtrosSegundos),
+        isTrue,
+      );
+    });
   });
 }

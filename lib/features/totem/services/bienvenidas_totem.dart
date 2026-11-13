@@ -27,6 +27,18 @@ const kCorteLargoTotem = Duration(minutes: 1);
 bool lecturaEnSilencio({required bool primera, Duration? corte}) =>
     primera || (corte != null && corte >= kCorteLargoTotem);
 
+/// Si un aviso que llegó por el puente entre ventanas es de la fiesta que este
+/// tótem está mostrando.
+///
+/// El puente es uno solo para toda la PC: hasta la 6.8.0 "se vació la lista" y
+/// "entró alguien" llegaban sin decir de qué fiesta eran, y vaciar la lista o
+/// deshacer el sorteo de **otra** fiesta le borraba a la tele los que ya habían
+/// entrado en esta. Un aviso sin evento (no debería haber) se toma como propio.
+bool avisoEsDeEsteEvento(Object? eventoDelAviso, String eventoDelTotem) {
+  if (eventoDelAviso is! String || eventoDelAviso.isEmpty) return true;
+  return eventoDelAviso == eventoDelTotem;
+}
+
 /// Cuánto esperar antes de volver a intentar conectarse: 2, 4, 8, 16 y 32
 /// segundos, y de ahí no pasa.
 Duration esperaDeReintento(int intentos) {
@@ -297,6 +309,10 @@ class IngresosTotem {
 
   bool _leyoAlgunaVez = false;
 
+  /// La próxima lectura va en silencio, sea como sea: se acaba de vaciar la
+  /// lista ([vaciar]).
+  bool _callarLaProxima = false;
+
   /// Desde cuándo no se puede leer la nube, con el reloj de esta PC.
   DateTime? _cortadoDesde;
 
@@ -318,12 +334,14 @@ class IngresosTotem {
       vistos: _vistos,
       delPuente: _delPuente,
       enCurso: _enCurso,
-      enSilencio: lecturaEnSilencio(
-        primera: !_leyoAlgunaVez,
-        corte: desde == null ? null : ahora.difference(desde),
-      ),
+      enSilencio: _callarLaProxima ||
+          lecturaEnSilencio(
+            primera: !_leyoAlgunaVez,
+            corte: desde == null ? null : ahora.difference(desde),
+          ),
     );
 
+    _callarLaProxima = false;
     _leyoAlgunaVez = true;
     // Leyó: recién acá se da por conectado, no al intentarlo.
     _cortadoDesde = null;
@@ -418,18 +436,28 @@ class IngresosTotem {
   }
 
   /// Se vació la lista o se deshicieron todos los ingresos.
+  ///
+  /// **La lectura que sigue va en silencio.** La nube puede tardar unos segundos
+  /// en enterarse de que la lista se vació: hasta la 6.8.0, si el tótem leía
+  /// antes, encontraba a todos adentro sin haberlos "visto" y los ponía de nuevo
+  /// en la cola de bienvenidas (con el salón, cien familias son más de veinte
+  /// minutos de saludos). Los que la nube todavía trae vuelven a la lista
+  /// callados, y la lectura siguiente los saca. El que entra de verdad después
+  /// llega por el aviso, que no pasa por acá.
   void vaciar() {
     ingresados.clear();
     cola.clear();
     enPantalla = null;
     _vistos.clear();
     _delPuente.clear();
+    _callarLaProxima = true;
   }
 
   /// Como recién abierto: otro evento, o la ventana que vuelve de estar
   /// escondida. La próxima lectura va en silencio.
   void reiniciar() {
     vaciar();
+    _callarLaProxima = false;
     _leyoAlgunaVez = false;
     _cortadoDesde = null;
   }

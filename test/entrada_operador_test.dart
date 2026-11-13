@@ -381,6 +381,19 @@ void main() {
       expect(lista.map((e) => e.id), ['a', 'b', 'c']);
     });
 
+    test('el de anoche sigue de madrugada, hasta el mediodía', () {
+      final e = [
+        fiesta('anoche', DateTime(2026, 11, 14, 21)),
+        fiesta('hoy', DateTime(2026, 11, 15, 21)),
+      ];
+      List<String> a(DateTime ahora) =>
+          [for (final f in fiestasQueVienen(e, ahora)) f.id];
+
+      expect(a(DateTime(2026, 11, 15, 1)), ['anoche', 'hoy']);
+      expect(a(DateTime(2026, 11, 15, 11, 59)), ['anoche', 'hoy']);
+      expect(a(DateTime(2026, 11, 15, 13)), ['hoy']);
+    });
+
     Future<ProviderContainer> abrir(
       WidgetTester tester, {
       required PermisosEfectivos permisos,

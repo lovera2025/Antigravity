@@ -184,6 +184,12 @@ class PersonalizarTotem extends ConsumerStatefulWidget {
   static const errorAlGuardar =
       'No se pudo guardar. Revisá la conexión e intentá de nuevo.';
 
+  /// Lo que se dice si lo guardado en la nube no es lo que esta ventana abrió
+  /// (`TotemConfigRepository.sigueComoSeAbrio`): no se guardó nada.
+  static const cambioEnLaNube =
+      'No se guardó: lo que hay guardado no es lo que se abrió acá. '
+      'Cerrá esta ventana y volvé a abrirla, así no se pisa nada.';
+
   /// Cómo se elige la foto. Solo los tests lo cambian.
   @visibleForTesting
   static Future<FilePickerResult?> Function() elegirFoto = _conElSelector;
@@ -590,6 +596,17 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     });
 
     try {
+      // Antes de borrar, subir o guardar nada: ¿lo de la nube sigue siendo lo
+      // que esta ventana mostró al abrirse? Se guarda la fila entera, así que
+      // sobre algo viejo o sobre los valores de fábrica se pisaría la foto, el
+      // fondo y los textos. Si no se puede leer, tira y no se guarda.
+      if (!await repo.sigueComoSeAbrio(_guardada)) {
+        if (!mounted) return;
+        ref.invalidate(totemConfigProvider(widget.eventoId));
+        setState(() => _error = PersonalizarTotem.cambioEnLaNube);
+        return;
+      }
+
       var url = _imagenUrl;
 
       if (_quitarImagen) {
