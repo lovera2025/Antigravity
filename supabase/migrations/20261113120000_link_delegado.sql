@@ -854,7 +854,8 @@ grant execute on function public.delegado_pendientes()                    to aut
 --   select (select count(*) from public.contratos_alumnos) as alumnos,
 --          (select count(*) from public.eventos)           as eventos;
 --
--- DESPUÉS: las tres tablas, vacías, y las trece funciones.
+-- DESPUÉS: las tres tablas, vacías, y las diecisiete funciones (ocho de adentro,
+-- cuatro de la página y cinco del programa).
 --   select (select count(*) from public.links_delegado)     as links,
 --          (select count(*) from public.celulares_delegado) as celulares,
 --          (select count(*) from public.cargas_delegado)    as cargas;

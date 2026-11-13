@@ -354,8 +354,8 @@ el cumplimiento, porque las ve cualquiera. Él creía que el tilde ya estaba hec
 - **Lo de arriba es la 6.7.0 como salió. La 6.7.1 lo cambió** (el tilde pasó al cartel del SORTEO): ver abajo.
 
 **La 6.7.1: "Cumplimiento debido" en el cartel del SORTEO, y la cruz para alinear** (programada el 12-nov a la tarde,
-**no se publica sola: el usuario decidió el 12-nov que sale todo junto en la 6.8.0** (ver abajo). Quedan abiertas dos
-preguntas para antes de publicar: si el "Por filas" corregido es lo que quería y qué dicen las novedades;
+**no se publicó sola: salió adentro de la 6.8.0, publicada el 13-nov** (ver abajo; "Por filas" quedó como el dibujo
+corregido, que se le reenvió antes de publicar);
 `docs/CONTEXTO_v6.7.1_2026-11-12.md`, que empieza con "Para retomar en otro chat" y dice **lo que falta, en orden, y lo
 que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
 6.7.0: al tildar en el plano las mesas ya aparecían repartidas ("se pierde la emoción") y el cartel se confundía.
@@ -386,10 +386,15 @@ que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
   puede abrir en el sandbox.**
 - Sigue pendiente el tilde con el sorteo **por división**.
 
-**La 6.8.0: el link del delegado, y todo lo de la 6.7.1** (programada el 12-nov a la noche, versión `6.8.0+74`, **en la rama
-y SIN PUBLICAR**: 61 reglas contra el SQL y 4.670 pruebas pasan, y el recorrido de punta a punta está hecho; `docs/CONTEXTO_v6.8.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está **lo que falta,
-en orden, y lo que no se probó**). **Un SQL en la nube, solo de agregar, sin correr**
-(`supabase/migrations/20261113120000_link_delegado.sql`); **sin migración en las PCs**. El usuario pidió algo más fácil que
+**La 6.8.0: el link del delegado, y todo lo de la 6.7.1** (programada el 12-nov a la noche, versión `6.8.0+74`.
+**PUBLICADA el 13-nov a las 8:10, con el usuario**: la foto de la mora "antes de 6.8.0" (642 alumnos; una sola alumna
+listada, por un cobro del 12-nov que no saldó toda la mora), el SQL del link corrido con los conteos iguales y **probado
+en la nube de verdad** (30 comprobaciones en un bloque que se deshace solo), el tag `v6.8.0`, el release con el Setup y
+el APK, y la web. Las novedades dicen "Acompañantes y música desde el celular, y nuevas capacidades en el modo jefe".
+**Falta que instale, primero la PC que sortea, y la foto "después de 6.8.0"**, que cubre de la 6.6.1 en adelante;
+`docs/CONTEXTO_v6.8.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está **cómo se publicó, lo que
+falta y lo que no se probó**). **Un SQL en la nube, solo de agregar, corrido el 13-nov**
+(`supabase/migrations/20261113120000_link_delegado.sql`: tres tablas y 17 funciones); **sin migración en las PCs**. El usuario pidió algo más fácil que
 el Excel para acompañantes y música, y seguro; lo fue decidiendo con una maqueta y pidió probarlo en un sandbox antes de
 integrarlo.
 - **Convive con el Excel**, que no cambió. PLANILLAS → "Acompañantes y música" tiene debajo **LINK PARA LOS DELEGADOS**
@@ -416,8 +421,12 @@ integrarlo.
   `tool/delegado_sandbox/servidor.mjs` (la página y la ventana de verdad, contra el Postgres de prueba).
 - **Una llamada a una función de la nube lleva siempre `params`, aunque no mande ninguno**: sin eso la librería manda
   `null` de cuerpo y la llamada falla sin error a la vista (así el aviso del inicio no llegaba).
-- **El SQL en la nube y la página en una dirección de prueba de Vercel se le piden al usuario uno por uno y en el
-  momento.** No crear links hasta que las PCs tengan la 6.8.0 y el SQL esté corrido.
+- **Un SQL de funciones corrido por el conector se comprueba con `md5(prosrc)`** contra la huella del cuerpo de cada
+  función del archivo: el conector recibe el texto copiado, no el archivo. **Y una prueba en la nube de verdad va en un
+  bloque `do` que termina con `raise exception` con el resultado**: Postgres deshace todo y no queda ni una fila (los
+  roles, con `set_config('role', …, true)` y `request.jwt.claims`).
+- **No crear links hasta que las PCs tengan la 6.8.0.** Falta, con la versión instalada: crear un link de verdad, abrirlo
+  en un celular desde WhatsApp y aceptar desde el programa.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

@@ -6,6 +6,62 @@ base del equipo sigue en la v79. Viene de `docs/CONTEXTO_v6.7.1_2026-11-12.md`.
 
 ## Para retomar en otro chat
 
+**Estado (13-nov, 8:15): la 6.8.0 está PUBLICADA, con el usuario** ("Sí, publicá"; el SQL, con su OK
+en el momento). **Falta que instale, primero la PC que sortea, y la foto de la mora "después de
+6.8.0"**, que cubre de la 6.6.1 en adelante. Lo que sigue está en "Lo que falta ahora"; la tabla y la
+lista de más abajo son de antes de publicar y quedan como historia.
+
+### Cómo se publicó (13-nov, de 7:50 a 8:15)
+
+- **Foto de la mora "antes de 6.8.0"** (`c8f8ee6d…`, 642 alumnos, por el conector). Comparada con la
+  de "antes de 6.7.0" (`1ce863c0…`) lista a **una alumna**: la mora pendiente le subió de 350 a
+  53.800 en la misma escritura de un cobro del 12-nov a las 17:40 (`mora_cambios`: el saldo bajó de
+  295.000 a 120.000 y el "ya usado" pasó de 0 a 75.000). Es un cobro que no saldó toda la mora, no
+  una mora revivida; se le avisó al usuario. El nombre, en la foto, no acá.
+- **El SQL del link, corrido** por el conector en tres partes, en orden. Antes y después: 642 alumnos
+  y 31 eventos, y la huella de `contratos_alumnos` (ids y `updated_at`) igual. Las tres tablas,
+  vacías, con RLS, sin políticas y sin lectura para `anon` ni `authenticated`. **Son 17 funciones, no
+  trece** (ocho de adentro, cuatro de la página, cinco del programa): el comentario del archivo
+  estaba viejo y se corrigió. **El cuerpo de cada una en la nube es igual al del archivo**: se
+  comparó `md5(prosrc)` con la huella sacada del archivo, las 17 iguales.
+- **El link, probado en la nube de verdad**, 30 comprobaciones en un bloque que termina con un error a
+  propósito, así Postgres deshace todo (después: las tres tablas en cero). Con los roles de verdad
+  (`anon`, y `authenticated` con su `request.jwt.claims`): sin usuario no se crea un link ni se lee
+  una tabla (42501), con usuario tampoco se lee una tabla; crear, la entrada sin apellido, el link mal
+  copiado, la lista (117 alumnos de una fiesta de verdad), el tope de 2 acompañantes, la música en un
+  renglón, el segundo celular que no pisa, el tercero que no entra, enviar una vez, el aviso que salta
+  y se va al traer, el límite vencido, y el alumno de `contratos_alumnos` igual antes y después.
+- **`flutter test` entero: 4.670, todas pasan** (antes de compilar).
+- **El instalador, por pasos**, con las comprobaciones: el programa dice `6.8.0+74`; la página del
+  celular entera antes de `ISCC` y **146 archivos en su registro, la misma lista que la 6.7.0**; la
+  clave de firma y `apksigner` ("CN=Junior Eventos"). Registros en `build/armado_680/`.
+- **Tag `v6.8.0`** en `680f9f9`. **Release** "Junior Eventos 6.8.0" con
+  `Setup.Junior.Eventos.v6.8.0.exe` (41.193.876 bytes) y `Junior.Eventos.v6.8.0.apk` (53.696.868
+  bytes, arm64). Los tamaños subidos son los de los archivos de esta PC.
+- **Las novedades dicen "Acompañantes y música desde el celular, y nuevas capacidades en el modo
+  jefe"** (se le propuso y dijo "Sí, publicá").
+- **Web** en Vercel: `arguello-events-4581dapee`, producción; `version.json` da 6.8.0/74. La anterior,
+  para volver atrás desde Vercel: `arguello-events-op84nn0r4` (la 6.7.0). **La página del delegado
+  abre en la web de verdad**: con una clave inventada le pregunta a la nube y dice "Este link no es
+  válido". La dirección de prueba de Vercel no hizo falta.
+- "Por filas": se le reenvió el dibujo corregido y publicó sin pedir cambios.
+- El título cortado del día límite quedó en "Día límite" (`680f9f9`).
+
+### Lo que falta ahora
+
+1. **Que instale, primero la PC que sortea**, y avise en cuáles (también las tablets).
+2. **La foto de la mora "después de 6.8.0"** y la comparación con `c8f8ee6d…`. Cubre también la 6.6.1,
+   la 6.6.2 y la 6.7.0, que no tienen su "después".
+3. Con la 6.8.0 instalada: **crear un link de verdad y aceptar desde el programa**, que es lo único que
+   ni el sandbox ni la prueba en la nube pudieron probar, y abrir el link en un celular desde WhatsApp.
+4. De la 6.7.1: si destildó "Cumplimiento debido" en el plano de la fiesta donde lo tildó con la
+   6.7.0, y cómo salió el sorteo.
+
+**No crear links hasta que las PCs tengan la 6.8.0.** Una PC con una versión anterior no ve la sección
+y no rompe nada.
+
+### Antes de publicar (historia)
+
 **Estado al cortar (13-nov, 0:30): la 6.8.0 está PROGRAMADA, probada en el sandbox y guardada en la
 rama, SIN PUBLICAR.** Versión `6.8.0+74` en `pubspec.yaml` y en el `.iss`. El usuario pidió guardar
 el contexto para seguir en otro chat. **No se corrió ningún SQL en su nube ni se tocó la web.**
@@ -16,7 +72,7 @@ va adentro. **No volver a preguntarle si se publica la 6.7.1.**
 
 | | Estado |
 |---|---|
-| El SQL del link (tres tablas cerradas y trece funciones) | Escrito. **Sin correr en la nube** |
+| El SQL del link (tres tablas cerradas y diecisiete funciones) | Escrito. **Sin correr en la nube** |
 | Las reglas, contra ese mismo SQL en un Postgres de prueba | **61 de 61 pasan** (`node pruebas.mjs`) |
 | La página del delegado (`?delegado&clave=…`) | Programada |
 | La sección LINK PARA LOS DELEGADOS y ACEPTAR Y CARGAR | Programadas |
