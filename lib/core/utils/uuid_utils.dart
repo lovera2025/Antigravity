@@ -115,6 +115,21 @@ class UuidUtils {
   static String barraRecargoId(String eventoId) =>
       _uuidDe('barra_recargos_v1|$eventoId');
 
+  /// PK estable para `entradas_config` (v80): una por fiesta. Si el jefe cambia el
+  /// precio desde dos PCs, escriben la misma fila (gana la última).
+  static String entradasConfigId(String eventoId) =>
+      _uuidDe('entradas_config_v1|$eventoId');
+
+  /// PK estable para `entradas_anulaciones` (v80): una por venta. Anularla dos
+  /// veces deja una sola anulación.
+  static String entradasAnulacionId(String ventaId) =>
+      _uuidDe('entradas_anulaciones_v1|$ventaId');
+
+  /// PK estable para `entradas_verificaciones` (v80): una por venta. Tildar y
+  /// destildar "Pago verificado" reescribe la misma fila.
+  static String entradasVerificacionId(String ventaId) =>
+      _uuidDe('entradas_verificaciones_v1|$ventaId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

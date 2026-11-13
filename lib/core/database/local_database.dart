@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 79;
+  static const int _version = 80;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -131,6 +131,11 @@ class LocalDatabase {
       await crearTablasV79(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v79 sin crear: $e');
+    }
+    try {
+      await crearTablasV80(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v80 sin crear: $e');
     }
     return db;
   }
@@ -719,6 +724,7 @@ class LocalDatabase {
     await crearTablasV77(db);
     await crearTablasV78(db);
     await crearTablasV79(db);
+    await crearTablasV80(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1141,6 +1147,131 @@ class LocalDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_barra_cierres_caja ON barra_cierres(caja_barra_id)',
+    );
+  }
+
+  /// Las cinco tablas de la v80 (13-nov-2026): **la venta de entradas**
+  /// (`docs/SPEC_venta_de_entradas_2026-11-13.md`). El precio de cada fiesta
+  /// (`entradas_config`), la caja de quien vende (`entradas_cajas`), cada venta
+  /// (`entradas_ventas`), su anulación (`entradas_anulaciones`) y "Pago
+  /// verificado" (`entradas_verificaciones`).
+  ///
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar ninguna tabla que ya exista. Una venta de entradas
+  /// no es un pago de cuota: nada de esto escribe en `contratos_alumnos`,
+  /// `pagos_contrato_alumno` ni `sesiones_caja`. Una versión anterior no las
+  /// conoce y sigue como siempre.
+  static Future<void> crearTablasV80(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_config (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        valor_entrada REAL,
+        precio_anticipada REAL,
+        anticipada_hasta TEXT,
+        descuento_lugares_pct REAL NOT NULL DEFAULT 50,
+        recargo_pct REAL NOT NULL DEFAULT 0,
+        descuento_a_mano INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_config_evento ON entradas_config(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_cajas (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        operador_id TEXT,
+        operador_nombre TEXT,
+        cambio_inicial REAL NOT NULL DEFAULT 0,
+        abierta_at TEXT NOT NULL,
+        cerrada_at TEXT,
+        efectivo_contado REAL,
+        diferencia REAL,
+        nota_cierre TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_cajas_evento ON entradas_cajas(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_ventas (
+        id TEXT PRIMARY KEY,
+        caja_entradas_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        numero INTEGER NOT NULL,
+        contrato_alumno_id TEXT,
+        comprador_nombre TEXT NOT NULL,
+        comprador_dni TEXT,
+        renglones TEXT NOT NULL,
+        cantidad INTEGER NOT NULL,
+        total REAL NOT NULL,
+        descuento REAL NOT NULL DEFAULT 0,
+        medio TEXT NOT NULL,
+        efectivo REAL NOT NULL DEFAULT 0,
+        transferencia REAL NOT NULL DEFAULT 0,
+        recibe REAL,
+        vuelto REAL NOT NULL DEFAULT 0,
+        recargo REAL NOT NULL DEFAULT 0,
+        recargo_pct REAL,
+        numeros TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_ventas_evento ON entradas_ventas(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_ventas_caja ON entradas_ventas(caja_entradas_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_ventas_alumno ON entradas_ventas(contrato_alumno_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_anulaciones (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        caja_entradas_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        motivo TEXT NOT NULL,
+        devueltas INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_anulaciones_evento ON entradas_anulaciones(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_anulaciones_caja ON entradas_anulaciones(caja_entradas_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_verificaciones (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        verificado INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_verificaciones_evento ON entradas_verificaciones(evento_id)',
     );
   }
 
@@ -3427,6 +3558,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v79 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v79: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 79, las tablas de la v80 no aparecen.
+    if (oldVersion < 80 && newVersion >= 80) {
+      debugPrint('  🔧 v80: la venta de entradas');
+      try {
+        await crearTablasV80(db);
+        debugPrint('✅ Migración v80 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v80: $e');
       }
     }
   }

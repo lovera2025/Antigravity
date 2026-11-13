@@ -448,6 +448,11 @@ class SyncEngine {
     'barra_vales': 'updated_at',
     'barra_recargos': 'updated_at',
     'barra_cierres': 'updated_at',
+    'entradas_config': 'updated_at',
+    'entradas_cajas': 'updated_at',
+    'entradas_ventas': 'updated_at',
+    'entradas_anulaciones': 'updated_at',
+    'entradas_verificaciones': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1619,6 +1624,13 @@ class SyncEngine {
     // El pedido de cierre de una caja de barra y el OK de la encargada (v79):
     // mientras no cruza, la cajera espera con la caja abierta.
     'barra_cierres',
+    // La venta de entradas (v80): es plata, y dos PCs vendiendo la misma fiesta
+    // tienen que verse en segundos (los números del talonario, las de los
+    // lugares que ya compró una familia) y una anulación tiene que llegar a
+    // quien vendió.
+    'entradas_cajas',
+    'entradas_ventas',
+    'entradas_anulaciones',
   ];
 
   /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
@@ -1669,6 +1681,10 @@ class SyncEngine {
     'barra_precios',
     // El recargo de cada fiesta (v78): lo pone el jefe con los precios.
     'barra_recargos',
+    // El precio de la entrada de cada fiesta y "Pago verificado" (v80): los
+    // carga el jefe en la oficina.
+    'entradas_config',
+    'entradas_verificaciones',
   ];
 
   /// Si ya corrió [revisarMora] en esta sesión del programa.
@@ -2059,6 +2075,11 @@ class SyncEngine {
       if (table == 'barra_cierres') return 5;
       // Cuelga de la fiesta, como el precio.
       if (table == 'barra_recargos') return 2;
+      // La venta de entradas (v80), de padres a hijas, como la barra.
+      if (table == 'entradas_config' || table == 'entradas_cajas') return 2;
+      if (table == 'entradas_ventas') return 4;
+      if (table == 'entradas_anulaciones') return 5;
+      if (table == 'entradas_verificaciones') return 5;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -2418,6 +2439,11 @@ class SyncEngine {
       _pullTable(db, 'barra_vales', 'updated_at'),
       _pullTable(db, 'barra_recargos', 'updated_at'),
       _pullTable(db, 'barra_cierres', 'updated_at'),
+      _pullTable(db, 'entradas_config', 'updated_at'),
+      _pullTable(db, 'entradas_cajas', 'updated_at'),
+      _pullTable(db, 'entradas_ventas', 'updated_at'),
+      _pullTable(db, 'entradas_anulaciones', 'updated_at'),
+      _pullTable(db, 'entradas_verificaciones', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -3534,6 +3560,85 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v80, la venta de entradas: exactamente las del `toMap()` de cada modelo
+      // y las del SQL (`test/sync_tablas_v80_test.dart` las compara).
+      'entradas_config': [
+        'id',
+        'evento_id',
+        'valor_entrada',
+        'precio_anticipada',
+        'anticipada_hasta',
+        'descuento_lugares_pct',
+        'recargo_pct',
+        'descuento_a_mano',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'entradas_cajas': [
+        'id',
+        'evento_id',
+        'operador_id',
+        'operador_nombre',
+        'cambio_inicial',
+        'abierta_at',
+        'cerrada_at',
+        'efectivo_contado',
+        'diferencia',
+        'nota_cierre',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'entradas_ventas': [
+        'id',
+        'caja_entradas_id',
+        'evento_id',
+        'numero',
+        'contrato_alumno_id',
+        'comprador_nombre',
+        'comprador_dni',
+        'renglones',
+        'cantidad',
+        'total',
+        'descuento',
+        'medio',
+        'efectivo',
+        'transferencia',
+        'recibe',
+        'vuelto',
+        'recargo',
+        'recargo_pct',
+        'numeros',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'entradas_anulaciones': [
+        'id',
+        'venta_id',
+        'caja_entradas_id',
+        'evento_id',
+        'motivo',
+        'devueltas',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'entradas_verificaciones': [
+        'id',
+        'venta_id',
+        'evento_id',
+        'verificado',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       // La v78: las 7 columnas de `RecargoBarra.toMap()`.
       'barra_recargos': [
         'id',
@@ -3711,6 +3816,14 @@ class SyncEngine {
         'una fila por fiesta, con id fijo: cambiar el recargo la actualiza, no se borra',
     'barra_cierres':
         'solo se agregan filas: el pedido de cierre de la cajera y cada respuesta son otra',
+    'entradas_config':
+        'una fila por fiesta con id fijo: cambiar el precio la actualiza, no se borra',
+    'entradas_cajas': 'una caja se cierra, no se borra',
+    'entradas_ventas':
+        'una venta nunca se edita ni se borra: anularla es otra fila',
+    'entradas_anulaciones': 'solo se agregan filas',
+    'entradas_verificaciones':
+        'una fila por venta con id fijo: destildar la actualiza, no se borra',
   };
 
   /// Para los tests: las tablas que se revisan.

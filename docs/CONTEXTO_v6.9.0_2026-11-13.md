@@ -152,14 +152,36 @@ nombres están escritos distinto (no cambian qué se hace):
 **Ajustes al spec** (aprobados con el plan): los tres PDF nuevos con `PdfService.fuentesOutfit()` y en un archivo
 propio; maqueta antes de las pantallas; elegir la fiesta para vender usa la regla del mediodía de la Parte A.
 
-**Hecho hasta acá (sin commit todavía):** los cinco modelos y el repositorio local, en `lib/features/entradas/datos/`
-(`config_entradas.dart`, `caja_entradas.dart`, `venta_entradas.dart`, `anulacion_entradas.dart`,
-`verificacion_entradas.dart`, `entradas_repositorio.dart`, `entradas_local.dart`) y los tres ids fijos en `UuidUtils`.
+### Etapa 1, los datos — HECHA (13-nov)
 
-**Falta de la etapa 1:** la v80 en `LocalDatabase` (`crearTablasV80`, el bloque de la migración y la red del arranque),
-el SQL de la nube (escrito, **sin correr**), las cinco tablas en el motor (`_incrementalColumns`, `_pullFromCloud`, la
-prioridad, las columnas que suben, `_tablasSinRevisarBorrados`, y cajas, ventas y anulaciones en `_tablasDelCobro`), y
-sus tests (`migracion_v80_test`, `sql_v80_coherencia_test`, `sync_tablas_v80_test`, `entradas_repositorio_test`,
-`venta_entradas_no_toca_test`; `borrados_de_otra_pc_test` y `sync_en_reposo_test` tienen que seguir pasando).
+- **Los cinco modelos** en `lib/features/entradas/datos/`: `ConfigEntradas` (el precio de la fiesta; `conPrecios`
+  valida y tira si algo no cierra), `CajaEntradas`, `VentaEntradas` con `RenglonEntradas` (`suelta` y `lugar`;
+  `precioCon` es la única cuenta del descuento, en pesos enteros; `VentaEntradas.nueva` tira si no cierra),
+  `AnulacionEntradas` (con `devueltas`) y `VerificacionEntradas`. Los tres ids fijos, en `UuidUtils`.
+- **El repositorio:** `EntradasLocal` (`entradas_local.dart`), con tres interfaces en `entradas_repositorio.dart`:
+  `EntradasDeLaFiesta` (leer), `EntradasDeLaCaja` (abrir, vender, cerrar) y `EntradasDelJefe` (precio, anular,
+  verificar). Todo lo que escribe va con su entrada en la cola en la misma transacción. Nada se borra.
+  **Una caja vive en el equipo que la abrió** (`cajaAbierta` mira el `device_id`).
+- **La v80** en `LocalDatabase` (`crearTablasV80`, el bloque `oldVersion < 80`, la red del arranque y `_onCreate`).
+- **El SQL de la nube, escrito y SIN CORRER:** `supabase/migrations/20261113200000_venta_de_entradas.sql`. Solo
+  agrega cinco tablas; sin CHECK, sin clave foránea, sin índice único; RLS para usuarios logueados y los dos
+  disparadores; nada a Realtime. **Se corre antes de instalar, con el OK del usuario.**
+- **El motor:** las cinco en `_incrementalColumns` y en la bajada general; cajas, ventas y anulaciones en
+  `_tablasDelCobro` (la red de 5 minutos), config y verificaciones en `_tablasDeCarga`; prioridades 2, 4 y 5; sus
+  columnas; y las cinco en `_tablasSinRevisarBorrados`, con su motivo.
+- **Tests nuevos:** `migracion_v80_test` (de 79 a 80 lo demás queda igual, se corre dos veces, la vuelta a la 6.8.0),
+  `sync_tablas_v80_test` (el modelo, la base, el motor y el SQL tienen las mismas columnas), `entradas_repositorio_test`
+  y `venta_entradas_no_toca_test` (lee el código de la venta de entradas y falla si toca cuotas, saldo, mora, mesas o
+  sillas). `borrados_de_otra_pc_test` y `sync_en_reposo_test` siguen pasando.
+- A `migracion_v79_test` se le puso `versionNueva: 79` en la copia, como a la de la 78.
 
-**Con la v80 en la rama, no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen la 79).
+**Falta de la etapa 1, para el día de publicar:** `tool/verificar_migracion_v80_test.dart` sobre una copia de la base
+real (el de la v79 es el modelo), con la app instalada cerrada: se le pide al usuario.
+
+**Con la v80 en la rama, no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen la 79). Los
+arneses `tool/*_prueba.dart` que no abren la base sí se pueden correr.
+
+### Etapa 2, las cuentas — sigue esto
+
+`lib/features/entradas/cuentas/`, puras y sin pantalla (sección 5 del spec): el precio de hoy, las de los lugares
+adicionales (cuántas le quedan a cada familia), los números del talonario y el cierre de una caja.
