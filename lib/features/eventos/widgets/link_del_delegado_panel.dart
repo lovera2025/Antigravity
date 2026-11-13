@@ -24,7 +24,8 @@ Future<LimiteElegido?> elegirLimiteConSelectores(
     initialDate: desde.dia.isBefore(hoy) ? hoy : desde.dia,
     firstDate: DateTime(hoy.year, hoy.month, hoy.day),
     lastDate: hoy.add(const Duration(days: 365)),
-    helpText: 'Hasta qué día pueden cargar',
+    // Corto: el selector corta un título largo ("Hasta qué día pu…").
+    helpText: 'Día límite',
   );
   if (dia == null || !context.mounted) return null;
   final hora = await showTimePicker(

@@ -42,9 +42,8 @@ va adentro. **No volver a preguntarle si se publica la 6.7.1.**
    3. poner la página en una dirección de prueba de Vercel (`flutter build web --release`, copiar a
       `.vercel/output/static` y `npx vercel deploy --prebuilt`, **sin** `--prod`), para que abra el
       link desde su celular por WhatsApp. La web de siempre no cambia.
-3. Un detalle chico que quedó a la vista: en el selector del día, el título "Hasta qué día pueden
-   cargar" sale cortado ("Hasta qué día pu…"). Acortarlo en `elegirLimiteConSelectores`
-   (`link_del_delegado_panel.dart`).
+3. ~~El título cortado del selector del día ("Hasta qué día pu…")~~ **Hecho el 13-nov**: ahora
+   dice "Día límite" (`elegirLimiteConSelectores`, `link_del_delegado_panel.dart`).
 4. Lo que quedó abierto de la 6.7.1, antes de publicar: si "Por filas" corregido es lo que quería
    (recorrerlo con el mouse en `tool/plano_prueba.dart` y mandarle la captura), y **qué dicen las
    novedades** de la 6.8.0.
