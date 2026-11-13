@@ -127,6 +127,78 @@ void main() {
     expect(notebook.c.read(clienteDeLaBarraProvider), isNull);
   });
 
+  // Hasta la 6.8.0 solo VENDER buscaba la central: la encargada que reabría la app y
+  // entraba derecho a LAS CAJAS quedaba afuera de la red del salón (revisión del 13-nov).
+  group('la encargada que entra directo a LAS CAJAS', () {
+    test('se conecta, ve el pedido de la cajera y su OK le llega, sin internet', () async {
+      final notebook = equipo('notebook');
+      final cajera = equipo('tablet-cajera');
+      final encargada = equipo('tablet-encargada');
+      await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+
+      await cajera.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 1 · Marta');
+      await encargada.c
+          .read(clienteDeLaBarraProvider.notifier)
+          .arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada · Romi');
+      final deLaEncargada = encargada.c.read(clienteDeLaBarraProvider);
+      expect(deLaEncargada, isNotNull, reason: 'LAS CAJAS también busca la central');
+      expect(deLaEncargada!.nombreCaja, 'Encargada · Romi');
+      await hasta(() => notebook.c.read(centralDeLaBarraProvider).conectadas == 2, que: 'las dos tablets conectadas');
+
+      // La cajera pide cerrar: a la encargada le llega por la red del salón.
+      final barraCajera = cajera.c.read(barraDeEsteEquipoProvider);
+      final caja = await barraCajera.abrirCaja(
+        eventoId: _fiesta,
+        operadorId: UuidUtils.generate(),
+        operadorNombre: 'Marta',
+        numeroCaja: 1,
+      );
+      final pedido = await barraCajera.anotarPasoDelCierre(PasoDelCierre.pedir(
+        caja: caja,
+        efectivoContado: 27000,
+        hechoPor: 'Marta',
+        ahora: DateTime.now().toUtc(),
+      ));
+      await hasta(() => encargada.barra.pasosGuardados.any((p) => p.id == pedido.id), que: 'el pedido en la tablet de la encargada');
+
+      // Y su OK, anotado desde LAS CAJAS (la barra de su equipo), le llega a la cajera.
+      final ok = await encargada.c.read(barraDelJefeProvider).anotarPasoDelCierre(PasoDelCierre.responder(
+            pedido: pedido,
+            tipo: TipoPasoDelCierre.ok,
+            hechoPor: 'Romi',
+            ahora: DateTime.now().toUtc(),
+          ));
+      await hasta(() => cajera.barra.pasosGuardados.any((p) => p.id == ok.id), que: 'el OK en la tablet de la cajera');
+    });
+
+    test('si VENDER ya la conectó para esa fiesta, queda esa: no se corta ni cambia de nombre', () async {
+      final tablet = equipo('tablet-encargada');
+      final notifier = tablet.c.read(clienteDeLaBarraProvider.notifier);
+      await notifier.arrancar(eventoId: _fiesta, nombreCaja: 'Caja 2 · Romi');
+      final deVender = tablet.c.read(clienteDeLaBarraProvider);
+      await notifier.arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada · Romi');
+      expect(identical(tablet.c.read(clienteDeLaBarraProvider), deVender), isTrue);
+      expect(tablet.c.read(clienteDeLaBarraProvider)!.nombreCaja, 'Caja 2 · Romi');
+    });
+
+    test('en la notebook con la central prendida, tampoco arranca otro cliente', () async {
+      final notebook = equipo('notebook');
+      await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+      await notebook.c.read(clienteDeLaBarraProvider.notifier).arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada');
+      expect(notebook.c.read(clienteDeLaBarraProvider), isNull);
+    });
+
+    test('el botón LAS CAJAS del inicio de la barra lo hace; la vista que comparte con el jefe, no', () {
+      final inicio = File('lib/features/barra/widgets/barra_home_screen.dart').readAsStringSync();
+      final abrir = inicio.substring(inicio.indexOf('void _abrirLasCajas('));
+      expect(abrir.substring(0, abrir.indexOf('LasCajasScreen(')), contains('arrancarSiNoHay('));
+      expect(inicio, contains('onPressed: () => _abrirLasCajas(e)'));
+      // La vista de adentro la usan también el jefe en la PC y la web.
+      final vista = File('lib/features/barra/jefe/cajas_de_la_fiesta.dart').readAsStringSync();
+      expect(vista, isNot(contains('clienteDeLaBarraProvider')));
+    });
+  });
+
   test('apagarla cierra la puerta: la tablet pasa a "sin central"', () async {
     final notebook = equipo('notebook');
     final tablet = equipo('tablet-a');

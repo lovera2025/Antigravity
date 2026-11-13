@@ -293,6 +293,20 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     cliente.arrancar();
   }
 
+  /// La encargada que entra **directo a LAS CAJAS**, sin pasar por VENDER: busca la
+  /// central igual. Hasta la 6.8.0 solo VENDER la arrancaba: si su tablet se reiniciaba
+  /// y ella entraba derecho a LAS CAJAS, sin internet no veía las ventas de las otras
+  /// cajas ni "la Caja N pide cerrar", y su OK no salía por la red del salón (revisión
+  /// del 13-nov).
+  ///
+  /// **Solo si no hay una conexión para esa fiesta:** si ya la arrancó VENDER con su
+  /// caja, queda esa, con su nombre; [arrancar] con otro nombre la cortaría y la
+  /// volvería a armar.
+  Future<void> arrancarSiNoHay({required String eventoId, required String nombre}) async {
+    if (_cliente?.eventoId == eventoId) return;
+    await arrancar(eventoId: eventoId, nombreCaja: nombre);
+  }
+
   /// La dirección que muestra la notebook, escrita a mano en la tablet. Null: se la busca sola.
   Future<void> ponerAMano(DondeEstaLaCentral? donde) async {
     await ref.read(guardadoDeLaCentralProvider).anotarAMano(donde);

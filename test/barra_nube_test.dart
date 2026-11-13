@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/services/cuerpo_del_broadcast.dart';
+import 'package:arguello_events/core/services/pulso_entre_equipos.dart';
+import 'package:arguello_events/core/services/sync_engine.dart' show trabajoDelPulso;
 import 'package:arguello_events/features/barra/datos/barra_nube.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -29,6 +32,9 @@ class _Nube {
   List<Map<String, Object?>> Function(String tabla, int desde) filas = (_, _) => const [];
   bool falla = false;
 
+  /// Si falla solo el aviso a los equipos (el broadcast por REST).
+  bool fallaElAviso = false;
+
   http.Client get cliente => MockClient((req) async {
         final tabla = req.url.pathSegments.last;
         pedidos.add(_Pedido(
@@ -38,7 +44,7 @@ class _Nube {
           req.headers,
           req.body.isEmpty ? null : jsonDecode(req.body),
         ));
-        if (falla) {
+        if (falla || (fallaElAviso && tabla == 'broadcast')) {
           return http.Response(jsonEncode({'message': 'sin red', 'code': '500'}), 500,
               headers: {'content-type': 'application/json'}, request: req);
         }
@@ -192,6 +198,73 @@ void main() {
       final a = await barra.anular(venta, motivo: 'otra', quien: 'Jefe');
       expect(a.motivo, 'la primera');
       expect(nube.pedidos.where((p) => p.metodo != 'GET'), isEmpty);
+    });
+  });
+
+  // Hasta la 6.8.0 el OK desde el iPhone quedaba en la nube sin avisarle a nadie: la
+  // tablet de la cajera lo bajaba con la red de 5 minutos, y a los 3 ya le ofrecía
+  // CERRAR SIN ESPERAR (revisión del 13-nov).
+  group('el OK de la encargada desde la web', () {
+    final pedido = PasoDelCierre(
+      id: 'd0000000-0000-4000-8000-000000000001',
+      cajaBarraId: 'c0000000-0000-4000-8000-000000000001',
+      eventoId: _evento,
+      tipoClave: TipoPasoDelCierre.pedido.clave,
+      efectivoContado: 120000,
+      hechoPor: 'La cajera',
+      deviceId: 'tablet',
+      createdAt: '2026-12-05T05:10:00+00:00',
+      updatedAt: '2026-12-05T05:10:00+00:00',
+    );
+    PasoDelCierre elOk() => PasoDelCierre.responder(
+          pedido: pedido,
+          tipo: TipoPasoDelCierre.ok,
+          hechoPor: 'La encargada',
+          ahora: ahora,
+        );
+
+    test('queda en la nube y les avisa a los equipos, para que la tablet lo baje ya', () async {
+      final ok = await barra.anotarPasoDelCierre(elOk());
+      expect(ok.deviceId, 'web');
+      expect(nube.pedidos.map((p) => '${p.metodo} ${p.tabla}'),
+          ['POST barra_cierres', 'POST broadcast']);
+
+      final aviso = ((nube.pedidos.last.cuerpo as Map)['messages'] as List).single as Map;
+      expect('${aviso['topic']}', contains(kCanalDelPulso));
+      expect(aviso['event'], kEventoDelPulso);
+      final cuerpo = Map<String, dynamic>.from(aviso['payload'] as Map);
+      expect(cuerpo['tablas'], ['barra_cierres']);
+      expect(cuerpo['origen'], 'web');
+      expect(cuerpo.containsKey('payload'), isFalse,
+          reason: 'ningún aviso nuestro lleva una clave payload');
+
+      // La tablet de la cajera lo entiende, llegue suelto (socket) o envuelto (REST).
+      for (final comoLlega in <Map<String, dynamic>>[
+        {...cuerpo, 'type': 'broadcast', 'event': kEventoDelPulso},
+        {'payload': cuerpo, 'type': 'broadcast', 'event': kEventoDelPulso},
+      ]) {
+        final trabajo = trabajoDelPulso(
+          cuerpoDelBroadcast(comoLlega),
+          yo: 'la-tablet-de-la-cajera',
+          tablasConocidas: {'barra_cierres', 'barra_ventas'},
+        );
+        expect(trabajo.tablas, {'barra_cierres'});
+        expect(trabajo.soloLatido, isFalse);
+      }
+    });
+
+    test('si el aviso no sale, el OK queda anotado igual', () async {
+      nube.fallaElAviso = true;
+      final ok = await barra.anotarPasoDelCierre(elOk());
+      expect(ok.tipo, TipoPasoDelCierre.ok);
+      expect(nube.pedidos.first.tabla, 'barra_cierres');
+      expect(nube.pedidos.first.metodo, 'POST');
+    });
+
+    test('si la nube no lo guarda, no avisa nada', () async {
+      nube.falla = true;
+      await expectLater(barra.anotarPasoDelCierre(elOk()), throwsA(isA<PostgrestException>()));
+      expect(nube.pedidos.any((p) => p.tabla == 'broadcast'), isFalse);
     });
   });
 

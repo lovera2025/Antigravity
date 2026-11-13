@@ -470,6 +470,9 @@ class BarraEnPrueba {
   /// Lo que no es una venta y se mandó a subir ya: "tabla id".
   final subidasDeLaBarra = <String>[];
 
+  /// Cuántas veces la tablet que espera el OK le preguntó a la nube.
+  var preguntasPorElCierre = 0;
+
   /// Los PDF que se guardaron: el nombre del archivo y sus renglones.
   final pdfs = <({String nombre, String titulo, List<LineaTicket> lineas})>[];
   var bajadas = 0;
@@ -494,6 +497,9 @@ class BarraEnPrueba {
         subirDeLaBarraProvider.overrideWithValue(
           (tabla, id) async => subidasDeLaBarra.add('$tabla $id'),
         ),
+        bajarCierresDeLaBarraProvider.overrideWithValue(() async {
+          preguntasPorElCierre++;
+        }),
         guardarPdfDeLaBarraProvider.overrideWithValue(
           (lineas, {required titulo, required nombre, context}) async =>
               pdfs.add((nombre: nombre, titulo: titulo, lineas: lineas)),

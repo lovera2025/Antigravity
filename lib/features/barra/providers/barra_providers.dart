@@ -92,6 +92,19 @@ final subirDeLaBarraProvider =
   };
 });
 
+/// Le pregunta a la nube por los pasos de cierre (`barra_cierres`) y los deja en este
+/// equipo. Lo usa la tablet que espera el OK de la encargada, cada unos segundos y solo
+/// mientras espera (`SyncEngine.bajarCierresDeLaBarra`). Sin internet no hace nada, y en
+/// la web tampoco: ahí no hay base. Los tests lo reemplazan.
+final bajarCierresDeLaBarraProvider = Provider<Future<void> Function()>((ref) {
+  if (ref.watch(enLaWebProvider)) return () async {};
+  return () async {
+    try {
+      await ref.read(syncEngineProvider).bajarCierresDeLaBarra();
+    } catch (_) {}
+  };
+});
+
 /// Guarda un papel de la barra como PDF de 58 mm (`PapelPdf`, con las letras de la app)
 /// y lo entrega: en Windows con el menú de ver o guardar, en Android para compartir. Los
 /// tests lo reemplazan.

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/instalacion_id.dart';
+import '../../../core/services/pulso_entre_equipos.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../../models/evento.dart';
 import 'barra_repositorio.dart';
@@ -206,10 +208,38 @@ class BarraNube implements BarraDelJefe {
 
   /// La respuesta de la encargada desde la web: va derecho a la nube, y la tablet de
   /// la cajera la baja. Solo se agrega: si la fila ya está, queda como está.
+  ///
+  /// **Y les avisa a los equipos** ([_avisar]). Hasta la 6.8.0 no avisaba: la tablet
+  /// de la cajera bajaba el OK recién con la red de seguridad de 5 minutos, y a los
+  /// 3 ya le ofrecía CERRAR SIN ESPERAR (revisión del 13-nov).
   @override
   Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
-    final conEquipo = paso.conEquipo(await _equipo());
+    final equipo = await _equipo();
+    final conEquipo = paso.conEquipo(equipo);
     await _supabase.from('barra_cierres').upsert(conEquipo.toMap(), ignoreDuplicates: true);
+    await _avisar(const ['barra_cierres'], origen: equipo);
     return conEquipo;
+  }
+
+  RealtimeChannel? _canalDelAviso;
+
+  /// Les avisa a las PCs y a las tablets que cambiaron [tablas], para que las bajen
+  /// ya: el mismo aviso que manda el motor de un equipo cuando sube algo
+  /// (`pulso_entre_equipos.dart`). Sin suscribirse, va por REST.
+  ///
+  /// Que no salga no rompe nada: la fila ya quedó en la nube, y el equipo que espera
+  /// la baja igual un rato después.
+  Future<void> _avisar(List<String> tablas, {String? origen}) async {
+    try {
+      final canal = _canalDelAviso ??= _supabase.channel(kCanalDelPulso);
+      await canal
+          .sendBroadcastMessage(
+            event: kEventoDelPulso,
+            payload: avisoDeTablas(origen: origen ?? 'web', tablas: tablas),
+          )
+          .timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('BarraNube: el aviso a los equipos no salió: $e');
+    }
   }
 }

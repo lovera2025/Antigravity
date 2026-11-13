@@ -388,6 +388,32 @@ void main() {
       expect(guardada().abierta, isTrue);
     });
 
+    // El OK dado desde el iPhone llega con un aviso, y un aviso se puede perder: la
+    // tablet que espera le pregunta además a la nube (revisión del 13-nov).
+    testWidgets('esperando el OK, le pregunta a la nube cada 15 segundos, y solo mientras espera',
+        (tester) async {
+      await abrir(tester);
+      await irACerrar(tester);
+      expect(prueba.preguntasPorElCierre, 0, reason: 'contando, no pregunta nada');
+      await tester.pump(const Duration(seconds: 20));
+      expect(prueba.preguntasPorElCierre, 0, reason: 'sin pedido en pie, sigue sin preguntar');
+
+      await contarYPedir(tester, '27000');
+      final unaPregunta = kMirarPedidosDeCierre * kMiradasPorPregunta;
+      expect(unaPregunta, const Duration(seconds: 15));
+      await tester.pump(unaPregunta - const Duration(seconds: 4));
+      expect(prueba.preguntasPorElCierre, 0, reason: 'todavía no pasaron los 15 s');
+      await tester.pump(const Duration(seconds: 5));
+      expect(prueba.preguntasPorElCierre, 1);
+      await tester.pump(unaPregunta);
+      expect(prueba.preguntasPorElCierre, 2);
+
+      // Vuelve a vender: ya no espera nada, y deja de preguntar.
+      await tocar(tester, porClave('cierre_volver_a_vender'));
+      await tester.pump(unaPregunta * 3);
+      expect(prueba.preguntasPorElCierre, 2);
+    });
+
     testWidgets('esperando, volver atrás es VOLVER A VENDER: el pedido no queda en pie', (tester) async {
       await abrir(tester);
       await irACerrar(tester);

@@ -61,9 +61,16 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
   PasoDelCierre? _pedido;
 
   /// Mientras espera, mira la base de este equipo cada pocos segundos: el OK llega por
-  /// la red del salón o baja de la nube. No le pide nada a la nube.
+  /// la red del salón o baja de la nube.
+  ///
+  /// **Y cada [kMiradasPorPregunta] miradas le pregunta a la nube** por los pasos de
+  /// cierre, solo mientras espera: el OK dado desde el iPhone llega con un aviso, y si
+  /// ese aviso se pierde la tablet lo bajaba recién a los 5 minutos, con CERRAR SIN
+  /// ESPERAR ya ofrecido a los 3 (revisión del 13-nov).
   Timer? _vigia;
   bool _mirando = false;
+  int _miradas = 0;
+  bool _preguntando = false;
 
   @override
   void initState() {
@@ -238,7 +245,25 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
 
   void _arrancarElVigia() {
     _vigia?.cancel();
-    _vigia = Timer.periodic(kMirarPedidosDeCierre, (_) => _mirarSiContestaron());
+    _miradas = 0;
+    _vigia = Timer.periodic(kMirarPedidosDeCierre, (_) {
+      if (++_miradas % kMiradasPorPregunta == 0) unawaited(_preguntarALaNube());
+      _mirarSiContestaron();
+    });
+  }
+
+  /// Baja los pasos de cierre de la nube. Va aparte de la mirada: si la nube tarda, el
+  /// OK que llega por la red del salón se sigue viendo cada pocos segundos.
+  Future<void> _preguntarALaNube() async {
+    if (_preguntando || _pedido == null) return;
+    _preguntando = true;
+    try {
+      await ref.read(bajarCierresDeLaBarraProvider)();
+    } catch (_) {
+      // Se vuelve a preguntar en la próxima.
+    } finally {
+      _preguntando = false;
+    }
   }
 
   /// Al abrir: si la caja ya había pedido cerrar y nadie cerró, sigue desde ahí.

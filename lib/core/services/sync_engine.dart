@@ -12,6 +12,7 @@ import 'borrados_de_otra_pc.dart';
 import 'connectivity_service.dart';
 import 'contrato_al_bajar.dart';
 import 'cuerpo_del_broadcast.dart';
+import 'pulso_entre_equipos.dart';
 import 'instalacion_id.dart';
 import 'reloj_del_motor.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
@@ -1039,8 +1040,8 @@ class SyncEngine {
   // y cobrando, se lo quedó: al cobrarle contó los dos y le pisó el saldo a la
   // nube.
 
-  static const String _nombreCanalPulso = 'sync_pulse';
-  static const String _eventoPulso = 'cambios';
+  static const String _nombreCanalPulso = kCanalDelPulso;
+  static const String _eventoPulso = kEventoDelPulso;
 
   /// Cuánto se espera antes de reaccionar a un pulso.
   ///
@@ -2979,6 +2980,25 @@ class SyncEngine {
       return bien.every((b) => b);
     } catch (e) {
       debugPrint('⚠️ No bajaron las tablas de la barra: $e');
+      return false;
+    }
+  }
+
+  /// Baja ya **solo `barra_cierres`**. Lo pide la tablet de la cajera cada unos
+  /// segundos **mientras espera el OK de la encargada, y nada más que entonces**
+  /// (`CerrarCajaBarraScreen`): el OK dado desde la web llega con un aviso, y un
+  /// aviso se puede perder. Sin esto esperaba la red de seguridad de 5 minutos,
+  /// y a los 3 ya se ofrece CERRAR SIN ESPERAR (revisión del 13-nov).
+  ///
+  /// Es una sola consulta chica, incremental, y no corre en reposo. Como
+  /// [bajarParaLaBarra]: no espera al motor ni cambia su estado.
+  Future<bool> bajarCierresDeLaBarra() async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return false;
+    try {
+      final db = await LocalDatabase.instance;
+      return await _pullTable(db, 'barra_cierres', 'updated_at');
+    } catch (e) {
+      debugPrint('⚠️ No bajaron los pasos de cierre de la barra: $e');
       return false;
     }
   }

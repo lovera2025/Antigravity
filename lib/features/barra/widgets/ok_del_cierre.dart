@@ -24,6 +24,10 @@ final ahoraEnLaBarraProvider = Provider<DateTime Function()>((ref) => DateTime.n
 /// bajó de la nube): no le pide nada a la nube. En la web no hay base, así que va con la
 /// misma relectura de LAS CAJAS.
 const kMirarPedidosDeCierre = Duration(seconds: 3);
+
+/// Cada cuántas miradas la tablet que espera el OK le pregunta además a la nube: con
+/// [kMirarPedidosDeCierre] en 3 s, cada 15 segundos.
+const kMiradasPorPregunta = 5;
 const kMirarPedidosDeCierreEnLaWeb = Duration(seconds: 30);
 
 /// El sonido del aviso "una caja pide cerrar". Los tests lo reemplazan.

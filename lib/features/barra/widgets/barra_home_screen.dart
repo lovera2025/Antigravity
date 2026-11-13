@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +7,7 @@ import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../central/central_barra_provider.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_providers.dart';
 import 'abrir_caja_barra_dialog.dart';
@@ -78,6 +81,19 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
     } finally {
       if (mounted) setState(() => _abriendo = false);
     }
+  }
+
+  /// LAS CAJAS de la encargada. Antes de abrirla busca la central de la barra, por si
+  /// entra directo acá sin haber pasado por VENDER (`arrancarSiNoHay`).
+  void _abrirLasCajas(Evento fiesta) {
+    final nombre = ref.read(appRoleProvider).operador?.nombre;
+    unawaited(ref.read(clienteDeLaBarraProvider.notifier).arrancarSiNoHay(
+          eventoId: fiesta.id,
+          nombre: nombre == null || nombre.isEmpty ? 'Encargada' : 'Encargada · $nombre',
+        ));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => LasCajasScreen(fiesta: fiesta)),
+    );
   }
 
   @override
@@ -163,11 +179,7 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                 trailing: app.esEncargadaDeBarra
                                     ? OutlinedButton(
                                         key: Key('barra_las_cajas_${e.id}'),
-                                        onPressed: () => Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => LasCajasScreen(fiesta: e),
-                                          ),
-                                        ),
+                                        onPressed: () => _abrirLasCajas(e),
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor: gold,
                                           side: const BorderSide(color: gold),
