@@ -4,11 +4,11 @@
 
 ## Para retomar en otro chat
 
-**Dónde quedó (13-nov, al cortar el chat):** la Parte A entera y la etapa 1 de la Parte B están **guardadas en la
-rama** (7 commits, el último de código `c5521e0`; **sin subir a GitHub**: se guardan en esta PC hasta que el usuario
-diga). **La etapa 2 (las cuentas) no tiene ningún archivo escrito**: quedó decidido cómo se hace (ver "Etapa 2", abajo)
-y se empieza por ahí. Antes de cortar se comprobó que nada quedó a medias: el repositorio sin cambios sueltos, **la
-suite entera pasa (4.803 pruebas, 280 archivos, 7 tandas)** y el análisis de lo nuevo no da errores.
+**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1 y 2 de la Parte B** están **guardadas en la rama**
+(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **Sigue la maqueta de las pantallas, y ahí
+se frena hasta su OK.** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
+medias (el repositorio igual al último commit y la suite entera en verde, 4.803) y recién después se escribió la etapa
+2. **La suite entera pasa: 4.857 pruebas, 283 archivos, 8 tandas**, y el análisis de lo nuevo no da errores.
 
 **Nada de esto está en las PCs ni en la nube**: no se publicó, no se instaló, no se corrió ningún SQL, no se tocó la
 base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.yaml`: se sube a `6.9.0` al publicar.
@@ -35,9 +35,10 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 **Lo que sigue, en orden:**
 
 1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
-2. **Etapa 2 (las cuentas): empezar acá.** Sin pantallas; va sin preguntar. Con su commit.
+2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
 3. **Frenar: la maqueta** de PRECIOS, VENDER, el comprobante, VENTAS, cerrar la caja y ENTRADAS del cierre, y su OK.
-   Interactiva, sobre una copia fiel de las pantallas de hoy; se le abre al usuario (no vio nada todavía).
+   Interactiva, sobre una copia fiel de las pantallas de hoy; se le abre al usuario. **Empezar acá si no está hecha;
+   si ya se le mostró, esperar su OK.**
 4. Etapas 3 a 6 del spec.
 5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
 
@@ -206,12 +207,49 @@ arneses `tool/*_prueba.dart` que no abren la base sí se pueden correr.
 
 **Después de la etapa 1 se corrió la suite entera: 4.803 pruebas, todas pasan.**
 
-### Etapa 2, las cuentas — sigue esto (decidido, sin ningún archivo escrito)
+### Etapa 2, las cuentas — HECHA (14-nov)
 
 `lib/features/entradas/cuentas/`, puras y sin pantalla ni base (sección 5 del spec). **Se usa lo de la barra, no se
 escribe otro:** `centavos`, `deCentavos` y `pesos` (`barra/cuentas/pesos.dart`), `MedioBarra`, `PartidoMixto` y
 `CobroBarra` (`barra/cuentas/cobro_barra.dart`), `diferenciaEnPalabras` (`barra/cuentas/cierre_de_barra.dart`).
-Cinco archivos:
+
+**Quedó como estaba decidido, con esto de más o distinto** (lo que tiene que saber quien haga las pantallas):
+
+- **La pantalla guarda con `PedidoDeEntradas.guardarEn(repositorio, caja:, cobro:, quien:)`**, no llamando a
+  `vender` a mano: arma primero la venta con `venta(...)` (que tira si algo no cierra) y al repositorio le manda eso
+  mismo, campo por campo. Así no hay una segunda cuenta en la pantalla. El número lo sigue dando el repositorio.
+- **El descuento a mano lo decide el pedido** (`puedeDescontar`: modo jefe, o el tilde de PRECIOS): la pantalla le
+  pasa `esJefe` y nada más. Sin permiso, `descuentoQueVa` es 0 aunque alguien haya escrito otra cosa.
+- **`paraLaFamilia(id, lugares)` viene con todas las de sus lugares que le quedan** (lo del spec: "viene tildado con
+  todas"), y `conDeLugar(n)` nunca pasa de las que le quedan.
+- **Con el 100 % de descuento la venta vale 0** (`esSinCargo`): se guarda igual, con `cobroPor(MedioBarra.efectivo)`,
+  **sin abrir `pedirCobro`** (que con total 0 dice "La cuenta está vacía").
+- `cobroPor(medio)` da el `CobroBarra` con el recargo de la fiesta (`recargoPrendido`, `recargoPct`); para
+  `pedirCobro` se pasan esos dos.
+- El nombre del renglón de lugar dice **lo que paga** del valor: con el descuento en 50, "(50 %)"; en 40, "(60 %)".
+- **Los repetidos son una lista de `NumeroRepetido`** (con `.texto`), no de textos: entre dos ventas, o entre una
+  venta y una entrega (`conUnaEntrega`).
+- **En el cierre, una venta cuyos renglones no dan su cantidad y su total va entera a "otras"**; un renglón de un
+  tipo que la versión no conoce, también. Así las entradas y la plata suman siempre lo vendido.
+- `CierreDeEntradas.deLaFiesta(cajas, ventas, anulaciones)` cuenta **todas** las ventas que recibe (vienen por
+  fiesta), aunque la caja de alguna todavía no haya bajado.
+- `ResumenDeCajaEntradas.porCaja(...)`: una por caja, la que abrió primero arriba.
+- "Anulado después del cierre" compara el momento de la anulación con el del cierre, que son de dos equipos (el del
+  jefe y el de quien vende): es el criterio de los cobros. Con los relojes corridos unos minutos, una anulación
+  hecha justo al cerrar puede caer del otro lado. No cambia ninguna plata: solo en qué renglón se muestra.
+
+**Cómo se probó:** 54 pruebas nuevas en tres archivos (`entradas_cuentas_test`, `entradas_numeros_test`,
+`cierre_de_entradas_test`), y **diez roturas a propósito, una por regla** (el último día de la anticipada, el lugar
+sobre el valor y no sobre la anticipada, la anulada que devuelve las de lugar, el tope de las que le quedan, el
+descuento sin permiso, la anulada con devolución que libera los números, lo vendido sumado a lo entregado, la
+anulada fuera del efectivo, los descuentos en su renglón, lo anulado después del cierre): **las diez hicieron fallar
+su test**, y cada archivo volvió a quedar igual (misma huella). `venta_entradas_no_toca_test` sigue pasando con la
+carpeta nueva adentro.
+
+**Lo que no se probó:** nada de esto tiene pantalla todavía, así que no se vio con el mouse. La regla de "anulado
+después del cierre" con dos equipos de verdad.
+
+Los cinco archivos, como quedaron pensados:
 
 1. **`precio_de_entradas.dart`** — `PrecioDeEntradas`: `hoyEnArgentina()` (`ArTime.nowAr()`), `rigeLaAnticipada(c,
    hoyAr)` (el día `AAAA-MM-DD` de `hoyAr` contra `anticipada_hasta`, **inclusive**, comparado como texto con

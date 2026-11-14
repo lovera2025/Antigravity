@@ -437,9 +437,22 @@ están en esta PC, **sin subir a GitHub**.
   **El P6 (la mesa "principal" con "Al final") no se toca: un sorteo hecho queda como está** (decisión del usuario).
 - **Parte B, la venta de entradas** (`docs/SPEC_venta_de_entradas_2026-11-13.md`): **hecha la etapa 1** (los datos:
   cinco tablas nuevas, v80, `lib/features/entradas/datos/`, el motor y el SQL
-  `supabase/migrations/20261113200000_venta_de_entradas.sql`, **sin correr**). **Sigue la etapa 2** (las cuentas,
-  `lib/features/entradas/cuentas/`, sin ningún archivo todavía; el diseño está en el CONTEXTO) **y después la maqueta
-  de las pantallas: ahí se frena y se espera el OK del usuario** antes de las etapas 3 a 6.
+  `supabase/migrations/20261113200000_venta_de_entradas.sql`, **sin correr**) **y la etapa 2** (14-nov: las cuentas,
+  `lib/features/entradas/cuentas/`, puras, sin pantalla ni base). **Sigue la maqueta de las pantallas: ahí se frena
+  y se espera el OK del usuario** antes de las etapas 3 a 6.
+- **Las cuentas de la venta de entradas** (lo que las pantallas tienen que usar, sin hacer otra cuenta al lado):
+  - `PrecioDeEntradas`: el precio de hoy (**la anticipada rige hasta su último día inclusive, a la medianoche de
+    Argentina**) y el de los lugares adicionales, **siempre sobre el valor de la entrada, nunca sobre la anticipada**.
+  - `LugaresDeLaFamilia`: cuántas al 50 % le corresponden, compró y le quedan. **No se guarda: se cuenta cada vez**
+    de la cuenta del alumno y de las ventas no anuladas.
+  - `NumerosDeEntradas.ocupados` (lo entregado sin cargo más lo vendido) **es el `deOtros` de
+    `RetiroEntradas.errorTramos` para la venta y para la entrega**. Una venta anulada **con** las entradas devueltas
+    libera sus números; sin devolver, quedan anulados para siempre.
+  - `PedidoDeEntradas`: lo que decide VENDER. **La pantalla guarda con `guardarEn`**, que manda al repositorio lo
+    mismo que arma `venta(...)`; el descuento a mano lo decide `puedeDescontar`, no la pantalla.
+  - `CierreDeEntradas`: **una anulada no cuenta, tampoco en el efectivo que tiene que haber**; los descuentos a
+    mano van en su renglón (el 50 % de los lugares no es uno); la diferencia de una caja cerrada es la que se anotó
+    al cerrar, y lo anulado después va aparte.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
