@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maqueta · La venta de entradas</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+  /* la app, con el tema claro (el que usa el programa) */
+  --app:#f2f0eb; --card:#fbfbf9; --borde:rgba(0,0,0,.08); --gris:#616161; --texto:#1c1b17; --dorado:#d4af37; --m3:#6d5e0f; --m3suave:#efe3b4;
+  --verde:#388e3c; --rojo:#d32f2f; --naranja:#ef6c00; --efectivo:#00b894; --transf:#6c63ff;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark } }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45}
+main{max-width:1060px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:24px;font-weight:800;margin:0 0 4px}
+.sub{color:var(--tinta2);margin:0 0 6px}
+.aviso{background:var(--primario-suave);border-radius:12px;padding:9px 13px;margin:8px 0 14px;font-weight:600}
+.pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 10px}
+.paso{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:8px 10px;text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.paso.on{border-color:var(--primario);box-shadow:0 0 0 2px var(--primario) inset}
+.paso .n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--primario);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center}
+.paso b{display:block;font-size:14px;line-height:1.2}.paso small{color:var(--tinta2);font-size:12px;line-height:1.2;display:block}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;margin:0 0 12px}
+.nota p{margin:0 0 4px}.donde{color:var(--tinta2);font-size:13.5px;margin:0}
+.donde b{color:var(--tinta)}
+.mirar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 12px;font-size:13.5px;color:var(--tinta2)}
+.mirar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;color:var(--tinta);font-weight:600}
+/* ───── la app ───── */
+.app{background:var(--app);color:var(--texto);border-radius:20px;padding:14px 16px 18px;border:1px solid rgba(0,0,0,.12);font-size:14px}
+.app.cierre{background:linear-gradient(135deg,#f8f9fa,#e9ecef)}
+.barraApp{display:flex;align-items:center;gap:8px;margin:0 0 10px;min-height:44px}
+.barraApp .tit{flex:1;text-align:center;font-weight:900;font-size:19px;letter-spacing:.06em;line-height:1.15}
+.barraApp .tit small{display:block;font-weight:400;font-size:13px;letter-spacing:0}
+.b{font:inherit;font-weight:700;font-size:13px;border-radius:999px;padding:8px 16px;border:1px solid #7e775f;background:transparent;color:var(--m3);cursor:pointer;white-space:nowrap}
+.b.lleno{background:var(--m3);border-color:var(--m3);color:#fff}
+.b.verde{background:var(--verde);border-color:var(--verde);color:#fff}
+.b.rojo{background:#ff5252;border-color:#ff5252;color:#fff}
+.b.texto{border-color:transparent}
+.b.chico{padding:5px 11px;font-size:12px}
+.b:disabled,.b.apagado{opacity:.38;cursor:not-allowed}
+.motivo{font-size:12px;color:var(--gris);font-style:italic}
+.card{background:var(--card);border:1px solid rgba(0,0,0,.05);border-radius:24px;padding:12px 16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:0 0 10px}
+.kpi{background:rgba(158,158,158,.08);border:1px solid rgba(0,0,0,.05);border-radius:24px;padding:10px 12px}
+.kpi .t{font-size:12px;color:var(--gris)}.kpi .v{font-size:20px;font-weight:800}.kpi .s{font-size:12px;color:var(--gris)}
+.seg{display:inline-flex;border:1px solid #7e775f;border-radius:999px;overflow:hidden}
+.seg button{font:inherit;font-weight:600;font-size:13px;background:transparent;border:0;border-left:1px solid #7e775f;padding:8px 16px;cursor:pointer;color:var(--texto)}
+.seg button:first-child{border-left:0}.seg button.on{background:var(--m3suave)}
+.seg.oro{border:1.5px solid rgba(212,175,55,.45)}.seg.oro button{border:0;font-weight:900;font-size:11.5px;letter-spacing:.08em;color:rgba(0,0,0,.54)}
+.seg.oro button.on{background:rgba(212,175,55,.2);color:#9a7b12}
+.campo{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--gris)}
+.campo input{font:inherit;font-size:15px;color:var(--texto);background:rgba(0,0,0,.02);border:1px solid rgba(0,0,0,.12);border-radius:20px;padding:11px 16px;width:100%}
+.campo input:focus{outline:1.5px solid var(--dorado)}
+.campo input:disabled{opacity:.5}
+.fila{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.grupo{margin:0 0 12px}.rot{font-size:12.5px;color:var(--gris);margin:0 0 5px;font-weight:600}
+.renglon{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 0;border-top:1px solid rgba(0,0,0,.08)}
+.renglon .q{flex:1;min-width:190px}.renglon .q b{display:block}
+.mas{display:inline-flex;align-items:center;gap:8px}
+.mas button{width:32px;height:32px;border-radius:50%;border:1px solid #7e775f;background:transparent;font:inherit;font-size:18px;font-weight:700;color:var(--m3);cursor:pointer}
+.mas b{min-width:26px;text-align:center;font-size:17px}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid rgba(212,175,55,.5);padding:10px 0 4px;font-weight:800}
+.total .v{font-size:26px}
+.err{color:var(--rojo);font-size:12.5px;font-weight:600}
+.chip{display:inline-flex;gap:5px;align-items:center;border-radius:99px;padding:4px 10px;font-size:12.5px;font-weight:700}
+.chip.v{background:rgba(56,142,60,.12);color:var(--verde)}.chip.r{background:rgba(211,47,47,.12);color:var(--rojo)}.chip.n{background:rgba(239,108,0,.12);color:var(--naranja)}.chip.g{background:rgba(84,110,122,.12);color:#546e7a}
+.tabla{width:100%;border-collapse:collapse;font-size:13px}
+.tabla th{font-size:10.5px;letter-spacing:.06em;font-weight:800;color:var(--gris);text-align:right;padding:7px 8px;white-space:nowrap}
+.tabla td{padding:8px;text-align:right;font-weight:600;border-top:1px solid rgba(0,0,0,.08);white-space:nowrap}
+.tabla th:first-child,.tabla td:first-child{text-align:left}
+.tabla tr.totalf td{border-top:2px solid rgba(212,175,55,.5);font-weight:800}
+.tabla tr.anulada td{text-decoration:line-through;color:#9e9e9e}.tabla tr.anulada td.no{text-decoration:none}
+.scrollx{overflow-x:auto}
+.nuevo{outline:2px dashed var(--dorado);outline-offset:3px;border-radius:8px}
+.tag{display:inline-block;background:var(--dorado);color:#16130a;font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 6px;letter-spacing:.04em;vertical-align:middle}
+.velo{background:rgba(0,0,0,.4);border-radius:18px;padding:22px 12px;display:flex;justify-content:center;margin-top:10px}
+.dialogo{background:var(--card);border-radius:28px;padding:18px 20px;width:100%;max-width:480px}
+.dialogo h3{margin:0 0 10px;font-size:18px;font-weight:800}
+.papel{background:#fff;color:#111;border:1px solid #bbb;border-radius:4px;max-width:520px;margin:0 auto;padding:18px 22px;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.papel h4{margin:0;font-size:15px;letter-spacing:.04em}.papel .lin{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+.papel hr{border:0;border-top:1px solid #999;margin:8px 0}
+.banda{border-radius:10px;padding:9px 12px;font-weight:700;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.banda.v{background:rgba(56,142,60,.1);border:1px solid rgba(56,142,60,.6);color:var(--verde)}
+.banda.n{background:rgba(239,108,0,.08);border:1px solid rgba(239,108,0,.5);color:var(--naranja)}
+.banda.r{background:rgba(211,47,47,.08);border:1px solid rgba(211,47,47,.5);color:var(--rojo)}
+.lista{display:flex;flex-direction:column;gap:8px;max-width:720px;margin:0 auto}
+.fiesta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.fiesta .q{flex:1;min-width:180px}.fiesta .q b{font-weight:800;display:block}
+.oro{color:#9a7b12}
+</style></head><body><main>
+<h1>La venta de entradas</h1>
+<p class="sub">Así quedaría, pantalla por pantalla. Lo marcado con línea punteada dorada y la etiqueta <span class="tag">NUEVO</span> es lo que se agrega; lo demás es el programa como está hoy.</p>
+<p class="aviso">Esto es un recorrido, no opciones para elegir: son nueve lugares distintos del mismo programa. Se puede tocar todo. El precio de $ 10.000 y los nombres son de ejemplo.</p>
+<div class="mirar">
+  <span>Mirar como:</span>
+  <label><input type="radio" name="quien" value="v" checked> Quien vende (operador con “Vende entradas”)</label>
+  <label><input type="radio" name="quien" value="j"> El jefe, en modo jefe</label>
+  <label><input type="checkbox" id="antic"> Hoy todavía rige la anticipada</label>
+</div>
+<nav class="pasos" id="pasos"></nav>
+<div class="nota" id="nota"></div>
+<section id="pantalla"></section>
+</main>
+<script>
+const PASOS = [
+  {t:'Precios', s:'el jefe pone el “$ X”', donde:'La fiesta → ENTRADAS → <b>PRECIOS</b> (solo en modo jefe)',
+   nota:'El jefe carga el precio de cada fiesta. <b>Sin precio, esa fiesta no se puede vender</b>. Todo lo que todavía no está decidido (anticipada, recargo, si el vendedor puede descontar) es un dato de acá: se cambia sin reprogramar.'},
+  {t:'Por dónde se entra', s:'ENTREGAR · VENDER', donde:'El operador entra con su PIN → <b>ENTRADAS</b>. El jefe: la fiesta → ENTRADAS → <b>VENDER</b>',
+   nota:'Quien tiene “Vende entradas” ve dos botones en cada fiesta. Quien solo entrega ve la pantalla como hoy, sin VENDER.'},
+  {t:'Abrir la caja', s:'con su cambio inicial', donde:'VENDER, la primera vez en esa fiesta',
+   nota:'Una caja de entradas <b>por fiesta</b>, aparte de la de cuotas y de la de la barra. Si ya tiene una abierta en ese equipo, la retoma: tocar dos veces no abre dos.'},
+  {t:'Vender', s:'a quién, cuántas y cómo paga', donde:'ENTRADAS → la fiesta → <b>VENDER</b>',
+   nota:'A una familia de la fiesta o a alguien de afuera. Las de la mesa adicional y las sillas extra salen solas al 50 %, y nunca más de las que le quedan. <b>No cobra cuotas ni toca el saldo</b>: si la familia debe, lo dice y deja vender igual.'},
+  {t:'El comprobante', s:'media A4, con las pulseras', donde:'Sale al confirmar la venta; se reimprime desde VENTAS',
+   nota:'La venta se guarda <b>antes</b> de abrir el comprobante: sin impresora, igual queda.'},
+  {t:'Ventas', s:'historial, verificar y anular', donde:'VENDER → <b>VENTAS</b>. El jefe: la fiesta → ENTRADAS → VENTAS',
+   nota:'Quien vende ve las de su caja; el jefe, todas las de la fiesta. <b>“Pago verificado” y ANULAR, solo el jefe.</b> Una venta nunca se borra: anulada queda tachada, con el motivo.'},
+  {t:'Cerrar la caja', s:'cuenta a ciegas', donde:'VENDER → <b>CERRAR CAJA</b>',
+   nota:'Cuenta el efectivo sin ver cuánto tenía que haber; recién después ve lo esperado y la diferencia. Una caja cerrada no se corrige: solo se le agrega la nota.'},
+  {t:'En el cierre de caja', s:'la pestaña ENTRADAS', donde:'CIERRE DE CAJA → <b>ENTRADAS</b> (modo jefe)',
+   nota:'Hoy esa pestaña dice “Todavía no hay ventas de entradas”. Pasa a mostrar una línea por caja, por fiesta, como la de la BARRA. La plata de cada sector no se mezcla.'},
+  {t:'La entrega', s:'con lo vendido a la vista', donde:'La fiesta → ENTRADAS (la entrega sin cargo de hoy)',
+   nota:'La entrega sin cargo no cambia: solo muestra cuántas del 50 % ya compró cada familia, y deja venderle las que faltan sin salir.'},
+];
+const C = {valor:10000, anticipada:8000, hasta:'28/11/2026', lugPct:50, recargo:0, aMano:false};
+const FIESTA = 'Instituto San Lorenzo · Promoción 2026', FECHA = '04/12/2026';
+const FAM = {nombre:'GÓMEZ, LUCÍA', div:'6° A', mesa:'14 y 15', corresponden:14, compradas:3, debe:45000};
+const S = {paso:0, jefe:false, antic:false, cajaAbierta:false, cambio:'5000', aQuien:'familia', lugar:11, sueltas:2, desc:0,
+  nombre:'', dni:'', del:'', medio:null, recibe:'', efMixto:'', ultima:null, contado:'', cerrada:false, nota:'', sector:'entradas',
+  filtro:'todas', anulando:null, motivo:'', verPrecios:true, dialogoEntrega:false,
+  ventas:[
+    {n:1, hora:'10:12', comprador:'PÉREZ, ANA', cant:4, total:40000, medio:'Efectivo', quien:'Romi', numeros:'1048 al 1051', verif:true},
+    {n:2, hora:'10:40', comprador:'RUIZ, MARTA', cant:8, total:40000, medio:'Transferencia', quien:'Romi', numeros:'1052 al 1059', verif:false, lugar:true},
+    {n:3, hora:'11:05', comprador:'SOSA, DIEGO', cant:2, total:18000, medio:'Mixto', quien:'Romi', numeros:'', verif:false, desc:2000},
+  ]};
+const $ = s => document.querySelector(s);
+const fmt = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+const num = s => { const n = parseInt(String(s).replace(/\D/g,''),10); return isNaN(n) ? 0 : n; };
+const N = '<span class="tag">NUEVO</span>';
+const quedan = () => Math.max(0, FAM.corresponden - FAM.compradas);
+const precioHoy = () => (S.antic && C.anticipada > 0) ? C.anticipada : C.valor;
+const precioLugar = () => Math.round(C.valor * (100 - C.lugPct) / 100);
+const puedeDesc = () => S.jefe || C.aMano;
+function pedido(){
+  const fam = S.aQuien === 'familia';
+  const nl = fam ? Math.min(S.lugar, quedan()) : 0;
+  const d = puedeDesc() ? Math.min(100, Math.max(0, S.desc)) : 0;
+  const ps = Math.round(precioHoy() * (100 - d) / 100);
+  const total = nl * precioLugar() + S.sueltas * ps, cant = nl + S.sueltas;
+  let falta = null;
+  if (!(C.valor > 0)) falta = 'El jefe todavía no puso el precio de la entrada de esta fiesta';
+  else if (S.nombre.trim().split(/\s+/).filter(Boolean).length < 2) falta = 'Escribí nombre y apellido de quien compra';
+  else if (cant < 1) falta = 'Elegí cuántas entradas lleva';
+  else falta = errNumeros(cant);
+  return {fam, nl, d, ps, total, cant, falta, descontado: S.sueltas * (precioHoy() - ps)};
+}
+function errNumeros(cant){
+  if (!S.del) return null;
+  const del = num(S.del); if (del < 1) return 'Los números del talonario empiezan en 1.';
+  const hasta = del + cant - 1;
+  if (del <= 1047 && hasta >= 1040) return `El ${Math.max(del,1040)} ya se le dio a DÍAZ, TOMÁS (1040 al 1047).`;
+  if (del <= 1059 && hasta >= 1048) return `El ${Math.max(del,1048)} ya se le dio a ${del<=1051&&hasta>=1048?'PÉREZ, ANA (1048 al 1051)':'RUIZ, MARTA (1052 al 1059)'}.`;
+  return null;
+}
+function cobro(p){
+  const rec = C.recargo > 0;
+  let ef = 0, tr = 0, falta = null;
+  if (S.medio === 'Efectivo') ef = p.total;
+  else if (S.medio === 'Transferencia') tr = p.total;
+  else { ef = Math.min(p.total, num(S.efMixto)); tr = p.total - ef; if (!(ef > 0 && tr > 0)) falta = 'Poné cuánto es en efectivo y cuánto por transferencia'; }
+  const recargo = rec ? Math.round(tr * C.recargo / 100) : 0;
+  const recibe = S.recibe ? num(S.recibe) : null;
+  if (!falta && S.medio !== 'Transferencia' && recibe !== null && recibe < ef) falta = S.medio === 'Mixto' ? 'Entrega menos que la parte en efectivo' : 'Entrega menos que el total';
+  return {ef, tr, recargo, transfiere: tr + recargo, aCobrar: p.total + recargo, recibe, vuelto: recibe !== null && recibe >= ef ? recibe - ef : null, falta};
+}
+const cuatro = n => String(n).padStart(4,'0');
+
+/* ───── 1. PRECIOS ───── */
+function pPrecios(){
+  const j = S.jefe;
+  const barra = `<div class="barraApp"><span style="width:90px"></span><span class="tit">Retiro de entradas<small>${FIESTA}</small></span>
+    <span class="nuevo fila" style="gap:6px"><button class="b chico ${j?'':'apagado'}" data-a="verPrecios">PRECIOS</button><button class="b chico ${j?'':'apagado'}" data-ir="3">VENDER</button><button class="b chico ${j?'':'apagado'}" data-ir="5">VENTAS</button></span> ${N}</div>
+    ${j?'':'<p class="motivo" style="text-align:right;margin:-6px 0 8px">Solo en modo jefe · elegí “El jefe, en modo jefe” arriba para abrirlo</p>'}`;
+  const dlg = !(j && S.verPrecios) ? '' : `<div class="velo"><div class="dialogo nuevo">
+    <h3>Precios de las entradas ${N}</h3>
+    <p class="rot" style="font-weight:400;margin-top:-6px">${FIESTA}</p>
+    <div class="grupo"><label class="campo">Valor de la entrada: $<input inputmode="numeric" data-c="valor" value="${C.valor||''}" placeholder="10000"></label>
+      ${C.valor>0?'':'<p class="err" style="margin:4px 0 0">Sin precio, esta fiesta no se puede vender.</p>'}</div>
+    <div class="grupo fila"><label class="campo" style="flex:1">Anticipada (opcional): $<input inputmode="numeric" data-c="anticipada" value="${C.anticipada||''}"></label>
+      <label class="campo" style="flex:1">hasta el día<input data-c="hasta" value="${C.hasta}" placeholder="dd/mm/aaaa"></label></div>
+    <p class="motivo" style="margin:-8px 0 10px">Las dos o ninguna. El último día rige entero.</p>
+    <div class="grupo fila"><label class="campo" style="width:150px">Mesa adicional y sillas extra: % de descuento<input inputmode="numeric" data-c="lugPct" value="${C.lugPct}"></label>
+      <b id="cadaUna">Cada una: ${fmt(precioLugar())}</b></div>
+    <p class="motivo" style="margin:-8px 0 10px">Siempre sobre el valor de la entrada, nunca sobre la anticipada.</p>
+    <div class="grupo"><label class="campo" style="width:150px">Recargo por transferencia: %<input inputmode="numeric" data-c="recargo" value="${C.recargo}"></label></div>
+    <label class="fila" style="gap:8px;cursor:pointer;margin-bottom:12px"><input type="checkbox" data-a="aMano" ${C.aMano?'checked':''}> El vendedor puede poner descuentos <span class="motivo">(destildado: solo en modo jefe)</span></label>
+    <div class="fila" style="justify-content:flex-end"><button class="b texto" data-a="verPrecios">CANCELAR</button><button class="b lleno" data-a="verPrecios">GUARDAR</button></div>
+    <p class="motivo" style="margin:8px 0 0">Guardar sin cambiar nada no escribe. Cambiar el precio no toca ninguna venta hecha.</p>
+  </div></div>`;
+  return `<div class="app">${barra}${tarjetasRetiro(false)}${dlg}</div>`;
+}
+function tarjetasRetiro(conVendidas){
+  return `<div class="kpis"><div class="kpi"><div class="t">Retiraron</div><div class="v">38 de 96</div></div><div class="kpi"><div class="t">Faltan</div><div class="v">58</div></div>
+    <div class="kpi"><div class="t">Con deuda</div><div class="v" style="color:var(--rojo)">12</div></div><div class="kpi"><div class="t">Sin cargo entregadas</div><div class="v">304 de 768</div></div>
+    ${conVendidas ? `<div class="kpi nuevo"><div class="t">Al 50 % ${N}</div><div class="v">40 vendidas de 112</div></div>` : `<div class="kpi"><div class="t">Al 50 %, aparte</div><div class="v">112</div></div>`}</div>`;
+}
+
+/* ───── 2. Por dónde se entra ───── */
+function pEntrar(){
+  const fiestas = [[FIESTA, FECHA],['Escuela Normal · 6° Economía','11/12/2026']];
+  return `<div class="app"><div class="barraApp"><span class="tit">ENTRADAS · ROMI</span><button class="b texto chico">PASAR A CAJA</button><button class="b texto chico">SALIR</button></div>
+    <div class="lista">${fiestas.map(f => `<div class="card fiesta"><span class="oro" style="font-size:22px">🎟</span><div class="q"><b>${f[0]}</b><span style="color:var(--gris)">${f[1]}</span></div>
+      <span class="nuevo fila" style="gap:6px"><button class="b chico" data-ir="8">ENTREGAR</button><button class="b chico lleno" data-ir="2">VENDER</button></span> ${N}</div>`).join('')}</div>
+    <p class="motivo" style="text-align:center;margin:10px 0 0">Hoy se toca la tarjeta entera y abre la entrega. Quien solo entrega la sigue viendo así, sin los botones.</p></div>`;
+}
+
+/* ───── 3. Abrir la caja ───── */
+function pAbrir(){
+  const sin = !(C.valor > 0);
+  return `<div class="app"><div class="barraApp"><span class="tit">Vender entradas<small>${FIESTA}</small></span></div>
+    <div class="velo"><div class="dialogo nuevo"><h3>Abrir la caja de entradas ${N}</h3>
+      <p style="margin:-4px 0 12px;color:var(--gris)">${FIESTA} · vende <b>${S.jefe?'el jefe':'Romi'}</b></p>
+      ${sin ? `<div class="banda r">El jefe todavía no puso el precio de la entrada de esta fiesta</div><p class="motivo">Sin precio no abre la caja. Se pone en ENTRADAS → PRECIOS.</p>` :
+      `<label class="campo">Cambio inicial: $<input inputmode="numeric" data-s="cambio" value="${S.cambio}" placeholder="0"></label>
+       <p class="motivo">Puede ser 0. Es la plata con que arranca para dar vuelto.</p>
+       <div class="fila" style="justify-content:flex-end;margin-top:10px"><button class="b texto" data-ir="1">VOLVER</button><button class="b lleno" data-a="abrir">ABRIR LA CAJA</button></div>`}
+    </div></div></div>`;
+}
+
+/* ───── 4. VENDER ───── */
+function pVender(){
+  const p = pedido(), fam = p.fam, q = quedan();
+  const cab = `<div class="barraApp"><span class="tit">Vender entradas<small>${FIESTA}</small></span><button class="b chico" data-ir="5">VENTAS</button><button class="b chico" data-ir="6">CERRAR CAJA</button></div>
+    <p style="margin:-4px 0 10px;font-size:12.5px;font-weight:600;color:var(--verde)">● Caja abierta · ${S.jefe?'el jefe':'Romi'} · Todo subido</p>`;
+  if (S.ultima && !S.medio) return `<div class="app nuevo">${cab}<div class="banda v">✔ Venta N° ${cuatro(S.ultima.n)} guardada · ${S.ultima.cant} entradas · ${fmt(S.ultima.cobrado)}
+      <span style="flex:1"></span><button class="b chico verde" data-ir="4">VER EL COMPROBANTE</button><button class="b chico" data-a="otra">OTRA VENTA</button></div>
+      <p class="motivo">La pantalla queda limpia para la siguiente.</p></div>`;
+  const aq = `<div class="grupo"><p class="rot">1 · ¿A quién?</p>
+    <div class="seg"><button class="${fam?'on':''}" data-a="familia">Una familia de la fiesta</button><button class="${fam?'':'on'}" data-a="afuera">Alguien de afuera</button></div>
+    ${fam ? `<div class="card" style="margin-top:8px;border-radius:16px"><b>${FAM.nombre}</b> <span style="color:var(--gris)">· ${FAM.div} · mesa ${FAM.mesa}</span><br>
+      ${q>0 ? `Le quedan <b>${q}</b> entradas de sus lugares adicionales, a <b>${fmt(precioLugar())}</b> cada una <span class="motivo">(le corresponden ${FAM.corresponden}, compró ${FAM.compradas})</span>` : 'Ya compró todas las de sus lugares adicionales.'}
+      <br><span style="color:var(--naranja);font-weight:600">Debe ${fmt(FAM.debe)} del contrato: se salda en caja</span> <span class="motivo">— se le vende igual</span></div>` : ''}
+    <div class="fila" style="margin-top:8px"><label class="campo" style="flex:2;min-width:220px">Nombre y apellido de quien compra<input data-s="nombre" value="${S.nombre}" placeholder="GÓMEZ, CARLA"></label>
+      <label class="campo" style="flex:1;min-width:120px">DNI (opcional)<input inputmode="numeric" data-s="dni" value="${S.dni}"></label></div></div>`;
+  const reng = `<div class="grupo"><p class="rot">2 · Las entradas</p>
+    ${fam && q>0 ? `<div class="renglon"><div class="q"><b>Entradas de sus lugares adicionales</b><span style="color:var(--gris)">${fmt(precioLugar())} c/u · el ${100-C.lugPct} % del valor · tope ${q}</span></div>
+      <span class="mas"><button data-a="l-">−</button><b>${p.nl}</b><button data-a="l+">+</button></span><b style="min-width:90px;text-align:right">${fmt(p.nl*precioLugar())}</b></div>` : ''}
+    <div class="renglon"><div class="q"><b>${S.antic&&C.anticipada>0?'Entradas (anticipada)':'Entradas'}</b><span style="color:var(--gris)">${fmt(precioHoy())} c/u${p.d>0?` · con ${p.d} % queda en ${fmt(p.ps)}`:''}</span></div>
+      <label class="campo" style="width:110px">Descuento %<input inputmode="numeric" data-s="desc" value="${puedeDesc()?S.desc:0}" ${puedeDesc()?'':'disabled'}></label>
+      <span class="mas"><button data-a="s-">−</button><b>${S.sueltas}</b><button data-a="s+">+</button></span><b style="min-width:90px;text-align:right" id="subS">${fmt(S.sueltas*p.ps)}</b></div>
+    ${puedeDesc()?'':'<p class="motivo" style="margin:0">El descuento a mano: solo en modo jefe (o si el jefe lo permitió en PRECIOS).</p>'}</div>`;
+  const hasta = S.del && p.cant>0 ? num(S.del)+p.cant-1 : null;
+  const nums = `<div class="grupo"><p class="rot">3 · Números del talonario (opcional)</p>
+    <div class="fila"><label class="campo" style="width:120px">Del<input inputmode="numeric" data-s="del" value="${S.del}"></label><b id="alN" style="font-size:15px">${hasta?'al '+hasta:'al …'}</b>
+      <button class="b texto chico">El talonario salta: dos tramos</button></div>
+    <p class="motivo" style="margin:4px 0 0">El mismo casillero de la entrega. Probá con 1045: ya está entregado.</p></div>`;
+  const pie = `<div class="total"><span>Total · <span id="cantT">${p.cant}</span> entradas</span><span class="v" id="totalT">${fmt(p.total)}</span></div>
+    <p class="err" id="faltaT" style="margin:0 0 8px;min-height:18px">${p.falta||''}</p>
+    <div class="fila" id="medios">${['Efectivo','Transferencia','Mixto'].map(m => `<button class="b lleno" style="flex:1" data-m="${m}" ${p.falta?'disabled':''}>${m.toUpperCase()}</button>`).join('')}</div>`;
+  return `<div class="app nuevo">${cab}${aq}${reng}${nums}${pie}${S.medio ? hojaCobro(p) : ''}</div><p class="donde" style="margin-top:8px">Toda la pantalla es nueva ${N}. El cobro (EFECTIVO · TRANSFERENCIA · MIXTO) es la misma hoja de la barra.</p>`;
+}
+function hojaCobro(p){
+  const c = cobro(p), m = S.medio;
+  return `<div class="velo"><div class="dialogo"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">Pagar ${m==='Efectivo'?'en efectivo':m==='Transferencia'?'por transferencia':'mixto'}</h3><b>Total ${fmt(p.total)}</b></div>
+    ${m==='Mixto'?`<div class="fila" style="margin-top:10px"><label class="campo" style="flex:1">En efectivo<input inputmode="numeric" data-s="efMixto" value="${S.efMixto}"></label><div class="campo" style="flex:1">Por transferencia<b style="font-size:17px;color:var(--texto);padding:9px 0" id="trM">${fmt(c.transfiere)}</b></div></div>`:''}
+    ${m!=='Efectivo'&&C.recargo>0?`<p style="margin:8px 0 0">Recargo por transferencia: ${fmt(c.tr)} + ${C.recargo} % = <b id="recT">${fmt(c.transfiere)}</b></p>`:''}
+    ${m==='Transferencia'?`<div class="fila" style="justify-content:space-between;margin-top:10px"><span>Transfiere</span><b style="font-size:22px">${fmt(c.transfiere)}</b></div>`:''}
+    ${m!=='Transferencia'?`<div class="fila" style="margin-top:10px"><label class="campo" style="flex:1">Recibe<input inputmode="numeric" data-s="recibe" value="${S.recibe}" placeholder="Vacío: paga justo"></label><div class="campo" style="flex:1">Vuelto<b style="font-size:22px;color:var(--texto)" id="vueltoT">${c.vuelto===null?'—':fmt(c.vuelto)}</b></div></div>`:''}
+    <hr style="border:0;border-top:1px solid rgba(0,0,0,.12);margin:14px 0 8px">
+    <div class="fila" style="justify-content:space-between"><b>A cobrar</b><b style="font-size:22px" id="aCobrarT">${fmt(c.aCobrar)}</b></div>
+    <p class="err" id="faltaC" style="min-height:18px;margin:4px 0">${c.falta||''}</p>
+    <div class="fila" style="justify-content:space-between"><button class="b texto" data-a="volverCobro">VOLVER</button><button class="b lleno" id="confirmar" data-a="confirmar" ${c.falta?'disabled':''}>CONFIRMAR</button></div>
+  </div></div>`;
+}
+
+/* ───── 5. El comprobante ───── */
+function pComprobante(){
+  const u = S.ultima || {n:17, cant:10, cobrado:60000, total:60000, recargo:0, comprador:'GÓMEZ, CARLA', dni:'', fam:true, nl:8, sueltas:2, ps:10000, d:0, medio:'Efectivo', ef:60000, tr:0, del:'', antic:false, quien:'Romi'};
+  const lin = (a,b) => `<div class="lin"><span>${a}</span><b>${b}</b></div>`;
+  return `<div class="papel nuevo">
+    <div class="lin"><h4>${FIESTA.toUpperCase()}</h4><span>Fiesta: ${FECHA}</span></div>
+    <div class="lin" style="margin-top:4px"><b>COMPROBANTE DE ENTRADAS · N° ${cuatro(u.n)}</b><span>14/11/2026 11:32 hs</span></div>
+    <div class="lin"><span>Vendió: ${u.quien}</span></div><hr>
+    ${lin('Compra', u.comprador + (u.dni ? ' · DNI ' + u.dni : ''))}
+    ${u.fam ? lin('Familia', `${FAM.nombre} · mesa ${FAM.mesa}`) : ''}<hr>
+    ${u.nl>0 ? lin(`${u.nl} × Entrada de lugar adicional (${100-C.lugPct} %) · ${fmt(precioLugar())} c/u`, fmt(u.nl*precioLugar())) : ''}
+    ${u.sueltas>0 ? lin(`${u.sueltas} × ${u.antic?'Entrada anticipada':'Entrada'} · ${fmt(u.ps)} c/u${u.d>0?` (descuento ${u.d} %)`:''}`, fmt(u.sueltas*u.ps)) : ''}
+    ${u.recargo>0 ? lin('Recargo por transferencia', fmt(u.recargo)) : ''}<hr>
+    <div class="lin" style="font-size:17px"><b>TOTAL</b><b>${fmt(u.cobrado)}</b></div>
+    ${lin('Pagó', u.medio==='Mixto' ? `Mixto · efectivo ${fmt(u.ef)} · transferencia ${fmt(u.tr)}` : u.medio)}<hr>
+    ${lin('Pulseras normales', u.cant)}
+    ${u.del ? lin('Talonario', `${u.del} al ${num(u.del)+u.cant-1}`) : '<div class="lin"><span style="color:#777">Sin números del talonario anotados</span></div>'}
+  </div><p class="donde" style="text-align:center;margin-top:10px">Media hoja A4, con la cabecera de los recibos de cobro. Reimpreso dice <b>COPIA</b>; anulado, <b>ANULADA</b> cruzado. ${S.ultima?'':'(Ejemplo: hacé una venta en el paso 4 y acá sale la tuya.)'}</p>`;
+}
+
+/* ───── 6. VENTAS ───── */
+function pVentas(){
+  const j = S.jefe;
+  const vs = S.ventas.filter(v => S.filtro==='todas' || (S.filtro==='verif') === !!v.verif);
+  const fila = v => {
+    const an = v.anulada;
+    return `<tr class="${an?'anulada':''}"><td>N° ${cuatro(v.n)}</td><td>${v.hora}</td><td style="text-align:left">${v.comprador}</td><td>${v.cant}</td><td>${fmt(v.total)}</td><td>${v.medio}</td><td>${v.quien}</td>
+      <td class="no"><label title="${j?'':'Solo en modo jefe'}"><input type="checkbox" data-verif="${v.n}" ${v.verif?'checked':''} ${j&&!an?'':'disabled'}></label></td>
+      <td class="no" style="text-align:right"><button class="b chico texto" data-ir="4">REIMPRIMIR</button><button class="b chico ${j&&!an?'':'apagado'}" data-anular="${v.n}" style="color:var(--rojo);border-color:var(--rojo)">ANULAR</button></td></tr>
+      ${an?`<tr><td colspan="9" class="no" style="text-align:left;font-weight:400;color:var(--gris);border-top:0;padding-top:0">Anulada por el jefe · ${an.motivo} · ${an.devueltas?'devolvieron las entradas y pulseras':'NO devolvieron las entradas: esos números quedan anulados'}</td></tr>`:''}
+      ${S.anulando===v.n?`<tr><td colspan="9" class="no" style="text-align:left;white-space:normal"><div class="banda r" style="font-weight:400;color:var(--texto)"><b style="color:var(--rojo)">Anular la venta N° ${cuatro(v.n)}</b>
+        <label class="campo" style="flex:1;min-width:200px">Por qué se anula (obligatorio)<input data-s="motivo" value="${S.motivo}"></label>
+        <span>¿Devolvieron las entradas y pulseras?${v.numeros?` <b>(${v.numeros})</b>`:''}</span>
+        <button class="b chico rojo" data-an="si">SÍ, ANULAR</button><button class="b chico rojo" data-an="no">NO DEVOLVIERON, ANULAR</button><button class="b chico texto" data-an="x">CANCELAR</button>
+        <span class="err" id="errAn" style="width:100%"></span></div></td></tr>`:''}`;
+  };
+  return `<div class="app nuevo"><div class="barraApp"><span class="tit">Ventas de entradas<small>${FIESTA}${j?' · todas las cajas':' · tu caja'}</small></span><button class="b chico">IMPRIMIR HISTORIAL</button></div>
+    <div class="banda n" style="margin-bottom:10px;font-size:13px">⚠ El 1052 está en dos ventas (RUIZ, MARTA y LEDESMA, JUAN): revisar. <span class="motivo" style="color:inherit">Pasa si dos equipos venden sin internet: se avisa cuando se juntan.</span></div>
+    <div class="fila" style="margin-bottom:8px"><div class="seg">${[['todas','Todas'],['verif','Verificadas'],['sin','Sin verificar']].map(f => `<button class="${S.filtro===f[0]?'on':''}" data-f="${f[0]}">${f[1]}</button>`).join('')}</div>
+      ${j?'':'<span class="motivo">“Pago verificado” y ANULAR: solo en modo jefe</span>'}</div>
+    <div class="card scrollx" style="padding:6px 10px"><table class="tabla"><thead><tr><th>N°</th><th>HORA</th><th style="text-align:left">COMPRADOR</th><th>CANT.</th><th>TOTAL</th><th>PAGÓ</th><th>VENDIÓ</th><th>PAGO VERIFICADO</th><th></th></tr></thead>
+      <tbody>${vs.map(fila).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--gris)">Ninguna venta con ese filtro.</td></tr>'}</tbody></table></div></div>`;
+}
+
+/* ───── 7. Cerrar la caja ───── */
+function cuentasCaja(){
+  const cuentan = S.ventas.filter(v => !v.anulada);
+  let ef = 0, tr = 0, mixtos = 0, desc = 0, ent = 0, lugar = 0;
+  for (const v of cuentan){ ent += v.cant; if (v.lugar || v.nl) lugar += (v.nl ?? v.cant);
+    if (v.medio==='Efectivo') ef += v.total; else if (v.medio==='Transferencia') tr += v.total; else { mixtos++; ef += v.ef ?? v.total/2; tr += v.tr ?? v.total/2; }
+    desc += v.desc || 0; }
+  return {ef, tr, mixtos, desc, ent, lugar, sueltas: ent-lugar, anuladas: S.ventas.length - cuentan.length, n: cuentan.length};
+}
+function pCerrar(){
+  const c = cuentasCaja(), cambio = num(S.cambio), esperado = cambio + c.ef, dif = num(S.contado) - esperado;
+  const difTxt = dif===0 ? 'Justo, sin diferencia' : dif>0 ? 'Sobran '+fmt(dif) : 'Faltan '+fmt(-dif);
+  const lin = (a,b,col) => `<div class="fila" style="justify-content:space-between;padding:3px 0"><span>${a}</span><b style="${col?'color:'+col:''}">${b}</b></div>`;
+  const cuerpo = !S.cerrada ? `<h3>Cerrar la caja de entradas ${N}</h3>
+      <p style="margin:-4px 0 10px;color:var(--gris)">Contá el efectivo que tenés en la caja y escribilo. <b>Todavía no se muestra cuánto tenía que haber.</b></p>
+      <label class="campo">Efectivo contado: $<input inputmode="numeric" data-s="contado" value="${S.contado}"></label>
+      <label class="campo" style="margin-top:8px">Nota (opcional)<input data-s="nota" value="${S.nota}"></label>
+      <p class="err" id="errC" style="min-height:18px;margin:6px 0"></p>
+      <div class="fila" style="justify-content:flex-end"><button class="b texto" data-ir="3">VOLVER A VENDER</button><button class="b lleno" data-a="cerrar">CERRAR LA CAJA</button></div>` :
+    `<h3>Caja cerrada</h3>
+      ${lin('Contaste', fmt(num(S.contado)))}${lin('Tenía que haber', fmt(esperado))}
+      <div class="banda ${dif===0?'v':dif>0?'n':'r'}" style="margin:6px 0 10px">${difTxt}</div>
+      ${lin('Cambio inicial', fmt(cambio))}${lin('Efectivo', fmt(c.ef), 'var(--efectivo)')}${lin('Transferencia', fmt(c.tr), 'var(--transf)')}${lin('Ventas mixtas', c.mixtos)}
+      ${lin('Entradas vendidas', `${c.ent} (${c.sueltas} sueltas y ${c.lugar} de lugares)`)}${lin('Descuentos a mano', fmt(c.desc))}${lin('Anuladas (no cuentan)', c.anuladas)}
+      <p class="motivo">Una caja cerrada no se vuelve a cerrar ni se corrige: solo se le puede agregar la nota. Sale su papel.</p>
+      <div class="fila" style="justify-content:flex-end"><button class="b chico" data-a="reabrir">(en la maqueta: volver a contar)</button><button class="b lleno">IMPRIMIR EL CIERRE</button></div>`;
+  return `<div class="app"><div class="barraApp"><span class="tit">Vender entradas<small>${FIESTA}</small></span></div><div class="velo"><div class="dialogo nuevo">${cuerpo}</div></div></div>`;
+}
+
+/* ───── 8. ENTRADAS en el cierre de caja ───── */
+function pSector(){
+  const seg = `<div class="seg oro">${['cobros','barra','entradas'].map(s => `<button class="${S.sector===s?'on':''}" data-sec="${s}">${s.toUpperCase()}</button>`).join('')}</div>`;
+  let cuerpo;
+  if (S.sector !== 'entradas') cuerpo = `<div class="card" style="text-align:center;color:var(--gris)">${S.sector==='cobros'?'COBROS: como hoy (el día, efectivo, transferencia, movimientos).':'BARRA: como hoy (una línea por caja de la barra).'}<br>No cambia nada.</div>`;
+  else if (!(C.valor > 0)) cuerpo = `<div class="card nuevo" style="text-align:center"><b>Esta fiesta todavía no tiene precio de entrada: se pone en ENTRADAS → PRECIOS.</b></div>`;
+  else {
+    const c = cuentasCaja(), cambio = num(S.cambio), esp = cambio + c.ef, dif = num(S.contado) - esp;
+    const difTxt = !S.cerrada ? '<span style="color:var(--gris)">abierta</span>' : dif===0 ? '<span style="color:#2e9e5b">Justo</span>' : dif>0 ? `<span style="color:#d68a00">Sobran ${fmt(dif)}</span>` : `<span style="color:#e74c3c">Faltan ${fmt(-dif)}</span>`;
+    cuerpo = `<div class="card fiesta" style="border-color:rgba(212,175,55,.35);border-radius:14px"><div class="q"><span class="oro" style="font-size:10px;letter-spacing:.14em;font-weight:800">LA FIESTA</span><b style="font-size:16px">${FIESTA}</b><span style="color:var(--gris);font-size:12.5px">viernes 4 de diciembre · la próxima</span></div><button class="b" style="color:#9a7b12;border-color:#9a7b12">CAMBIAR DE FIESTA</button></div>
+      <p style="font-size:12px;color:var(--gris);margin:8px 2px">Las entradas van por fiesta, no por día. Solo para mirar: anular, verificar y reimprimir están en VENTAS.</p>
+      <div class="card scrollx nuevo" style="padding:6px 10px;border-radius:14px"><table class="tabla"><thead><tr><th>CAJA</th><th>CAMBIO</th><th>EFECTIVO</th><th>TRANSF.</th><th>MIXTOS</th><th>VENDIDAS</th><th>DESC.</th><th>ANUL.</th><th>CONTÓ</th><th>DIFERENCIA</th></tr></thead><tbody>
+        <tr><td><b>Romi${S.cerrada?'':' · abierta'}</b></td><td>${fmt(cambio)}</td><td style="color:var(--efectivo)">${fmt(c.ef)}</td><td style="color:var(--transf)">${fmt(c.tr)}</td><td>${c.mixtos}</td><td>${c.ent}</td><td>${fmt(c.desc)}</td><td>${c.anuladas}</td><td>${S.cerrada?fmt(num(S.contado)):'—'}</td><td>${difTxt}</td></tr>
+        <tr><td><b>Maxi</b></td><td>${fmt(0)}</td><td style="color:var(--efectivo)">${fmt(120000)}</td><td style="color:var(--transf)">${fmt(85000)}</td><td>1</td><td>26</td><td>${fmt(0)}</td><td>1</td><td>${fmt(120000)}</td><td><span style="color:#2e9e5b">Justo</span></td></tr>
+        <tr class="totalf"><td>TOTAL</td><td>${fmt(cambio)}</td><td style="color:var(--efectivo)">${fmt(c.ef+120000)}</td><td style="color:var(--transf)">${fmt(c.tr+85000)}</td><td>${c.mixtos+1}</td><td>${c.ent+26}</td><td>${fmt(c.desc)}</td><td>${c.anuladas+1}</td><td></td><td></td></tr></tbody></table></div>
+      <div class="kpis" style="margin-top:10px"><div class="kpi nuevo" style="border-radius:14px"><div class="t" style="font-weight:800;font-size:10.5px">TOTAL VENDIDO</div><div class="v oro">${fmt(c.ef+c.tr+205000)}</div><div class="s">${c.ent+26} entradas · ${c.sueltas+14} sueltas y ${c.lugar+12} de lugares</div></div>
+        <div class="kpi nuevo" style="border-radius:14px"><div class="t" style="font-weight:800;font-size:10.5px">ANULADO DESPUÉS DEL CIERRE</div><div class="v">${fmt(10000)}</div><div class="s">el cierre de esa caja no se corrige</div></div>
+        <div class="kpi" style="border-radius:14px"><div class="t" style="font-weight:800;font-size:10.5px">CAJAS</div><div class="v">${S.cerrada?'0 abiertas':'1 abierta'}</div><div class="s">${S.cerrada?'2 cerradas':'1 cerrada'}</div></div></div>`;
+  }
+  return `<div class="app cierre"><div class="barraApp"><span class="tit oro" style="letter-spacing:.2em;font-size:17px">CIERRE DE CAJA</span></div><div style="margin-bottom:12px">${seg}</div>${cuerpo}</div>
+    <p class="donde" style="margin-top:8px">Sin ninguna caja diría: “Todavía no se abrió ninguna caja de entradas en esta fiesta.” El texto de hoy (“se venden a mano, fuera de la app”) se va.</p>`;
+}
+
+/* ───── 9. La entrega ───── */
+function pEntrega(){
+  const filas = [
+    ['DÍAZ, TOMÁS','6° A · mesa 9 · 8 sin cargo (3 VIP + 5 generales)','', 'v','✔ Retiró'],
+    [FAM.nombre, `${FAM.div} · mesa ${FAM.mesa} · 8 sin cargo (2 VIP + 6 generales) · ${FAM.corresponden} al 50 %`, `(compró ${FAM.compradas})`, 'r','⛔ Debe '+fmt(FAM.debe)],
+    ['LEDESMA, JUAN','6° B · mesa 22 y 23 · 8 sin cargo (1 VIP + 7 generales) · 8 al 50 %','(compró 3)', 'g','◷ Pendiente'],
+  ];
+  const dlg = !S.dialogoEntrega ? '' : `<div class="velo"><div class="dialogo"><p class="rot" style="margin:0">Entregar entradas · 6° B · mesa 22 y 23</p><h3>LEDESMA, JUAN</h3>
+      <span class="chip v">✔ Pagó todo: cuotas, extras y mora</span>
+      <div class="fila" style="margin:10px 0"><div class="kpi" style="flex:1;border-radius:10px"><div class="t">VIP con cena</div><div class="v">1</div><div class="s">solo el egresado</div></div><div class="kpi" style="flex:1;border-radius:10px"><div class="t">Generales</div><div class="v">7</div><div class="s">del talonario, con número</div></div></div>
+      <p style="color:var(--naranja);font-weight:600;font-size:12.5px;margin:0 0 6px">Las 8 entradas de su mesa adicional no van sin cargo: se compran aparte, al 50 %.</p>
+      <div class="nuevo" style="padding:4px"><span style="font-size:12.5px">Ya compró <b>3</b>: le quedan <b>5</b>.</span> <button class="b chico lleno" data-ir="3">VENDERLE ESAS ENTRADAS</button> ${N}
+        <p class="motivo" style="margin:4px 0 0">Sin el permiso de vender, en vez del botón dice: “Se las vende quien tiene la caja de entradas.”</p></div>
+      <p class="motivo" style="margin-top:10px">…sigue el formulario de la entrega, como hoy.</p>
+      <div class="fila" style="justify-content:flex-end"><button class="b texto" data-a="dlgEntrega">CERRAR</button></div></div></div>`;
+  return `<div class="app"><div class="barraApp"><span class="tit">Retiro de entradas<small>${FIESTA}</small></span></div>${tarjetasRetiro(true)}
+    <div class="card" style="padding:4px 14px">${filas.map((f,i) => `<div class="renglon" style="${i?'':'border-top:0'};cursor:pointer" data-a="dlgEntrega"><div class="q"><b>${f[0]}</b><span style="color:var(--gris);font-size:12.5px">${f[1]} ${f[2]?`<span class="nuevo" style="color:var(--texto);font-weight:700">${f[2]}</span>`:''}</span></div><span class="chip ${f[3]}">${f[4]}</span><span style="color:#9e9e9e">›</span></div>`).join('')}</div>
+    <p class="motivo" style="margin:8px 0 0">Tocá un renglón para ver el botón nuevo adentro de la entrega.</p>${dlg}</div>
+    <p class="donde" style="margin-top:8px">La planilla de entrega en papel no cambia. Lo que frena por deuda sigue siendo solo la entrega sin cargo.</p>`;
+}
+
+/* ───── dibujar y enlazar ───── */
+const PANTALLAS = [pPrecios, pEntrar, pAbrir, pVender, pComprobante, pVentas, pCerrar, pSector, pEntrega];
+function dibujar(){
+  $('#pasos').innerHTML = PASOS.map((p,i) => `<button class="paso ${i===S.paso?'on':''}" data-p="${i}"><span class="n">${i+1}</span><span><b>${p.t}</b><small>${p.s}</small></span></button>`).join('');
+  const p = PASOS[S.paso];
+  $('#nota').innerHTML = `<p>${p.nota}</p><p class="donde">Dónde: ${p.donde}</p>`;
+  $('#pantalla').innerHTML = PANTALLAS[S.paso]();
+}
+function ir(n){ S.paso = n; if (n === 3 && !S.cajaAbierta) S.paso = 2; S.medio = null; S.anulando = null; dibujar(); window.scrollTo({top: 0, behavior:'smooth'}); }
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-p],[data-ir],[data-a],[data-m],[data-f],[data-sec],[data-anular],[data-an]'); if (!t || t.disabled || t.classList.contains('apagado')) return;
+  const d = t.dataset;
+  if (d.p !== undefined) return ir(+d.p);
+  if (d.ir !== undefined) return ir(+d.ir);
+  if (d.m){ S.medio = d.m; S.recibe = ''; S.efMixto = ''; return dibujar(); }
+  if (d.f){ S.filtro = d.f; return dibujar(); }
+  if (d.sec){ S.sector = d.sec; return dibujar(); }
+  if (d.anular){ S.anulando = +d.anular; S.motivo = ''; return dibujar(); }
+  if (d.an){
+    if (d.an === 'x'){ S.anulando = null; return dibujar(); }
+    if (!S.motivo.trim()){ $('#errAn').textContent = 'Anular lleva motivo.'; return; }
+    const v = S.ventas.find(x => x.n === S.anulando); v.anulada = {motivo: S.motivo.trim(), devueltas: d.an === 'si'}; S.anulando = null; return dibujar();
+  }
+  switch (d.a){
+    case 'verPrecios': S.verPrecios = !S.verPrecios; break;
+    case 'aMano': C.aMano = t.checked; break;
+    case 'abrir': S.cajaAbierta = true; S.paso = 3; break;
+    case 'familia': S.aQuien = 'familia'; S.lugar = quedan(); break;
+    case 'afuera': S.aQuien = 'afuera'; break;
+    case 'l-': S.lugar = Math.max(0, Math.min(S.lugar, quedan()) - 1); break;
+    case 'l+': S.lugar = Math.min(quedan(), S.lugar + 1); break;
+    case 's-': S.sueltas = Math.max(0, S.sueltas - 1); break;
+    case 's+': S.sueltas++; break;
+    case 'volverCobro': S.medio = null; break;
+    case 'confirmar': {
+      const p = pedido(), c = cobro(p); if (p.falta || c.falta) return;
+      const n = Math.max(...S.ventas.map(v => v.n)) + 1;
+      S.ultima = {n, cant:p.cant, total:p.total, cobrado:c.aCobrar, recargo:c.recargo, comprador:S.nombre.trim().toUpperCase(), dni:S.dni, fam:p.fam, nl:p.nl, sueltas:S.sueltas, ps:p.ps, d:p.d, medio:S.medio, ef:c.ef, tr:c.transfiere, del:S.del, antic:S.antic&&C.anticipada>0, quien:S.jefe?'el jefe':'Romi'};
+      S.ventas.push({n, hora:'11:32', comprador:S.ultima.comprador, cant:p.cant, total:c.aCobrar, medio:S.medio, quien:S.ultima.quien, numeros:S.del?`${S.del} al ${num(S.del)+p.cant-1}`:'', verif:false, nl:p.nl, ef:c.ef, tr:c.transfiere, desc:p.descontado});
+      if (p.fam) FAM.compradas += p.nl;
+      S.medio = null; S.nombre = ''; S.dni = ''; S.del = ''; S.desc = 0; S.sueltas = 0; S.lugar = quedan(); break; }
+    case 'otra': S.ultima = null; S.sueltas = 2; S.lugar = quedan(); break;
+    case 'cerrar': if (!S.contado){ $('#errC').textContent = 'Escribí cuánto efectivo contaste.'; return; } S.cerrada = true; break;
+    case 'reabrir': S.cerrada = false; S.contado = ''; break;
+    case 'dlgEntrega': S.dialogoEntrega = !S.dialogoEntrega; break;
+  }
+  dibujar();
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.name === 'quien'){ S.jefe = t.value === 'j'; return dibujar(); }
+  if (t.id === 'antic'){ S.antic = t.checked; return dibujar(); }
+  if (t.dataset.verif){ S.ventas.find(v => v.n === +t.dataset.verif).verif = t.checked; return; }
+  if (t.dataset.c){ const k = t.dataset.c; C[k] = k === 'hasta' ? t.value : num(t.value); const el = $('#cadaUna'); if (el) el.textContent = 'Cada una: ' + fmt(precioLugar()); return; }
+  if (!t.dataset.s) return;
+  const k = t.dataset.s; S[k] = k === 'desc' ? Math.min(100, num(t.value)) : t.value;
+  if (S.paso !== 3) return;
+  const p = pedido();
+  const pon = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+  pon('#totalT', fmt(p.total)); pon('#cantT', p.cant); pon('#faltaT', p.falta || ''); pon('#subS', fmt(S.sueltas * p.ps));
+  pon('#alN', S.del && p.cant > 0 ? 'al ' + (num(S.del) + p.cant - 1) : 'al …');
+  document.querySelectorAll('#medios button').forEach(b => b.disabled = !!p.falta);
+  if (S.medio){ const c = cobro(p); pon('#vueltoT', c.vuelto === null ? '—' : fmt(c.vuelto)); pon('#aCobrarT', fmt(c.aCobrar)); pon('#trM', fmt(c.transfiere)); pon('#recT', fmt(c.transfiere)); pon('#faltaC', c.falta || ''); const b = $('#confirmar'); if (b) b.disabled = !!c.falta; }
+});
+document.addEventListener('change', e => { if (e.target.dataset.c || e.target.dataset.s === 'desc') dibujar(); });
+/* Para abrir la maqueta en un paso: …html#p=4&caja=1&jefe=1&nombre=… */
+const H = new URLSearchParams(location.hash.slice(1));
+if (H.get('jefe')){ S.jefe = true; $('input[name=quien][value=j]').checked = true; }
+if (H.get('caja')) S.cajaAbierta = true;
+if (H.get('nombre')) S.nombre = H.get('nombre');
+if (H.get('medio')) S.medio = H.get('medio');
+if (H.get('p')){ S.paso = Math.min(PASOS.length, Math.max(1, +H.get('p') || 1)) - 1; if (S.paso === 3 && !S.cajaAbierta) S.paso = 2; }
+dibujar();
+</script>
+</body></html>

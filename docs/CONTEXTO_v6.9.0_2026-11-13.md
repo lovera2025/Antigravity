@@ -5,8 +5,8 @@
 ## Para retomar en otro chat
 
 **Dónde quedó (14-nov):** la Parte A entera y **las etapas 1 y 2 de la Parte B** están **guardadas en la rama**
-(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **Sigue la maqueta de las pantallas, y ahí
-se frena hasta su OK.** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
+(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **La maqueta de las pantallas está hecha y
+mostrada: se espera su OK para las etapas 3 a 6.** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
 medias (el repositorio igual al último commit y la suite entera en verde, 4.803) y recién después se escribió la etapa
 2. **La suite entera pasa: 4.857 pruebas, 283 archivos, 8 tandas**, y el análisis de lo nuevo no da errores.
 
@@ -36,9 +36,8 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 
 1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
 2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
-3. **Frenar: la maqueta** de PRECIOS, VENDER, el comprobante, VENTAS, cerrar la caja y ENTRADAS del cierre, y su OK.
-   Interactiva, sobre una copia fiel de las pantallas de hoy; se le abre al usuario. **Empezar acá si no está hecha;
-   si ya se le mostró, esperar su OK.**
+3. **Frenado acá: la maqueta está hecha y se le mostró el 14-nov** (ver "La maqueta", abajo). **Falta su OK.** Si
+   pide cambios, primero en la maqueta.
 4. Etapas 3 a 6 del spec.
 5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
 
@@ -305,11 +304,25 @@ Los cinco archivos, como quedaron pensados:
 `saldo_deudor`, `RepartoDeSillas`, `sillas_puerta` ni lo demás de su lista (importar `retiro_entradas.dart` y
 `contrato_alumno.dart` sí se puede).
 
-### La maqueta (después de la etapa 2, y ahí se frena)
+### La maqueta — HECHA y mostrada el 14-nov: **se espera su OK**
 
-PRECIOS, VENDER, el comprobante, VENTAS, cerrar la caja y ENTRADAS del cierre (secciones 6 a 9 del spec). Va sobre
-una copia fiel de las pantallas de hoy (`RetiroEntradasScreen`, `EntradasHomeScreen`, el cierre por sector), con los
-accesos a la vista (por dónde se llega a cada cosa). **Se le muestra y se espera su OK antes de las etapas 3 a 6.**
+`docs/maqueta_venta_de_entradas_2026-11-14.html` (un solo archivo, sin imágenes, 48 KB: abre en el panel de la app).
+Nueve pasos, cada uno con su "Dónde:" (por dónde se llega): PRECIOS, por dónde se entra (ENTREGAR · VENDER), abrir la
+caja, VENDER (con el cobro), el comprobante, VENTAS, cerrar la caja, ENTRADAS del cierre y la entrega con lo vendido a
+la vista. Arriba se elige mirar como quien vende o como el jefe, y si rige la anticipada. Se puede tocar todo: una
+venta hecha en el paso 4 aparece en el comprobante, en VENTAS, en el cierre y en el sector.
+
+- **Las pantallas van con el tema claro**, que es el del programa (`ThemeMode.light`); la maqueta de la encargada las
+  había pintado oscuras. Los textos, las tarjetas y los estados de `RetiroEntradasScreen`, `EntradasHomeScreen`, el
+  diálogo de entrega y el cierre por sector se copiaron del código.
+- **Para mirarla:** `preview_start` con `maquetas` (`.claude/launch.json`, sirve `docs/` en el 8796). Abre en un paso
+  con `…html#p=4&caja=1&jefe=1&nombre=…`. Las capturas de cada paso, en
+  `build/maquetas/venta_de_entradas_2026-11-14/` (no van a git; se sacan con Edge sin ventana, **cada una con su
+  propio perfil y reintentando**: de corrido, Edge se saltea algunas).
+- Probada con clics simulados de punta a punta (los mismos mensajes que da `PedidoDeEntradas.falta`), sin errores en
+  la consola.
+
+**Las etapas 3 a 6 no empiezan sin su OK.** Si pide cambios, se cambian en la maqueta primero.
 
 ### Para preguntarle al jefe (ninguna frena el trabajo)
 

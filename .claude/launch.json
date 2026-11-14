@@ -36,6 +36,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8795", "--directory", "build/plano_prueba_web"],
       "port": 8795
+    },
+    {
+      "name": "maquetas",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8796", "--bind", "127.0.0.1", "--directory", "docs"],
+      "port": 8796
     }
   ]
 }
