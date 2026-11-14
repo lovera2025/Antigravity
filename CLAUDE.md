@@ -429,8 +429,9 @@ integrarlo.
   en un celular desde WhatsApp y aceptar desde el programa.
 
 **La 6.8.1, SOLA y antes que la 6.9.0: el rótulo de la mora y el recibo reimpreso entero** (decidida el 14-nov;
-**programada y probada sobre una copia de la base, sin publicar**; `docs/CONTEXTO_v6.8.1_2026-11-14.md`, que empieza
-con "Para retomar en otro chat": ahí está lo que falta, en orden). Sale de la rama **`release/6.8.x`** (desde el tag
+**programada y probada sobre una copia de la base, sin publicar; el usuario vio los recibos y todo lo que pidió está
+hecho: falta su OK para publicar, con él**; `docs/CONTEXTO_v6.8.1_2026-11-14.md`, que empieza con "Para retomar en otro
+chat": ahí está lo que falta, en orden). Sale de la rama **`release/6.8.x`** (desde el tag
 `v6.8.0`, carpeta `..\arguello_events_6.8.x`); cada commit también acá con `cherry-pick`. **Ningún instalador de la
 6.8.x sale de esta rama** (tiene la v80). Sin SQL ni migración. Una familia reclamó un recibo del 14/11 que nombraba
 una cuota ya cobrada, y el jefe avisó que los recibos reimpresos salían con menos datos.
@@ -444,9 +445,12 @@ una cuota ya cobrada, y el jefe avisó que los recibos reimpresos salían con me
   (`tool/rotulo_mora_antes_despues_test.dart` en la 6.8.0 y en la versión, `tool/comparar_rotulo_mora.py`, sobre una
   copia de `tool/copiar_base_solo_lectura.py`).
 - **El recibo reimpreso sale con el cobro entero** (`ReciboDeUnCobro`: REIMPRIMIR del Estado de cuenta, "Generar
-  recibo" y Finanzas), sin anulados; la nota de la cuota pagada en partes ("el resto: antes se habían pagado $X" /
-  "parcial: quedan $X") va siempre que va su cuota, sin perdón en la ficha; el título verde dice "MORA ABONADA EN SU
-  TOTALIDAD / PARCIALMENTE / EN ESTE PAGO" (pedido del usuario).
+  recibo" y Finanzas), sin anulados.
+- **El recuadro verde de todo recibo explica cada mora** (pedido y aprobado por el usuario): título "MORA ABONADA EN SU
+  TOTALIDAD / PARCIALMENTE / EN ESTE PAGO · N moras", una tabla **"Mora de · Debía · Pagó · Quedó" siempre** (también
+  cuando todo se paga entero: lo eligió él, para que todos los recibos tengan el mismo formato), el renglón que explica
+  la mora pagada en partes y el pie. Con un perdón en la ficha, solo lo pagado. La tabla no junta cuotas en "y N cuotas
+  más".
 
 **La 6.9.0, EN CURSO y SIN PUBLICAR: los arreglos de la noche y la venta de entradas** (plan aprobado el 13-nov;
 `docs/CONTEXTO_v6.9.0_2026-11-13.md`, que empieza con "Para retomar en otro chat": ahí está **dónde quedó, lo que sigue

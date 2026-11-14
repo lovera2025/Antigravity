@@ -5,6 +5,13 @@ todo en esta PC, **sin subir a GitHub**.
 
 ## Para retomar en otro chat
 
+**Antes que esto: la 6.8.1** (14-nov, a la tarde). En el medio de la 6.9.0 el usuario trajo una spec del rótulo de la
+mora (una familia reclamó un recibo) y el jefe avisó que los recibos reimpresos salían con menos datos. Se hizo como
+**6.8.1, sola**, desde `release/6.8.x`: **programada y probada sobre una copia de la base, sin publicar; falta su OK y
+publicar con él.** Todo en `docs/CONTEXTO_v6.8.1_2026-11-14.md`. Sus commits ya están también en esta rama (la suite
+entera pasa: 5.000). **La 6.9.0 se retoma después de publicar la 6.8.1**, desde donde dice abajo. El plan general va
+por 10 partes (los arreglos de la noche, las 7 etapas de la venta de entradas y las 2 de la 6.8.1): 6,5 de 10, **65 %**.
+
 **Dónde quedó (14-nov, al cortar el chat a pedido del usuario):**
 
 - **Parte A (los arreglos de la noche): hecha entera.** Faltan solo sus capturas con el mouse, antes de publicar.
