@@ -37,6 +37,12 @@ reclamó, y sola se compara limpia con las fotos de la mora). Tres cosas:
   del calendario sale "(parcial)" solo si la reconstrucción confirma que le quedó mora (`_parcialesConfirmados`).
 - **Un cobro reimpreso que dejó una cuota a medias no dice que la mora quedó abonada en su totalidad** (`pdf_service.dart`, `moraQuedaSaldada`):
   el recibo del 12/11 de la familia lo decía arriba de "parcial: quedan $9.000".
+- **El recuadro verde explica cada mora** (pedido del usuario el 14-nov, "que todo sea muy explicativo
+  minuciosamente"; aprobó el dibujo): la cantidad de moras en el título ("· 3 moras"), una tabla "Mora de · Debía ·
+  Pagó · Quedó" con el total, el renglón que explica la mora pagada en partes y al pie "Se pagaron N moras enteras y M
+  parcialmente." o "Con este pago no queda mora pendiente.". `FilaMoraPdf.debia`/`quedo`, `notaMoraPorCuota`,
+  `cantidadDeMorasPdf`. Con perdón, como antes (solo lo pagado). La tabla no junta cuotas en "y N cuotas más": si el
+  papel no entra, achica la letra o crece. Reemplaza la nota de una línea de más arriba.
 - **El título del recuadro verde, más formal** (lo pidió el usuario al ver los papeles, 14-nov): "MORA ABONADA EN SU
   TOTALIDAD", "MORA ABONADA PARCIALMENTE" o, si no se puede saber, "MORA ABONADA EN ESTE PAGO". Decía "MORA SALDADA /
   COBRADA EN ESTE PAGO". Vale para todos los recibos, también el que sale al cobrar.
