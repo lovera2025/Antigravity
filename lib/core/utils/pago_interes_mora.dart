@@ -109,3 +109,44 @@ double moraCobradaDelPeriodoVigente(Iterable<Map<String, dynamic>> pagos, DateTi
   return double.parse(suma.toStringAsFixed(2));
 }
 
+
+String _plegarConcepto(String raw) =>
+    foldDiacriticosLatin(_stripCombiningMarks(raw.toLowerCase()));
+
+/// La línea de mora dice que paga mora que **quedó sin cobrar** cuando se pagó
+/// otra cuota (el arrastre): `Mora pendiente cuotas 1 y 2 (no cobrada al
+/// pagar)`, o el sufijo `… + mora pendiente cuota 6` de una mixta.
+///
+/// Se usa solo sobre líneas que ya se sabe que son de mora: con eso alcanza
+/// para que `MoraTrackedOrigen.inferir` reparta la plata donde la línea dice,
+/// en vez de dársela a la cuota que se pagó ese mismo día.
+bool mencionaArrastre(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return false;
+  final f = _plegarConcepto(raw);
+  return f.contains('mora pendiente') ||
+      f.contains('cuotas ya pagadas') ||
+      f.contains('mora remanente') ||
+      f.contains('+ remanente') ||
+      f.contains('no cobrada al pagar');
+}
+
+/// Las cuotas del calendario que nombra una línea de mora, en el orden en que
+/// las escribe: `Interés mora cuotas 3, 4 + mora pendiente cuota 2` → `[3, 4]`.
+///
+/// Solo la lista de **antes** del primer ` + ` (lo de después es el arrastre),
+/// y solo los números de la lista: el año de `(vto Oct 2026)` no cuenta.
+/// `Interés mora (cuota base — este cobro)` no nombra ninguna: vacía.
+List<int> cuotasDeCalendarioEnConcepto(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  final f = _plegarConcepto(raw);
+  final corte = f.indexOf(' + ');
+  final antes = corte >= 0 ? f.substring(0, corte) : f;
+  final m = RegExp(
+    r'interes\s*mora\s*cuotas?\s+(\d+(?:\s*,\s*\d+)*)',
+  ).firstMatch(antes);
+  if (m == null) return const [];
+  return RegExp(r'\d+')
+      .allMatches(m.group(1)!)
+      .map((x) => int.parse(x.group(0)!))
+      .toList();
+}

@@ -4,6 +4,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import 'cobro_abono_acumulado.dart';
+import 'mora_concepto_rotulo.dart' show MoraConceptoRotulo;
 import 'mora_cuota_calculator.dart';
 
 /// Origen atribuido de [mora_pendiente_tracked] a cuotas ya liquidadas.
@@ -278,6 +279,121 @@ class MoraTrackedOrigen {
     }).toList();
   }
 
+  /// Desde la v4.9 (21-ago-2026) una línea mixta que no alcanza para todo
+  /// paga primero el arrastre y después el calendario. Antes, al revés.
+  static const _desdeArrastrePrimero = '2026-08-21';
+
+  /// Reparte la mora de un lote que liquida cuotas entre las cuotas que se
+  /// liquidan ([liquidadas]) y el arrastre de antes ([previos]). Escribe cuánto
+  /// le tocó a cada una en [aplicadoLiq] y [tomadoPrev].
+  ///
+  /// **Cada línea de mora va a lo que dice su concepto.** Hasta la 6.8.0 toda
+  /// la mora del lote iba primero a las cuotas que se liquidaban ese día y solo
+  /// lo que sobraba al arrastre: una línea que decía "Mora pendiente cuotas 1 y
+  /// 2" terminaba en la cuota 3, y la ficha seguía mostrando la 1 y la 2 como
+  /// debidas aunque se hubieran pagado (spec del 14-nov-2026). La plata no
+  /// cambia: cada lote consume lo mismo que antes, solo cambia sobre qué cuotas.
+  ///
+  /// - Solo arrastre: al arrastre, primero las cuotas que nombra.
+  /// - Solo calendario: a las liquidadas que nombra, por número.
+  /// - Mixta: desde el 21/08/2026, arrastre y después calendario; antes, al
+  ///   revés.
+  /// - Lo que una línea no pudo ubicar, y las líneas que no nombran nada, van al
+  ///   **pozo**, que sigue el camino de siempre: las liquidadas en orden y
+  ///   después el arrastre.
+  static void _repartirMoraDelLote({
+    required List<Map<String, dynamic>> lote,
+    required List<MoraCuotaDetalle> liquidadas,
+    required List<_OrigenAcc> previos,
+    required List<double> aplicadoLiq,
+    required List<double> tomadoPrev,
+  }) {
+    double tomarLiq(int i, double m) {
+      final cap = liquidadas[i].interesBruto - aplicadoLiq[i];
+      if (cap <= 0) return 0;
+      final t = math.min(cap, m);
+      aplicadoLiq[i] += t;
+      return t;
+    }
+
+    double tomarPrev(int i, double m) {
+      final cap = previos[i].remanente - tomadoPrev[i];
+      if (cap <= 0) return 0;
+      final t = math.min(cap, m);
+      tomadoPrev[i] += t;
+      return t;
+    }
+
+    double alArrastre(double m, String concepto) {
+      var resto = m;
+      final nombradas =
+          MoraConceptoRotulo.numerosCuotaPendienteDesdeConcepto(concepto);
+      for (final n in nombradas) {
+        if (resto <= 0.01) break;
+        final ip = previos.indexWhere((o) => o.numeroCuota == n);
+        if (ip >= 0) {
+          resto -= tomarPrev(ip, resto);
+          continue;
+        }
+        // Dos cobros el mismo día: la cuota se liquidó en este mismo lote.
+        final il = liquidadas.indexWhere((d) => d.numeroCuota == n);
+        if (il >= 0) resto -= tomarLiq(il, resto);
+      }
+      for (var i = 0; i < previos.length && resto > 0.01; i++) {
+        resto -= tomarPrev(i, resto);
+      }
+      return resto;
+    }
+
+    double alCalendario(double m, List<int> nums) {
+      var resto = m;
+      final orden = nums.toSet().toList()..sort();
+      for (final n in orden) {
+        if (resto <= 0.01) break;
+        final il = liquidadas.indexWhere((d) => d.numeroCuota == n);
+        if (il >= 0) resto -= tomarLiq(il, resto);
+      }
+      return resto;
+    }
+
+    final arrastrePrimero =
+        _claveLoteDia(lote.first).compareTo(_desdeArrastrePrimero) >= 0;
+    var pozo = 0.0;
+    for (final p in lote.where(_esMora)) {
+      final m = (p['monto'] as num?)?.toDouble() ?? 0;
+      final concepto = p['concepto']?.toString() ?? '';
+      final arrastre = mencionaArrastre(concepto);
+      final calendario = cuotasDeCalendarioEnConcepto(concepto);
+      final double resto;
+      if (m <= 0.01) {
+        resto = m;
+      } else if (arrastre && calendario.isEmpty) {
+        resto = alArrastre(m, concepto);
+      } else if (!arrastre && calendario.isNotEmpty) {
+        resto = alCalendario(m, calendario);
+      } else if (arrastre) {
+        resto = arrastrePrimero
+            ? alCalendario(alArrastre(m, concepto), calendario)
+            : alArrastre(alCalendario(m, calendario), concepto);
+      } else {
+        resto = m;
+      }
+      pozo += resto;
+    }
+
+    // El pozo, por el camino de siempre.
+    var moraRestante = pozo.clamp(0.0, double.infinity);
+    for (var i = 0; i < liquidadas.length; i++) {
+      moraRestante = (moraRestante - tomarLiq(i, moraRestante))
+          .clamp(0.0, double.infinity);
+    }
+    for (var i = 0; i < previos.length; i++) {
+      if (moraRestante <= 0.01) break;
+      moraRestante = (moraRestante - tomarPrev(i, moraRestante))
+          .clamp(0.0, double.infinity);
+    }
+  }
+
   /// Simula orígenes del tracked aplicando las mismas reglas que el cobro.
   ///
   /// [trackedMonto]: monto a etiquetar (FIFO sobre orígenes vivos).
@@ -379,12 +495,24 @@ class MoraTrackedOrigen {
                   d.numeroCuota <= cuotasPostCobro,
             )
             .toList();
-        // FIFO: aplicar moraEsteCobro a las liquidadas; remanente = origen nuevo.
-        var moraRestante = moraEsteCobro;
+        // El arrastre de antes que puede recibir plata de este lote. Con
+        // cuotasPre == 0 no hay arrastre legítimo (misma guarda que abajo).
+        final previosVivos = cuotasPre > 0 ? origenes : const <_OrigenAcc>[];
+        final aplicadoLiq = List<double>.filled(liquidadas.length, 0);
+        final tomadoPrev = List<double>.filled(previosVivos.length, 0);
+        _repartirMoraDelLote(
+          lote: lote,
+          liquidadas: liquidadas,
+          previos: previosVivos,
+          aplicadoLiq: aplicadoLiq,
+          tomadoPrev: tomadoPrev,
+        );
+
+        // Lo que no se cobró de cada cuota que se liquida es un origen nuevo.
         final nuevos = <_OrigenAcc>[];
-        for (final d in liquidadas) {
-          final aplicado = math.min(d.interesBruto, moraRestante);
-          moraRestante = (moraRestante - aplicado).clamp(0.0, double.infinity);
+        for (var i = 0; i < liquidadas.length; i++) {
+          final d = liquidadas[i];
+          final aplicado = aplicadoLiq[i];
           final rem = double.parse(
             (d.interesBruto - aplicado).clamp(0.0, double.infinity).toStringAsFixed(2),
           );
@@ -403,15 +531,15 @@ class MoraTrackedOrigen {
             );
           }
         }
-        // Lo que sobre de la mora cobrada baja el arrastre viejo, FIFO.
+        // Lo que se aplicó al arrastre viejo lo baja.
         final previos = <_OrigenAcc>[];
-        for (final o in origenes) {
-          if (moraRestante <= 0.01) {
+        for (var i = 0; i < previosVivos.length; i++) {
+          final o = previosVivos[i];
+          final toma = tomadoPrev[i];
+          if (toma <= 0) {
             previos.add(o);
             continue;
           }
-          final toma = math.min(o.remanente, moraRestante);
-          moraRestante = (moraRestante - toma).clamp(0.0, double.infinity);
           final nuevoRem = double.parse(
             (o.remanente - toma).clamp(0.0, double.infinity).toStringAsFixed(2),
           );

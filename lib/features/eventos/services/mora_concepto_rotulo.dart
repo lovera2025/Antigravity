@@ -1,3 +1,5 @@
+import '../../../core/utils/ar_time.dart';
+import '../../../models/contrato_alumno.dart';
 import 'mora_cuota_calculator.dart';
 import 'mora_tracked_origen.dart';
 
@@ -79,14 +81,57 @@ class MoraConceptoRotulo {
   ///
   /// Los conceptos que ya se entienden —`Interés mora cuota 3 (vto Jun 2026)`—
   /// vuelven intactos y sin subtexto.
-  static ({String titulo, String? subtexto}) rotuloFichaMora(String concepto) {
+  ///
+  /// Con [contrato] (con su fecha de alta), cada cuota del arrastre lleva su
+  /// vencimiento, igual que las filas del calendario: `Mora cuota 1 (vto Abr
+  /// 2026) y cuota 2 (vto May 2026)`, y en una mixta `Interés mora cuota 7 (vto
+  /// Oct 2026) + mora cuota 6 (vto Sep 2026)` (spec del 14-nov, parte C).
+  ///
+  /// [cuotasArrastre]: las cuotas del arrastre reconstruidas desde el historial
+  /// (`ConceptoPagoDisplay.arrastreDeUnaLinea`), que mandan sobre las que dice
+  /// el texto guardado: un cobro guardado con el rótulo viejo nombraba una cuota
+  /// ya cobrada (Anexo D). Null o vacía: las del texto, como siempre.
+  static ({String titulo, String? subtexto}) rotuloFichaMora(
+    String concepto, {
+    ContratoAlumno? contrato,
+    List<int>? cuotasArrastre,
+  }) {
     final t = concepto.trim();
+    final reconstruidas = (cuotasArrastre == null || cuotasArrastre.isEmpty)
+        ? null
+        : (cuotasArrastre.toSet().toList()..sort());
+
+    // Mixta: el calendario queda como está; el sufijo nombra el arrastre.
+    final mixta = RegExp(
+      r'\s\+\s*mora pendiente cuotas?\s+[\d,\sy]+$',
+      caseSensitive: false,
+    ).firstMatch(t);
+    if (mixta != null && !t.contains(sufijoNoCobradaAlPagar)) {
+      final nums = reconstruidas ??
+          numerosCuotaPendienteDesdeConcepto(t.substring(mixta.start));
+      final lista = _listaConVencimiento(nums, contrato);
+      if (lista == null) return (titulo: t, subtexto: null);
+      return (
+        titulo: '${t.substring(0, mixta.start).trimRight()} + mora $lista',
+        subtexto: null,
+      );
+    }
+
     if (!t.contains(sufijoNoCobradaAlPagar)) {
       return (titulo: t, subtexto: null);
     }
     final sinSufijo = t.replaceAll(sufijoNoCobradaAlPagar, '').trim();
 
-    final nums = numerosCuotaPendienteDesdeConcepto(sinSufijo);
+    final nums = reconstruidas ?? numerosCuotaPendienteDesdeConcepto(sinSufijo);
+    final lista = _listaConVencimiento(nums, contrato);
+    if (lista != null) {
+      return (
+        titulo: 'Mora $lista',
+        subtexto: nums.length == 1
+            ? 'Quedaba de cuando se pagó la cuota ${nums.first} · se cobró en este pago'
+            : 'Quedaba de cuando se pagaron esas cuotas · se cobró en este pago',
+      );
+    }
     if (nums.isEmpty) {
       return (
         titulo: 'Mora de cuotas ya pagadas',
@@ -105,6 +150,28 @@ class MoraConceptoRotulo {
       titulo: 'Mora de las cuotas $head y ${nums.last}',
       subtexto: 'Quedaba de cuando se pagaron esas cuotas · se cobró en este pago',
     );
+  }
+
+  static const _mesesCortos = [
+    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+  ];
+
+  /// `cuota 1 (vto Abr 2026) y cuota 2 (vto May 2026)`. Null sin cuotas o sin
+  /// la fecha de alta del contrato: ahí el rótulo queda como estaba.
+  static String? _listaConVencimiento(List<int> nums, ContratoAlumno? c) {
+    final alta = c?.createdAt;
+    if (nums.isEmpty || alta == null) return null;
+    final regAr = ArTime.toAr(alta);
+    final partes = [
+      for (final n in nums)
+        () {
+          final v = MoraCuotaCalculator.vencimientoCuotaDesdeRegAr(regAr, n);
+          return 'cuota $n (vto ${_mesesCortos[v.month - 1]} ${v.year})';
+        }(),
+    ];
+    if (partes.length == 1) return partes.first;
+    return '${partes.sublist(0, partes.length - 1).join(', ')} y ${partes.last}';
   }
 
   /// Números de "Mora pendiente cuota 3" / "Mora pendiente cuotas 2 y 3".

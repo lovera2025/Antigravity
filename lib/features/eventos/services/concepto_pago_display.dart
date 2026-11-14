@@ -221,6 +221,36 @@ class ConceptoPagoDisplay {
     return ia.compareTo(ib);
   }
 
+  /// De qué cuotas fue el arrastre que cobró una fila de mora, para nombrarlas
+  /// en el Estado de cuenta con la misma cuenta que la reimpresión (Anexo D de
+  /// la spec del 14-nov). Null si la fila no es del arrastre o si la
+  /// reconstrucción no alcanza: ahí se usan los números del texto, como antes.
+  ///
+  /// Una línea sola (`Mora pendiente cuotas … (no cobrada al pagar)`) toma la
+  /// reconstrucción solo si cubre todo su monto; una mixta, si no vuelve vacía.
+  static List<int>? _cuotasDelArrastreDeLaFila(
+    ContratoAlumno contrato,
+    Map<String, dynamic> p,
+    List<Map<String, dynamic>> pagos,
+  ) {
+    final concepto = p['concepto']?.toString() ?? '';
+    if (!mencionaArrastre(concepto)) return null;
+    final monto = (p['monto'] as num?)?.toDouble() ?? 0;
+    final det = arrastreDeUnaLinea(
+      contrato: contrato,
+      pago: p,
+      historial: pagos,
+      monto: monto,
+    );
+    if (det.isEmpty) return null;
+    final sola = cuotasDeCalendarioEnConcepto(concepto).isEmpty;
+    if (sola) {
+      final cubierto = det.fold<double>(0, (s, d) => s + d.montoAtribuido);
+      if ((cubierto - monto).abs() > 0.01) return null;
+    }
+    return det.map((d) => d.numeroCuota).toList();
+  }
+
   /// Enriquece pagos para Estado de Cuenta / reimpresión (más reciente primero).
   static List<Map<String, dynamic>> enriquecerPagosHistorial(
     ContratoAlumno contrato,
@@ -298,7 +328,11 @@ class ConceptoPagoDisplay {
       // persistida. Si el texto de display entrara ahí, el recibo dejaría de
       // reconocer la línea.
       if (esMora(p)) {
-        final ficha = MoraConceptoRotulo.rotuloFichaMora(conceptoDisplay);
+        final ficha = MoraConceptoRotulo.rotuloFichaMora(
+          conceptoDisplay,
+          contrato: contrato,
+          cuotasArrastre: _cuotasDelArrastreDeLaFila(contrato, p, pagos),
+        );
         pCpy['concepto_ficha'] = ficha.titulo;
         if (ficha.subtexto != null) pCpy['subtexto_ficha'] = ficha.subtexto;
       }
@@ -966,14 +1000,6 @@ class ConceptoPagoDisplay {
     return false;
   }
 
-  /// Extrae N de "Interés mora cuota N …" tolerando tildes (Interés → interes).
-  static int? _numeroCuotaCalendarioDesdeConcepto(String concepto) {
-    final folded = foldDiacriticosLatin(concepto.toLowerCase());
-    final m = RegExp(r'interes\s*mora\s*cuota\s*(\d+)').firstMatch(folded);
-    if (m == null) return null;
-    return int.tryParse(m.group(1)!);
-  }
-
   static String? _mesLabelDesdeConceptoMora(String concepto) {
     final m = RegExp(
       r'\(\s*(?:vto\s*)?([^)]+)\)',
@@ -1014,6 +1040,50 @@ class ConceptoPagoDisplay {
     ];
   }
 
+  /// Desde la v4.9 (21-ago-2026) una línea mixta que no alcanza para todo
+  /// paga primero el arrastre; antes, el calendario. Es la misma regla que
+  /// `MoraTrackedOrigen.inferir` usa para la ficha.
+  static const _desdeArrastrePrimero = '2026-08-21';
+
+  /// El inicio del día (en Argentina) del cobro de [pago]: lo de antes es el
+  /// historial que se usa para saber de qué cuotas era su mora.
+  static DateTime? _inicioDelDiaDelCobro(Map<String, dynamic> pago) {
+    final fechaRaw = pago['fecha_pago']?.toString();
+    final fecha = fechaRaw != null ? DateTime.tryParse(fechaRaw) : null;
+    if (fecha == null) return null;
+    final ar = ArTime.toAr(fecha);
+    return DateTime.utc(ar.year, ar.month, ar.day, 3);
+  }
+
+  /// De qué cuotas ya pagadas es el arrastre que cobró una línea de mora,
+  /// reconstruido desde el historial (no desde el texto guardado).
+  ///
+  /// Una sola cuenta para la ficha (Estado de cuenta) y para la reimpresión del
+  /// recibo: si cada una armara la suya, para la misma línea la pantalla y el
+  /// papel podían nombrar cuotas distintas (Anexo D de la spec del 14-nov).
+  ///
+  /// Recorta FIFO hasta [monto]: devuelve `min(monto, arrastre vivo antes del
+  /// día del cobro)`. Vacía si no hay historial o no se puede reconstruir.
+  static List<MoraPendientePreviaDetalle> arrastreDeUnaLinea({
+    required ContratoAlumno contrato,
+    required Map<String, dynamic> pago,
+    required List<Map<String, dynamic>> historial,
+    required double monto,
+  }) {
+    if (historial.isEmpty || monto <= 0.01) return const [];
+    return MoraTrackedOrigen.inferir(
+      // No usar la exención de hoy al rearmar un cobro pasado.
+      contratoBase: contrato.copyWith(
+        moraExentaHasta: null,
+        moraFechaReferencia: null,
+      ),
+      pagos: historial,
+      trackedMonto: monto,
+      antesDe: _inicioDelDiaDelCobro(pago),
+      excluirPagoId: pago['id']?.toString(),
+    );
+  }
+
   static List<Map<String, dynamic>>? _repartirMoraMixtoSiAplica({
     required ContratoAlumno contrato,
     required Map<String, dynamic> pago,
@@ -1022,7 +1092,10 @@ class ConceptoPagoDisplay {
     final concepto = (pago['concepto_detallado'] as String?) ??
         (pago['concepto'] as String?) ??
         '';
-    if (!_esConceptoMoraMixtoOPendiente(concepto)) return null;
+    final esArrastre = _esConceptoMoraMixtoOPendiente(concepto);
+    final calNums = cuotasDeCalendarioEnConcepto(concepto);
+    // Una línea de calendario de una sola cuota sigue el camino de siempre.
+    if (!esArrastre && calNums.length < 2) return null;
 
     final monto = double.parse(
       ((pago['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2),
@@ -1042,66 +1115,118 @@ class ConceptoPagoDisplay {
     );
     // Inferir tracked ANTES del lote del día (si incluimos la cuota base
     // del mismo cobro, postCobro resetea orígenes y pierde la cuota 2).
-    final DateTime? antesDeLote = fechaAr == null
-        ? null
-        : DateTime.utc(fechaAr.year, fechaAr.month, fechaAr.day, 3);
+    final DateTime? antesDeLote = _inicioDelDiaDelCobro(pago);
+    final arrastrePrimero = fechaAr == null ||
+        _claveDiaAr(fechaAr).compareTo(_desdeArrastrePrimero) >= 0;
 
-    final nCal = _numeroCuotaCalendarioDesdeConcepto(concepto);
-
-    List<Map<String, dynamic>> desg = const [];
-    var montoCal = 0.0;
-    if (nCal != null && nCal > 0 && fechaAr != null) {
+    // Lo que se debía ese día por cada cuota del calendario que nombra.
+    final desg = <Map<String, dynamic>>[];
+    if (calNums.isNotEmpty && fechaAr != null) {
+      final orden = calNums.toSet().toList()..sort();
       final pre = contratoHist.copyWith(
-        cuotasPagadas: nCal - 1,
+        cuotasPagadas: orden.first - 1,
         saldoDeudor: contrato.saldoDeudor > 0.01
             ? contrato.saldoDeudor
             : contrato.montoTotalPactado,
       );
       final bruto = MoraCuotaCalculator.calcularDesglose(pre, fechaAr);
-      final d = bruto.where((x) => x.numeroCuota == nCal).toList();
-      if (d.isNotEmpty) {
-        montoCal = d.first.interesBruto;
-        desg = [
-          {
-            'numeroCuota': d.first.numeroCuota,
-            'mesLabel': d.first.mesLabel,
-            'monto': d.first.interesBruto,
-            'diasMora': d.first.diasMora,
-          },
-        ];
-      } else {
-        // Fallback: hay N en el texto pero el desglose no respondió (exención/fecha).
-        final mes = _mesLabelDesdeConceptoMora(concepto) ?? '';
-        // Inferir pendiente primero; calendario = resto.
-        final detPrev = hist.isEmpty
-            ? const <MoraPendientePreviaDetalle>[]
-            : MoraTrackedOrigen.inferir(
-                contratoBase: contratoHist,
-                pagos: hist,
-                trackedMonto: monto,
-                antesDe: antesDeLote,
-                excluirPagoId: pagoId,
-              );
-        final sumPrev = detPrev.fold<double>(0, (s, e) => s + e.montoAtribuido);
-        // Si el origen cubre menos que el total, el resto es calendario.
-        final calEst = double.parse(
-          (monto - sumPrev).clamp(0.0, double.infinity).toStringAsFixed(2),
-        );
-        if (calEst > 0.01) {
-          montoCal = calEst;
-          desg = [
-            {
-              'numeroCuota': nCal,
-              'mesLabel': mes.isNotEmpty ? mes : 'cuota $nCal',
-              'monto': calEst,
-            },
-          ];
-        }
+      for (final n in orden) {
+        final d = bruto.where((x) => x.numeroCuota == n).toList();
+        if (d.isEmpty || d.first.interesBruto <= 0.01) continue;
+        desg.add({
+          'numeroCuota': d.first.numeroCuota,
+          'mesLabel': d.first.mesLabel,
+          'monto': d.first.interesBruto,
+          'diasMora': d.first.diasMora,
+        });
+      }
+    }
+    final sumCal = desg.fold<double>(
+      0,
+      (s, d) => s + ((d['monto'] as num?)?.toDouble() ?? 0),
+    );
+
+    // Calendario puro de varias cuotas: se reparte entre las que nombra. Si lo
+    // que se debía no llega a lo cobrado, la cuenta de aquel día no se pudo
+    // rearmar y se deja la línea como estaba.
+    if (!esArrastre) {
+      if (desg.isEmpty || sumCal < monto - 0.01) return null;
+      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+        montoTotal: monto,
+        moraDesglose: desg,
+        moraPendientePrevias: 0,
+        detallePendiente: const [],
+        conceptoFallback: concepto,
+      );
+    }
+
+    // Mixta cuyo calendario no se pudo rearmar: el arrastre primero y el resto
+    // al calendario, con el mes que dice el texto (el camino de siempre).
+    if (desg.isEmpty && calNums.isNotEmpty && fechaAr != null) {
+      final nCal = calNums.first;
+      final mes = _mesLabelDesdeConceptoMora(concepto) ?? '';
+      final detPrev = hist.isEmpty
+          ? const <MoraPendientePreviaDetalle>[]
+          : MoraTrackedOrigen.inferir(
+              contratoBase: contratoHist,
+              pagos: hist,
+              trackedMonto: monto,
+              antesDe: antesDeLote,
+              excluirPagoId: pagoId,
+            );
+      final sumPrev = detPrev.fold<double>(0, (s, e) => s + e.montoAtribuido);
+      final calEst = double.parse(
+        (monto - sumPrev).clamp(0.0, double.infinity).toStringAsFixed(2),
+      );
+      if (calEst > 0.01) {
+        desg.add({
+          'numeroCuota': nCal,
+          'mesLabel': mes.isNotEmpty ? mes : 'cuota $nCal',
+          'monto': calEst,
+        });
       }
     }
 
-    final pendiente = double.parse(
-      (monto - montoCal).clamp(0.0, double.infinity).toStringAsFixed(2),
+    // Solo pendiente (sin parte calendario en el texto).
+    if (desg.isEmpty) {
+      var detalle = arrastreDeUnaLinea(
+        contrato: contrato,
+        pago: pago,
+        historial: hist,
+        monto: monto,
+      );
+      detalle = _detalleDesdeElConcepto(concepto, monto, detalle);
+      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+        montoTotal: monto,
+        moraDesglose: const [],
+        moraPendientePrevias: monto,
+        detallePendiente: detalle,
+        conceptoFallback: concepto,
+      );
+    }
+
+    // Mixta: cuánto de la línea fue arrastre.
+    final calTope = desg.fold<double>(
+      0,
+      (s, d) => s + ((d['monto'] as num?)?.toDouble() ?? 0),
+    );
+    double pendiente;
+    if (arrastrePrimero) {
+      final arr = arrastreDeUnaLinea(
+        contrato: contrato,
+        pago: pago,
+        historial: hist,
+        monto: monto,
+      ).fold<double>(0, (s, d) => s + d.montoAtribuido);
+      pendiente = arr < monto ? arr : monto;
+      // Lo que no entra en el calendario no se puede perder: es arrastre.
+      final resto = monto - pendiente;
+      if (resto > calTope + 0.01) pendiente += resto - calTope;
+    } else {
+      pendiente = monto - (calTope < monto ? calTope : monto);
+    }
+    pendiente = double.parse(
+      pendiente.clamp(0.0, double.infinity).toStringAsFixed(2),
     );
 
     List<MoraPendientePreviaDetalle> detalle = const [];
@@ -1115,29 +1240,6 @@ class ConceptoPagoDisplay {
       );
     }
 
-    // Solo pendiente (sin parte calendario en el texto).
-    if (desg.isEmpty && pendiente > 0.01) {
-      detalle = hist.isEmpty
-          ? detalle
-          : MoraTrackedOrigen.inferir(
-              contratoBase: contratoHist,
-              pagos: hist,
-              trackedMonto: monto,
-              antesDe: antesDeLote,
-              excluirPagoId: pagoId,
-            );
-      detalle = _detalleDesdeElConcepto(concepto, monto, detalle);
-      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
-        montoTotal: monto,
-        moraDesglose: const [],
-        moraPendientePrevias: monto,
-        detallePendiente: detalle,
-        conceptoFallback: concepto,
-      );
-    }
-
-    if (desg.isEmpty && pendiente <= 0.01) return null;
-
     return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
       montoTotal: monto,
       moraDesglose: desg,
@@ -1146,6 +1248,10 @@ class ConceptoPagoDisplay {
       conceptoFallback: concepto,
     );
   }
+
+  static String _claveDiaAr(DateTime ar) =>
+      '${ar.year}-${ar.month.toString().padLeft(2, '0')}-'
+      '${ar.day.toString().padLeft(2, '0')}';
 }
 
 class _MixtoClaseAcum {
