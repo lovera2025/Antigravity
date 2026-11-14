@@ -4,9 +4,11 @@
 
 ## Para retomar en otro chat
 
-**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1, 2 y 3 de la Parte B** están **guardadas en la rama**
+**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1 a 4 de la Parte B** están **guardadas en la rama**
 (**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **El usuario aprobó la maqueta el 14-nov
-("Sí, seguí")**: las pantallas se programan como están ahí. **Sigue la etapa 4 (la caja, VENDER y el comprobante).** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
+("Sí, seguí")**: las pantallas se programan como están ahí. **Ya se puede vender con comprobante; sigue la etapa 5
+(VENTAS: historial, reimprimir, anular y "Pago verificado") y después la 6 (cerrar la caja, la pestaña ENTRADAS del
+cierre y la entrega).** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
 medias (el repositorio igual al último commit y la suite entera en verde, 4.803) y recién después se escribió la etapa
 2. **Con la etapa 3, la suite entera pasa: 4.883 pruebas, 284 archivos, 8 tandas**, y el análisis de lo nuevo no da
 errores.
@@ -38,7 +40,9 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
 2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
 3. ~~La maqueta~~: hecha, mostrada y **aprobada el 14-nov** ("Sí, seguí").
-4. ~~Etapa 3 (el permiso y PRECIOS)~~: hecha el 14-nov. **Etapas 4 a 6 del spec: seguir por la 4.**
+4. ~~Etapa 3 (el permiso y PRECIOS)~~ y ~~etapa 4 (la caja, VENDER y el comprobante)~~: hechas el 14-nov.
+   **Seguir por la etapa 5 (VENTAS)**, y después la 6. **Sin anular (de la 5), un error de carga no tiene arreglo:
+   la 5 tiene que salir con la 4.**
 5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
 
 **Pendiente de la Parte A, antes de publicar:** las capturas con el mouse de los carteles nuevos (el permiso para
@@ -327,6 +331,43 @@ Los cinco archivos, como quedaron pensados:
   que hace lo mismo que `EntradasLocal`.
 - **Probado:** 26 pruebas nuevas y **diez roturas a propósito, las diez detectadas**. La suite entera: 4.883.
 - **No se probó:** con el mouse en una ventana de prueba (queda para el arnés de la etapa 7).
+
+### Etapa 4, la caja, VENDER y el comprobante — HECHA (14-nov)
+
+- **Por dónde se entra:** en el inicio de Entradas (`EntradasHomeScreen`), quien tiene "Vende entradas" ve **ENTREGAR ·
+  VENDER** en cada fiesta (en un celular, debajo del nombre); quien solo entrega la ve como siempre. En ENTRADAS de la
+  fiesta (`RetiroEntradasScreen`, la oficina), **VENDER** al lado de PRECIOS, apagado y con el motivo sin el permiso.
+- **Abrir la caja** (`widgets/abrir_caja_entradas_dialog.dart`): VENDER sin caja abierta la pide, con su cambio
+  inicial. Sin precio no la abre y lo dice. Si baja de la nube otra caja abierta de esa persona en otro equipo, avisa y
+  deja seguir. **Volver sin abrirla sale de VENDER.** La caja del jefe va sin operador (`operador_id` null).
+- **VENDER** (`widgets/vender_entradas_screen.dart`): la línea "Caja abierta · Carla · Todo subido"
+  (`cuentas/linea_de_subida.dart`), a quién (una familia, con buscador; o alguien de afuera), los renglones con su
+  cantidad, el descuento a mano (apagado y con el motivo sin permiso), los números (un tramo con el "al" calculado, o
+  dos) y el total con EFECTIVO · TRANSFERENCIA · MIXTO, que abren **la hoja del cobro de la barra** (`pedirCobro`).
+  **Toda la cuenta sale de `PedidoDeEntradas`**: la pantalla lo arma de nuevo en cada dibujo con lo escrito.
+  - La venta **se guarda antes de abrir el comprobante**; si el comprobante falla, la venta queda y lo dice.
+  - Con el 100 % de descuento el botón es GUARDAR SIN CARGO, con una pregunta, sin pasar por el cobro.
+  - **Para releer lo que debe la familia escucha `contratos_alumnos`, no la tabla de los pagos**: el guardián
+    (`venta_entradas_no_toca_test`) no deja nombrarla, y un cobro siempre cambia la cuenta del alumno.
+  - Por debajo de 560 px se acomoda como en un celular (rótulos y botones uno debajo del otro).
+- **El comprobante** (`pdf/comprobante_entradas_pdf.dart`, media A4; `pdf/papeles_de_entradas.dart` lo abre con las
+  letras de la app y el isotipo): no hace cuentas, dice lo que la venta tiene guardado. COPIA al reabrirlo; ANULADA
+  cruzado con el motivo.
+- **El nombre de la fiesta** en todo lo de la venta: `services/nombre_de_la_fiesta.dart` (la institución; si el evento
+  no la trae, su título, nunca "Evento").
+- **Las llaves:** `_frenaSinPermiso()` (con `puedeVenderEntradasProvider`) antes de abrir una caja o guardar una venta;
+  `test/solo_modo_jefe_test.dart` lo exige en `lib/features/entradas/widgets/`.
+- **Las muestras** (las pantallas de verdad, con el tema claro de la app): `tool/venta_entradas_muestra_test.dart`
+  (`--dart-define=salida=…`; quedaron en `build/muestras_6.9.0/venta_entradas/`). `test/helpers/tema_de_la_app.dart`
+  copia el tema de `main.dart`, que es privado. **Mirándolas aparecieron tres defectos que ningún test veía** (en el
+  celular los botones partían el texto y los rótulos se cortaban; en la PC los subtotales no quedaban alineados; un
+  rótulo de PRECIOS se cortaba): corregidos.
+- **Probado:** 39 pruebas nuevas (la pantalla entera con la hoja del cobro de verdad, el comprobante medido, las dos
+  entradas) y **trece roturas a propósito, las trece detectadas**. La suite entera: 4.922.
+- **No se probó:** con el mouse en una ventana, ni el PDF abierto desde el programa (la entrega del PDF en Windows);
+  una tablet de verdad.
+- **Distinto de la maqueta:** el comprobante se abre solo al guardar (la maqueta mostraba solo el botón); VENTAS y
+  CERRAR CAJA todavía no están en la barra de VENDER (etapas 5 y 6).
 
 ### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 

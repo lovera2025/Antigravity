@@ -12,6 +12,7 @@ import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/services/en_caja.dart';
+import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
@@ -117,6 +118,34 @@ void main() {
         (tester) async {
       await _montar(tester, entradas: EntradasEnMemoria());
       expect(find.byKey(const Key('entradas_precios')), findsNothing);
+      expect(find.byKey(const Key('entradas_vender')), findsNothing);
+    });
+  });
+
+  group('VENDER, en ENTRADAS de la fiesta (6.9.0)', () {
+    TextButton boton(WidgetTester tester) =>
+        tester.widget<TextButton>(find.byKey(const Key('entradas_vender')));
+
+    testWidgets('sin el permiso ni el modo jefe se ve, apagado y con el motivo',
+        (tester) async {
+      await _montar(tester, mostrador: false, entradas: EntradasEnMemoria());
+      expect(boton(tester).onPressed, isNull);
+      expect(
+        find.byTooltip('Con el permiso "Vende entradas" o en modo jefe'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('en modo jefe abre la caja de entradas de esa fiesta', (tester) async {
+      final entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, mostrador: false, jefe: true, entradas: entradas);
+      expect(boton(tester).onPressed, isNotNull);
+      await tester.tap(find.byKey(const Key('entradas_vender')));
+      await _pasar(tester);
+      await _pasar(tester);
+      expect(find.byType(VenderEntradasScreen), findsOneWidget);
+      // Sin caja abierta, VENDER la pide.
+      expect(find.text('Abrir la caja de entradas'), findsOneWidget);
     });
   });
 

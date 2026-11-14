@@ -20,7 +20,9 @@ import '../common/utils/subir_ya.dart';
 import '../common/utils/texto_busqueda.dart';
 import '../entradas/providers/entradas_providers.dart';
 import '../entradas/services/en_caja.dart';
+import '../entradas/services/nombre_de_la_fiesta.dart';
 import '../entradas/widgets/precios_de_entradas_dialog.dart';
+import '../entradas/widgets/vender_entradas_screen.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
 import 'services/permisos_de_entrega.dart';
@@ -636,7 +638,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         actions: [
           // La venta de entradas es de la oficina: en el mostrador se entra por
           // el inicio de Entradas.
-          if (!widget.enElMostrador) _botonPrecios(),
+          if (!widget.enElMostrador) ...[_botonPrecios(), _botonVender()],
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _ocupado ? null : () => _cargar(),
@@ -692,9 +694,40 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     await mostrarPreciosDeEntradas(
       context,
       eventoId: widget.evento.id,
-      fiesta: widget.evento.cliente?.nombreCompleto ?? 'Evento',
+      fiesta: nombreDeLaFiesta(widget.evento),
       quien: quienOpera(ref),
     );
+  }
+
+  /// VENDER: la caja de entradas de esta fiesta, para quien puede vender (el
+  /// jefe en modo jefe, o un operador con "Vende entradas").
+  Widget _botonVender() {
+    final puede = ref.watch(puedeVenderEntradasProvider);
+    final enElEquipo = ref.watch(entradasEnEsteEquipoProvider);
+    final motivo = !enElEquipo
+        ? kEntradasDesdeLaPc
+        : (puede
+            ? 'Vender entradas de esta fiesta'
+            : 'Con el permiso "Vende entradas" o en modo jefe');
+    return Tooltip(
+      message: motivo,
+      child: TextButton(
+        key: const Key('entradas_vender'),
+        onPressed: puede && enElEquipo ? _abrirVender : null,
+        child: const Text('VENDER'),
+      ),
+    );
+  }
+
+  Future<void> _abrirVender() async {
+    // Doble llave: el botón ya está apagado sin el permiso.
+    if (!ref.read(puedeVenderEntradasProvider)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VenderEntradasScreen(evento: widget.evento),
+      ),
+    );
+    if (mounted) await _cargar(silencioso: true);
   }
 
   /// Arriba de todo en el mostrador: si se está en vivo con la caja, las

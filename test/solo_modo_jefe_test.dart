@@ -559,6 +559,45 @@ void main() {
     expect(cuerpo, isNot(contains('PermisoOperador.entradas')));
   });
 
+  test('la venta de entradas: abrir una caja, vender y cerrarla preguntan por el '
+      'permiso de vender antes de guardar', () {
+    final escribe = RegExp(r'\.(abrirCaja|cerrarCaja|vender|guardarEn)\(');
+    final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
+    final encontradas = <String>{};
+    final carpeta = Directory('lib/features/entradas/widgets');
+    for (final f in carpeta.listSync().whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final ruta = f.path.replaceAll('\\', '/');
+      final fuente = leer(ruta);
+      final funciones = funcion.allMatches(fuente).toList();
+      for (final g in escribe.allMatches(fuente)) {
+        final donde = funciones.lastWhere(
+          (x) => x.start < g.start,
+          orElse: () => fail('un guardado fuera de una función, en $ruta'),
+        );
+        encontradas.add(donde.group(1)!);
+        expect(
+          fuente.substring(donde.start, g.start),
+          contains('_frenaSinPermiso()'),
+          reason: '${donde.group(1)} ($ruta) guarda sin preguntar si puede vender',
+        );
+      }
+      if (escribe.hasMatch(fuente)) {
+        final i = fuente.indexOf('bool _frenaSinPermiso() {');
+        expect(i, greaterThanOrEqualTo(0), reason: 'falta la llave en $ruta');
+        final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+        expect(
+          cuerpo,
+          contains('if (ref.read(puedeVenderEntradasProvider)) return false;'),
+          reason: ruta,
+        );
+        expect(cuerpo, contains('return true;'), reason: ruta);
+      }
+    }
+    // Si aparece otra función que guarda, que pregunte y se sume acá.
+    expect(encontradas, {'_abrir', '_cobrar'});
+  });
+
   test('PRECIOS se abre solo desde ENTRADAS de la fiesta, y con la llave', () {
     const pantallaEntradas = 'lib/features/eventos/retiro_entradas_screen.dart';
     final fuente = leer(pantallaEntradas);

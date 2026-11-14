@@ -9,6 +9,7 @@ import '../eventos/repositories/eventos_repository.dart';
 import '../eventos/retiro_entradas_screen.dart';
 import '../eventos/utils/evento_presentacion.dart';
 import 'services/fiestas_que_vienen.dart';
+import 'widgets/vender_entradas_screen.dart';
 
 /// Los eventos masivos que vienen. Se vuelve a leer cuando baja algo de la otra
 /// PC: en una PC recién entrada, la primera bajada llega después de abrir esto.
@@ -23,11 +24,23 @@ final fiestasQueVienenProvider = FutureProvider<List<Evento>>((ref) async {
 /// camino a cobrar ni a editar un alumno (`test/modo_entradas_cerrado_test.dart`).
 ///
 /// Si además tiene Cobros, PASAR A CAJA lo lleva sin volver a poner el PIN.
+///
+/// **Quien tiene "Vende entradas" (6.9.0) ve dos botones en cada fiesta,
+/// ENTREGAR y VENDER**; quien solo entrega la ve como siempre, sin VENDER
+/// (`puedeVenderEntradasProvider`). La venta va en su propia pantalla
+/// (`widgets/vender_entradas_screen.dart`): acá solo está el botón.
 class EntradasHomeScreen extends ConsumerWidget {
   /// Para los tests y la ventana de prueba. Sin esto, abre el retiro de entradas.
   final void Function(BuildContext context, Evento evento)? onAbrirFiesta;
 
-  const EntradasHomeScreen({super.key, this.onAbrirFiesta});
+  /// Para los tests y la ventana de prueba. Sin esto, abre VENDER.
+  final void Function(BuildContext context, Evento evento)? onVenderFiesta;
+
+  const EntradasHomeScreen({
+    super.key,
+    this.onAbrirFiesta,
+    this.onVenderFiesta,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,7 +48,9 @@ class EntradasHomeScreen extends ConsumerWidget {
     final app = ref.watch(appRoleProvider);
     final fiestas = ref.watch(fiestasQueVienenProvider);
     final ancho = MediaQuery.sizeOf(context).width;
-    final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
+    final enCelular = CortesPantalla.esCelular(ancho);
+    final margen = enCelular ? 12.0 : 24.0;
+    final vende = ref.watch(puedeVenderEntradasProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -79,21 +94,57 @@ class EntradasHomeScreen extends ConsumerWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final e = lista[i];
-                      return Card(
-                        child: ListTile(
-                          key: Key('fiesta_${e.id}'),
-                          leading: const Icon(
-                            Icons.confirmation_number_outlined,
-                            color: gold,
-                          ),
-                          title: Text(
-                            EventoPresentacion.tituloPrincipal(e),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Text(_fecha(e.fechaEvento)),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _abrir(context, ref, e),
+                      // Con la caja de entradas: ENTREGAR y VENDER, a la vista.
+                      final botones = !vende
+                          ? null
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                OutlinedButton(
+                                  key: Key('entregar_${e.id}'),
+                                  onPressed: () => _abrir(context, ref, e),
+                                  child: const Text('ENTREGAR'),
+                                ),
+                                const SizedBox(width: 6),
+                                FilledButton(
+                                  key: Key('vender_${e.id}'),
+                                  onPressed: () => _vender(context, e),
+                                  child: const Text('VENDER'),
+                                ),
+                              ],
+                            );
+                      final tile = ListTile(
+                        key: Key('fiesta_${e.id}'),
+                        leading: const Icon(
+                          Icons.confirmation_number_outlined,
+                          color: gold,
                         ),
+                        title: Text(
+                          EventoPresentacion.tituloPrincipal(e),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(_fecha(e.fechaEvento)),
+                        trailing: botones == null
+                            ? const Icon(Icons.chevron_right)
+                            : (enCelular ? null : botones),
+                        // Quien solo entrega toca la tarjeta entera, como siempre.
+                        onTap: vende ? null : () => _abrir(context, ref, e),
+                      );
+                      return Card(
+                        child: botones != null && enCelular
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  tile,
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                                    child: botones,
+                                  ),
+                                ],
+                              )
+                            : tile,
                       );
                     },
                   ),
@@ -106,6 +157,20 @@ class EntradasHomeScreen extends ConsumerWidget {
   static String _fecha(DateTime f) {
     String dos(int n) => n.toString().padLeft(2, '0');
     return '${dos(f.day)}/${dos(f.month)}/${f.year}';
+  }
+
+  /// VENDER: la caja de entradas de esa fiesta.
+  void _vender(BuildContext context, Evento evento) {
+    final vender = onVenderFiesta;
+    if (vender != null) {
+      vender(context, evento);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VenderEntradasScreen(evento: evento),
+      ),
+    );
   }
 
   /// La entrega en modo mostrador: sin cobrar ni editar al alumno; la familia que

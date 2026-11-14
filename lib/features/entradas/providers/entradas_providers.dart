@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../barra/providers/barra_del_jefe_provider.dart' show enLaWebProvider;
+import '../cuentas/precio_de_entradas.dart';
 import '../datos/entradas_local.dart';
 import '../datos/entradas_repositorio.dart';
 
@@ -32,6 +33,12 @@ final entradasEnEsteEquipoProvider =
     Provider<bool>((ref) => !ref.watch(enLaWebProvider));
 
 const kEntradasDesdeLaPc = 'La venta de entradas se maneja desde la PC o la tablet';
+
+/// El momento de ahora en el reloj de Argentina: decide si rige la anticipada.
+/// Los tests lo fijan.
+final hoyEnArgentinaProvider = Provider<DateTime Function()>(
+  (ref) => PrecioDeEntradas.hoyEnArgentina,
+);
 
 /// El precio de la fiesta, para mostrarlo. Se vuelve a leer con
 /// `ref.invalidate` después de guardar.

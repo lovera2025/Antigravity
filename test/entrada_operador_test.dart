@@ -398,6 +398,7 @@ void main() {
       WidgetTester tester, {
       required PermisosEfectivos permisos,
       void Function(BuildContext, Evento)? alAbrir,
+      void Function(BuildContext, Evento)? alVender,
     }) async {
       tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1;
@@ -409,7 +410,12 @@ void main() {
             (ref) async => [fiesta('uno', DateTime(2026, 12, 1))],
           ),
         ],
-        child: MaterialApp(home: EntradasHomeScreen(onAbrirFiesta: alAbrir)),
+        child: MaterialApp(
+          home: EntradasHomeScreen(
+            onAbrirFiesta: alAbrir,
+            onVenderFiesta: alVender,
+          ),
+        ),
       ));
       final c = ProviderScope.containerOf(tester.element(find.byType(EntradasHomeScreen)));
       await c
@@ -430,6 +436,41 @@ void main() {
       expect(find.textContaining('01/12/2026'), findsOneWidget);
       await tester.tap(find.byKey(const Key('fiesta_uno')));
       expect(abierta?.id, 'uno');
+    });
+
+    testWidgets('quien solo entrega no ve VENDER: toca la tarjeta, como siempre',
+        (tester) async {
+      await abrir(tester, permisos: const PermisosEfectivos(entradas: true));
+      expect(find.byKey(const Key('vender_uno')), findsNothing);
+      expect(find.byKey(const Key('entregar_uno')), findsNothing);
+      expect(find.text('VENDER'), findsNothing);
+    });
+
+    testWidgets('con "Vende entradas" cada fiesta tiene ENTREGAR y VENDER (6.9.0)',
+        (tester) async {
+      Evento? entrega;
+      Evento? venta;
+      await abrir(
+        tester,
+        permisos: const PermisosEfectivos(vendeEntradas: true),
+        alAbrir: (_, e) => entrega = e,
+        alVender: (_, e) => venta = e,
+      );
+      await tester.tap(find.byKey(const Key('vender_uno')));
+      expect(venta?.id, 'uno');
+      expect(entrega, isNull, reason: 'VENDER no abre la entrega');
+      await tester.tap(find.byKey(const Key('entregar_uno')));
+      expect(entrega?.id, 'uno');
+    });
+
+    testWidgets('en un celular, ENTREGAR y VENDER van debajo y no se desborda',
+        (tester) async {
+      await abrir(tester, permisos: const PermisosEfectivos(vendeEntradas: true));
+      tester.view.physicalSize = const Size(360, 700);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('vender_uno')), findsOneWidget);
+      expect(find.byKey(const Key('entregar_uno')), findsOneWidget);
     });
 
     testWidgets('solo Entradas no ve PASAR A CAJA', (tester) async {

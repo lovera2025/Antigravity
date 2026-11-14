@@ -332,15 +332,20 @@ class _PreciosDeEntradasDialogState
                       ),
                     ),
                     const SizedBox(height: 14),
+                    const Text(
+                      'Entradas de la mesa adicional y las sillas extra',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 250,
+                          width: 200,
                           child: _porciento(
                             'precio_lugares',
                             _lugares,
-                            'Mesa adicional y sillas extra: descuento',
+                            'Descuento',
                           ),
                         ),
                         const SizedBox(width: 12),

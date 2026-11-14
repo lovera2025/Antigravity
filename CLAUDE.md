@@ -441,8 +441,19 @@ están en esta PC, **sin subir a GitHub**.
   `lib/features/entradas/cuentas/`, puras, sin pantalla ni base). **La maqueta de las pantallas** (`docs/maqueta_venta_de_entradas_2026-11-14.html`;
   `preview_start` con `maquetas`) **la aprobó el usuario el 14-nov.** Hecha la **etapa 3** (14-nov): el permiso
   "Vende entradas" (Entradas con un **2** en `permisos_operador.entradas`, sin SQL; la llave
-  `puedeVenderEntradasProvider`) y PRECIOS (en ENTRADAS de la fiesta, solo en modo jefe). **Sigue la etapa 4** (la
-  caja, VENDER y el comprobante), después la 5 y la 6.
+  `puedeVenderEntradasProvider`) y PRECIOS (en ENTRADAS de la fiesta, solo en modo jefe). Hecha la **etapa 4**
+  (14-nov): la caja de entradas, VENDER (`entradas/widgets/vender_entradas_screen.dart`, con la hoja del cobro de la
+  barra) y el comprobante de media hoja (`entradas/pdf/`). **Sigue la etapa 5** (VENTAS: historial, reimprimir,
+  anular y "Pago verificado") **y la 6** (cerrar la caja, ENTRADAS del cierre y la entrega).
+- **Lo que dejó la etapa 4 como regla:**
+  - **VENDER arma `PedidoDeEntradas` de nuevo en cada dibujo** con lo escrito, y guarda con `guardarEn`; antes de
+    abrir una caja o guardar, `_frenaSinPermiso()` (`test/solo_modo_jefe_test.dart` lo exige en
+    `lib/features/entradas/widgets/`).
+  - **La venta se guarda antes de abrir el comprobante**: sin impresora, igual queda.
+  - **Nada de la venta nombra la tabla de los pagos**, ni para releer: escucha `contratos_alumnos`.
+  - **Las pantallas de la venta se miran con `tool/venta_entradas_muestra_test.dart`** (el tema claro de la app,
+    `test/helpers/tema_de_la_app.dart`): mirándolas aparecieron tres defectos de diseño con todos los tests en verde.
+  - Para montar una pantalla de la venta en un test: `EntradasEnMemoria` y `EntregaEnMemoria` (`test/helpers/`).
 - **Las cuentas de la venta de entradas** (lo que las pantallas tienen que usar, sin hacer otra cuenta al lado):
   - `PrecioDeEntradas`: el precio de hoy (**la anticipada rige hasta su último día inclusive, a la medianoche de
     Argentina**) y el de los lugares adicionales, **siempre sobre el valor de la entrada, nunca sobre la anticipada**.
