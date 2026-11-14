@@ -839,6 +839,11 @@ class MoraConceptoRotulo {
           // haya cobrado en su momento— no hay nada que aclarar, y vale más el
           // origen (cuándo venció, cuánto tardó en pagarse).
           if (it.parcial) 'montoPleno': it.pleno,
+          // Lo que de la mora de esa cuota ya se había pagado en otro cobro:
+          // el recibo lo dice debajo de la cuota ("el resto: antes se habían
+          // pagado $X"), para que no se lea como la misma mora cobrada dos
+          // veces (reclamo del 14-nov).
+          if (d.moraCobrada > 0.01) 'moraCobradaAntes': d.moraCobrada,
           'subtexto': it.parcial
               ? subtextoParcialMora(it.pleno)
               : d.subtextoDetalle,

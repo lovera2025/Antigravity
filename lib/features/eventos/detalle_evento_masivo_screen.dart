@@ -54,6 +54,7 @@ import 'services/filtro_mora_masivos.dart';
 import 'services/mora_congelada.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
+import 'services/recibo_de_un_cobro.dart';
 import 'services/mora_tracked_origen.dart';
 import 'services/cobro_abono_acumulado.dart';
 import 'services/concepto_pago_display.dart';
@@ -8892,36 +8893,22 @@ class _DetalleEventoMasivoScreenState
                                                         p['fecha_pago'] ?? '',
                                                       ) ??
                                                       DateTime.now();
-                                                  // El saldo y las cuotas de
-                                                  // aquel día los cuenta la
+                                                  // El cobro entero al que
+                                                  // pertenece este renglón, con
+                                                  // su medio, su descuento y la
+                                                  // mora nombrada por cuota
+                                                  // (`ReciboDeUnCobro`). Con
+                                                  // solo el renglón, un cobro de
+                                                  // cuota y mora salía con una
+                                                  // línea (aviso del 14-nov). El
+                                                  // saldo y las cuotas de aquel
+                                                  // día los cuenta la
                                                   // reimpresión desde los pagos.
-                                                  // Sumar `monto` acá daba una
-                                                  // cuota de menos a quien
-                                                  // liquidó con descuento.
                                                   _imprimirReciboAlumno(
                                                     alumno,
-                                                    montoPagado: monto,
-                                                    conceptosPagados:
-                                                        <Map<String, dynamic>>[
-                                                          {
-                                                            'concepto':
-                                                                concepto,
-                                                            'monto': monto,
-                                                            // Sin estas banderas
-                                                            // la mora salía
-                                                            // contada como plata
-                                                            // del plan.
-                                                            'esMora':
-                                                                esLineaMora,
-                                                            'esCargoCanal':
-                                                                esLineaCargo,
-                                                          },
-                                                        ],
+                                                    filaDelCobro: p,
                                                     fechaManual: fechaOrig,
                                                     esReimpresion: true,
-                                                    medioPago:
-                                                        p['medio_pago']
-                                                            as String?,
                                                   );
                                                 },
                                                 child: const Padding(
@@ -9156,6 +9143,12 @@ class _DetalleEventoMasivoScreenState
     /// `null` la infiere de [fechaManual]. El cobro original también manda
     /// fecha, así que sin este flag se lo confundía con una reimpresión.
     bool? esReimpresion,
+
+    /// Un renglón del cobro a reimprimir (REIMPRIMIR del Estado de cuenta). Se
+    /// imprime **el cobro entero** al que pertenece, no solo ese renglón: así
+    /// salía con una sola línea y el recuadro de la mora sin cuotas (aviso del
+    /// jefe del 14-nov). Sin esto y sin [conceptosPagados], el último cobro.
+    Map<String, dynamic>? filaDelCobro,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -9175,53 +9168,35 @@ class _DetalleEventoMasivoScreenState
       final repo = ref.read(contratosRepositoryProvider);
 
       if (conceptosPagados == null || conceptosPagados.isEmpty) {
-        final lote = await repo.getUltimosPagosLote(alumno.id);
+        final historial = await repo.getHistorialPagosAlumno(alumno.id);
+        // Las anuladas no van: el último lote del repositorio las traía y el
+        // recibo sumaba plata que se devolvió.
+        final lote = filaDelCobro != null
+            ? ReciboDeUnCobro.lineasDelCobro(historial, filaDelCobro)
+            : (await repo.getUltimosPagosLote(alumno.id))
+                .where((p) => !ConceptoPagoDisplay.esAnulado(p))
+                .toList();
 
         if (lote.isNotEmpty) {
-          // Detect if there are both Efectivo and Transferencia payments in the batch (Mixto)
-          double totalEfectivo = 0.0;
-          double totalTransferencia = 0.0;
-          for (final p in lote) {
-            final double m = (p['monto'] as num?)?.toDouble() ?? 0.0;
-            final String mp = (p['medio_pago'] as String?)?.trim() ?? '';
-            if (mp.toLowerCase() == 'efectivo') {
-              totalEfectivo += m;
-            } else if (mp.toLowerCase().contains('transfer') ||
-                mp.toLowerCase() == 'transferencia') {
-              totalTransferencia += m;
-            }
-            final d = (p['descuento_porcentaje'] as num?)?.toDouble() ?? 0;
-            if (d > pctDescuentoPdf) pctDescuentoPdf = d;
-          }
-
-          if (totalEfectivo > 0.01 && totalTransferencia > 0.01) {
-            medioPago = 'Mixto';
-            montoEfectivoDetalle = totalEfectivo;
-            montoTransferenciaDetalle = totalTransferencia;
-          } else if (totalEfectivo > 0.01) {
-            medioPago = 'Efectivo';
-          } else if (totalTransferencia > 0.01) {
-            medioPago = 'Transferencia';
-          }
-
-          conceptosPagados = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
-            alumno,
-            lote,
-            historialCompleto: await repo.getHistorialPagosAlumno(alumno.id),
+          // La misma regla para los tres caminos (`ReciboDeUnCobro.armar`).
+          final cobro = ReciboDeUnCobro.armar(
+            contrato: alumno,
+            lote: lote,
+            historial: historial,
           );
-
-          valPago = conceptosPagados.fold<double>(
-            0,
-            (sum, c) => sum + ((c['monto'] as num?)?.toDouble() ?? 0.0),
-          );
+          medioPago = cobro.medioPago ?? medioPago;
+          montoEfectivoDetalle = cobro.montoEfectivo;
+          montoTransferenciaDetalle = cobro.montoTransferencia;
+          if (cobro.porcentajeDescuento > pctDescuentoPdf) {
+            pctDescuentoPdf = cobro.porcentajeDescuento;
+          }
+          conceptosPagados = cobro.conceptos;
+          valPago = cobro.montoPagado;
 
           // El recibo reproduce un cobro que ya pasó: tiene que llevar la fecha
           // de ese cobro, no la de hoy. Y si no es de hoy, va rotulado como
           // reimpresión, porque tampoco puede afirmar la mora de hoy.
-          final fechaLoteStr = lote.first['fecha_pago']?.toString();
-          final fechaLote = fechaLoteStr == null
-              ? null
-              : DateTime.tryParse(fechaLoteStr);
+          final fechaLote = cobro.fecha;
           if (fechaLote != null) {
             final loteAr = ArTime.toAr(fechaLote);
             final hoyAr = ArTime.nowAr();
@@ -9288,43 +9263,42 @@ class _DetalleEventoMasivoScreenState
           final moraHistPdf = await repo.sumMoraCobradaHistorial(
             alumnoParaPdf.id,
           );
-          final detalle = MoraCuotaCalculator.moraPendienteOperativaDetallada(
+          // La misma cuenta que usa Mi Empresa → Finanzas al reimprimir.
+          final hoy = ReciboDeUnCobro.moraDeHoy(
             contrato: alumnoParaPdf,
+            historial: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
             moraCobradaHistorial: moraHistPdf,
           );
           if (reimpresion) {
-            moraRestantePdf = detalle.total;
+            moraRestantePdf = hoy.total;
             moraMedidaEl = ArTime.nowAr();
           }
-          moraRestantePdf ??= detalle.total;
+          moraRestantePdf ??= hoy.total;
           // El "viene de" tiene que nombrar las cuotas. El tracked es un solo
           // número en la ficha: de qué cuotas salió se reconstruye del
           // historial, y recién acá el cobro ya está guardado (el modal todavía
           // no lo tenía). Si el recálculo no coincide con el monto que trae el
           // modal, se deja la línea del modal: manda el número que se imprime.
-          if ((detalle.total - moraRestantePdf).abs() < 0.02) {
-            final trackedDetalle = detalle.tracked > 0.01
-                ? MoraTrackedOrigen.inferir(
-                    contratoBase: alumnoParaPdf,
-                    pagos: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
-                    trackedMonto: detalle.tracked,
-                    recorte: MoraOrigenRecorte.loQueQueda,
-                  )
-                : const <MoraPendientePreviaDetalle>[];
-            final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
-              desglose: detalle.desglose,
-              tracked: detalle.tracked,
-              trackedDetalle: trackedDetalle,
-              formatoMonto: (v) => v.toCurrency(),
-            );
-            if (linea.isNotEmpty) moraOrigenPdf = linea;
-            moraDesglosePdf = detalle.desglose;
-            moraArrastrePdf = trackedDetalle;
+          if ((hoy.total - moraRestantePdf).abs() < 0.02) {
+            if (hoy.origen.isNotEmpty) moraOrigenPdf = hoy.origen;
+            moraDesglosePdf = hoy.desglose;
+            moraArrastrePdf = hoy.arrastre;
           }
         } catch (e) {
           if (montoExigido) rethrow;
           debugPrint('⚠️ No se pudo reconstruir el origen de la mora: $e');
         }
+      }
+
+      // La nota de la cuota pagada en partes, salvo con un perdón en la ficha.
+      var notasMora = false;
+      try {
+        notasMora = ReciboDeUnCobro.conNotas(
+          contrato: alumnoParaPdf,
+          historial: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
+        );
+      } catch (e) {
+        debugPrint('⚠️ No se pudo saber si la ficha tiene un perdón: $e');
       }
 
       await PdfService.generarReciboAlumno(
@@ -9350,6 +9324,7 @@ class _DetalleEventoMasivoScreenState
             porcentajeCargoTransferenciaExterno,
         montoCargoTransferenciaInformado: montoCargoTransferenciaInformado,
         porcentajeDescuentoLiquidacion: pctDescuentoPdf,
+        notasMoraPorCuota: notasMora,
       );
     } catch (e) {
       messenger.showSnackBar(

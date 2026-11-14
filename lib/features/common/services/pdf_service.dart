@@ -1979,6 +1979,12 @@ class PdfService {
     /// original salía rotulado como reimpresión.
     bool? esReimpresion,
 
+    /// Debajo de cada cuota del recuadro verde cuya mora se pagó en partes, un
+    /// renglón chico: "el resto: antes se habían pagado $X" o "parcial: quedan
+    /// $X" (pedido del usuario el 14-nov). Quien llama lo apaga si la ficha
+    /// tiene un perdón. Por defecto, apagado: el papel queda como antes.
+    bool notasMoraPorCuota = false,
+
     /// Cuotas base pagadas el día del recibo, contadas desde los pagos
     /// ([progresoAlDia]). Las reimpresiones lo mandan: el contrato ya avanzó y
     /// el saldo solo no alcanza para saberlo.
@@ -2096,7 +2102,10 @@ class PdfService {
 
     /// De qué cuotas salen los pesos de mora que entraron en este cobro.
     final filasMoraCobrada = conceptosPagadosDisplay != null
-        ? filasMoraCobradaPdf(conceptosPagadosDisplay)
+        ? filasMoraCobradaPdf(
+            conceptosPagadosDisplay,
+            conNotas: notasMoraPorCuota,
+          )
         : const <FilaMoraPdf>[];
 
     /// De qué cuotas sale la mora que queda debiendo. Dos orígenes: cuotas
@@ -2382,32 +2391,47 @@ class PdfService {
                 color: color,
               ),
             ),
-            ...visibles.map(
-              (f) => pw.Padding(
-                padding: pw.EdgeInsets.only(top: d.sp(1), left: 6),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Expanded(
-                      child: pw.Text(
-                        f.rotulo,
+            ...visibles.expand(
+              (f) => [
+                pw.Padding(
+                  padding: pw.EdgeInsets.only(top: d.sp(1), left: 6),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Text(
+                          f.rotulo,
+                          style: pw.TextStyle(
+                            fontSize: d.fs(8, piso: 6.5),
+                            color: _darkText,
+                          ),
+                        ),
+                      ),
+                      pw.Text(
+                        f.monto.toCurrency(),
                         style: pw.TextStyle(
                           fontSize: d.fs(8, piso: 6.5),
+                          fontWeight: pw.FontWeight.bold,
                           color: _darkText,
                         ),
                       ),
-                    ),
-                    pw.Text(
-                      f.monto.toCurrency(),
+                    ],
+                  ),
+                ),
+                // La nota de la cuota pagada en partes: dato auxiliar, se
+                // apaga con los subtextos cuando el papel aprieta.
+                if (d.subtextos && f.nota != null)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 14),
+                    child: pw.Text(
+                      f.nota!,
                       style: pw.TextStyle(
-                        fontSize: d.fs(8, piso: 6.5),
-                        fontWeight: pw.FontWeight.bold,
-                        color: _darkText,
+                        fontSize: d.fs(7, piso: 6),
+                        color: _greyText,
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
             if (d.subtextos)
               ...lineas.map(

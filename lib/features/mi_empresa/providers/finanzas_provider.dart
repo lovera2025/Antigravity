@@ -9,8 +9,8 @@ import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../common/services/pdf_service.dart';
-import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/cobro_abono_acumulado.dart';
+import '../../eventos/services/recibo_de_un_cobro.dart';
 import 'package:flutter/material.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
@@ -836,68 +836,25 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           whereArgs: [contrato.id],
         );
 
-        final listOtrosRaw = <Map<String, dynamic>>[];
-        for (final row in todosPagosRows) {
-          final String? fp = row['fecha_pago'] as String?;
-          final String? ca = row['created_at'] as String?;
-          final String pFechaStr = fp ?? ca ?? '';
-          if (pFechaStr.isEmpty) continue;
-          try {
-            final pDt = DateTime.parse(pFechaStr);
-            final diff = pDt.difference(dtBase).inSeconds.abs();
-            if (diff <= 10) {
-              listOtrosRaw.add(row);
-            }
-          } catch (_) {
-            // Ignorar errores de parseo
-          }
-        }
-
-        // Detect dynamic "Mixto" details
-        String? medioPago;
-        double? montoEfectivoDetalle;
-        double? montoTransferenciaDetalle;
-
-        double totalEfectivo = 0.0;
-        double totalTransferencia = 0.0;
-        for (final p in listOtrosRaw) {
-          final double m = (p['monto'] as num?)?.toDouble() ?? 0.0;
-          final String mp = (p['medio_pago'] as String?)?.trim() ?? '';
-          if (mp.toLowerCase() == 'efectivo') {
-            totalEfectivo += m;
-          } else if (mp.toLowerCase().contains('transfer') || mp.toLowerCase() == 'transferencia') {
-            totalTransferencia += m;
-          }
-        }
-
-        if (totalEfectivo > 0.01 && totalTransferencia > 0.01) {
-          medioPago = 'Mixto';
-          montoEfectivoDetalle = totalEfectivo;
-          montoTransferenciaDetalle = totalTransferencia;
-        } else if (totalEfectivo > 0.01) {
-          medioPago = 'Efectivo';
-        } else if (totalTransferencia > 0.01) {
-          medioPago = 'Transferencia';
-        }
-
-        // Mismo motor que usa la ficha y el "imprimir recibo" de la grilla. Este
-        // camino tenía su propia tabla de rótulos, que reescribía TODO concepto
-        // con "mora" o "interés" a la constante "Interés mora (cuota base — este
-        // cobro)": el recibo Nº 11408158 (VIZGARRA, 08/07/2026) llamó así a un
-        // arrastre de la cuota 3, mientras el estado de cuenta del mismo
-        // movimiento lo llamaba "Mora pendiente cuota 3". Y como armaba los mapas
-        // a mano, sin `esMora`, los $3.150 de mora se sumaban dentro de "Cuotas
-        // del plan".
-        final listOtros = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
-          contrato,
-          listOtrosRaw,
-          historialCompleto: todosPagosRows,
+        // El cobro entero, sin anuladas, con la misma regla que el Estado de
+        // cuenta y la grilla (`ReciboDeUnCobro`). Este camino tenía su propia
+        // ventana de ±10 s que sumaba renglones anulados y de otra caja, y antes
+        // su propia tabla de rótulos (el recibo Nº 11408158 de VIZGARRA llamó
+        // "Interés mora (cuota base — este cobro)" a un arrastre de la cuota 3).
+        final listOtrosRaw = ReciboDeUnCobro.lineasDelCobro(
+          todosPagosRows,
+          resP,
         );
-
-        final double valPago = listOtros.fold<double>(
-          0.0,
-          (sum, c) => sum + ((c['monto'] as num?)?.toDouble() ?? 0.0),
+        final cobro = ReciboDeUnCobro.armar(
+          contrato: contrato,
+          lote: listOtrosRaw,
+          historial: todosPagosRows,
         );
+        final String? medioPago = cobro.medioPago;
+        final double? montoEfectivoDetalle = cobro.montoEfectivo;
+        final double? montoTransferenciaDetalle = cobro.montoTransferencia;
+        final listOtros = cobro.conceptos;
+        final double valPago = cobro.montoPagado;
 
         // Calcular de forma cronológica el progreso del contrato al momento de esta transacción:
         // Consideramos pagos no anulados con fecha <= dtBase + 2 segundos
@@ -1022,6 +979,18 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           saldoDeudor: saldoCronologico,
         );
 
+        // La mora de hoy, fechada, como la reimpresión de la grilla: el papel
+        // no puede callarse lo que se sigue debiendo (antes este camino no
+        // traía el recuadro rojo). Se mide sobre el contrato de hoy.
+        final moraHoy = ReciboDeUnCobro.moraDeHoy(
+          contrato: contrato,
+          historial: todosPagosRows,
+        );
+        final notasMora = ReciboDeUnCobro.conNotas(
+          contrato: contrato,
+          historial: todosPagosRows,
+        );
+
         await PdfService.generarReciboAlumno(
           alumno: contratoCronologico,
           evento: evento,
@@ -1029,8 +998,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           saldoPendiente: contratoCronologico.saldoDeudor,
           conceptosPagados: listOtros.isNotEmpty ? listOtros : null,
           fechaManual: dtBase,
-          // Reproduce un cobro que ya pasó: no puede afirmar la mora de hoy.
+          // Reproduce un cobro que ya pasó: la mora de hoy va fechada.
           esReimpresion: true,
+          moraPendienteRestante: moraHoy.total,
+          moraPendienteOrigen: moraHoy.origen,
+          moraPendienteDesglose: moraHoy.desglose,
+          moraPendienteArrastre: moraHoy.arrastre,
+          moraRestanteMedidaEl: ArTime.nowAr(),
+          porcentajeDescuentoLiquidacion: cobro.porcentajeDescuento,
+          notasMoraPorCuota: notasMora,
           // Las cuotas de aquel día, con el mismo cálculo que el saldo. El
           // recuadro las deducía del saldo con mesas y sillas adentro.
           cuotasPagadasAlDia: progresoAlDia(
