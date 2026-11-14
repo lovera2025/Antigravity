@@ -2187,7 +2187,7 @@ class PdfService {
     // operación fue —entera o parcial— y no de qué cuota salió cada peso: eso
     // es el detalle de las líneas de arriba, y enumerarlo dos veces era lo que
     // hacía ilegible el bloque.
-    final bool moraQuedaSaldada =
+    final bool moraEnCeroAlMedirla =
         moraCobradaRecibo > 0.01 &&
         moraPendienteRestante != null &&
         moraPendienteRestante <= 0.01;
@@ -2225,6 +2225,13 @@ class PdfService {
           );
         }) ??
         false;
+
+    /// En una reimpresión la mora se mide hoy: estar en 0 hoy no dice que este
+    /// cobro la saldó. Si dejó una cuota a medias, no fue "saldada" (el recibo
+    /// del 12/11 de la familia que reclamó decía SALDADA arriba de "parcial:
+    /// quedan $9.000").
+    final bool moraQuedaSaldada = moraEnCeroAlMedirla &&
+        !(moraRestanteMedidaEl != null && moraCobroFueParcial);
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
@@ -2418,9 +2425,11 @@ class PdfService {
                     ],
                   ),
                 ),
-                // La nota de la cuota pagada en partes: dato auxiliar, se
-                // apaga con los subtextos cuando el papel aprieta.
-                if (d.subtextos && f.nota != null)
+                // La nota de la cuota pagada en partes va siempre que va su
+                // cuota: es lo que explica por qué esa cuota cobra menos (el
+                // reclamo del 14-nov). Con el cobro entero el papel se
+                // compacta y apagaba los subtextos, y con ellos la nota.
+                if (f.nota != null)
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(left: 14),
                     child: pw.Text(

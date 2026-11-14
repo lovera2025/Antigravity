@@ -205,6 +205,19 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
     if (monto.abs() <= 0.001) continue;
     final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
 
+    // Arrastre de varias cuotas sin el monto de cada una (la reimpresión no lo
+    // pudo reconstruir): un renglón que las nombra a todas.
+    final previas = ((c['cuotasPrevias'] ?? c['cuotasDeLaLinea']) as List?)
+        ?.map((n) => (n as num).toInt())
+        .toList();
+    if (previas != null && previas.isNotEmpty) {
+      final rotulo = previas.length == 1
+          ? 'Cuota ${previas.first}'
+          : 'Cuotas ${previas.sublist(0, previas.length - 1).join(', ')} y ${previas.last}';
+      sumar('prevs:${previas.join(',')}', rotulo, previas.first, monto);
+      continue;
+    }
+
     final previa = (c['cuotaPrevia'] as num?)?.toInt();
     if (previa != null && previa > 0) {
       sumar(

@@ -7,6 +7,7 @@ import 'mesas_extra_utils.dart';
 import 'mora_concepto_rotulo.dart';
 import 'mora_cuota_calculator.dart';
 import 'mora_tracked_origen.dart';
+import 'mora_tracked_recovery.dart';
 
 /// Resultado de rotular un pago del plan (base / mesa / sillas).
 class RotuloPlanPago {
@@ -226,8 +227,9 @@ class ConceptoPagoDisplay {
   /// la spec del 14-nov). Null si la fila no es del arrastre o si la
   /// reconstrucción no alcanza: ahí se usan los números del texto, como antes.
   ///
-  /// Una línea sola (`Mora pendiente cuotas … (no cobrada al pagar)`) toma la
-  /// reconstrucción solo si cubre todo su monto; una mixta, si no vuelve vacía.
+  /// Si la línea nombra sus cuotas, son esas, menos las que se prueba que ya
+  /// estaban cobradas ([cuotasNombradasDelArrastre]). Una genérica ("de cuotas
+  /// ya pagadas") toma la reconstrucción solo si cubre todo su monto.
   static List<int>? _cuotasDelArrastreDeLaFila(
     ContratoAlumno contrato,
     Map<String, dynamic> p,
@@ -235,20 +237,26 @@ class ConceptoPagoDisplay {
   ) {
     final concepto = p['concepto']?.toString() ?? '';
     if (!mencionaArrastre(concepto)) return null;
-    final monto = (p['monto'] as num?)?.toDouble() ?? 0;
-    final det = arrastreDeUnaLinea(
+    final nombradas = cuotasNombradasDelArrastre(
       contrato: contrato,
       pago: p,
       historial: pagos,
-      monto: monto,
     );
-    if (det.isEmpty) return null;
-    final sola = cuotasDeCalendarioEnConcepto(concepto).isEmpty;
-    if (sola) {
-      final cubierto = det.fold<double>(0, (s, d) => s + d.montoAtribuido);
-      if ((cubierto - monto).abs() > 0.01) return null;
+    if (nombradas.isNotEmpty) return nombradas;
+    // Genérica: las más viejas del arrastre vivo hasta el monto, si alcanzan.
+    final monto = (p['monto'] as num?)?.toDouble() ?? 0;
+    final vivo = arrastreDeUnaLinea(contrato: contrato, pago: p, historial: pagos);
+    var resto = monto;
+    final cuotas = <int>[];
+    for (final d in vivo) {
+      if (resto <= 0.01) break;
+      cuotas.add(d.numeroCuota);
+      resto -= d.montoAtribuido < resto ? d.montoAtribuido : resto;
     }
-    return det.map((d) => d.numeroCuota).toList();
+    if (cuotas.isEmpty) return null;
+    final sola = cuotasDeCalendarioEnConcepto(concepto).isEmpty;
+    if (sola && resto > 0.01) return null;
+    return cuotas;
   }
 
   /// Enriquece pagos para Estado de Cuenta / reimpresión (más reciente primero).
@@ -1055,33 +1063,147 @@ class ConceptoPagoDisplay {
     return DateTime.utc(ar.year, ar.month, ar.day, 3);
   }
 
-  /// De qué cuotas ya pagadas es el arrastre que cobró una línea de mora,
-  /// reconstruido desde el historial (no desde el texto guardado).
+  /// Todo el arrastre vivo antes del día del cobro de [pago], reconstruido
+  /// desde el historial: una entrada por cuota, con lo que se debía de ella
+  /// (`montoAtribuido`), de la más vieja a la más nueva.
+  static List<MoraPendientePreviaDetalle> _arrastreVivoAntesDe(
+    ContratoAlumno contrato,
+    Map<String, dynamic> pago,
+    List<Map<String, dynamic>> historial,
+  ) {
+    return MoraTrackedOrigen.inferir(
+      // Sin la exención de hoy, y con saldo aunque la familia ya haya
+      // terminado de pagar: con saldo 0 la cuenta de la mora no devuelve nada
+      // y el cobro quedaba sin sus cuotas (lo encontró la revisión del 14-nov).
+      contratoBase: contrato.copyWith(
+        moraExentaHasta: null,
+        moraFechaReferencia: null,
+        saldoDeudor: contrato.saldoDeudor > 0.01
+            ? contrato.saldoDeudor
+            : contrato.montoTotalPactado,
+      ),
+      pagos: historial,
+      trackedMonto: 1e12,
+      antesDe: _inicioDelDiaDelCobro(pago),
+      excluirPagoId: pago['id']?.toString(),
+    );
+  }
+
+  /// De qué cuotas ya pagadas es el arrastre que cobró una línea de mora, y
+  /// cuánto se debía de cada una antes de ese cobro (`montoAtribuido`: lo
+  /// pleno, sin recortar a lo que se cobró; el recorte lo hace quien arma el
+  /// papel, y así sabe si una cuota quedó a medias).
   ///
-  /// Una sola cuenta para la ficha (Estado de cuenta) y para la reimpresión del
-  /// recibo: si cada una armara la suya, para la misma línea la pantalla y el
-  /// papel podían nombrar cuotas distintas (Anexo D de la spec del 14-nov).
+  /// Una sola cuenta para el Estado de cuenta y para la reimpresión del recibo
+  /// (Anexo D de la spec del 14-nov).
   ///
-  /// Recorta FIFO hasta [monto]: devuelve `min(monto, arrastre vivo antes del
-  /// día del cobro)`. Vacía si no hay historial o no se puede reconstruir.
+  /// **Las cuotas son las que la línea guardada nombra** (ver
+  /// [cuotasNombradasDelArrastre]): el texto lo escribió la app en el momento
+  /// del cobro, sabiendo los perdones y las exenciones, y la reconstrucción no.
+  /// Solo vienen las que la reconstrucción respalda; las demás las nombra el
+  /// papel sin inventar cuánto fue de cada una.
+  ///
+  /// Una línea genérica, que no nombra cuotas ("Mora pendiente de cuotas ya
+  /// pagadas"), toma todo el arrastre vivo, como siempre. Ordenadas por cuota.
+  /// Vacía si no hay historial.
   static List<MoraPendientePreviaDetalle> arrastreDeUnaLinea({
     required ContratoAlumno contrato,
     required Map<String, dynamic> pago,
     required List<Map<String, dynamic>> historial,
-    required double monto,
   }) {
-    if (historial.isEmpty || monto <= 0.01) return const [];
-    return MoraTrackedOrigen.inferir(
-      // No usar la exención de hoy al rearmar un cobro pasado.
-      contratoBase: contrato.copyWith(
-        moraExentaHasta: null,
-        moraFechaReferencia: null,
+    if (historial.isEmpty) return const [];
+    final vivo = _arrastreVivoAntesDe(contrato, pago, historial);
+    final nombres = _nombresConVivo(contrato, pago, historial, vivo);
+    if (nombres == null) return vivo;
+    return [
+      for (final d in vivo)
+        if (nombres.contains(d.numeroCuota)) d,
+    ];
+  }
+
+  /// Las cuotas del arrastre que nombra una línea guardada, menos las que se
+  /// prueba que ya estaban cobradas: otra línea de un día anterior las nombró
+  /// y la reconstrucción dice que ya no se debían (el cobro reclamado el
+  /// 14-nov nombraba la cuota 2, cobrada el día antes). Si no queda ninguna, o
+  /// la ficha tiene un perdón, las guardadas.
+  static List<int> _nombresDelArrastre({
+    required List<int> guardadas,
+    required Set<int> vivas,
+    required Set<int> yaCobradas,
+    required bool conPerdon,
+  }) {
+    // Con un perdón en la ficha la reconstrucción no sabe qué se perdonó ni
+    // cuándo: no se saca ninguna (el comparador mostró una así el 14-nov).
+    if (conPerdon) return guardadas;
+    final nombres = [
+      for (final n in guardadas)
+        if (vivas.contains(n) || !yaCobradas.contains(n)) n,
+    ];
+    return nombres.isEmpty ? guardadas : nombres;
+  }
+
+  /// Null si la línea no nombra cuotas (la genérica).
+  static List<int>? _nombresConVivo(
+    ContratoAlumno contrato,
+    Map<String, dynamic> pago,
+    List<Map<String, dynamic>> historial,
+    List<MoraPendientePreviaDetalle> vivo,
+  ) {
+    final concepto = (pago['concepto_detallado'] as String?) ??
+        (pago['concepto'] as String?) ??
+        '';
+    final guardadas =
+        MoraConceptoRotulo.numerosCuotaPendienteDesdeConcepto(concepto);
+    if (guardadas.isEmpty) return null;
+    return _nombresDelArrastre(
+      guardadas: guardadas,
+      vivas: {
+        for (final d in vivo)
+          if (d.montoAtribuido > 0.01) d.numeroCuota,
+      },
+      yaCobradas: _arrastreNombradoAntes(
+        historial,
+        _inicioDelDiaDelCobro(pago),
       ),
-      pagos: historial,
-      trackedMonto: monto,
-      antesDe: _inicioDelDiaDelCobro(pago),
-      excluirPagoId: pago['id']?.toString(),
-    );
+      conPerdon: MoraTrackedRecovery.tienePerdon(
+        contrato: contrato,
+        pagos: historial,
+      ),
+    )..sort();
+  }
+
+  /// Las cuotas que el Estado de cuenta y el recibo reimpreso nombran para el
+  /// arrastre de una línea (ver [arrastreDeUnaLinea]). Vacía si la línea no
+  /// nombra cuotas (la genérica) o no hay historial.
+  static List<int> cuotasNombradasDelArrastre({
+    required ContratoAlumno contrato,
+    required Map<String, dynamic> pago,
+    required List<Map<String, dynamic>> historial,
+  }) {
+    if (historial.isEmpty) return const [];
+    final vivo = _arrastreVivoAntesDe(contrato, pago, historial);
+    return _nombresConVivo(contrato, pago, historial, vivo) ?? const [];
+  }
+
+  /// Las cuotas que alguna línea de mora de un día anterior a [antesDe]
+  /// nombró como arrastre ("… mora pendiente cuota 2").
+  static Set<int> _arrastreNombradoAntes(
+    List<Map<String, dynamic>> historial,
+    DateTime? antesDe,
+  ) {
+    final out = <int>{};
+    if (antesDe == null) return out;
+    for (final p in historial) {
+      if (esAnulado(p) || !esMora(p)) continue;
+      final f = DateTime.tryParse(p['fecha_pago']?.toString() ?? '');
+      if (f == null || !f.isBefore(antesDe)) continue;
+      out.addAll(
+        MoraConceptoRotulo.numerosCuotaPendienteDesdeConcepto(
+          p['concepto']?.toString() ?? '',
+        ),
+      );
+    }
+    return out;
   }
 
   static List<Map<String, dynamic>>? _repartirMoraMixtoSiAplica({
@@ -1105,25 +1227,19 @@ class ConceptoPagoDisplay {
     final fechaRaw = pago['fecha_pago']?.toString();
     final fecha = fechaRaw != null ? DateTime.tryParse(fechaRaw) : null;
     final fechaAr = fecha != null ? ArTime.toAr(fecha) : null;
-    final pagoId = pago['id']?.toString();
 
     final hist = historialCompleto ?? const <Map<String, dynamic>>[];
-    // No usar exención actual del contrato al rearmar un cobro pasado.
-    final contratoHist = contrato.copyWith(
-      moraExentaHasta: null,
-      moraFechaReferencia: null,
-    );
-    // Inferir tracked ANTES del lote del día (si incluimos la cuota base
-    // del mismo cobro, postCobro resetea orígenes y pierde la cuota 2).
-    final DateTime? antesDeLote = _inicioDelDiaDelCobro(pago);
     final arrastrePrimero = fechaAr == null ||
         _claveDiaAr(fechaAr).compareTo(_desdeArrastrePrimero) >= 0;
 
-    // Lo que se debía ese día por cada cuota del calendario que nombra.
+    // Lo que se debía ese día por cada cuota del calendario que nombra (sin la
+    // exención de hoy; con saldo aunque ya haya terminado de pagar).
     final desg = <Map<String, dynamic>>[];
     if (calNums.isNotEmpty && fechaAr != null) {
       final orden = calNums.toSet().toList()..sort();
-      final pre = contratoHist.copyWith(
+      final pre = contrato.copyWith(
+        moraExentaHasta: null,
+        moraFechaReferencia: null,
         cuotasPagadas: orden.first - 1,
         saldoDeudor: contrato.saldoDeudor > 0.01
             ? contrato.saldoDeudor
@@ -1146,37 +1262,43 @@ class ConceptoPagoDisplay {
       (s, d) => s + ((d['monto'] as num?)?.toDouble() ?? 0),
     );
 
-    // Calendario puro de varias cuotas: se reparte entre las que nombra. Si lo
-    // que se debía no llega a lo cobrado, la cuenta de aquel día no se pudo
-    // rearmar y se deja la línea como estaba.
+    // Calendario puro de varias cuotas ("Interés mora cuotas 3, 4"). Se reparte
+    // solo si lo que se debía ese día da justo lo cobrado: si no, la cuenta de
+    // aquel día tenía un crédito o una exención que la reimpresión no ve, y
+    // repartir marcaría "(parcial)" y sacaría una cuota del papel (lo encontró
+    // la revisión del 14-nov). Ahí va un renglón que las nombra a todas.
     if (!esArrastre) {
-      if (desg.isEmpty || sumCal < monto - 0.01) return null;
-      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
-        montoTotal: monto,
-        moraDesglose: desg,
-        moraPendientePrevias: 0,
-        detallePendiente: const [],
-        conceptoFallback: concepto,
-      );
+      if (desg.length == calNums.toSet().length && (sumCal - monto).abs() <= 0.01) {
+        return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+          montoTotal: monto,
+          moraDesglose: desg,
+          moraPendientePrevias: 0,
+          detallePendiente: const [],
+          conceptoFallback: concepto,
+        );
+      }
+      return [_renglonDeVariasCuotas(calNums, monto, arrastre: false)];
     }
+
+    final vivo = hist.isEmpty
+        ? const <MoraPendientePreviaDetalle>[]
+        : arrastreDeUnaLinea(contrato: contrato, pago: pago, historial: hist);
+    final respaldado = vivo.fold<double>(0, (s, d) => s + d.montoAtribuido);
+    final nombradas = cuotasNombradasDelArrastre(
+      contrato: contrato,
+      pago: pago,
+      historial: hist,
+    );
 
     // Mixta cuyo calendario no se pudo rearmar: el arrastre primero y el resto
     // al calendario, con el mes que dice el texto (el camino de siempre).
     if (desg.isEmpty && calNums.isNotEmpty && fechaAr != null) {
       final nCal = calNums.first;
       final mes = _mesLabelDesdeConceptoMora(concepto) ?? '';
-      final detPrev = hist.isEmpty
-          ? const <MoraPendientePreviaDetalle>[]
-          : MoraTrackedOrigen.inferir(
-              contratoBase: contratoHist,
-              pagos: hist,
-              trackedMonto: monto,
-              antesDe: antesDeLote,
-              excluirPagoId: pagoId,
-            );
-      final sumPrev = detPrev.fold<double>(0, (s, e) => s + e.montoAtribuido);
       final calEst = double.parse(
-        (monto - sumPrev).clamp(0.0, double.infinity).toStringAsFixed(2),
+        (monto - (respaldado < monto ? respaldado : monto))
+            .clamp(0.0, double.infinity)
+            .toStringAsFixed(2),
       );
       if (calEst > 0.01) {
         desg.add({
@@ -1189,19 +1311,16 @@ class ConceptoPagoDisplay {
 
     // Solo pendiente (sin parte calendario en el texto).
     if (desg.isEmpty) {
-      var detalle = arrastreDeUnaLinea(
-        contrato: contrato,
-        pago: pago,
-        historial: hist,
-        monto: monto,
-      );
-      detalle = _detalleDesdeElConcepto(concepto, monto, detalle);
-      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
-        montoTotal: monto,
-        moraDesglose: const [],
-        moraPendientePrevias: monto,
-        detallePendiente: detalle,
-        conceptoFallback: concepto,
+      final detalle = _detalleDesdeElConcepto(concepto, monto, vivo);
+      return _conLasCuotasNombradas(
+        MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+          montoTotal: monto,
+          moraDesglose: const [],
+          moraPendientePrevias: monto,
+          detallePendiente: detalle,
+          conceptoFallback: concepto,
+        ),
+        nombradas,
       );
     }
 
@@ -1212,13 +1331,8 @@ class ConceptoPagoDisplay {
     );
     double pendiente;
     if (arrastrePrimero) {
-      final arr = arrastreDeUnaLinea(
-        contrato: contrato,
-        pago: pago,
-        historial: hist,
-        monto: monto,
-      ).fold<double>(0, (s, d) => s + d.montoAtribuido);
-      pendiente = arr < monto ? arr : monto;
+      // Lo que la reconstrucción respalda; el resto es calendario.
+      pendiente = respaldado < monto ? respaldado : monto;
       // Lo que no entra en el calendario no se puede perder: es arrastre.
       final resto = monto - pendiente;
       if (resto > calTope + 0.01) pendiente += resto - calTope;
@@ -1229,24 +1343,138 @@ class ConceptoPagoDisplay {
       pendiente.clamp(0.0, double.infinity).toStringAsFixed(2),
     );
 
-    List<MoraPendientePreviaDetalle> detalle = const [];
-    if (pendiente > 0.01 && hist.isNotEmpty) {
-      detalle = MoraTrackedOrigen.inferir(
-        contratoBase: contratoHist,
-        pagos: hist,
-        trackedMonto: pendiente,
-        antesDe: antesDeLote,
-        excluirPagoId: pagoId,
-      );
-    }
-
-    return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+    final lineas = MoraConceptoRotulo.lineasPdfDesdePreviewMora(
       montoTotal: monto,
       moraDesglose: desg,
       moraPendientePrevias: pendiente,
-      detallePendiente: detalle,
+      detallePendiente: pendiente > 0.01 ? vivo : const [],
       conceptoFallback: concepto,
     );
+    return _conLasCuotasNombradas(
+      _parcialesConfirmados(lineas, contrato, pago, hist),
+      nombradas,
+    );
+  }
+
+  /// Una línea de mora que nombra varias cuotas, con la suma y sin repartir:
+  /// la reimpresión no pudo decir cuánto fue de cada una.
+  static Map<String, dynamic> _renglonDeVariasCuotas(
+    List<int> cuotas,
+    double monto, {
+    required bool arrastre,
+  }) {
+    final orden = cuotas.toSet().toList()..sort();
+    final lista = orden.length == 1
+        ? 'cuota ${orden.first}'
+        : 'cuotas ${orden.sublist(0, orden.length - 1).join(', ')} y ${orden.last}';
+    return {
+      'concepto': arrastre ? 'Mora pendiente $lista' : 'Interés mora $lista',
+      'monto': double.parse(monto.toStringAsFixed(2)),
+      'esMora': true,
+      if (arrastre) 'cuotasPrevias': orden else 'cuotasDeLaLinea': orden,
+    };
+  }
+
+  /// Una cuota del calendario que el reparto marca "(parcial)" lo es solo si la
+  /// reconstrucción confirma que, después de ese día, le quedó mora por pagar.
+  /// Si lo confirma, lo que se debía de ella es lo cobrado más lo que quedó
+  /// (así la nota dice cuánto quedó de verdad); si no, la mora de ese día se
+  /// calculó sin un crédito o una exención que la reimpresión no ve, y la
+  /// línea sale entera, sin "(parcial)".
+  static List<Map<String, dynamic>> _parcialesConfirmados(
+    List<Map<String, dynamic>> lineas,
+    ContratoAlumno contrato,
+    Map<String, dynamic> pago,
+    List<Map<String, dynamic>> historial,
+  ) {
+    final parciales = lineas.where(
+      (l) =>
+          l['numeroCuota'] != null &&
+          l['cuotaPrevia'] == null &&
+          l['montoPleno'] != null,
+    );
+    if (parciales.isEmpty) return lineas;
+    final inicio = _inicioDelDiaDelCobro(pago);
+    final quedo = <int, double>{};
+    if (inicio != null && historial.isNotEmpty) {
+      final despues = MoraTrackedOrigen.inferir(
+        contratoBase: contrato.copyWith(
+          moraExentaHasta: null,
+          moraFechaReferencia: null,
+          saldoDeudor: contrato.saldoDeudor > 0.01
+              ? contrato.saldoDeudor
+              : contrato.montoTotalPactado,
+        ),
+        pagos: historial,
+        trackedMonto: 1e12,
+        antesDe: inicio.add(const Duration(days: 1)),
+      );
+      final dia = ArTime.toAr(inicio);
+      for (final d in despues) {
+        final f = d.fechaPagoCuota;
+        if (f != null &&
+            f.year == dia.year &&
+            f.month == dia.month &&
+            f.day == dia.day) {
+          quedo[d.numeroCuota] = d.montoAtribuido;
+        }
+      }
+    }
+    return [
+      for (final l in lineas)
+        if (!parciales.contains(l))
+          l
+        else
+          () {
+            final n = (l['numeroCuota'] as num).toInt();
+            final m = (l['monto'] as num).toDouble();
+            final c = Map<String, dynamic>.from(l);
+            final resta = quedo[n];
+            if (resta != null && resta > 0.01) {
+              final pleno = double.parse((m + resta).toStringAsFixed(2));
+              c['montoPleno'] = pleno;
+              c['subtexto'] = MoraConceptoRotulo.subtextoParcialMora(pleno);
+            } else {
+              c.remove('montoPleno');
+              c.remove('subtexto');
+              c['concepto'] = (c['concepto'] as String)
+                  .replaceAll(MoraConceptoRotulo.sufijoParcial, '');
+            }
+            return c;
+          }(),
+    ];
+  }
+
+  /// Si las líneas del arrastre no nombran exactamente las cuotas que nombra
+  /// el Estado de cuenta ([nombradas]), las junta en un solo renglón que las
+  /// nombra a todas ("Mora pendiente cuotas 2, 3 y 4"), con la suma: la
+  /// reconstrucción no alcanzó para decir cuánto fue de cada una, y repartirlo
+  /// a ojo sería inventar. Así el papel y la pantalla nombran lo mismo.
+  static List<Map<String, dynamic>> _conLasCuotasNombradas(
+    List<Map<String, dynamic>> lineas,
+    List<int> nombradas,
+  ) {
+    if (nombradas.isEmpty) return lineas;
+    bool esArrastre(Map<String, dynamic> l) =>
+        l['cuotaPrevia'] != null || l['arrastreGenerico'] == true;
+    final arrastre = lineas.where(esArrastre).toList();
+    if (arrastre.isEmpty) return lineas;
+    final reimpresas = {
+      for (final l in arrastre)
+        if (l['cuotaPrevia'] != null) (l['cuotaPrevia'] as num).toInt(),
+    };
+    final iguales = arrastre.every((l) => l['cuotaPrevia'] != null) &&
+        reimpresas.length == nombradas.length &&
+        nombradas.every(reimpresas.contains);
+    if (iguales) return lineas;
+    final suma = arrastre.fold<double>(
+      0,
+      (s, l) => s + ((l['monto'] as num?)?.toDouble() ?? 0),
+    );
+    return [
+      ...lineas.where((l) => !esArrastre(l)),
+      _renglonDeVariasCuotas(nombradas, suma, arrastre: true),
+    ];
   }
 
   static String _claveDiaAr(DateTime ar) =>

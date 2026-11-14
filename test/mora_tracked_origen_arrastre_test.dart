@@ -6,6 +6,7 @@
 // de la 6.8.0 corre al lado (`InferirDeLa680`) para ver qué cambia.
 
 import 'package:arguello_events/core/utils/pago_interes_mora.dart';
+import 'package:arguello_events/features/eventos/services/cobro_masivo_conceptos_pdf.dart';
 import 'package:arguello_events/features/eventos/services/concepto_pago_display.dart';
 import 'package:arguello_events/features/eventos/services/mora_concepto_rotulo.dart';
 import 'package:arguello_events/features/eventos/services/mora_tracked_origen.dart';
@@ -405,8 +406,8 @@ void main() {
         contrato: f.c,
         pago: f.lineaDel14,
         historial: f.pagos,
-        monto: 53800,
       );
+      // Lo que se debía de cada cuota antes del cobro: lo pagó entero.
       expect(det.map((d) => d.montoAtribuido), [9000, 25550, 15050, 4200]);
     });
 
@@ -421,7 +422,6 @@ void main() {
         contrato: f.c,
         pago: f.lineaDel12,
         historial: f.pagos,
-        monto: 75000,
       );
       expect(det.map((d) => '${d.numeroCuota} ${d.montoAtribuido}'),
           ['2 350.0']);
@@ -469,6 +469,160 @@ void main() {
       expect(reimpresas(f.c, f.loteDel12, f.pagos), [2]);
       final f1 = _familiaF1();
       expect(reimpresas(f1.c, [f1.linea], f1.pagos), [1, 2]);
+    });
+
+    test('D8. la línea nombra una cuota que todavía se debía: se respeta, '
+        'aunque haya otra más vieja', () {
+      // La 1 y la 3 quedaron con arrastre ($9.000 cada una: 30 días tarde).
+      // La línea guardada dice "cuota 3": la reconstrucción no sabe si la 1
+      // se perdonó (los perdones no tienen fecha), así que no la cambia por la
+      // 1 (lo mostró el comparador sobre la copia de la base).
+      final c = _contrato(saldo: 180000);
+      final linea = _pago(
+        '2026-08-10',
+        'Mora pendiente cuota 3 (no cobrada al pagar)',
+        3500,
+      );
+      final pagos = [
+        _pago('2026-05-30', 'Cuota Base (1/9)', 30000),
+        _pago('2026-05-30', 'Cuota Base (2/9)', 30000),
+        _pago('2026-07-30', 'Cuota Base (3/9)', 30000),
+        linea,
+      ];
+      expect(ficha(c, pagos, linea['id'] as String),
+          'Mora cuota 3 (vto Jun 2026)');
+      expect(reimpresas(c, [linea], pagos), [3]);
+    });
+
+    test('D9. con un perdón en la ficha no se saca ninguna cuota del texto', () {
+      final f = _familiaDel14();
+      final conPerdon = ContratoAlumno(
+        id: f.c.id,
+        eventoId: 'ev',
+        nombreAlumno: 'FAMILIA, INVENTADA',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 315000,
+        totalCuotas: 9,
+        cuotasPagadas: 7,
+        saldoDeudor: 70000,
+        moraTrackedAjuste: -1000,
+        createdAt: DateTime.parse('2026-03-30T03:00:00+00:00'),
+      );
+      expect(
+        ficha(conPerdon, f.pagos, f.lineaDel14['id'] as String),
+        'Mora cuota 2 (vto May 2026), cuota 4 (vto Jul 2026), '
+        'cuota 5 (vto Ago 2026), cuota 6 (vto Sep 2026) y cuota 7 (vto Oct 2026)',
+      );
+    });
+
+    test('D10. si no se puede decir cuánto fue de cada cuota, un renglón con '
+        'todas', () {
+      // El 30/07 se pagan la 2 (60 días tarde, sin su mora: $18.000 de
+      // arrastre) y la 3 con toda su mora. La línea guardada dice "cuotas 2 y
+      // 3": la reconstrucción solo respalda la 2, y no inventa cuánto fue de la
+      // 3.
+      final c = _contrato(saldo: 180000);
+      final linea = _pago(
+        '2026-08-20',
+        'Mora pendiente cuotas 2 y 3 (no cobrada al pagar)',
+        10000,
+      );
+      final pagos = [
+        _pago('2026-04-20', 'Cuota Base (1/9)', 30000),
+        _pago('2026-07-30', 'Cuota Base (2/9)', 30000),
+        _pago('2026-07-30', 'Cuota Base (3/9)', 30000),
+        _pago('2026-07-30', 'Interés mora cuota 3 (vto Jun 2026)', 9000),
+        linea,
+      ];
+      expect(ficha(c, pagos, linea['id'] as String),
+          'Mora cuota 2 (vto May 2026) y cuota 3 (vto Jun 2026)');
+      final lineas = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+        c,
+        [linea],
+        historialCompleto: pagos,
+      );
+      expect(lineas.single['cuotasPrevias'], [2, 3]);
+      expect(lineas.single['monto'], 10000);
+      expect(
+        filasMoraCobradaPdf(lineas).map((f) => '${f.rotulo} ${f.monto}'),
+        ['Cuotas 2 y 3 10000.0'],
+      );
+    });
+
+    test('R1. con la familia que ya terminó de pagar (saldo 0), igual', () {
+      final f = _familiaDel14();
+      final pagado = ContratoAlumno(
+        id: f.c.id,
+        eventoId: 'ev',
+        nombreAlumno: 'FAMILIA, INVENTADA',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 315000,
+        totalCuotas: 9,
+        cuotasPagadas: 9,
+        saldoDeudor: 0,
+        createdAt: DateTime.parse('2026-03-30T03:00:00+00:00'),
+      );
+      expect(
+        ficha(pagado, f.pagos, f.lineaDel14['id'] as String),
+        'Mora cuota 4 (vto Jul 2026), cuota 5 (vto Ago 2026), '
+        'cuota 6 (vto Sep 2026) y cuota 7 (vto Oct 2026)',
+      );
+    });
+
+    test('R2. reimpreso, un pago a medias del arrastre dice "parcial: quedan"',
+        () {
+      final c = _contrato(saldo: 180000);
+      final linea = _pago(
+        '2026-08-20',
+        'Mora pendiente cuota 2 (no cobrada al pagar)',
+        10000,
+      );
+      final pagos = [
+        _pago('2026-04-20', 'Cuota Base (1/9)', 30000),
+        // La 2 vence el 31/05: 60 días tarde, sin su mora ($18.000).
+        _pago('2026-07-30', 'Cuota Base (2/9)', 30000),
+        linea,
+      ];
+      final filas = filasMoraCobradaPdf(
+        ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+          c,
+          [linea],
+          historialCompleto: pagos,
+        ),
+        conNotas: true,
+      );
+      expect(filas.single.monto, 10000);
+      expect(filas.single.nota, 'parcial: quedan \$ 8.000,00');
+    });
+
+    test('R3. "cuotas 3, 4" cuando la mora de aquel día tenía un crédito: un '
+        'renglón con las dos, sin "(parcial)"', () {
+      final c = _contrato(saldo: 150000);
+      final linea = _pago(
+        '2026-08-20',
+        'Interés mora cuotas 3, 4 (vto Jun 2026, Jul 2026)',
+        9000,
+      );
+      final pagos = [
+        _pago('2026-04-20', 'Cuota Base (1/9)', 30000),
+        _pago('2026-05-20', 'Cuota Base (2/9)', 30000),
+        _pago('2026-08-10', 'Entrega parcial — Cuota Base (3/9)', 10000),
+        _pago('2026-08-10', 'Interés mora cuota 3 (vto Jun 2026)', 12300),
+        _pago('2026-08-20', 'Cuota Base (3/9) — Completada', 20000),
+        _pago('2026-08-20', 'Cuota Base (4/9)', 30000),
+        linea,
+      ];
+      final lineas = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+        c,
+        [linea],
+        historialCompleto: pagos,
+      );
+      expect(lineas.any((l) => (l['concepto'] as String).contains('(parcial)')),
+          isFalse);
+      expect(
+        filasMoraCobradaPdf(lineas).map((f) => '${f.rotulo} ${f.monto}'),
+        ['Cuotas 3 y 4 9000.0'],
+      );
     });
 
     test('D7. una fila que no es del arrastre no cambia', () {
