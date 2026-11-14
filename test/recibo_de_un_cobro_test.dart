@@ -113,7 +113,9 @@ List<FilaMoraPdf> _filasVerdes(
 }
 
 String _fila(FilaMoraPdf f) =>
-    '${f.rotulo} ${f.monto.toStringAsFixed(0)}${f.nota == null ? '' : ' · ${f.nota}'}';
+    '${f.rotulo} debía ${f.debia?.toStringAsFixed(0) ?? '-'} '
+    'pagó ${f.monto.toStringAsFixed(0)} quedó ${f.quedo?.toStringAsFixed(0) ?? '-'}'
+    '${f.nota == null ? '' : ' · ${f.nota}'}';
 
 void main() {
   group('lineasDelCobro', () {
@@ -168,10 +170,11 @@ void main() {
         () {
       final f = _familiaDel14();
       expect(_filasVerdes(c, f.pagos, f.lineaDel14).map(_fila), [
-        'Cuota 4 (Jul, 104 d) 9000 · el resto: antes se habían pagado \$ 27.400,00',
-        'Cuota 5 (Ago, 73 d) 25550',
-        'Cuota 6 (Sep, 43 d) 15050',
-        'Cuota 7 (Oct, 12 d) 4200',
+        'Cuota 4 (Jul, 104 d) debía 9000 pagó 9000 quedó 0 · era de \$ 36.400,00: '
+            'antes se pagaron \$ 27.400,00, hoy se terminó de pagar',
+        'Cuota 5 (Ago, 73 d) debía 25550 pagó 25550 quedó 0',
+        'Cuota 6 (Sep, 43 d) debía 15050 pagó 15050 quedó 0',
+        'Cuota 7 (Oct, 12 d) debía 4200 pagó 4200 quedó 0',
       ]);
     });
 
@@ -182,9 +185,10 @@ void main() {
       expect(
         filas,
         unorderedEquals([
-          'Cuota 2 (May, 1 d) 350',
-          'Cuota 3 (135 d) 47250',
-          'Cuota 4 (104 d) 27400 · parcial: quedan \$ 9.000,00',
+          'Cuota 2 (May, 1 d) debía 350 pagó 350 quedó 0',
+          'Cuota 3 (135 d) debía 47250 pagó 47250 quedó 0',
+          'Cuota 4 (104 d) debía 36400 pagó 27400 quedó 9000 · '
+              'pagada parcialmente: quedaron \$ 9.000,00',
         ]),
       );
     });

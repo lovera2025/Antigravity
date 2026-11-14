@@ -2233,6 +2233,25 @@ class PdfService {
     final bool moraQuedaSaldada = moraEnCeroAlMedirla &&
         !(moraRestanteMedidaEl != null && moraCobroFueParcial);
 
+    /// Cuántas moras se pagaron (para el título), y cuántas enteras y cuántas
+    /// a medias, cuando se sabe lo que se debía de cada una.
+    final int? cantidadMoras = cantidadDeMorasPdf(filasMoraCobrada);
+    final String? resumenEnterasYParciales = () {
+      if (filasMoraCobrada.isEmpty ||
+          filasMoraCobrada.any((f) => f.debia == null)) {
+        return null;
+      }
+      final parciales = filasMoraCobrada.where((f) => f.parcial).length;
+      if (parciales == 0) return null;
+      final enteras = filasMoraCobrada.length - parciales;
+      String moras(int n) => n == 1 ? '1 mora' : '$n moras';
+      return enteras == 0
+          ? 'Se pagaron ${moras(parciales)} parcialmente.'
+          : 'Se ${enteras == 1 ? 'pagó' : 'pagaron'} ${moras(enteras)} '
+              '${enteras == 1 ? 'entera' : 'enteras'} y ${moras(parciales)} '
+              'parcialmente.';
+    }();
+
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
     final bool reciboMixto =
@@ -2377,7 +2396,65 @@ class PdfService {
       List<String> lineas = const [],
     }) {
       final d = dRecibo;
-      final visibles = recortarFilasMoraPdf(filas, d.maxFilasMora);
+      // Con lo que se debía de cada mora, una tabla: cuánto se debía, cuánto se
+      // pagó y cuánto quedó (pedido del usuario el 14-nov). Sin eso (una ficha
+      // con perdón, o el aviso rojo), un renglón por cuota con lo pagado.
+      final conTabla = filas.any((f) => f.debia != null);
+      // La tabla muestra todas las moras: es el detalle que se pidió. Si el
+      // papel no entra, achica la letra o crece; no junta cuotas en "y N cuotas
+      // más" (así se perdía la mora a medias en el recibo del 12/11).
+      final visibles =
+          conTabla ? filas : recortarFilasMoraPdf(filas, d.maxFilasMora);
+      final cantidad = cantidadDeMorasPdf(filas);
+      pw.Widget celda(String t, {bool derecha = true, bool negrita = false, bool gris = false}) =>
+          pw.Text(
+            t,
+            textAlign: derecha ? pw.TextAlign.right : pw.TextAlign.left,
+            style: pw.TextStyle(
+              fontSize: gris ? d.fs(7, piso: 6) : d.fs(8, piso: 6.5),
+              fontWeight: negrita ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: gris ? _greyText : _darkText,
+            ),
+          );
+      pw.Widget filaTabla(
+        String rotulo,
+        String debia,
+        String pago,
+        String quedo, {
+        bool gris = false,
+        bool total = false,
+      }) =>
+          pw.Container(
+            padding: pw.EdgeInsets.only(top: d.sp(1), left: 6),
+            decoration: total
+                ? const pw.BoxDecoration(
+                    border: pw.Border(
+                      top: pw.BorderSide(color: PdfColors.grey400, width: 0.5),
+                    ),
+                  )
+                : null,
+            child: pw.Row(
+              children: [
+                pw.Expanded(
+                  flex: 4,
+                  child: celda(rotulo, derecha: false, negrita: total, gris: gris),
+                ),
+                pw.Expanded(flex: 2, child: celda(debia, negrita: total, gris: gris)),
+                pw.Expanded(
+                  flex: 2,
+                  child: celda(pago, negrita: !gris, gris: gris),
+                ),
+                pw.Expanded(flex: 2, child: celda(quedo, negrita: total, gris: gris)),
+              ],
+            ),
+          );
+      pw.Widget notaDeLaFila(String t) => pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 14),
+            child: pw.Text(
+              t,
+              style: pw.TextStyle(fontSize: d.fs(7, piso: 6), color: _greyText),
+            ),
+          );
       return pw.Container(
         width: double.infinity,
         margin: pw.EdgeInsets.only(top: d.sp(4)),
@@ -2398,6 +2475,44 @@ class PdfService {
                 color: color,
               ),
             ),
+            if (conTabla) ...[
+              filaTabla(
+                'Mora de',
+                'Debía',
+                'Pagó',
+                'Quedó',
+                gris: true,
+              ),
+              ...visibles.expand(
+                (f) => [
+                  filaTabla(
+                    f.rotulo,
+                    f.debia?.toCurrency() ?? '—',
+                    f.monto.toCurrency(),
+                    f.quedo?.toCurrency() ?? '—',
+                  ),
+                  if (f.nota != null) notaDeLaFila(f.nota!),
+                ],
+              ),
+              if (filas.length > 1)
+                filaTabla(
+                  cantidad == null
+                      ? 'Total'
+                      : '$cantidad ${cantidad == 1 ? 'mora' : 'moras'}',
+                  filas.every((f) => f.debia != null)
+                      ? filas
+                          .fold<double>(0, (s, f) => s + f.debia!)
+                          .toCurrency()
+                      : '—',
+                  filas.fold<double>(0, (s, f) => s + f.monto).toCurrency(),
+                  filas.every((f) => f.quedo != null)
+                      ? filas
+                          .fold<double>(0, (s, f) => s + f.quedo!)
+                          .toCurrency()
+                      : '—',
+                  total: true,
+                ),
+            ] else
             ...visibles.expand(
               (f) => [
                 pw.Padding(
@@ -2442,7 +2557,10 @@ class PdfService {
                   ),
               ],
             ),
-            if (d.subtextos)
+            // Con la tabla, el pie ("Se pagaron 2 moras enteras y 1
+            // parcialmente.", "Con este pago no queda mora pendiente.") va
+            // siempre: es parte de lo que el usuario aprobó el 14-nov.
+            if (d.subtextos || conTabla)
               ...lineas.map(
                 (t) => pw.Text(
                   t,
@@ -2677,15 +2795,19 @@ class PdfService {
                                         moraSigueDebiendo)
                                   ? 'MORA ABONADA PARCIALMENTE'
                                   : 'MORA ABONADA EN ESTE PAGO'}'
+                          '${cantidadMoras == null ? '' : ' · $cantidadMoras ${cantidadMoras == 1 ? 'mora' : 'moras'}'}'
                           ' — ${moraCobradaRecibo.toCurrency()}',
                       filas: filasMoraCobrada,
                       lineas: [
+                        if (resumenEnterasYParciales != null)
+                          resumenEnterasYParciales,
                         if (moraQuedaSaldada)
                           'Con este pago no queda mora pendiente.'
                         else if (moraTotalPreCobro != null)
                           'Pago parcial: la mora era de '
                               '${moraTotalPreCobro.toCurrency()}.'
-                        else if (moraCobroFueParcial || moraSigueDebiendo)
+                        else if ((moraCobroFueParcial || moraSigueDebiendo) &&
+                            resumenEnterasYParciales == null)
                           // Reimpresión: el total de aquel día no se puede
                           // reconstruir, pero que fue parcial sí se sabe —
                           // abajo está lo que todavía falta.

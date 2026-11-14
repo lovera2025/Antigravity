@@ -569,7 +569,7 @@ void main() {
       );
     });
 
-    test('R2. reimpreso, un pago a medias del arrastre dice "parcial: quedan"',
+    test('R2. reimpreso, un pago a medias del arrastre dice cuánto se debía y cuánto quedó',
         () {
       final c = _contrato(saldo: 180000);
       final linea = _pago(
@@ -592,7 +592,9 @@ void main() {
         conNotas: true,
       );
       expect(filas.single.monto, 10000);
-      expect(filas.single.nota, 'parcial: quedan \$ 8.000,00');
+      expect(filas.single.debia, 18000);
+      expect(filas.single.quedo, 8000);
+      expect(filas.single.nota, 'pagada parcialmente: quedaron \$ 8.000,00');
     });
 
     test('R3. "cuotas 3, 4" cuando la mora de aquel día tenía un crédito: un '

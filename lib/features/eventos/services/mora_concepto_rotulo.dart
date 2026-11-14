@@ -844,6 +844,8 @@ class MoraConceptoRotulo {
           // pagado $X"), para que no se lea como la misma mora cobrada dos
           // veces (reclamo del 14-nov).
           if (d.moraCobrada > 0.01) 'moraCobradaAntes': d.moraCobrada,
+          // De cuánto era entera la mora de esa cuota ("era de $36.400").
+          if (d.moraDebida > 0.01) 'moraDebida': d.moraDebida,
           'subtexto': it.parcial
               ? subtextoParcialMora(it.pleno)
               : d.subtextoDetalle,

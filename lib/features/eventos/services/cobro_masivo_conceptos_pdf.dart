@@ -119,30 +119,67 @@ void anexarMetadatosMoraDisplay(Map<String, dynamic> line) {
 /// alineado a la derecha.
 class FilaMoraPdf {
   final String rotulo;
+
+  /// Lo que se pagó de esta mora en este cobro.
   final double monto;
 
-  /// Un renglón chico debajo, cuando la mora de esa cuota se pagó en partes:
-  /// "el resto: antes se habían pagado $X" o "parcial: quedan $X" (pedido del
-  /// usuario el 14-nov, para que la familia entienda el papel sin que se lo
-  /// expliquen). Null: sin renglón.
+  /// Lo que se debía de esta mora en el momento del cobro. Con esto el recibo
+  /// dice, por cada mora, cuánto se debía, cuánto se pagó y cuánto quedó
+  /// (pedido del usuario el 14-nov: "que todo sea muy explicativo"). Null: no
+  /// se sabe (un renglón bolsa, o una ficha con perdón), y la fila dice solo lo
+  /// pagado.
+  final double? debia;
+
+  /// Un renglón chico debajo, cuando la mora se pagó en partes: cuánto quedó,
+  /// o de cuánto era y cuánto se había pagado antes. Null: sin renglón.
   final String? nota;
 
-  const FilaMoraPdf({required this.rotulo, required this.monto, this.nota});
+  /// Cuántas moras (cuotas) nombra la fila: 1, varias en un renglón agrupado,
+  /// 0 en un renglón bolsa (no se sabe de cuáles).
+  final int cuotas;
+
+  const FilaMoraPdf({
+    required this.rotulo,
+    required this.monto,
+    this.debia,
+    this.nota,
+    this.cuotas = 1,
+  });
+
+  /// Lo que quedó de esta mora después del cobro. Null si no se sabe.
+  double? get quedo {
+    final d = debia;
+    if (d == null) return null;
+    final q = d - monto;
+    return q > 0.01 ? double.parse(q.toStringAsFixed(2)) : 0;
+  }
+
+  bool get parcial => (quedo ?? 0) > 0.01;
 }
 
-/// La nota de una cuota cuya mora se pagó en partes. [pleno] es lo que se
-/// debía por esa cuota en este cobro (si este cobro la dejó a medias) y
-/// [cobradaAntes] lo que de su mora ya se había pagado en otro cobro.
+/// El renglón que explica una mora pagada en partes. [debia] es lo que se
+/// debía de ella en este cobro, [monto] lo que se pagó, [cobradaAntes] lo que
+/// de ella ya se había pagado en otro cobro y [total] de cuánto era entera.
 String? notaMoraPorCuota({
   required double monto,
-  double? pleno,
+  double? debia,
   double cobradaAntes = 0,
+  double? total,
 }) {
-  if (pleno != null && pleno - monto > 0.01) {
-    return 'parcial: quedan ${(pleno - monto).toCurrency()}';
+  final quedo = debia == null ? 0.0 : debia - monto;
+  final entera = (total != null && total > 0.01)
+      ? total
+      : (debia ?? monto) + cobradaAntes;
+  if (quedo > 0.01) {
+    if (cobradaAntes > 0.01) {
+      return 'era de ${entera.toCurrency()}: antes se pagaron '
+          '${cobradaAntes.toCurrency()} y quedaron ${quedo.toCurrency()}';
+    }
+    return 'pagada parcialmente: quedaron ${quedo.toCurrency()}';
   }
   if (cobradaAntes > 0.01) {
-    return 'el resto: antes se habían pagado ${cobradaAntes.toCurrency()}';
+    return 'era de ${entera.toCurrency()}: antes se pagaron '
+        '${cobradaAntes.toCurrency()}, hoy se terminó de pagar';
   }
   return null;
 }
@@ -152,6 +189,13 @@ const String rotuloMoraOtrasCuotasPdf = 'Otras cuotas ya pagadas';
 
 /// Rótulo bolsa de la mora que no se puede atribuir a ninguna cuota.
 const String rotuloMoraSinCuotaPdf = 'Mora por pagar fuera de término';
+
+/// Cuántas moras nombran las filas, o null si alguna es un renglón bolsa (no se
+/// sabe de cuántas cuotas es).
+int? cantidadDeMorasPdf(List<FilaMoraPdf> filas) {
+  if (filas.isEmpty || filas.any((f) => f.cuotas == 0)) return null;
+  return filas.fold<int>(0, (s, f) => s + f.cuotas);
+}
 
 /// Detalle de la mora cobrada en este recibo, una fila por cuota.
 ///
@@ -168,9 +212,10 @@ const String rotuloMoraSinCuotaPdf = 'Mora por pagar fuera de término';
 /// separado aunque compartan número: son dos deudas distintas de la misma
 /// cuota.
 ///
-/// Con [conNotas], cada cuota cuya mora se pagó en partes lleva su nota
-/// ([notaMoraPorCuota]). Quien llama la apaga si la ficha tiene un perdón: los
-/// perdones no tienen fecha y la nota podría contar mal lo que se pagó antes.
+/// Con [conNotas], cada fila dice además cuánto se debía de esa mora
+/// ([FilaMoraPdf.debia]) y, si se pagó en partes, lo explica
+/// ([notaMoraPorCuota]). Quien llama lo apaga si la ficha tiene un perdón: los
+/// perdones no tienen fecha y no se puede comprobar cuánto se debía.
 List<FilaMoraPdf> filasMoraCobradaPdf(
   Iterable<Map<String, dynamic>> lineas, {
   bool conNotas = false,
@@ -179,8 +224,10 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
   final rotulos = <String, String>{};
   final orden = <String, int>{};
   final plenos = <String, double>{};
+  final totales = <String, double>{};
   final cobradaAntes = <String, double>{};
   final lineasPorClave = <String, int>{};
+  final cuotasPorClave = <String, int>{};
 
   void sumar(
     String clave,
@@ -188,13 +235,17 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
     int posicion,
     double monto, [
     Map<String, dynamic>? c,
+    int cuotas = 1,
   ]) {
     montos[clave] = (montos[clave] ?? 0) + monto;
     rotulos[clave] ??= rotulo;
     orden[clave] ??= posicion;
+    cuotasPorClave[clave] ??= cuotas;
     lineasPorClave[clave] = (lineasPorClave[clave] ?? 0) + 1;
     final pleno = (c?['montoPleno'] as num?)?.toDouble();
     if (pleno != null) plenos[clave] = pleno;
+    final total = (c?['moraDebida'] as num?)?.toDouble();
+    if (total != null) totales[clave] = total;
     final antes = (c?['moraCobradaAntes'] as num?)?.toDouble();
     if (antes != null) cobradaAntes[clave] = antes;
   }
@@ -205,16 +256,17 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
     if (monto.abs() <= 0.001) continue;
     final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
 
-    // Arrastre de varias cuotas sin el monto de cada una (la reimpresión no lo
-    // pudo reconstruir): un renglón que las nombra a todas.
-    final previas = ((c['cuotasPrevias'] ?? c['cuotasDeLaLinea']) as List?)
+    // Varias cuotas sin el monto de cada una (la reimpresión no lo pudo
+    // reconstruir): un renglón que las nombra a todas.
+    final varias = ((c['cuotasPrevias'] ?? c['cuotasDeLaLinea']) as List?)
         ?.map((n) => (n as num).toInt())
         .toList();
-    if (previas != null && previas.isNotEmpty) {
-      final rotulo = previas.length == 1
-          ? 'Cuota ${previas.first}'
-          : 'Cuotas ${previas.sublist(0, previas.length - 1).join(', ')} y ${previas.last}';
-      sumar('prevs:${previas.join(',')}', rotulo, previas.first, monto);
+    if (varias != null && varias.isNotEmpty) {
+      final rotulo = varias.length == 1
+          ? 'Cuota ${varias.first}'
+          : 'Cuotas ${varias.sublist(0, varias.length - 1).join(', ')} y ${varias.last}';
+      sumar('prevs:${varias.join(',')}', rotulo, varias.first, monto, null,
+          varias.length);
       continue;
     }
 
@@ -252,9 +304,9 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
 
     // Bolsas: van al final, después de toda cuota nombrada.
     if (c['arrastreGenerico'] == true) {
-      sumar('bolsa:previas', rotuloMoraOtrasCuotasPdf, 1 << 20, monto);
+      sumar('bolsa:previas', rotuloMoraOtrasCuotasPdf, 1 << 20, monto, null, 0);
     } else {
-      sumar('bolsa:suelta', rotuloMoraSinCuotaPdf, 1 << 21, monto);
+      sumar('bolsa:suelta', rotuloMoraSinCuotaPdf, 1 << 21, monto, null, 0);
     }
   }
 
@@ -266,19 +318,30 @@ List<FilaMoraPdf> filasMoraCobradaPdf(
 
   return [
     for (final k in claves)
-      FilaMoraPdf(
-        rotulo: rotulos[k]!,
-        monto: double.parse(montos[k]!.toStringAsFixed(2)),
-        // Dos líneas de la misma cuota en un cobro: no se arma nota, no se sabe
-        // a cuál de las dos corresponde lo pleno.
-        nota: conNotas && lineasPorClave[k] == 1
-            ? notaMoraPorCuota(
-                monto: montos[k]!,
-                pleno: plenos[k],
-                cobradaAntes: cobradaAntes[k] ?? 0,
-              )
-            : null,
-      ),
+      () {
+        final monto = double.parse(montos[k]!.toStringAsFixed(2));
+        // Lo que se debía se sabe de una cuota nombrada, con una sola línea en
+        // este cobro: dos líneas de la misma cuota no dicen a cuál corresponde
+        // lo pleno.
+        final conDetalle = conNotas &&
+            lineasPorClave[k] == 1 &&
+            (k.startsWith('prev:') || k.startsWith('cal:'));
+        final debia = conDetalle ? (plenos[k] ?? monto) : null;
+        return FilaMoraPdf(
+          rotulo: rotulos[k]!,
+          monto: monto,
+          debia: debia,
+          cuotas: cuotasPorClave[k] ?? 1,
+          nota: conDetalle
+              ? notaMoraPorCuota(
+                  monto: monto,
+                  debia: debia,
+                  cobradaAntes: cobradaAntes[k] ?? 0,
+                  total: totales[k],
+                )
+              : null,
+        );
+      }(),
   ];
 }
 
@@ -295,11 +358,18 @@ List<FilaMoraPdf> recortarFilasMoraPdf(List<FilaMoraPdf> filas, int maximo) {
   final visibles = filas.take(maximo - 1).toList();
   final resto = filas.skip(maximo - 1).toList();
   final suma = resto.fold<double>(0, (s, f) => s + f.monto);
+  final debia = resto.every((f) => f.debia != null)
+      ? double.parse(
+          resto.fold<double>(0, (s, f) => s + f.debia!).toStringAsFixed(2),
+        )
+      : null;
   return [
     ...visibles,
     FilaMoraPdf(
       rotulo: 'y ${resto.length} cuotas más',
       monto: double.parse(suma.toStringAsFixed(2)),
+      debia: debia,
+      cuotas: resto.fold<int>(0, (s, f) => s + f.cuotas),
     ),
   ];
 }
