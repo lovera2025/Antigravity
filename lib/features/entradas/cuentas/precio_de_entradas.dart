@@ -30,6 +30,24 @@ class PrecioDeEntradas {
     return rigeLaAnticipada(c, hoyAr) ? c.precioAnticipada : c.valorEntrada;
   }
 
+  /// El día como lo escribe el jefe en PRECIOS ("28/11/2026") pasado a como se
+  /// guarda ("2026-11-28"). **Null si no es un día que existe.**
+  static String? diaDeTexto(String texto) {
+    final m = RegExp(r'^\s*(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\s*$')
+        .firstMatch(texto);
+    if (m == null) return null;
+    final dia = '${m[3]}-${m[2]!.padLeft(2, '0')}-${m[1]!.padLeft(2, '0')}';
+    return ConfigEntradas.diaValido(dia) ? dia : null;
+  }
+
+  /// Lo guardado ("2026-11-28") como se lee en pantalla ("28/11/2026"). Vacío
+  /// si no hay día.
+  static String textoDelDia(String? dia) {
+    if (!ConfigEntradas.diaValido(dia)) return '';
+    final p = dia!.split('-');
+    return '${p[2]}/${p[1]}/${p[0]}';
+  }
+
   /// Lo que vale cada entrada de la mesa adicional y de las sillas extra.
   /// **Siempre sobre el valor de la entrada, nunca sobre la anticipada**: la
   /// regla es "el 50 % de su valor". Null sin precio.

@@ -57,6 +57,11 @@ void main() {
         'Cobros · Encargada de barra',
       );
       expect(textoDePermisos(const PermisosEfectivos(barra: true)), 'Barra');
+      expect(
+        textoDePermisos(const PermisosEfectivos(cobros: true, vendeEntradas: true)),
+        'Cobros · Entradas y venta',
+        reason: 'quien vende también entrega: se dicen las dos',
+      );
     });
   });
 
@@ -166,6 +171,61 @@ void main() {
       await editar(tester, 'Maxi');
       expect(tildada(tester, 'permiso_barra'), isTrue);
       expect(tildada(tester, 'permiso_encargada_barra'), isTrue);
+    });
+
+    testWidgets('Vende entradas: tildarla tilda Entradas, avisa lo de las versiones y se '
+        'guarda con un 2 a nombre del jefe', (tester) async {
+      await abrir(tester);
+      await editar(tester, 'Maxi');
+      expect(tildada(tester, 'permiso_vende_entradas'), isFalse);
+      expect(find.byKey(const Key('aviso_vende_entradas')), findsNothing);
+      await tester.tap(find.byKey(const Key('permiso_vende_entradas')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_entradas'), isTrue,
+          reason: 'quien vende también entrega');
+      expect(find.byKey(const Key('aviso_vende_entradas')), findsOneWidget);
+      await guardar(tester);
+      final guardada = permisos.filas[_maxi]!;
+      expect(guardada.permisos.vendeEntradas, isTrue);
+      expect(guardada.toMap()['entradas'], 2);
+      expect(permisos.guardados, ['Jefe']);
+      expect(find.text('Cobros · Entradas y venta'), findsOneWidget);
+      // Al volver a abrirla, las dos tildadas.
+      await editar(tester, 'Maxi');
+      expect(tildada(tester, 'permiso_entradas'), isTrue);
+      expect(tildada(tester, 'permiso_vende_entradas'), isTrue);
+    });
+
+    testWidgets('destildar Entradas le saca también Vende entradas', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(vendeEntradas: true),
+        ahora: DateTime.utc(2026, 11, 14),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_entradas'), isTrue);
+      expect(tildada(tester, 'permiso_vende_entradas'), isTrue);
+      await tester.tap(find.byKey(const Key('permiso_entradas')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_vende_entradas'), isFalse);
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.permisos.ninguno, isTrue);
+    });
+
+    testWidgets('quien solo entrega sigue con su 1: abrir y guardar no lo hace vendedor',
+        (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(entradas: true),
+        ahora: DateTime.utc(2026, 11, 14),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_entradas'), isTrue);
+      expect(tildada(tester, 'permiso_vende_entradas'), isFalse);
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.toMap()['entradas'], 1);
     });
 
     testWidgets('destildar Barra le saca también Encargada', (tester) async {

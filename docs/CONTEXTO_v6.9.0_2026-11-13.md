@@ -4,11 +4,12 @@
 
 ## Para retomar en otro chat
 
-**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1 y 2 de la Parte B** están **guardadas en la rama**
-(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **La maqueta de las pantallas está hecha y
-mostrada: se espera su OK para las etapas 3 a 6.** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
+**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1, 2 y 3 de la Parte B** están **guardadas en la rama**
+(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **El usuario aprobó la maqueta el 14-nov
+("Sí, seguí")**: las pantallas se programan como están ahí. **Sigue la etapa 4 (la caja, VENDER y el comprobante).** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
 medias (el repositorio igual al último commit y la suite entera en verde, 4.803) y recién después se escribió la etapa
-2. **La suite entera pasa: 4.857 pruebas, 283 archivos, 8 tandas**, y el análisis de lo nuevo no da errores.
+2. **Con la etapa 3, la suite entera pasa: 4.883 pruebas, 284 archivos, 8 tandas**, y el análisis de lo nuevo no da
+errores.
 
 **Nada de esto está en las PCs ni en la nube**: no se publicó, no se instaló, no se corrió ningún SQL, no se tocó la
 base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.yaml`: se sube a `6.9.0` al publicar.
@@ -36,9 +37,8 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 
 1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
 2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
-3. **Frenado acá: la maqueta está hecha y se le mostró el 14-nov** (ver "La maqueta", abajo). **Falta su OK.** Si
-   pide cambios, primero en la maqueta.
-4. Etapas 3 a 6 del spec.
+3. ~~La maqueta~~: hecha, mostrada y **aprobada el 14-nov** ("Sí, seguí").
+4. ~~Etapa 3 (el permiso y PRECIOS)~~: hecha el 14-nov. **Etapas 4 a 6 del spec: seguir por la 4.**
 5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
 
 **Pendiente de la Parte A, antes de publicar:** las capturas con el mouse de los carteles nuevos (el permiso para
@@ -304,7 +304,31 @@ Los cinco archivos, como quedaron pensados:
 `saldo_deudor`, `RepartoDeSillas`, `sillas_puerta` ni lo demás de su lista (importar `retiro_entradas.dart` y
 `contrato_alumno.dart` sí se puede).
 
-### La maqueta — HECHA y mostrada el 14-nov: **se espera su OK**
+### Etapa 3, el permiso "Vende entradas" y PRECIOS — HECHA (14-nov)
+
+- **El permiso** es Entradas con un **2** en `permisos_operador.entradas` (sin columna ni SQL, como la Encargada de
+  barra): `PermisoOperador.vendeEntradas` (al final del enum; no es una puerta más), `PermisosEfectivos.vendeEntradas`
+  y `nivelEntradas`. `tiene(entradas)` da verdadero también con el 2: quien vende también entrega. En OPERADORES, la
+  casilla **"Vende entradas"** debajo de Entradas (tildarla tilda Entradas; destildar Entradas la destilda), con el
+  aviso de no tildarla hasta que todas las PCs y las tablets tengan la versión. En la lista dice "Entradas y venta".
+- **La llave:** `puedeVenderEntradasProvider` (`app_role_provider.dart`): el jefe en modo jefe, o un operador con
+  "Vende entradas". **Toda pantalla nueva de la venta pregunta por ahí.** PRECIOS, anular y "Pago verificado", por
+  `esRolJefeProvider`, con `_frenaSinModoJefe()` antes de guardar (`test/solo_modo_jefe_test.dart` lee
+  `lib/features/entradas/widgets/` y falla si una función guarda sin la llave).
+- **PRECIOS:** el botón en ENTRADAS de la fiesta (`RetiroEntradasScreen`, solo en la oficina; en el mostrador no
+  está), apagado y con el motivo sin modo jefe. El diálogo, `entradas/widgets/precios_de_entradas_dialog.dart`:
+  valor, anticipada con su día (se escribe `28/11/2026`; `PrecioDeEntradas.diaDeTexto` y `textoDelDia`), el descuento
+  de los lugares con "Cada una: $ X" a la vista, el recargo y el tilde del vendedor. Lo que está mal se dice adentro y
+  no se cierra. Guardar sin cambiar nada no escribe.
+- **Los providers** de la venta: `entradas/providers/entradas_providers.dart` (`entradasDeLaFiestaProvider`,
+  `entradasDeLaCajaProvider`, `entradasDelJefeProvider`, `configDeEntradasProvider`). **En la web no hay venta de
+  entradas** (`entradasEnEsteEquipoProvider`, `kEntradasDesdeLaPc`): lo de la venta se ve apagado.
+- **Para los tests de pantalla:** `test/helpers/entradas_en_memoria.dart` (`EntradasEnMemoria`, con `reemplazos`),
+  que hace lo mismo que `EntradasLocal`.
+- **Probado:** 26 pruebas nuevas y **diez roturas a propósito, las diez detectadas**. La suite entera: 4.883.
+- **No se probó:** con el mouse en una ventana de prueba (queda para el arnés de la etapa 7).
+
+### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 
 `docs/maqueta_venta_de_entradas_2026-11-14.html` (un solo archivo, sin imágenes, 48 KB: abre en el panel de la app).
 Nueve pasos, cada uno con su "Dónde:" (por dónde se llega): PRECIOS, por dónde se entra (ENTREGAR · VENDER), abrir la
@@ -322,7 +346,7 @@ venta hecha en el paso 4 aparece en el comprobante, en VENTAS, en el cierre y en
 - Probada con clics simulados de punta a punta (los mismos mensajes que da `PedidoDeEntradas.falta`), sin errores en
   la consola.
 
-**Las etapas 3 a 6 no empiezan sin su OK.** Si pide cambios, se cambian en la maqueta primero.
+**Aprobada el 14-nov.** Lo que se programe distinto de la maqueta se le dice (y se le muestra) antes de publicar.
 
 ### Para preguntarle al jefe (ninguna frena el trabajo)
 

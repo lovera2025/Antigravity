@@ -84,6 +84,64 @@ void main() {
       );
     });
 
+    test('Vende entradas va en la columna de Entradas, con un 2, y entra por ENTRADAS', () {
+      final fila = PermisosOperador.para(
+        operadorId: operador,
+        permisos: const PermisosEfectivos(vendeEntradas: true),
+        ahora: hoy,
+      );
+      expect(fila.toMap()['entradas'], 2);
+      final leida = PermisosOperador.fromMap(fila.toMap()).permisos;
+      expect(leida.vendeEntradas, isTrue);
+      expect(leida.entradas, isTrue, reason: 'quien vende también entrega');
+      expect(leida.tiene(PermisoOperador.entradas), isTrue);
+      expect(leida.tiene(PermisoOperador.vendeEntradas), isTrue);
+      expect(leida.lista, [PermisoOperador.entradas],
+          reason: 'un solo botón, el de ENTRADAS');
+      expect(leida.ninguno, isFalse);
+      expect(leida.nivelEntradas, 2);
+      // Quien solo entrega sigue siendo un 1, y se lee igual que antes.
+      final entrega = PermisosOperador.fromMap({
+        ...fila.toMap(),
+        'entradas': 1,
+      }).permisos;
+      expect(entrega.entradas, isTrue);
+      expect(entrega.vendeEntradas, isFalse);
+      expect(entrega.nivelEntradas, 1);
+      expect(entrega, isNot(leida));
+      expect(
+        PermisosOperador.fromMap({...fila.toMap(), 'entradas': true}).permisos.entradas,
+        isTrue,
+      );
+      // Vender con o sin la casilla de Entradas tildada es lo mismo.
+      expect(
+        const PermisosEfectivos(entradas: true, vendeEntradas: true),
+        const PermisosEfectivos(vendeEntradas: true),
+      );
+      // Y no toca lo demás: ni Cobros ni la barra.
+      expect(leida.cobros, isFalse);
+      expect(leida.tiene(PermisoOperador.barra), isFalse);
+    });
+
+    test('sin fila es de Cobros solo: no entrega ni vende', () {
+      final p = PermisosEfectivos.de(null);
+      expect(p.cobros, isTrue);
+      expect(p.tiene(PermisoOperador.entradas), isFalse);
+      expect(p.vendeEntradas, isFalse);
+    });
+
+    test('una PC con una versión anterior lee el 2 como "sin Entradas"', () {
+      // Así leía la columna hasta la 6.8.0. Falla cerrada: por eso nadie lleva
+      // "Vende entradas" hasta que todas las PCs y las tablets tengan la 6.9.0.
+      bool comoLaVersionAnterior(Object? v) => v == 1 || v == true;
+      final fila = PermisosOperador.para(
+        operadorId: operador,
+        permisos: const PermisosEfectivos(vendeEntradas: true),
+        ahora: hoy,
+      ).toMap();
+      expect(comoLaVersionAnterior(fila['entradas']), isFalse);
+    });
+
     test('el id sale del operador: las dos PCs escriben la misma fila', () {
       final a = PermisosOperador.para(
         operadorId: operador,
@@ -232,6 +290,46 @@ void main() {
         },
       );
       expect((await db.query('permisos_operador')).single['barra'], 0);
+    });
+
+    test('de entregar a vender: escribe la fila con un 2 y anota vende_entradas', () async {
+      await guardar(const PermisosEfectivos(entradas: true));
+      final cambios = await guardar(
+        const PermisosEfectivos(entradas: true, vendeEntradas: true),
+        cuando: hoy.add(const Duration(minutes: 1)),
+      );
+      expect(cambios, hasLength(1), reason: 'Entradas ya lo tenía');
+      expect(cambios.single.permiso, PermisoOperador.vendeEntradas);
+      expect(cambios.single.dado, isTrue);
+      expect((await db.query('permisos_operador')).single['entradas'], 2);
+      final renglon = (await db.query(
+        'permisos_operador_cambios',
+        where: 'permiso = ?',
+        whereArgs: ['vende_entradas'],
+      ))
+          .single;
+      expect(renglon['dado'], 1);
+      expect(renglon['hecho_por'], 'Jefe');
+      final cola = await db.query('_sync_queue',
+          where: 'tabla = ?', whereArgs: ['permisos_operador']);
+      expect(jsonDecode(cola.single['payload'] as String)['entradas'], 2);
+      // Lo que se lee de vuelta es lo que se guardó.
+      final leido = PermisosEfectivos.de(
+          await PermisosOperadorRepository.deEn(db, operador));
+      expect(leido.vendeEntradas, isTrue);
+    });
+
+    test('de vender a solo entregar: un renglón en cero, y Entradas queda', () async {
+      await guardar(const PermisosEfectivos(vendeEntradas: true));
+      final cambios = await guardar(
+        const PermisosEfectivos(entradas: true),
+        cuando: hoy.add(const Duration(minutes: 1)),
+      );
+      expect(
+        {for (final c in cambios) c.permiso: c.dado},
+        {PermisoOperador.vendeEntradas: false},
+      );
+      expect((await db.query('permisos_operador')).single['entradas'], 1);
     });
 
     test('guardar lo mismo otra vez no agrega renglones', () async {

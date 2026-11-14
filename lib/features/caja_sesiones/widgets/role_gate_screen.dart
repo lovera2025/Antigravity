@@ -123,7 +123,10 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
     switch (permiso) {
       case PermisoOperador.cobros:
         await notifier.entrarComoCaja(quien.operador, quien.permisos);
+      // Quien vende entradas entra por el mismo botón ENTRADAS: adentro, cada
+      // fiesta le muestra VENDER por sus permisos.
       case PermisoOperador.entradas:
+      case PermisoOperador.vendeEntradas:
         await notifier.entrarComoEntradas(quien.operador, quien.permisos);
       // La encargada entra por el mismo botón BARRA: la barra sabe que es ella
       // por sus permisos (`AppRoleState.esEncargadaDeBarra`).
@@ -282,7 +285,9 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
     const gold = Color(0xFFD4AF37);
     IconData icono(PermisoOperador p) => switch (p) {
           PermisoOperador.cobros => Icons.point_of_sale_outlined,
-          PermisoOperador.entradas => Icons.confirmation_number_outlined,
+          PermisoOperador.entradas ||
+          PermisoOperador.vendeEntradas =>
+            Icons.confirmation_number_outlined,
           PermisoOperador.barra || PermisoOperador.encargadaBarra => Icons.local_bar_outlined,
         };
     return [

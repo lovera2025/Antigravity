@@ -619,3 +619,16 @@ final mandaEnLaBarraProvider = Provider<bool>((ref) {
   if (ref.watch(esRolJefeProvider)) return true;
   return ref.watch(appRoleProvider).esEncargadaDeBarra;
 });
+
+/// Quién puede vender entradas (6.9.0): el jefe en modo jefe **o un operador con
+/// "Vende entradas"**. Es la única llave de VENDER, de la caja de entradas y de
+/// su historial: **toda pantalla nueva de la venta pregunta por acá, nunca por el
+/// rol a mano.** PRECIOS, anular y "Pago verificado" siguen con
+/// [esRolJefeProvider]: son solo del jefe (`test/solo_modo_jefe_test.dart`).
+///
+/// Quien solo entrega (Entradas sin "Vende entradas") no toca plata.
+final puedeVenderEntradasProvider = Provider<bool>((ref) {
+  if (ref.watch(esRolJefeProvider)) return true;
+  final app = ref.watch(appRoleProvider);
+  return app.operador != null && app.permisos.vendeEntradas;
+});

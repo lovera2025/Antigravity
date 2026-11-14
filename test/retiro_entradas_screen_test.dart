@@ -15,6 +15,7 @@ import 'package:arguello_events/features/entradas/services/en_caja.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
+import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
 
 const _perez = EntregaEnMemoria.idPerez;
@@ -34,13 +35,17 @@ Future<_Montada> _montar(
   bool mostrador = true,
   bool cobros = false,
   bool jefe = false,
+  EntradasEnMemoria? entradas,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1300, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
-  final c = ProviderContainer(overrides: e.reemplazos(jefe: mostrador ? null : jefe));
+  final c = ProviderContainer(overrides: [
+    ...e.reemplazos(jefe: mostrador ? null : jefe),
+    ...?entradas?.reemplazos,
+  ]);
   addTearDown(c.dispose);
   final cobrosDeLaOficina = <String>[];
   if (mostrador) {
@@ -79,6 +84,42 @@ Future<void> _abrir(WidgetTester tester, String nombre) async {
 }
 
 void main() {
+  group('PRECIOS, en ENTRADAS de la fiesta (6.9.0)', () {
+    TextButton boton(WidgetTester tester) =>
+        tester.widget<TextButton>(find.byKey(const Key('entradas_precios')));
+
+    testWidgets('sin modo jefe se ve, apagado y con el motivo', (tester) async {
+      await _montar(tester, mostrador: false, entradas: EntradasEnMemoria());
+      expect(find.text('PRECIOS'), findsOneWidget);
+      expect(boton(tester).onPressed, isNull);
+      expect(find.byTooltip(kSoloEnModoJefe), findsWidgets);
+    });
+
+    testWidgets('en modo jefe abre los precios de esa fiesta y los guarda',
+        (tester) async {
+      final entradas = EntradasEnMemoria();
+      await _montar(tester, mostrador: false, jefe: true, entradas: entradas);
+      expect(boton(tester).onPressed, isNotNull);
+      await tester.tap(find.byKey(const Key('entradas_precios')));
+      await _pasar(tester);
+      expect(find.text('Precios de las entradas'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('precio_valor')), '10000');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('precios_guardar')));
+      await _pasar(tester);
+      expect(find.text('Precios de las entradas'), findsNothing);
+      final guardada = entradas.configs[idFiestaEntrega]!;
+      expect(guardada.valorEntrada, 10000);
+      expect(guardada.hechoPor, isNotEmpty);
+    });
+
+    testWidgets('en el mostrador no está: quien entrega no ve los precios',
+        (tester) async {
+      await _montar(tester, entradas: EntradasEnMemoria());
+      expect(find.byKey(const Key('entradas_precios')), findsNothing);
+    });
+  });
+
   // Con "gomez" no aparecía "GÓMEZ": el buscador del mostrador comparaba letra
   // por letra (revisión del 13-nov).
   testWidgets('el buscador del mostrador encuentra sin acentos y en cualquier orden',

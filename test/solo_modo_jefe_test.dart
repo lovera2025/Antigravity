@@ -501,4 +501,84 @@ void main() {
       'lib/features/eventos/repositories/contratos_repository.dart',
     });
   });
+
+  // ── La venta de entradas (6.9.0) ───────────────────────────────────────────
+
+  test('la venta de entradas: los precios, anular y "Pago verificado" preguntan por '
+      'el modo jefe antes de guardar', () {
+    final escribe = RegExp(r'\.(guardarConfig|anular|verificar)\(');
+    final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
+    final encontradas = <String>{};
+    final carpeta = Directory('lib/features/entradas/widgets');
+    for (final f in carpeta.listSync().whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final ruta = f.path.replaceAll('\\', '/');
+      final fuente = leer(ruta);
+      final funciones = funcion.allMatches(fuente).toList();
+      for (final g in escribe.allMatches(fuente)) {
+        final donde = funciones.lastWhere(
+          (x) => x.start < g.start,
+          orElse: () => fail('un guardado fuera de una función, en $ruta'),
+        );
+        encontradas.add(donde.group(1)!);
+        expect(
+          fuente.substring(donde.start, g.start),
+          contains('_frenaSinModoJefe()'),
+          reason: '${donde.group(1)} ($ruta) guarda sin preguntar por el modo jefe',
+        );
+      }
+      if (escribe.hasMatch(fuente)) {
+        final i = fuente.indexOf('bool _frenaSinModoJefe() {');
+        expect(i, greaterThanOrEqualTo(0), reason: 'falta la llave en $ruta');
+        final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+        // Son solo del jefe: quien vende no pone precios, no anula ni verifica.
+        expect(cuerpo, contains('if (ref.read(esRolJefeProvider)) return false;'),
+            reason: ruta);
+        expect(cuerpo, contains('return true;'), reason: ruta);
+        expect(fuente, isNot(contains('puedeVenderEntradasProvider)) return false')),
+            reason: '$ruta: la llave del jefe no se abre a quien vende');
+      }
+    }
+    // Si aparece otra función que guarda, que pregunte y se sume acá.
+    expect(encontradas, {'_guardar'});
+  });
+
+  test('quien puede vender entradas es el jefe en modo jefe o quien tiene "Vende '
+      'entradas", y nadie más', () {
+    final fuente = leer('lib/features/caja_sesiones/providers/app_role_provider.dart');
+    final i = fuente
+        .indexOf('final puedeVenderEntradasProvider = Provider<bool>((ref) {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n});', i));
+    expect(cuerpo, contains('if (ref.watch(esRolJefeProvider)) return true;'));
+    expect(
+      cuerpo,
+      contains('return app.operador != null && app.permisos.vendeEntradas;'),
+    );
+    // Quien solo entrega no vende: la llave no mira el permiso de Entradas.
+    expect(cuerpo, isNot(contains('PermisoOperador.entradas')));
+  });
+
+  test('PRECIOS se abre solo desde ENTRADAS de la fiesta, y con la llave', () {
+    const pantallaEntradas = 'lib/features/eventos/retiro_entradas_screen.dart';
+    final fuente = leer(pantallaEntradas);
+    final i = fuente.indexOf('Future<void> _abrirPrecios() async {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+    final llave = cuerpo.indexOf('if (!ref.read(esRolJefeProvider)) return;');
+    expect(llave, greaterThanOrEqualTo(0));
+    expect(cuerpo.indexOf('mostrarPreciosDeEntradas('), greaterThan(llave));
+
+    final quienes = {
+      for (final f in Directory('lib').listSync(recursive: true))
+        if (f is File &&
+            f.path.endsWith('.dart') &&
+            f.readAsStringSync().contains('mostrarPreciosDeEntradas('))
+          f.path.replaceAll('\\', '/'),
+    };
+    expect(quienes, {
+      pantallaEntradas,
+      'lib/features/entradas/widgets/precios_de_entradas_dialog.dart',
+    });
+  });
 }

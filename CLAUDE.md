@@ -438,9 +438,11 @@ están en esta PC, **sin subir a GitHub**.
 - **Parte B, la venta de entradas** (`docs/SPEC_venta_de_entradas_2026-11-13.md`): **hecha la etapa 1** (los datos:
   cinco tablas nuevas, v80, `lib/features/entradas/datos/`, el motor y el SQL
   `supabase/migrations/20261113200000_venta_de_entradas.sql`, **sin correr**) **y la etapa 2** (14-nov: las cuentas,
-  `lib/features/entradas/cuentas/`, puras, sin pantalla ni base). **La maqueta de las pantallas está hecha y se le
-  mostró el 14-nov** (`docs/maqueta_venta_de_entradas_2026-11-14.html`; `preview_start` con `maquetas`): **se
-  espera el OK del usuario** antes de las etapas 3 a 6.
+  `lib/features/entradas/cuentas/`, puras, sin pantalla ni base). **La maqueta de las pantallas** (`docs/maqueta_venta_de_entradas_2026-11-14.html`;
+  `preview_start` con `maquetas`) **la aprobó el usuario el 14-nov.** Hecha la **etapa 3** (14-nov): el permiso
+  "Vende entradas" (Entradas con un **2** en `permisos_operador.entradas`, sin SQL; la llave
+  `puedeVenderEntradasProvider`) y PRECIOS (en ENTRADAS de la fiesta, solo en modo jefe). **Sigue la etapa 4** (la
+  caja, VENDER y el comprobante), después la 5 y la 6.
 - **Las cuentas de la venta de entradas** (lo que las pantallas tienen que usar, sin hacer otra cuenta al lado):
   - `PrecioDeEntradas`: el precio de hoy (**la anticipada rige hasta su último día inclusive, a la medianoche de
     Argentina**) y el de los lugares adicionales, **siempre sobre el valor de la entrada, nunca sobre la anticipada**.

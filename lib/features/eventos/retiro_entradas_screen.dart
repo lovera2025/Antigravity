@@ -15,9 +15,12 @@ import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
+import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
 import '../common/utils/texto_busqueda.dart';
+import '../entradas/providers/entradas_providers.dart';
 import '../entradas/services/en_caja.dart';
+import '../entradas/widgets/precios_de_entradas_dialog.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
 import 'services/permisos_de_entrega.dart';
@@ -631,6 +634,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           ],
         ),
         actions: [
+          // La venta de entradas es de la oficina: en el mostrador se entra por
+          // el inicio de Entradas.
+          if (!widget.enElMostrador) _botonPrecios(),
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _ocupado ? null : () => _cargar(),
@@ -659,6 +665,35 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           : _errorCarga != null
               ? Center(child: Text('No se pudo cargar: $_errorCarga'))
               : _cuerpo(),
+    );
+  }
+
+  /// PRECIOS: el precio de la entrada de esta fiesta (6.9.0). **Solo en modo
+  /// jefe**: sin él se ve apagado, con el motivo.
+  Widget _botonPrecios() {
+    final esJefe = ref.watch(esRolJefeProvider);
+    final enElEquipo = ref.watch(entradasEnEsteEquipoProvider);
+    final motivo = !enElEquipo
+        ? kEntradasDesdeLaPc
+        : (esJefe ? 'El precio de la entrada de esta fiesta' : kSoloEnModoJefe);
+    return Tooltip(
+      message: motivo,
+      child: TextButton(
+        key: const Key('entradas_precios'),
+        onPressed: esJefe && enElEquipo ? _abrirPrecios : null,
+        child: const Text('PRECIOS'),
+      ),
+    );
+  }
+
+  Future<void> _abrirPrecios() async {
+    // Doble llave: el botón ya está apagado sin modo jefe.
+    if (!ref.read(esRolJefeProvider)) return;
+    await mostrarPreciosDeEntradas(
+      context,
+      eventoId: widget.evento.id,
+      fiesta: widget.evento.cliente?.nombreCompleto ?? 'Evento',
+      quien: quienOpera(ref),
     );
   }
 

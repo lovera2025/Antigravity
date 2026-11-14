@@ -7,11 +7,16 @@ import '../../../core/utils/uuid_utils.dart';
 /// **Encargada de barra** (6.4.0) no es una puerta más: es Barra con algo más (ve
 /// todas las cajas de la fiesta y anula cualquier venta con motivo). Entra por el
 /// mismo botón BARRA ([deEntrada]); en la fila va como `barra = 2`.
+///
+/// **Vende entradas** (6.9.0) es igual con Entradas: quien vende también entrega,
+/// entra por el mismo botón ENTRADAS y en la fila va como `entradas = 2`. Va al
+/// final del enum: lo que ya estaba no cambia de lugar.
 enum PermisoOperador {
   cobros('cobros'),
   entradas('entradas'),
   barra('barra'),
-  encargadaBarra('encargada_barra');
+  encargadaBarra('encargada_barra'),
+  vendeEntradas('vende_entradas');
 
   const PermisoOperador(this.clave);
 
@@ -29,18 +34,23 @@ enum PermisoOperador {
 /// tiene permisos.** Son dos cosas distintas y cada una lleva su test.
 ///
 /// [encargadaBarra] lleva Barra adentro: `tiene(barra)` es verdadero también para
-/// la encargada, aunque [barra] haya quedado en false.
+/// la encargada, aunque [barra] haya quedado en false. [vendeEntradas] lleva
+/// Entradas adentro, de la misma manera.
 class PermisosEfectivos {
   final bool cobros;
   final bool entradas;
   final bool barra;
   final bool encargadaBarra;
 
+  /// Tiene la caja de entradas: vende, y también entrega.
+  final bool vendeEntradas;
+
   const PermisosEfectivos({
     this.cobros = false,
     this.entradas = false,
     this.barra = false,
     this.encargadaBarra = false,
+    this.vendeEntradas = false,
   });
 
   /// El operador sin fila.
@@ -51,12 +61,16 @@ class PermisosEfectivos {
 
   bool tiene(PermisoOperador p) => switch (p) {
         PermisoOperador.cobros => cobros,
-        PermisoOperador.entradas => entradas,
+        PermisoOperador.entradas => entradas || vendeEntradas,
         PermisoOperador.barra => barra || encargadaBarra,
         PermisoOperador.encargadaBarra => encargadaBarra,
+        PermisoOperador.vendeEntradas => vendeEntradas,
       };
 
-  bool get ninguno => !cobros && !entradas && !tiene(PermisoOperador.barra);
+  bool get ninguno =>
+      !cobros &&
+      !tiene(PermisoOperador.entradas) &&
+      !tiene(PermisoOperador.barra);
 
   /// Las puertas que tiene, siempre en el mismo orden: Cobros, Entradas, Barra.
   List<PermisoOperador> get lista =>
@@ -65,17 +79,28 @@ class PermisosEfectivos {
   /// Lo que va en la columna `barra`: 0 nada, 1 cajera, 2 encargada.
   int get nivelBarra => encargadaBarra ? 2 : (barra ? 1 : 0);
 
+  /// Lo que va en la columna `entradas`: 0 nada, 1 entrega, 2 entrega y vende.
+  int get nivelEntradas => vendeEntradas ? 2 : (entradas ? 1 : 0);
+
   @override
   bool operator ==(Object other) =>
       other is PermisosEfectivos &&
       other.cobros == cobros &&
-      other.entradas == entradas &&
+      other.tiene(PermisoOperador.entradas) ==
+          tiene(PermisoOperador.entradas) &&
+      other.vendeEntradas == vendeEntradas &&
       other.tiene(PermisoOperador.barra) == tiene(PermisoOperador.barra) &&
       other.encargadaBarra == encargadaBarra;
 
   @override
   int get hashCode =>
-      Object.hash(cobros, entradas, tiene(PermisoOperador.barra), encargadaBarra);
+      Object.hash(
+        cobros,
+        tiene(PermisoOperador.entradas),
+        vendeEntradas,
+        tiene(PermisoOperador.barra),
+        encargadaBarra,
+      );
 }
 
 /// La fila de `permisos_operador` (v76): una por operador, con id fijo
@@ -129,7 +154,7 @@ class PermisosOperador {
         'id': id,
         'operador_id': operadorId,
         'cobros': permisos.cobros ? 1 : 0,
-        'entradas': permisos.entradas ? 1 : 0,
+        'entradas': permisos.nivelEntradas,
         'barra': permisos.nivelBarra,
         'hecho_por': hechoPor,
         'device_id': deviceId,
@@ -140,12 +165,17 @@ class PermisosOperador {
   factory PermisosOperador.fromMap(Map<String, dynamic> m) {
     bool prendido(Object? v) => v == 1 || v == true;
     final barra = m['barra'];
+    final entradas = m['entradas'];
     return PermisosOperador(
       id: m['id'] as String,
       operadorId: m['operador_id'] as String,
       permisos: PermisosEfectivos(
         cobros: prendido(m['cobros']),
-        entradas: prendido(m['entradas']),
+        // 1 entrega, 2 entrega y vende (6.9.0). Una PC con una versión anterior
+        // lee el 2 como "sin Entradas": por eso nadie vende hasta que todas
+        // tengan la 6.9.0.
+        entradas: prendido(entradas) || entradas == 2,
+        vendeEntradas: entradas == 2,
         // 1 cajera, 2 encargada (6.4.0). Una PC con la 6.3 lee el 2 como "sin
         // Barra": por eso nadie es encargada hasta que las tres tengan la 6.4.0.
         barra: prendido(barra) || barra == 2,

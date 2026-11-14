@@ -19,6 +19,7 @@ void main() {
     'lib/features/entradas/cuentas',
     'lib/features/entradas/widgets',
     'lib/features/entradas/pdf',
+    'lib/features/entradas/providers',
   ];
 
   /// Lo que no puede aparecer, y por qué.

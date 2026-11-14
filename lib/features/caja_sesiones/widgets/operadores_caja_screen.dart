@@ -278,7 +278,8 @@ class _FichaOperadorState extends State<_FichaOperador> {
   late final _nombre = TextEditingController(text: widget.existente?.nombre ?? '');
   late final _pin = TextEditingController(text: widget.existente?.pin ?? '');
   late bool _cobros = widget.permisos.cobros;
-  late bool _entradas = widget.permisos.entradas;
+  late bool _entradas = widget.permisos.tiene(PermisoOperador.entradas);
+  late bool _vende = widget.permisos.vendeEntradas;
   late bool _barra = widget.permisos.tiene(PermisoOperador.barra);
   late bool _encargada = widget.permisos.encargadaBarra;
   String? _problema;
@@ -310,6 +311,7 @@ class _FichaOperadorState extends State<_FichaOperador> {
         PermisosEfectivos(
           cobros: _cobros,
           entradas: _entradas,
+          vendeEntradas: _entradas && _vende,
           barra: _barra,
           encargadaBarra: _barra && _encargada,
         ),
@@ -376,8 +378,35 @@ class _FichaOperadorState extends State<_FichaOperador> {
                 titulo: 'Entradas',
                 detalle: 'Entregar entradas y pulseras.',
                 valor: _entradas,
-                cambiar: (v) => _entradas = v,
+                // Sin Entradas no puede vender.
+                cambiar: (v) {
+                  _entradas = v;
+                  if (!v) _vende = false;
+                },
               ),
+              _casilla(
+                clave: 'permiso_vende_entradas',
+                titulo: 'Vende entradas',
+                detalle: 'Tiene la caja de entradas de cada fiesta: vende, da el '
+                    'comprobante y cierra su caja. También entrega.',
+                valor: _vende,
+                // Quien vende también entrega.
+                cambiar: (v) {
+                  _vende = v;
+                  if (v) _entradas = true;
+                },
+              ),
+              if (_vende)
+                const Padding(
+                  key: Key('aviso_vende_entradas'),
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'No lo tildes hasta que todas las PCs y las tablets tengan esta '
+                    'versión: una anterior lo lee como "sin Entradas" y, si guarda '
+                    'sus permisos, se lo saca.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
               _casilla(
                 clave: 'permiso_barra',
                 titulo: 'Barra',
