@@ -443,8 +443,14 @@ están en esta PC, **sin subir a GitHub**.
   "Vende entradas" (Entradas con un **2** en `permisos_operador.entradas`, sin SQL; la llave
   `puedeVenderEntradasProvider`) y PRECIOS (en ENTRADAS de la fiesta, solo en modo jefe). Hecha la **etapa 4**
   (14-nov): la caja de entradas, VENDER (`entradas/widgets/vender_entradas_screen.dart`, con la hoja del cobro de la
-  barra) y el comprobante de media hoja (`entradas/pdf/`). **Sigue la etapa 5** (VENTAS: historial, reimprimir,
-  anular y "Pago verificado") **y la 6** (cerrar la caja, ENTRADAS del cierre y la entrega).
+  barra) y el comprobante de media hoja (`entradas/pdf/`). **La etapa 5 (VENTAS) quedó a medias el 14-nov, guardada
+  como está:** la pantalla (`entradas/widgets/ventas_de_entradas_screen.dart`: historial, reimprimir, "Pago
+  verificado" y anular, las dos últimas solo del jefe) y el historial impreso andan y tienen sus pruebas; **le
+  faltan** las pruebas de sus dos entradas, las roturas a propósito y mirarla en la muestra. **La 6** (cerrar la
+  caja, ENTRADAS del cierre y la entrega) **y la 7** (ventana de prueba, capturas y publicar), **sin empezar.** Lo
+  que falta de cada una, paso por paso: "Etapa 5" y "Etapa 6" del CONTEXTO.
+- **Para trabajar:** `bash tool/suite_por_tandas.sh` (la suite entera) y `bash tool/romper_una_regla.sh <casos>` (las
+  roturas a propósito). Mientras corre la suite no se escribe en `lib/` ni en `test/`.
 - **Lo que dejó la etapa 4 como regla:**
   - **VENDER arma `PedidoDeEntradas` de nuevo en cada dibujo** con lo escrito, y guarda con `guardarEn`; antes de
     abrir una caja o guardar, `_frenaSinPermiso()` (`test/solo_modo_jefe_test.dart` lo exige en

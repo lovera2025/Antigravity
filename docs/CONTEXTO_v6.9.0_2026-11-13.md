@@ -1,17 +1,28 @@
 # CONTEXTO — la 6.9.0: los arreglos de la noche y la venta de entradas
 
-**Estado (13-nov-2026, noche):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`.
+**Estado (14-nov-2026, al cortar el chat):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`,
+todo en esta PC, **sin subir a GitHub**.
 
 ## Para retomar en otro chat
 
-**Dónde quedó (14-nov):** la Parte A entera y **las etapas 1 a 4 de la Parte B** están **guardadas en la rama**
-(**sin subir a GitHub**: se guardan en esta PC hasta que el usuario diga). **El usuario aprobó la maqueta el 14-nov
-("Sí, seguí")**: las pantallas se programan como están ahí. **Ya se puede vender con comprobante; sigue la etapa 5
-(VENTAS: historial, reimprimir, anular y "Pago verificado") y después la 6 (cerrar la caja, la pestaña ENTRADAS del
-cierre y la entrega).** El 14-nov, al retomar después de una compactación, se comprobó primero que nada había quedado a
-medias (el repositorio igual al último commit y la suite entera en verde, 4.803) y recién después se escribió la etapa
-2. **Con la etapa 3, la suite entera pasa: 4.883 pruebas, 284 archivos, 8 tandas**, y el análisis de lo nuevo no da
-errores.
+**Dónde quedó (14-nov, al cortar el chat a pedido del usuario):**
+
+- **Parte A (los arreglos de la noche): hecha entera.** Faltan solo sus capturas con el mouse, antes de publicar.
+- **Parte B (la venta de entradas), 7 etapas:**
+  - **1 a 4, hechas y guardadas:** los datos (v80), las cuentas, el permiso "Vende entradas" con PRECIOS, y la
+    caja con VENDER y el comprobante. **Ya se puede vender con comprobante.**
+  - **5 (VENTAS), a medias y guardada como está:** la pantalla anda y tiene sus pruebas (ver "Etapa 5", abajo, con
+    **lo que le falta**). **Empezar por ahí.**
+  - **6 (cerrar la caja, la pestaña ENTRADAS del cierre y la entrega): sin empezar.** El plan, en "Etapa 6", abajo.
+  - **7 (la ventana de prueba, recorrerlo con el mouse, las capturas y publicar): sin empezar.**
+- **El usuario aprobó la maqueta el 14-nov ("Sí, seguí")**: las pantallas se programan como están ahí
+  (`docs/maqueta_venta_de_entradas_2026-11-14.html`). Ya vio VENDER de verdad y el comprobante (se le mandaron las
+  muestras); no opinó todavía.
+- **Preguntó dos veces cuánto falta para publicar.** Se le dijo: terminar la 5, hacer la 6, la prueba de punta a
+  punta, y publicar con él; entre 2 y 4 tandas de trabajo, con margen para el 4-dic.
+- Antes de cortar se dejó todo en verde: **la suite entera pasa (4.947 pruebas, 288 archivos, 8 tandas)** y el
+  repositorio sin cambios sueltos. El 14-nov, al retomar después de una compactación, lo primero fue comprobar que
+  nada había quedado a medias (la suite en verde, 4.803) antes de escribir nada.
 
 **Nada de esto está en las PCs ni en la nube**: no se publicó, no se instaló, no se corrió ningún SQL, no se tocó la
 base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.yaml`: se sube a `6.9.0` al publicar.
@@ -41,9 +52,14 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
 3. ~~La maqueta~~: hecha, mostrada y **aprobada el 14-nov** ("Sí, seguí").
 4. ~~Etapa 3 (el permiso y PRECIOS)~~ y ~~etapa 4 (la caja, VENDER y el comprobante)~~: hechas el 14-nov.
-   **Seguir por la etapa 5 (VENTAS)**, y después la 6. **Sin anular (de la 5), un error de carga no tiene arreglo:
-   la 5 tiene que salir con la 4.**
-5. Probar de punta a punta, las capturas, y publicar con él (foto de la mora antes, el SQL, el instalador por pasos).
+5. **Terminar la etapa 5 (VENTAS): empezar acá.** Lo que le falta está en "Etapa 5", abajo. **Sin anular, un error
+   de carga no tiene arreglo: la 5 tiene que salir con la 4.**
+6. **Etapa 6** (cerrar la caja, ENTRADAS del cierre, la entrega): el plan, en "Etapa 6", abajo.
+7. **Etapa 7:** la ventana de prueba (`tool/venta_entradas_prueba.dart`), recorrerlo con el mouse, las capturas
+   para el usuario (las quiere ver antes de publicar), la migración v80 sobre una copia de la base real (con el
+   programa cerrado: se le pide), y publicar con él (foto de la mora antes, el SQL con su OK, el instalador por
+   pasos, la web). Al publicar: `pubspec.yaml` a `6.9.0`, y en `CLAUDE.md` sacar "sin programar" de "El retiro de
+   entradas".
 
 **Pendiente de la Parte A, antes de publicar:** las capturas con el mouse de los carteles nuevos (el permiso para
 manejar la ventana de prueba se pidió y no se aprobó esa noche: volver a pedirlo), y lo de "Lo que no se probó".
@@ -57,6 +73,18 @@ manejar la ventana de prueba se pidió y no se aprobó esa noche: volver a pedir
 - Los cambios de varias líneas a archivos grandes (`local_database.dart`, `sync_engine.dart`) se hicieron con un
   script escrito a un archivo y corrido, no con texto pegado en la consola.
 - Cada commit: el mensaje en un archivo y `git commit -F`. Sin nombres de alumnos (el repositorio es público).
+- **Los dos scripts del trabajo quedaron en el repositorio** (14-nov): `bash tool/suite_por_tandas.sh` (la suite
+  entera; termina con `FIN fallo=0 total=N`) y `bash tool/romper_una_regla.sh <casos>` (las roturas a propósito: un
+  caso son cinco renglones y uno de `---`; lo explica arriba del archivo).
+- **Mientras corre la suite no se escribe en `lib/` ni en `test/`**: hay tests que leen carpetas enteras
+  (`lib/features/entradas/widgets`) y un archivo a medio escribir los hace fallar. Se adelanta lo que no tiene
+  pantalla, o los documentos.
+- **Un script con comillas simples y dobles mezcladas no va en la consola** (falla el heredoc), y con Perl las llaves
+  del código rompen `q{}`: los cambios al código van con la herramienta de edición.
+- **Las pantallas se miran, no alcanza con los tests:** `flutter test tool/venta_entradas_muestra_test.dart
+  --dart-define=salida=<carpeta>` saca las imágenes con el tema de la app. La primera vez aparecieron tres defectos.
+- Las capturas de una página web con Edge sin ventana se saltean algunas si van de corrido: cada una con su perfil
+  (`--user-data-dir`) y reintentando.
 
 ## Parte A — lo hecho
 
@@ -368,6 +396,74 @@ Los cinco archivos, como quedaron pensados:
   una tablet de verdad.
 - **Distinto de la maqueta:** el comprobante se abre solo al guardar (la maqueta mostraba solo el botón); VENTAS y
   CERRAR CAJA todavía no están en la barra de VENDER (etapas 5 y 6).
+
+### Etapa 5, VENTAS — A MEDIAS (14-nov): la pantalla anda, falta cerrarla
+
+**Hecho y guardado** (con sus pruebas en verde):
+
+- **La cuenta del historial**, sin pantalla: `cuentas/historial_de_entradas.dart` (`HistorialDeEntradas.de`,
+  `VentaDelHistorial`, `FiltroDeVentas`). Cada venta con su anulación y su verificación, de la más nueva a la más
+  vieja; `soloDeLaCaja` para quien vende. **Los números repetidos se buscan en toda la fiesta aunque se mire una
+  caja.** Una anulada no cuenta como verificada ni espera verificación.
+- **La pantalla** `widgets/ventas_de_entradas_screen.dart`: quien vende ve las de su caja, el jefe todas; el aviso de
+  números repetidos arriba; el filtro Todas · Verificadas · Sin verificar; los totales en un renglón; cada venta con
+  REIMPRIMIR (COPIA, y ANULADA si corresponde), la casilla **Pago verificado** y **ANULAR**. Las dos últimas, solo el
+  jefe: apagadas con el motivo, y `_frenaSinModoJefe()` en `_verificar` y `_anular`
+  (`test/solo_modo_jefe_test.dart` ya espera `{'_guardar', '_anular', '_verificar'}`).
+- **Anular** abre un cartel (`_AnularVentaDialog`, en el mismo archivo): motivo obligatorio y **"¿Devolvieron las
+  entradas y las pulseras?"**, que también hay que contestar, con los números a la vista. La venta queda en la lista,
+  tachada, con quién, cuándo, el motivo y si devolvieron.
+- **El historial impreso** (`pdf/historial_entradas_pdf.dart`, A4, la tabla hija directa del `MultiPage`): la casilla
+  de la tilde va dibujada, las anuladas tachadas y con su motivo abajo, los totales y los repetidos. Lo abre
+  `abrirHistorialDeEntradasProvider` (`pdf/papeles_de_entradas.dart`).
+- **Las dos entradas:** el botón **VENTAS** en la barra de VENDER (`vender_ventas`; al volver relee, porque una
+  anulada cambia lo que le queda a la familia y los números libres) y en ENTRADAS de la fiesta (`entradas_ventas`,
+  solo en modo jefe, apagado con el motivo).
+- **Pruebas:** `test/historial_de_entradas_test.dart` (13: la cuenta y el PDF medido y leído) y
+  `test/ventas_de_entradas_test.dart` (12: la pantalla entera).
+
+**Lo que le falta a la etapa 5 (empezar acá):**
+
+1. **Las pruebas de las dos entradas a VENTAS**, que no se escribieron: en `vender_entradas_pantalla_test`, que
+   `vender_ventas` abre `VentasDeEntradasScreen` con su caja; en `retiro_entradas_screen_test`, que `entradas_ventas`
+   está apagado con `kSoloEnModoJefe` sin modo jefe, abre en modo jefe y no está en el mostrador.
+2. **Las roturas a propósito** (ninguna se hizo en esta etapa). Con `tool/romper_una_regla.sh`. Las que conviene:
+   quien vende ve solo su caja (`_soloDeLaCaja`); `_frenaSinModoJefe()` en `_verificar` y en `_anular`; anular sin
+   motivo; anular sin contestar si devolvieron; una anulada no cuenta como verificada (`verificada`); el filtro
+   "Sin verificar" sin las anuladas; los repetidos en toda la fiesta; el total del historial impreso.
+3. **Mirarla:** sumar a `tool/venta_entradas_muestra_test.dart` VENTAS como jefe y como quien vende, el cartel de
+   anular y el PDF del historial con las letras de la app. **El historial impreso no se miró nunca con los ojos.**
+4. La suite entera y el commit de cierre de la etapa.
+
+### Etapa 6, cerrar la caja, ENTRADAS del cierre y la entrega — SIN EMPEZAR
+
+Sección 9 del spec. Las cuentas ya están (`CierreDeEntradas`, `ResumenDeCajaEntradas.porCaja`,
+`compradasPorFamilia`, `NumerosDeEntradas.ocupados`); falta enchufarlas.
+
+1. **Cerrar la caja (9.1).** Botón **CERRAR CAJA** en la barra de VENDER, al lado de VENTAS. Se cuenta el efectivo
+   **a ciegas** (ninguna plata de la caja a la vista hasta cerrar), y recién después se ve lo que tenía que haber
+   (`CierreDeEntradas.de(caja, ventas, anulaciones).efectivoEsperado`) y la diferencia (`diferenciaEnPalabras`, de
+   la barra). Guarda con `cerrarCaja` del repositorio, con `_frenaSinPermiso()` antes (el test de
+   `solo_modo_jefe_test` espera hoy `{'_abrir', '_cobrar'}`: sumar la función nueva). Nota opcional, y `anotarCierre`
+   después. **Una caja cerrada no se vuelve a cerrar ni se corrige.** Su papel en `entradas/pdf/` con su provider en
+   `papeles_de_entradas.dart`. Sin el OK de una encargada: eso es de la barra. Modelo: `cerrar_caja_barra_screen.dart`.
+2. **La pestaña ENTRADAS del cierre de caja (9.2).** `SectorEntradasDelCierre` hoy es un cartel adentro de
+   `cierre_caja/widgets/sector_barra.dart`: pasa a un archivo propio (`cierre_caja/widgets/sector_entradas.dart`)
+   con la forma de `SectorBarraDelCierre`: por fiesta (la misma elección, CAMBIAR DE FIESTA), una línea por caja
+   (quién, cambio, efectivo, transferencia, mixtos, vendidas, descuentos a mano, anuladas, contó, diferencia, o
+   "abierta"), los totales ("vendidas N (sueltas y de lugares) = $ total") y "Anulado después del cierre" si hay.
+   Solo para mirar. Sin cajas: "Todavía no se abrió ninguna caja de entradas en esta fiesta."; sin precio: "Esta
+   fiesta todavía no tiene precio de entrada: se pone en ENTRADAS → PRECIOS." El texto de hoy ("se venden a mano,
+   fuera de la app") se va. **En la web no puede abrir la base** (`entradasEnEsteEquipoProvider`).
+   `tool/cierre_sector_prueba.dart` tiene que mostrarlo; test `cierre_por_sector_test` (sin cajas, sin precio, dos).
+3. **La entrega con lo vendido a la vista (9.3)**, en `RetiroEntradasScreen` y `entrega_entradas_dialog.dart`:
+   la tarjeta "Al 50 %, aparte: 112" pasa a "Al 50 %: 40 vendidas de 112"; en cada familia "· 8 al 50 % (compró 3)";
+   y en el cartel de la entrega, con `puedeVenderEntradasProvider`, el botón **VENDERLE ESAS ENTRADAS**, que abre
+   `VenderEntradasScreen(evento:, familiaId:)` (**ya acepta `familiaId`**); sin el permiso, el texto de hoy más "Se
+   las vende quien tiene la caja de entradas." **Y enchufar `NumerosDeEntradas.ocupados` como el `deOtros` de la
+   entrega**, para que no deje repetir un número vendido. La planilla en papel no cambia.
+4. **Pendiente chico del spec (7.3):** que las cinco tablas de entradas bajen con "Lista para trabajar sin internet"
+   (para una tablet que se prepara en la oficina). No se hizo.
 
 ### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 

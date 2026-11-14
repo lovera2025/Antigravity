@@ -23,6 +23,7 @@ import '../entradas/services/en_caja.dart';
 import '../entradas/services/nombre_de_la_fiesta.dart';
 import '../entradas/widgets/precios_de_entradas_dialog.dart';
 import '../entradas/widgets/vender_entradas_screen.dart';
+import '../entradas/widgets/ventas_de_entradas_screen.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
 import 'services/permisos_de_entrega.dart';
@@ -638,7 +639,11 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         actions: [
           // La venta de entradas es de la oficina: en el mostrador se entra por
           // el inicio de Entradas.
-          if (!widget.enElMostrador) ...[_botonPrecios(), _botonVender()],
+          if (!widget.enElMostrador) ...[
+            _botonPrecios(),
+            _botonVender(),
+            _botonVentas(),
+          ],
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _ocupado ? null : () => _cargar(),
@@ -697,6 +702,35 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       fiesta: nombreDeLaFiesta(widget.evento),
       quien: quienOpera(ref),
     );
+  }
+
+  /// VENTAS: el historial de todas las cajas de entradas de esta fiesta. Desde
+  /// acá es del jefe; quien vende llega al de su caja por VENDER.
+  Widget _botonVentas() {
+    final esJefe = ref.watch(esRolJefeProvider);
+    final enElEquipo = ref.watch(entradasEnEsteEquipoProvider);
+    final motivo = !enElEquipo
+        ? kEntradasDesdeLaPc
+        : (esJefe ? 'Las ventas de entradas de esta fiesta' : kSoloEnModoJefe);
+    return Tooltip(
+      message: motivo,
+      child: TextButton(
+        key: const Key('entradas_ventas'),
+        onPressed: esJefe && enElEquipo ? _abrirVentas : null,
+        child: const Text('VENTAS'),
+      ),
+    );
+  }
+
+  Future<void> _abrirVentas() async {
+    // Doble llave: el botón ya está apagado sin modo jefe.
+    if (!ref.read(esRolJefeProvider)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VentasDeEntradasScreen(evento: widget.evento),
+      ),
+    );
+    if (mounted) await _cargar(silencioso: true);
   }
 
   /// VENDER: la caja de entradas de esta fiesta, para quien puede vender (el

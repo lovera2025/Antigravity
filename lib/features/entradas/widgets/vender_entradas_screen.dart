@@ -30,6 +30,7 @@ import '../pdf/papeles_de_entradas.dart';
 import '../providers/entradas_providers.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'abrir_caja_entradas_dialog.dart';
+import 'ventas_de_entradas_screen.dart';
 
 /// VENDER: la pantalla de la caja de entradas de una fiesta (6.9.0, sección 7.3
 /// del spec del 13-nov). A una familia de la fiesta o a alguien de afuera.
@@ -438,6 +439,19 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     }
   }
 
+  /// VENTAS: las de esta caja (el jefe ve todas las de la fiesta). Al volver se
+  /// relee todo: una venta anulada cambia lo que le queda a esa familia y los
+  /// números que están libres.
+  Future<void> _abrirVentas() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            VentasDeEntradasScreen(evento: widget.evento, caja: _caja),
+      ),
+    );
+    if (mounted) await _cargar(silencioso: true);
+  }
+
   // ── Pantalla ─────────────────────────────────────────────────────────────
 
   @override
@@ -455,6 +469,15 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             ),
           ],
         ),
+        actions: [
+          if (puede && _caja != null)
+            TextButton(
+              key: const Key('vender_ventas'),
+              onPressed: _guardando ? null : _abrirVentas,
+              child: const Text('VENTAS'),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: !puede
           ? const _Aviso(

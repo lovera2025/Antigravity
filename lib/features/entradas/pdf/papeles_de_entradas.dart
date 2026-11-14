@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../common/services/pdf_service.dart';
 import 'comprobante_entradas_pdf.dart';
+import 'historial_entradas_pdf.dart';
 
 /// El isotipo de la cabecera de los papeles. Null si no se pudo leer: el papel
 /// sale igual, sin él.
@@ -39,6 +40,30 @@ final abrirComprobanteDeEntradasProvider =
     await PdfService.entregarPdf(
       bytes,
       ComprobanteEntradasPdf.nombreDelArchivo(datos),
+      context: context,
+    );
+  };
+});
+
+/// Arma el historial de ventas de una fiesta (A4) y lo entrega como los demás
+/// papeles. Los tests lo reemplazan.
+typedef AbrirHistorialDeEntradas = Future<void> Function(
+  DatosDelHistorial datos, {
+  BuildContext? context,
+});
+
+final abrirHistorialDeEntradasProvider =
+    Provider<AbrirHistorialDeEntradas>((ref) {
+  return (datos, {context}) async {
+    final bytes = await HistorialEntradasPdf.armar(
+      datos,
+      fuentes: await PdfService.fuentesOutfit(),
+      logo: await isotipoDeLosPapeles(),
+    );
+    if (context != null && !context.mounted) return;
+    await PdfService.entregarPdf(
+      bytes,
+      HistorialEntradasPdf.nombreDelArchivo(datos),
       context: context,
     );
   };

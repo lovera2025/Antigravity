@@ -539,8 +539,9 @@ void main() {
             reason: '$ruta: la llave del jefe no se abre a quien vende');
       }
     }
-    // Si aparece otra función que guarda, que pregunte y se sume acá.
-    expect(encontradas, {'_guardar'});
+    // Si aparece otra función que guarda, que pregunte y se sume acá: PRECIOS
+    // (`_guardar`) y, en VENTAS, anular y "Pago verificado".
+    expect(encontradas, {'_guardar', '_anular', '_verificar'});
   });
 
   test('quien puede vender entradas es el jefe en modo jefe o quien tiene "Vende '
