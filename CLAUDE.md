@@ -428,6 +428,26 @@ integrarlo.
 - **No crear links hasta que las PCs tengan la 6.8.0.** Falta, con la versión instalada: crear un link de verdad, abrirlo
   en un celular desde WhatsApp y aceptar desde el programa.
 
+**La 6.8.1, SOLA y antes que la 6.9.0: el rótulo de la mora y el recibo reimpreso entero** (decidida el 14-nov;
+**programada y probada sobre una copia de la base, sin publicar**; `docs/CONTEXTO_v6.8.1_2026-11-14.md`, que empieza
+con "Para retomar en otro chat": ahí está lo que falta, en orden). Sale de la rama **`release/6.8.x`** (desde el tag
+`v6.8.0`, carpeta `..\arguello_events_6.8.x`); cada commit también acá con `cherry-pick`. **Ningún instalador de la
+6.8.x sale de esta rama** (tiene la v80). Sin SQL ni migración. Una familia reclamó un recibo del 14/11 que nombraba
+una cuota ya cobrada, y el jefe avisó que los recibos reimpresos salían con menos datos.
+- **Cada línea de mora va a lo que dice su concepto** (`MoraTrackedOrigen._repartirMoraDelLote`; specs
+  `docs/SPEC_remanente_mora_por_concepto_2026-11-14.md` y su Anexo D, sin nombres). La plata no cambia: el comparador
+  lo vigila. La regla de la 6.8.0 queda copiada solo para comparar (`test/helpers/inferir_de_la_6_8_0.dart`).
+- **Para un cobro ya guardado, las cuotas del arrastre son las que nombra su texto** (`arrastreDeUnaLinea`,
+  `cuotasNombradasDelArrastre`): la reconstrucción desde los pagos no sabe de perdones ni exenciones. Solo se saca una
+  si otra línea anterior ya la nombró y no se debía; con un perdón, ninguna. Sin respaldo para repartir, un renglón
+  "Cuotas 2, 3 y 4" con la suma. Lo mostró el comparador: **antes de cambiar cómo se nombra la mora, correrlo**
+  (`tool/rotulo_mora_antes_despues_test.dart` en la 6.8.0 y en la versión, `tool/comparar_rotulo_mora.py`, sobre una
+  copia de `tool/copiar_base_solo_lectura.py`).
+- **El recibo reimpreso sale con el cobro entero** (`ReciboDeUnCobro`: REIMPRIMIR del Estado de cuenta, "Generar
+  recibo" y Finanzas), sin anulados; la nota de la cuota pagada en partes ("el resto: antes se habían pagado $X" /
+  "parcial: quedan $X") va siempre que va su cuota, sin perdón en la ficha; el título verde dice "MORA ABONADA EN SU
+  TOTALIDAD / PARCIALMENTE / EN ESTE PAGO" (pedido del usuario).
+
 **La 6.9.0, EN CURSO y SIN PUBLICAR: los arreglos de la noche y la venta de entradas** (plan aprobado el 13-nov;
 `docs/CONTEXTO_v6.9.0_2026-11-13.md`, que empieza con "Para retomar en otro chat": ahí está **dónde quedó, lo que sigue
 y lo que no se probó**). Una sola versión, cuando el usuario diga. `pubspec.yaml` sigue en `6.8.0+74`. Los commits
