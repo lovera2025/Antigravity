@@ -9,8 +9,18 @@ todo en esta PC, **sin subir a GitHub**.
 mora (una familia reclamó un recibo) y el jefe avisó que los recibos reimpresos salían con menos datos. Se hizo como
 **6.8.1, sola**, desde `release/6.8.x`: **programada y probada sobre una copia de la base, sin publicar; falta su OK y
 publicar con él.** Todo en `docs/CONTEXTO_v6.8.1_2026-11-14.md`. Sus commits ya están también en esta rama (la suite
-entera pasa: 5.000). **La 6.9.0 se retoma después de publicar la 6.8.1**, desde donde dice abajo. El plan general va
-por 10 partes (los arreglos de la noche, las 7 etapas de la venta de entradas y las 2 de la 6.8.1): 6,5 de 10, **65 %**.
+entera pasa: 5.000). **El 14-nov a la noche el usuario decidió no publicarla sola: sale adentro de la 6.9.0** (le
+recomendé publicarla antes del 16, cuando la empresa empieza a cobrar; eligió esperar). Entonces:
+- **La 6.9.0 lleva también la 6.8.1**: el rótulo de la mora, el recibo reimpreso entero y el recuadro verde con la
+  tabla Debía · Pagó · Quedó. Las novedades tienen que nombrarlo ("correcciones en la mora y en los recibos").
+- **Antes de publicar la 6.9.0**, además de lo suyo: correr otra vez el comparador de la mora y los papeles de antes y
+  después sobre una copia nueva de la base, y mandárselos (cómo, en "Cómo se probó" del CONTEXTO de la 6.8.1). La
+  versión anterior para comparar es la 6.8.0.
+- Hasta que salga: a las 4 familias del Anexo D, todo el remanente junto y nada de perdón por mes.
+- **Se sigue por la etapa 5 de la venta de entradas**, desde donde dice abajo.
+
+El plan general va por 9 partes (los arreglos de la noche, las 7 etapas de la venta de entradas y la 6.8.1 programada;
+publicar todo es la etapa 7): 6,5 de 9, **72 %**.
 
 **Dónde quedó (14-nov, al cortar el chat a pedido del usuario):**
 

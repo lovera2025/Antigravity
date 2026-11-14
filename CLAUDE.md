@@ -428,12 +428,12 @@ integrarlo.
 - **No crear links hasta que las PCs tengan la 6.8.0.** Falta, con la versión instalada: crear un link de verdad, abrirlo
   en un celular desde WhatsApp y aceptar desde el programa.
 
-**La 6.8.1, SOLA y antes que la 6.9.0: el rótulo de la mora y el recibo reimpreso entero** (decidida el 14-nov;
-**programada y probada sobre una copia de la base, sin publicar; el usuario vio los recibos y todo lo que pidió está
-hecho: falta su OK para publicar, con él**; `docs/CONTEXTO_v6.8.1_2026-11-14.md`, que empieza con "Para retomar en otro
-chat": ahí está lo que falta, en orden). Sale de la rama **`release/6.8.x`** (desde el tag
-`v6.8.0`, carpeta `..\arguello_events_6.8.x`); cada commit también acá con `cherry-pick`. **Ningún instalador de la
-6.8.x sale de esta rama** (tiene la v80). Sin SQL ni migración. Una familia reclamó un recibo del 14/11 que nombraba
+**La 6.8.1: el rótulo de la mora y el recibo reimpreso entero — NO SALE SOLA: va adentro de la 6.9.0** (programada y
+probada sobre una copia de la base el 14-nov; el usuario vio los recibos y todo lo que pidió está hecho; esa noche
+decidió no publicarla sola y sacar todo junto en la 6.9.0; `docs/CONTEXTO_v6.8.1_2026-11-14.md`, que empieza con "Para
+retomar en otro chat"). Se programó en la rama **`release/6.8.x`** (desde el tag `v6.8.0`, carpeta
+`..\arguello_events_6.8.x`) y cada commit está también acá; **de esa rama no se publica nada**. Antes de publicar la
+6.9.0 se vuelve a correr el comparador de la mora sobre una copia nueva y se le mandan los papeles. Sin SQL ni migración. Una familia reclamó un recibo del 14/11 que nombraba
 una cuota ya cobrada, y el jefe avisó que los recibos reimpresos salían con menos datos.
 - **Cada línea de mora va a lo que dice su concepto** (`MoraTrackedOrigen._repartirMoraDelLote`; specs
   `docs/SPEC_remanente_mora_por_concepto_2026-11-14.md` y su Anexo D, sin nombres). La plata no cambia: el comparador
