@@ -8,6 +8,15 @@ de este repo); cada commit también en `feature/v4.6-cierre-por-sesiones` con `c
 
 ## Para retomar en otro chat
 
+**DECIDIDO EL 14-NOV A LA NOCHE: NO SALE SOLA. Va adentro de la 6.9.0.** Le recomendé publicarla antes del 16 (ese
+día la empresa empieza a cobrar), y eligió esperar y sacar todo junto. Sus commits ya están en la rama feature, así que
+la 6.9.0 la lleva sin trabajo de más. **No se publica nada desde `release/6.8.x`**: esa rama queda como estaba. Lo de
+"Lo que falta" de abajo pasa a ser parte de publicar la 6.9.0 (`docs/CONTEXTO_v6.9.0_2026-11-13.md`).
+
+**Hasta que salga la 6.9.0** (se le dijo): a las 4 familias cuya ficha nombra mal el remanente (las del Anexo D) se les
+cobra todo el remanente junto, nunca por tilde suelto, y no se usa el perdón por mes; a la familia que reclamó se le
+explica en persona, porque el recibo correcto sale recién con la versión.
+
 **Dónde quedó:**
 
 - **Todo programado y probado.** La suite entera pasa en las dos ramas (6.8.x: 4.720; feature: 5.000). El comparador
@@ -91,10 +100,12 @@ reclamó, y sola se compara limpia con las fotos de la mora):
 - Al reimprimir, "EN SU TOTALIDAD" mira la mora de hoy: un cobro que pagó su calendario y dejó arrastre de otras cuotas
   sin tocar puede decirlo si hoy está en 0 (igual que en la 6.8.0).
 
-**Lo que falta, en orden:**
+**Lo que falta, en orden** (ahora, al publicar la 6.9.0):
 
-1. **Preguntarle al usuario si da el OK para publicar** (vio los recibos de la familia; todo lo que pidió está hecho).
-2. **Publicar con él** (sección 8.3 de la spec y "Cómo se publicó" de los CONTEXTO anteriores): que nadie esté
+1. ~~Preguntarle si da el OK para publicarla sola~~: eligió esperar a la 6.9.0.
+2. **Al publicar la 6.9.0, con él**: volver a correr el comparador de la mora y los papeles sobre una copia nueva de
+   la base (los datos van a haber cambiado) y mandárselos antes de publicar. Lo de abajo es como se iba a publicar
+   sola; los pasos son los de la 6.9.0, desde la rama feature: (sección 8.3 de la spec y "Cómo se publicó" de los CONTEXTO anteriores): que nadie esté
    cobrando; respaldo; foto de la mora "antes de 6.8.1" (`supabase/mora_fotos.sql`, por el conector); `6.8.1+75` en
    `pubspec.yaml` y en `installer/junior_eventos_setup.iss`; la suite entera; el instalador **por pasos** desde
    `..\arguello_events_6.8.x` (la página del celular entera antes de `ISCC`, la clave de firma y `apksigner`); tag
