@@ -35,8 +35,11 @@ reclamó, y sola se compara limpia con las fotos de la mora). Tres cosas:
   claves `cuotasPrevias` y `cuotasDeLaLinea`, que entiende `filasMoraCobradaPdf`), en vez de inventar un reparto.
 - **Una línea de calendario de varias cuotas se reparte solo si lo que se debía ese día da justo lo cobrado**; una cuota
   del calendario sale "(parcial)" solo si la reconstrucción confirma que le quedó mora (`_parcialesConfirmados`).
-- **Un cobro reimpreso que dejó una cuota a medias no dice "MORA SALDADA"** (`pdf_service.dart`, `moraQuedaSaldada`):
+- **Un cobro reimpreso que dejó una cuota a medias no dice que la mora quedó abonada en su totalidad** (`pdf_service.dart`, `moraQuedaSaldada`):
   el recibo del 12/11 de la familia lo decía arriba de "parcial: quedan $9.000".
+- **El título del recuadro verde, más formal** (lo pidió el usuario al ver los papeles, 14-nov): "MORA ABONADA EN SU
+  TOTALIDAD", "MORA ABONADA PARCIALMENTE" o, si no se puede saber, "MORA ABONADA EN ESTE PAGO". Decía "MORA SALDADA /
+  COBRADA EN ESTE PAGO". Vale para todos los recibos, también el que sale al cobrar.
 
 **Cómo se probó** (todo en esta PC, sobre copias):
 
@@ -60,7 +63,7 @@ reclamó, y sola se compara limpia con las fotos de la mora). Tres cosas:
 - Dos cobros del mismo alumno el mismo día: la reconstrucción corta por día (la spec lo deja así).
 - Una mixta anterior al 21/08/2026 cuyo calendario se recalcula más alto que lo cobrado deja el arrastre en 0 en la
   reimpresión (un caso en la base; igual que en la 6.8.0).
-- Al reimprimir, "MORA SALDADA" mira la mora de hoy: un cobro que pagó su calendario y dejó arrastre de otras cuotas
+- Al reimprimir, "MORA ABONADA EN SU TOTALIDAD" mira la mora de hoy: un cobro que pagó su calendario y dejó arrastre de otras cuotas
   sin tocar puede decir "saldada" si hoy está en 0 (como en la 6.8.0).
 
 **Lo que falta, en orden:**

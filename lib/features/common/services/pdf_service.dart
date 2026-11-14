@@ -2668,11 +2668,16 @@ class PdfService {
                   if (moraCobradaRecibo > 0.01)
                     avisoRecibo(
                       color: _greenAccent,
-                      titulo: moraQuedaSaldada
-                          ? 'MORA SALDADA EN ESTE PAGO — '
-                                '${moraCobradaRecibo.toCurrency()}'
-                          : 'MORA COBRADA EN ESTE PAGO — '
-                                '${moraCobradaRecibo.toCurrency()}',
+                      // Títulos más formales, a pedido del usuario (14-nov):
+                      // decían "MORA SALDADA / COBRADA EN ESTE PAGO".
+                      titulo: '${moraQuedaSaldada
+                              ? 'MORA ABONADA EN SU TOTALIDAD'
+                              : (moraTotalPreCobro != null ||
+                                        moraCobroFueParcial ||
+                                        moraSigueDebiendo)
+                                  ? 'MORA ABONADA PARCIALMENTE'
+                                  : 'MORA ABONADA EN ESTE PAGO'}'
+                          ' — ${moraCobradaRecibo.toCurrency()}',
                       filas: filasMoraCobrada,
                       lineas: [
                         if (moraQuedaSaldada)

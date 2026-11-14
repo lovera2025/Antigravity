@@ -8,7 +8,7 @@
 //
 //   • Mora no cobrada al pagar (cuotas ya pagadas)   $19.400
 //   • Mora cuota 1                                    $5.600
-//   MORA COBRADA EN ESTE PAGO — $25.000
+//   MORA ABONADA PARCIALMENTE — $25.000
 //   Corresponde a la mora de la cuota 1 (no cobrada al pagar).
 //
 // Tres cosas mal: el recuadro nombraba la cuota 1 por los $25.000 cuando de ahí
