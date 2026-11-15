@@ -99,8 +99,11 @@ void main() {
         'VenderEntradasScreen',
         'CierreCajaScreen(',
       ].any(s.contains);
-      final enMemoria =
-          s.contains('EntradasEnMemoria') || s.contains('reemplazosDelCierre(');
+      // Los reemplazos de la venta en memoria puestos de verdad (no alcanza con
+      // crear la venta en memoria y no ponerla).
+      final enMemoria = s.contains('reemplazosDelCierre(') ||
+          RegExp(r'(EntradasEnMemoria\(\)|\b_?venta|\bentradas)\.reemplazos')
+              .hasMatch(s);
       if (muestra && !enMemoria) conLaBase.add(_nombre(ruta));
     }
     expect(conLaBase, isEmpty,

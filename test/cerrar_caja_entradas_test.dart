@@ -1,6 +1,7 @@
 // Cerrar la caja de entradas (sección 9.1 del spec del 13-nov): CERRAR CAJA en
 // VENDER, contar a ciegas, cerrar con la diferencia anotada, el papel del
 // cierre (media A4) y la nota. Montada de verdad, con la venta en memoria.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,29 @@ class _Montada {
   _Montada(this.e, this.entradas, this.caja, this.papeles, this.c);
 
   CajaEntradas get guardada => entradas.listaCajas.single;
+}
+
+/// Una caja que tarda en cerrar hasta que la prueba la suelta ([freno]).
+class _CierreQueTarda extends EntradasEnMemoria {
+  final freno = Completer<void>();
+
+  @override
+  Future<CajaEntradas> cerrarCaja(
+    CajaEntradas caja, {
+    required double efectivoContado,
+    required double diferencia,
+    String? nota,
+    required String quien,
+  }) async {
+    await freno.future;
+    return super.cerrarCaja(
+      caja,
+      efectivoContado: efectivoContado,
+      diferencia: diferencia,
+      nota: nota,
+      quien: quien,
+    );
+  }
 }
 
 /// La caja de Carla, con $ 5.000 de cambio y tres ventas: 2 en efectivo
@@ -85,6 +109,7 @@ Future<_Montada> _montar(
   CajaEntradas Function(CajaEntradas)? caja,
   EntradasEnMemoria? entradas,
   bool fallaElPapel = false,
+  Completer<void>? papelQueTarda,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1100, 1300);
@@ -98,6 +123,7 @@ Future<_Montada> _montar(
     ...memoria.reemplazos,
     abrirCierreDeEntradasProvider.overrideWithValue((datos, {context}) async {
       if (fallaElPapel) throw StateError('sin impresora (prueba)');
+      if (papelQueTarda != null) await papelQueTarda.future;
       papeles.add(datos);
     }),
   ]);
@@ -216,6 +242,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CerrarCajaEntradasScreen), findsNothing);
       expect(find.byType(VenderEntradasScreen), findsNothing);
+      expect(find.text('ir'), findsOneWidget);
+    });
+
+    // Revisión del 15-nov: Atrás no sale mientras se cierra la caja ni mientras
+    // sale el papel (la caja se cerraría igual sin que se vea el resultado ni
+    // salga el papel); cerrada y con el papel, Atrás es LISTO (VENDER se va).
+    testWidgets('Atrás espera a que se cierre la caja y salga el papel; después es LISTO',
+        (tester) async {
+      final entradas = _CierreQueTarda();
+      final papel = Completer<void>();
+      final m = await _montar(tester, entradas: entradas, papelQueTarda: papel);
+      await _contar(tester, '25000');
+      await tester.tap(find.byKey(const Key('cierre_confirmar')));
+      await tester.pumpAndSettle();
+
+      // 1. Cerrando: Atrás no sale y la caja sigue abierta.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(CerrarCajaEntradasScreen), findsOneWidget);
+      expect(m.guardada.abierta, isTrue);
+
+      // 2. Cerrada, mientras sale el papel: Atrás tampoco sale ni pregunta.
+      entradas.freno.complete();
+      await tester.pumpAndSettle();
+      expect(m.guardada.abierta, isFalse);
+      expect(find.byKey(const Key('cierre_resultado')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(CerrarCajaEntradasScreen), findsOneWidget);
+      expect(find.text('No salió el papel del cierre'), findsNothing);
+
+      // 3. Salió el papel: Atrás es LISTO, y se van el cierre y VENDER.
+      papel.complete();
+      await tester.pumpAndSettle();
+      expect(m.papeles, hasLength(1));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(CerrarCajaEntradasScreen), findsNothing);
+      expect(find.byType(VenderEntradasScreen), findsNothing);
+      expect(find.text('Abrir la caja de entradas'), findsNothing);
       expect(find.text('ir'), findsOneWidget);
     });
 

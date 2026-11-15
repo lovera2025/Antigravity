@@ -464,6 +464,24 @@ void main() {
       expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
     });
 
+    // La segunda llave (etapa 7): el botón se decide al abrir el cartel. Si en
+    // el medio le sacan "Vende entradas", tocarlo no abre VENDER.
+    testWidgets('sin el permiso, VENDERLE ESAS ENTRADAS no abre VENDER aunque el botón '
+        'ya estuviera', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      final m = await _montar(tester, vende: true, entradas: e);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
+      await m.c.read(appRoleProvider.notifier).entrarComoEntradas(
+            m.e.operador(),
+            const PermisosEfectivos(entradas: true),
+          );
+      await tester.tap(find.byKey(const Key('entrega_venderle')));
+      await _pasar(tester);
+      await _pasar(tester);
+      expect(find.byType(VenderEntradasScreen), findsNothing);
+    });
+
     // Revisión del 15-nov: los números de un alumno que pasó a baja temporal
     // después de retirar siguen teniendo dueño.
     testWidgets('un número entregado a un alumno que después pasó a baja no se vuelve a dar',

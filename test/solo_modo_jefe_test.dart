@@ -621,4 +621,34 @@ void main() {
       'lib/features/entradas/widgets/precios_de_entradas_dialog.dart',
     });
   });
+
+  // 6.9.0, etapa 7: VENDER, VENDERLE ESAS ENTRADAS y VENTAS se abren desde la
+  // entrega con su llave, antes de la pantalla (el botón ya viene apagado: es la
+  // segunda llave, por si el permiso cambió con el cartel abierto).
+  test('VENDER, VENDERLE ESAS ENTRADAS y VENTAS se abren desde la entrega con su llave',
+      () {
+    final fuente = leer('lib/features/eventos/retiro_entradas_screen.dart');
+    for (final (funcion, llave) in [
+      (
+        'Future<void> _venderAlCincuenta(ContratoAlumno a) async {',
+        'if (!ref.read(puedeVenderEntradasProvider)) return;'
+      ),
+      (
+        'Future<void> _abrirVender() async {',
+        'if (!ref.read(puedeVenderEntradasProvider)) return;'
+      ),
+      (
+        'Future<void> _abrirVentas() async {',
+        'if (!ref.read(esRolJefeProvider)) return;'
+      ),
+    ]) {
+      final i = fuente.indexOf(funcion);
+      expect(i, greaterThanOrEqualTo(0), reason: 'no está $funcion');
+      final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+      final donde = cuerpo.indexOf(llave);
+      expect(donde, greaterThanOrEqualTo(0), reason: '$funcion sin su llave');
+      expect(cuerpo.indexOf('Navigator.of(context).push('), greaterThan(donde),
+          reason: '$funcion abre la pantalla antes de la llave');
+    }
+  });
 }
