@@ -53,6 +53,7 @@ import 'package:arguello_events/models/invitado.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
 import '../test/helpers/repo_totem_en_memoria.dart';
+import 'raiz_del_proyecto.dart';
 
 const _redLocal = String.fromEnvironment('red') == 'local';
 const _teleEn = String.fromEnvironment('tele');
@@ -134,7 +135,7 @@ Future<void> main() async {
         updatedAt: DateTime.now().toUtc(),
       ),
     ],
-  )..paginaDelCelular = Directory('build${Platform.pathSeparator}puesto');
+  )..paginaDelCelular = carpetaEnBuild('puesto');
   if (!_redLocal) {
     mundo
       ..escuchaCentral = InternetAddress.anyIPv4

@@ -78,6 +78,7 @@ import '../test/helpers/entrega_en_memoria.dart';
 import '../test/helpers/operadores_en_memoria.dart' show ConexionFija;
 import '../test/helpers/puerta_en_memoria.dart' show MotorDePrueba;
 import '../test/helpers/tema_de_la_app.dart';
+import 'raiz_del_proyecto.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,7 +90,7 @@ Future<void> main() async {
   GoogleFonts.config.allowRuntimeFetching = false;
   final lados = await armarLados(
     papeles: PapelesDeLaPrueba(
-      carpeta: Directory('build${Platform.pathSeparator}venta_entradas_prueba').absolute,
+      carpeta: carpetaEnBuild('venta_entradas_prueba'),
       abrirConElVisor: true,
     ),
   );

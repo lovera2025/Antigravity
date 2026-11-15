@@ -65,6 +65,7 @@ import 'package:arguello_events/features/common/widgets/operational_sync_coordin
 
 import '../test/helpers/barra_en_memoria.dart';
 import '../test/helpers/operadores_en_memoria.dart';
+import 'raiz_del_proyecto.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,7 +84,7 @@ Future<void> main() async {
     papelEnPantalla: enPantalla,
     sinImpresoraElegida: _sinImpresora,
     conLaDeAnoche: _conLaDeAnoche,
-    carpetaDeLosPdf: Directory('build/barra_prueba').absolute,
+    carpetaDeLosPdf: carpetaEnBuild('barra_prueba'),
     impresora: enPantalla
         ? null
         : ImpresoraBluetooth(CanalUniversalBle(), recordada: const ImpresoraRecordada()),
