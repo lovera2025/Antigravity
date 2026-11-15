@@ -240,6 +240,108 @@ void main() {
         isTrue);
   });
 
+  // La revisión final de la 6.9.0 encontró tres papeles que decían algo falso al
+  // reimprimir. Ninguno cambia plata: cambia lo que el papel explica.
+  group('revisión final de la 6.9.0', () {
+    final c = _contrato();
+    List<Map<String, dynamic>> antes() => [
+          _pago('2026-04-25T10:00:00', 'Cuota Base (1/9)', 35000),
+          _pago('2026-05-30T10:00:00', 'Cuota Base (2/9)', 35000),
+          _pago('2026-06-29T10:00:00', 'Cuota Base (3/9)', 35000),
+        ];
+
+    // Una sola cuota del calendario con su mora cobrada a medias: se guarda sin
+    // "(parcial)", y la reimpresión decía "Debía = lo pagado, Quedó $0".
+    test('la mora de UNA cuota cobrada a medias: reimpresa dice lo que quedó', () {
+      final cuota = _pago('2026-09-10T11:00:00', 'Cuota Base (4/9)', 35000);
+      final mora = _pago('2026-09-10T11:00:01', 'Interés mora cuota 4 (vto Jul 2026)', 5000);
+      final resto = _pago('2026-09-20T11:00:00', 'Mora pendiente cuota 4', 9000);
+      final pagos = [...antes(), cuota, mora, resto];
+      final filas = _filasVerdes(c, pagos, mora);
+      expect(filas, hasLength(1));
+      final f = filas.single;
+      expect(f.monto, 5000);
+      expect(f.quedo, isNotNull);
+      expect(f.quedo!, greaterThan(0.01), reason: 'le quedó mora: ${_fila(f)}');
+      expect(f.debia, closeTo(5000 + f.quedo!, 0.01));
+      final cobro = ReciboDeUnCobro.armar(
+        contrato: c,
+        lote: ReciboDeUnCobro.lineasDelCobro(pagos, mora),
+        historial: pagos,
+      );
+      final lineaMora = cobro.conceptos.firstWhere((l) => l['esMora'] == true);
+      expect(lineaMora['concepto'], contains('(parcial)'));
+    });
+
+    test('la mora de UNA cuota cobrada entera: reimpresa, debía lo que pagó', () {
+      final cuota = _pago('2026-09-10T11:00:00', 'Cuota Base (4/9)', 35000);
+      // Más de lo que daba la cuenta: no le quedó nada.
+      final mora = _pago('2026-09-10T11:00:01', 'Interés mora cuota 4 (vto Jul 2026)', 90000);
+      final pagos = [...antes(), cuota, mora];
+      final f = _filasVerdes(c, pagos, mora).single;
+      expect(f.debia, 90000);
+      expect(f.quedo, 0);
+    });
+
+    // Un Mixto con la mora partida en efectivo y transferencia se guarda en dos
+    // filas con el mismo concepto. Reimpreso, cada fila se repartía sola y la
+    // cuota del arrastre salía dos veces (el doble de lo que debía).
+    test('partir la mora en efectivo y transferencia no cambia el papel', () {
+      List<String> filasCon(List<Map<String, dynamic>> lineasDeMora) {
+        final cuota = _pago('2026-07-20T11:00:00', 'Cuota Base (4/9)', 35000);
+        final pagos = [
+          _pago('2026-04-25T10:00:00', 'Cuota Base (1/9)', 35000),
+          // La 2 se pagó tarde, sin su mora: queda de arrastre.
+          _pago('2026-06-20T10:00:00', 'Cuota Base (2/9)', 35000),
+          _pago('2026-06-29T10:00:00', 'Cuota Base (3/9)', 35000),
+          cuota,
+          ...lineasDeMora,
+        ];
+        return [for (final f in _filasVerdes(c, pagos, cuota)) _fila(f)]..sort();
+      }
+
+      const concepto = 'Interés mora cuota 4 (vto Jul 2026) + mora pendiente cuota 2';
+      final juntas = filasCon([_pago('2026-07-20T11:00:01', concepto, 10000)]);
+      final partidas = filasCon([
+        _pago('2026-07-20T11:00:01', concepto, 6000),
+        _pago('2026-07-20T11:00:01', concepto, 4000, medio: 'Transferencia'),
+      ]);
+      expect(partidas, juntas);
+      expect(juntas.where((f) => f.startsWith('Cuota 2')), hasLength(1));
+    });
+
+    // Reimpreso un recibo que saldó su mora, con la familia debiendo hoy otra
+    // mora (de una cuota que entonces no estaba vencida): el título decía
+    // "PARCIALMENTE" al lado de una tabla con "Quedó $0".
+    test('reimpreso con otra mora de hoy, no dice que aquel pago fue parcial', () {
+      // Aquel pago saldó su mora; hoy la familia debe otra (en la reimpresión
+      // no hay "total de antes": la mora restante es la de hoy).
+      expect(
+        tituloMoraCobradaPdf(saldada: false, totalAntes: null, fueParcial: false),
+        'MORA ABONADA EN ESTE PAGO',
+      );
+      expect(
+        tituloMoraCobradaPdf(saldada: false, totalAntes: null, fueParcial: true),
+        'MORA ABONADA PARCIALMENTE',
+        reason: 'si una línea dice que quedó a medias, sí',
+      );
+      expect(
+        tituloMoraCobradaPdf(saldada: false, totalAntes: 12000, fueParcial: false),
+        'MORA ABONADA PARCIALMENTE',
+        reason: 'al cobrar, lo que quedó se midió en el cobro',
+      );
+      expect(
+        tituloMoraCobradaPdf(saldada: true, totalAntes: null, fueParcial: false),
+        'MORA ABONADA EN SU TOTALIDAD',
+      );
+      // Y el recibo no vuelve a decidir con la mora de hoy.
+      final codigo = File('lib/features/common/services/pdf_service.dart')
+          .readAsStringSync();
+      expect(codigo, isNot(contains('moraSigueDebiendo')));
+      expect(codigo, contains('tituloMoraCobradaPdf('));
+    });
+  });
+
   group('el papel de verdad', () {
     TestWidgetsFlutterBinding.ensureInitialized();
     late Directory destino;

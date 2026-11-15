@@ -472,8 +472,12 @@ están en esta PC, **sin subir a GitHub**.
   últimas solo del jefe, y el historial impreso) **y la 6**: CERRAR CAJA en VENDER
   (`entradas/widgets/cerrar_caja_entradas_screen.dart`, a ciegas, con su papel de media hoja), ENTRADAS en el cierre
   de caja (`cierre_caja/widgets/sector_entradas.dart`) y la entrega con lo vendido a la vista y VENDERLE ESAS
-  ENTRADAS. **Falta la 7** (la ventana de prueba, recorrerlo con el mouse, las capturas y publicar con el usuario):
-  "Lo que sigue" del CONTEXTO.
+  ENTRADAS. **La 7, el 15-nov a la tarde: la ventana de prueba, el recorrido con el mouse y las capturas, hechos**
+  (falta publicar con el usuario: "Lo que sigue" del CONTEXTO). `tool/venta_entradas_prueba.dart` pone la tablet de
+  Carla y la PC del jefe lado a lado, **cada una con su base** (`EntradasDeUnEquipo`), y una nube de prueba sube lo
+  guardado a los 2 s (CORTAR INTERNET lo deja en la cola); `test/venta_entradas_prueba_test.dart` la vigila. Se le
+  mandaron las capturas (`build/capturas_6.9.0/`). Al recorrerla apareció que **VENDER quedaba en "1 venta subiendo"
+  con la venta ya en la nube**: ahora escucha `pendingStream` del motor (`MotorDePrueba.pendiente` en las pruebas).
   - **Quien vende no ve sumas de plata en VENTAS ni en su historial impreso** (`conPlata`): cuenta su caja a ciegas.
   - **La entrega sin cargo no da un número vendido** (`NumerosDeEntradas.ocupados` es su `deOtros`), y **dos alumnos
     con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta).
@@ -555,6 +559,15 @@ prueba de punta a punta quedó hecha en el sandbox el 6-nov (`tool/puerta_sandbo
 los arneses `tool/*_prueba.dart` en memoria, sin la base real ni la nube; el navegador de la app con pestañas que hacen de celulares.
 Nunca contra `Documentos\Junior Eventos\data.db` ni contra Supabase. No se le pide al usuario que pruebe: queda para él solo lo que
 necesita un aparato físico (la impresora, un celular en el router del salón) o su OK. Publicar se propone recién con la prueba hecha.
+
+**Una ventana de prueba no abre la base de la PC, ni escribe las preferencias del programa ni su carpeta de PDF** (15-nov: cinco
+lo hacían con un clic; ninguna llegó a migrar la base). Toda `tool/*_prueba.dart` llama a `LocalDatabase.cerrarParaLaPrueba()` al
+arrancar (desde ahí abrir la base o buscar su carpeta falla), usa `SharedPreferences.setMockInitialValues` y pone en memoria lo que
+muestra; `test/arneses_sin_base_test.dart` lo vigila, también que `InvitadosEnMemoria` reemplace todo lo que abre la base. **Antes
+y después de cada sesión con el mouse, `python -I tool/huella_de_la_base.py`** (sin abrir la base: la versión, el SHA-256, las
+preferencias y la carpeta de PDF; `--comparar` dice IGUAL). Una ventana compilada corre con la carpeta del exe como la actual:
+las rutas van con `carpetaEnBuild` (`tool/raiz_del_proyecto.dart`). **Para traer una ventana de prueba al frente no se usa
+`open_application`: abre otra copia.** Se la trae con PowerShell (`(New-Object -ComObject WScript.Shell).AppActivate(<pid>)`).
 
 ## Documentación del proyecto
 

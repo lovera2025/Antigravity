@@ -2192,11 +2192,6 @@ class PdfService {
         moraPendienteRestante != null &&
         moraPendienteRestante <= 0.01;
 
-    /// Después de este cobro sigue habiendo mora. En una reimpresión es la de
-    /// hoy, pero alcanza para afirmar que aquel pago no la saldó.
-    final bool moraSigueDebiendo =
-        moraPendienteRestante != null && moraPendienteRestante > 0.01;
-
     /// Mora que había antes de este cobro: lo que entró más lo que quedó.
     ///
     /// Solo vale cuando lo que quedó se midió **en este cobro**. En una
@@ -2788,13 +2783,14 @@ class PdfService {
                       color: _greenAccent,
                       // Títulos más formales, a pedido del usuario (14-nov):
                       // decían "MORA SALDADA / COBRADA EN ESTE PAGO".
-                      titulo: '${moraQuedaSaldada
-                              ? 'MORA ABONADA EN SU TOTALIDAD'
-                              : (moraTotalPreCobro != null ||
-                                        moraCobroFueParcial ||
-                                        moraSigueDebiendo)
-                                  ? 'MORA ABONADA PARCIALMENTE'
-                                  : 'MORA ABONADA EN ESTE PAGO'}'
+                      // La mora de hoy no decide el título ni el renglón: en una
+                      // reimpresión puede ser de una cuota que ese día no estaba
+                      // vencida (revisión final de la 6.9.0).
+                      titulo: '${tituloMoraCobradaPdf(
+                            saldada: moraQuedaSaldada,
+                            totalAntes: moraTotalPreCobro,
+                            fueParcial: moraCobroFueParcial,
+                          )}'
                           '${cantidadMoras == null ? '' : ' · $cantidadMoras ${cantidadMoras == 1 ? 'mora' : 'moras'}'}'
                           ' — ${moraCobradaRecibo.toCurrency()}',
                       filas: filasMoraCobrada,
@@ -2806,7 +2802,7 @@ class PdfService {
                         else if (moraTotalPreCobro != null)
                           'Pago parcial: la mora era de '
                               '${moraTotalPreCobro.toCurrency()}.'
-                        else if ((moraCobroFueParcial || moraSigueDebiendo) &&
+                        else if (moraCobroFueParcial &&
                             resumenEnterasYParciales == null)
                           // Reimpresión: el total de aquel día no se puede
                           // reconstruir, pero que fue parcial sí se sabe —

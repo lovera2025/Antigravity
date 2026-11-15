@@ -1,10 +1,23 @@
 # CONTEXTO — la 6.9.0: los arreglos de la noche y la venta de entradas
 
-**Estado (15-nov-2026):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`, todo en esta PC,
-**sin subir a GitHub**. **Las etapas 1 a 6 de la venta de entradas están hechas; falta la 7** (la prueba de punta a
-punta, las capturas y publicar con el usuario).
+**Estado (15-nov-2026, a la tarde):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`, todo en esta
+PC, **sin subir a GitHub**. **Las etapas 1 a 7 de la venta de entradas están hechas, menos publicar**: la ventana de
+prueba, el recorrido con el mouse, las capturas (mandadas) y la revisión final con sus 6 arreglos (ver "Etapa 7").
 
 ## Para retomar en otro chat
+
+**Lo último (15-nov, a la tarde):**
+- **Pendiente de su respuesta: la hoja A4 del historial de ventas de entradas, "con todos los detalles".** Lo pidió él al
+  ver las capturas ("imaginá 1.000 entradas"). Se le mostró la **forma C** (una muestra de verdad en tamaño A4,
+  `build/muestras_6.9.0/historial_c/historial_c_hoja1.png`, armada con `build/muestras_6.9.0/historial_c/hoja_c.py` y Edge sin ventana): un renglón por
+  venta (N°, hora, comprador · familia y mesa, entradas, talonario, total, pagó, vendió, verificado) y un segundo
+  renglón **solo** si hay algo que explicar (mixto, descuento a mano, anulada); **40 ventas por hoja, 1.000 entradas ≈ 8
+  hojas**, los totales al final; y antes de imprimir, si son muchas hojas, el cartel **Todo junto · Por hojas** (de a
+  tandas de 10, o "de la hoja X a la Y"). Se le preguntó si va así y si el N° (que se repite: cada caja numera desde 1)
+  queda así o se separa la hoja por caja. **No está programado**; va en la 6.9.0 si dice que sí (sin SQL). El historial
+  de hoy es `entradas/pdf/historial_entradas_pdf.dart` (una línea por venta, sin talonario ni familia).
+- Las otras dos formas que se le mostraron: A (dos renglones siempre, 25 por hoja) y B (hoja acostada, todo en
+  columnas, 30 por hoja). Le recomendé la C.
 
 **Antes que esto: la 6.8.1** (14-nov, a la tarde). En el medio de la 6.9.0 el usuario trajo una spec del rótulo de la
 mora (una familia reclamó un recibo) y el jefe avisó que los recibos reimpresos salían con menos datos. Se hizo como
@@ -73,15 +86,11 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
   sin preguntar.
 - Publicar, correr el SQL y cada instalación: con él, preguntando en el momento, con las capturas.
 
-**Lo que sigue, en orden** (las etapas 1 a 6 están hechas; queda la 7):
+**Lo que sigue, en orden** (las etapas 1 a 7 están hechas, menos publicar):
 
-1. **La ventana de prueba** `tool/venta_entradas_prueba.dart` (no existe: sin base ni nube, como
-   `tool/entradas_prueba.dart` y `tool/barra_prueba.dart`), con dos equipos sobre la misma venta en memoria: uno vende
-   y cierra, el otro ve VENTAS, el cierre por sector y la entrega; una familia compra las de sus lugares y la entrega
-   lo muestra (spec 11.7).
-2. **Recorrerla con el mouse y sacar las capturas** que el usuario quiere ver antes de publicar: la venta (VENDER,
-   VENTAS, cerrar la caja, ENTRADAS del cierre, la entrega) y **los carteles de la Parte A** (la pregunta de la tele,
-   la de los celulares). El permiso de computer-use es por `arguello_events.exe` (pedirlo; el 13-nov no se aprobó).
+1. ~~La ventana de prueba~~ y 2. ~~el recorrido con el mouse y las capturas~~: **hechos el 15-nov** (ver "Etapa 7").
+   Queda, si él dice que sí, **la hoja A4 del historial de ventas con todos los detalles y el cartel para imprimir por
+   hojas** (arriba, "Lo último"): programarla, con su prueba y su muestra de 1.000 entradas inventadas, y mostrársela.
 3. **Comprobaciones con aparatos de verdad, cuando estén:** la notebook sola unos minutos con la tele abierta, que no
    se apague (P9); el OK de la encargada desde el iPhone (P4); los papeles abiertos desde el programa (el cartel de
    imprimir de Windows); una tablet.
@@ -565,6 +574,77 @@ Los cinco archivos, como quedaron pensados:
   la entrega con VENDERLE ESAS ENTRADAS. Se miraron todas.
 - **No se probó:** con el mouse en una ventana, ni el PDF abierto desde el programa, ni en una tablet de verdad. Es la
   etapa 7.
+
+### Etapa 7, la prueba de punta a punta — HECHA (15-nov, a la tarde); falta publicar con él
+
+Plan aprobado el 15-nov ("prosigamos", con el botón): `C:\Users\lover\.claude\plans\prosigamos-eventual-crab.md`.
+
+1. **Los peligros de las ventanas de prueba (commit `c2adc64`).** Cinco podían, con un clic, abrir y migrar a la v80 la base de
+   verdad de la PC, o escribir las preferencias del programa instalado o su carpeta de PDF: la del mostrador de Entradas (al
+   abrir una fiesta), las de Recepción (Actualizar la lista, Vaciar, Agregar; y las preferencias), la de la barra (la tablet que
+   espera el OK de la encargada, la notebook al contar lo suyo, los PDF) y la de operadores (VENDER). **Ninguna llegó a hacerlo:
+   la base de esta PC sigue en la 79, sin `antes_de_v80.db`.** Ahora:
+   - `LocalDatabase.cerrarParaLaPrueba()` (un solo freno, `_frenarSiEstaCerrada`, para `instance` y `dbPath`): toda ventana lo
+     llama al arrancar. La app nunca.
+   - Cada ventana pone en memoria lo que le faltaba; `InvitadosEnMemoria` reemplaza todo lo que abre la base;
+     `RepoTotemEnMemoria` pasó a `test/helpers/repo_totem_en_memoria.dart` (sin `flutter_test`, para usarlo en Windows).
+   - `test/arneses_sin_base_test.dart` lee las ventanas y lo vigila; `test/base_cerrada_para_la_prueba_test.dart`, el freno.
+   - `tool/huella_de_la_base.py`: la huella de la base (sin abrirla), de las preferencias y de la carpeta de PDF. Antes y después
+     de cada sesión con el mouse: **dio IGUAL las tres veces** el 15-nov.
+   - Para las capturas de la Parte A, con `--dart-define`: `central_puerta_prueba` (`red=local`, `tele=masivo`,
+     `personalizar=cambio`, `sillas=2`) y `barra_prueba` (`impresora=ninguna`, `anoche=si`).
+2. **Las dos pruebas que faltaban (`ce933cb`):** Atrás mientras se cierra la caja (`_CierreQueTarda`) y la segunda llave de
+   VENDERLE ESAS ENTRADAS (con el cartel abierto y leyendo el código).
+3. **La ventana de la venta (`4d26a70`):** `tool/venta_entradas_prueba.dart` + `test/venta_entradas_prueba_test.dart` (7). Dos
+   equipos con su base (`EntradasDeUnEquipo`: `tablet-carla` y `pc-oficina`), una nube de prueba (`NubeDeLaPrueba`: sube a los
+   2 s, `CORTAR INTERNET` deja todo en la cola, al volver suben las dos colas), los papeles de la app en `build/` (sin el menú de
+   la app) y el modo jefe con una sola llave (`adminAuthProvider → ModoJefeDelCierre`). La noche arranca con precio, la caja de
+   Maxi cerrada con $ 500 de menos y PÉREZ con 8 lugares al 50 %.
+   - **Arreglo de la app:** VENDER quedaba en "1 venta subiendo" con la venta ya en la nube (el aviso del motor sale al bajar,
+     no al subir). Ahora escucha `pendingStream` y vuelve a contar (`_contarSinSubir`). La prueba falló primero con el código de
+     antes.
+4. **Las roturas a propósito:** 22 en total entre los pasos 1 a 3, todas detectadas. Tres que no se detectaban al principio
+   eran controles repetidos (el freno de la base y el de la nube de prueba): se dejó uno solo.
+5. **La suite entera: 5.078 pruebas, todas pasan** (eran 5.054).
+6. **El recorrido con el mouse** (`2462f87` ordena dónde caen los papeles: una ventana compilada corre con la carpeta del exe
+   como la actual; `tool/raiz_del_proyecto.dart`). Se recorrió la venta entera con los dos equipos (abrir la caja, vender 3 de
+   los lugares de PÉREZ con talonario, el comprobante, la entrega del jefe con "Ya compró 3: le quedan 5", VENTAS, verificar,
+   el historial impreso, PRECIOS, MODO JEFE en NO, ENTRADAS del cierre, vender sin internet y volver, anular desde el jefe y
+   que le llegue a Carla, VENTAS de Carla sin sumas, cerrar la caja a ciegas con su papel, el cierre del jefe con la caja
+   cerrada, Carla en un celular) y los carteles de la Parte A (la pregunta de la tele, la de los celulares, Actualizar la
+   lista sin nube, Personalizar que no pisa, las sillas sin subir, el vale sin impresora). **Las capturas y los tres papeles
+   se le mandaron**; están en `build/capturas_6.9.0/` (no van a git).
+   - No se capturó "la fiesta de anoche hasta el mediodía": la sesión fue a la tarde (lo cubren sus pruebas).
+   - **Para traer una ventana de prueba al frente no usar `open_application`: abre otra copia** (pasó: tres ventanas).
+7. **La revisión independiente de toda la 6.9.0** (Workflow de cinco lectores por tema —la noche, la mora y los recibos, la
+   venta, los datos y la v80, la convivencia con PCs en la 6.8.0— y un verificador por hallazgo que intentó refutarlo, solo
+   lectura; el resultado entero, en `build/revision_6.9.0.json`, fuera de git). **9 hallazgos: 6 confirmados (todos
+   medios) y 3 descartados.** Ninguno cambia plata ni datos; nada estaba instalado. Arreglados, cada uno con su prueba y
+   su rotura a propósito (11 de 11 detectadas):
+   - **La tele después de SOLO MIRAR ACÁ** (`51e3702`): el botón TÓTEM del Centro de Comando la pasaba en silencio a la
+     fiesta de Recepción y, con el filtro de la 6.9.0, dejaba de saludar a los de esa noche. Ahora pregunta
+     (`fiestaParaAbrirLaTele`: SEGUIR CON LA DE LA TELE · PASAR EL TÓTEM).
+   - **La tele sin internet con la config de fábrica** (`51e3702`): abierta antes para otra fiesta, buscaba la config de
+     la de la noche en su copia vieja de las preferencias. Ahora le pregunta a la principal (`leer_preferencia`, solo las
+     preferencias de la tele; si no contesta, su copia).
+   - **Una caja de entradas (o de la barra) abierta después del mediodía** (`51e3702`): la fiesta salía de la lista y la
+     caja quedaba abierta para siempre. Ahora la fiesta sigue en la lista de quien tiene ahí su caja abierta, en ese
+     equipo (`conCajaAbierta`), hasta que la cierre.
+   - **El recibo reimpreso: la mora de una cuota cobrada a medias** decía "Debía $5.000 · Quedó $0" (se guarda sin
+     "(parcial)"). Ahora la reconstrucción lo confirma como en las mixtas (`_confirmarParcialDeUnaCuota`,
+     `_moraQueQuedoElDia`).
+   - **El recibo reimpreso de un Mixto con la mora partida** en efectivo y transferencia (dos filas, mismo concepto): cada
+     fila se repartía sola y la cuota del arrastre salía dos veces. Ahora se juntan antes de repartir
+     (`_juntarMoraPartida`), como ya hacía la ficha.
+   - **El título del recuadro verde reimpreso** decía "PARCIALMENTE" solo porque la familia debe hoy otra mora. Ahora no
+     mira la mora de hoy (`tituloMoraCobradaPdf`).
+   - Descartados por el verificador: que quien vende pueda cambiar el recargo por transferencia (es la regla de la spec,
+     queda para preguntarle al jefe), que una lectura fallida en el cierre guarde una diferencia falsa (no pasa), y que
+     una PC con la 6.9.0 sin el SQL de la v80 no haga la revisión de la mora al arrancar (el camino de publicar corre el
+     SQL antes de instalar).
+   - **Los tres del recibo tocan cómo se nombra la mora al reimprimir: antes de publicar, el comparador de la mora de la
+     6.8.1 (`tool/rotulo_mora_antes_despues_test.dart` en la 6.8.0 y en la versión, `tool/comparar_rotulo_mora.py`) tiene
+     que mostrar esos cambios y ningún otro.**
 
 ### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 

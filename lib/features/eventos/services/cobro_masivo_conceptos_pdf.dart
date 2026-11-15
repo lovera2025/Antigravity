@@ -115,6 +115,24 @@ void anexarMetadatosMoraDisplay(Map<String, dynamic> line) {
   }
 }
 
+/// El título del recuadro verde de la mora del recibo, sin la cantidad ni el
+/// monto. [saldada]: la mora quedó en cero con este cobro. [totalAntes]: la mora
+/// que había, medida en el mismo cobro (null en una reimpresión). [fueParcial]:
+/// alguna línea dice que una cuota quedó a medias.
+///
+/// **No mira la mora de hoy** (revisión final de la 6.9.0): en una reimpresión
+/// la mora que se debe hoy puede ser de una cuota que el día del cobro no estaba
+/// vencida, y el título decía "PARCIALMENTE" al lado de una tabla con "Quedó $0".
+String tituloMoraCobradaPdf({
+  required bool saldada,
+  required double? totalAntes,
+  required bool fueParcial,
+}) {
+  if (saldada) return 'MORA ABONADA EN SU TOTALIDAD';
+  if (totalAntes != null || fueParcial) return 'MORA ABONADA PARCIALMENTE';
+  return 'MORA ABONADA EN ESTE PAGO';
+}
+
 /// Un renglón del detalle de mora en el recibo: rótulo a la izquierda, importe
 /// alineado a la derecha.
 class FilaMoraPdf {

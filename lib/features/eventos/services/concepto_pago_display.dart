@@ -897,7 +897,7 @@ class ConceptoPagoDisplay {
     }
 
     final out = <Map<String, dynamic>>[];
-    for (final p in enriquecidos) {
+    for (final p in _juntarMoraPartida(enriquecidos)) {
       if (esMora(p)) {
         final repartido = _repartirMoraMixtoSiAplica(
           contrato: contrato,
@@ -921,6 +921,7 @@ class ConceptoPagoDisplay {
       if (esMora(p)) {
         line['esMora'] = true;
         anexarMetadatosMoraDisplay(line);
+        _confirmarParcialDeUnaCuota(line, contrato, p, historialCompleto);
       } else if (esCargoCanal(p)) {
         line['esCargoCanal'] = true;
       } else {
@@ -929,7 +930,9 @@ class ConceptoPagoDisplay {
       }
       final subConcepto = p['subtexto_concepto'] as String?;
       final subMedio = p['subtitulo_medio'] as String?;
-      if (subConcepto != null && subConcepto.isNotEmpty) {
+      if (line['montoPleno'] != null) {
+        // Una mora cobrada a medias ya dice de cuánto era.
+      } else if (subConcepto != null && subConcepto.isNotEmpty) {
         line['subtexto'] = subConcepto;
       } else if (subMedio != null && subMedio.isNotEmpty) {
         line['subtexto'] = subMedio.replaceFirst('· ', '');
@@ -1356,6 +1359,111 @@ class ConceptoPagoDisplay {
     );
   }
 
+  /// Las filas de mora de un mismo cobro con el mismo concepto, juntas en una
+  /// (revisión final de la 6.9.0). En un Mixto la mora puede quedar partida en
+  /// una fila de efectivo y otra de transferencia con el mismo concepto:
+  /// repartida cada una por su lado, las dos tomaban la misma cuota del arrastre
+  /// (el papel decía el doble de lo que se debía) y la del calendario no salía.
+  /// La ficha ya las reparte juntas (`MoraTrackedOrigen._repartirMoraDelLote`).
+  static List<Map<String, dynamic>> _juntarMoraPartida(
+    List<Map<String, dynamic>> filas,
+  ) {
+    double plata(Object? v) => (v as num?)?.toDouble() ?? 0;
+    final out = <Map<String, dynamic>>[];
+    final dondeVa = <String, int>{};
+    for (final p in filas) {
+      final concepto = ((p['concepto_detallado'] as String?) ??
+              (p['concepto'] as String?) ??
+              '')
+          .trim();
+      if (!esMora(p) || esAnulado(p) || concepto.isEmpty) {
+        out.add(p);
+        continue;
+      }
+      final i = dondeVa[concepto];
+      if (i == null) {
+        dondeVa[concepto] = out.length;
+        out.add(p);
+        continue;
+      }
+      final junta = Map<String, dynamic>.from(out[i]);
+      final grossJunta = plata(junta['monto_gross'] ?? junta['monto']);
+      final grossOtra = plata(p['monto_gross'] ?? p['monto']);
+      junta['monto'] = plata(junta['monto']) + plata(p['monto']);
+      junta['monto_gross'] = grossJunta + grossOtra;
+      // Ya no es de un solo medio.
+      junta.remove('subtitulo_medio');
+      out[i] = junta;
+    }
+    return out;
+  }
+
+  /// Lo que le quedó de mora a cada cuota pagada el día del cobro [pago], según
+  /// la reconstrucción con los pagos hasta el fin de ese día. Solo las cuotas
+  /// cuyo pago se completó ese día; vacío si no se puede saber.
+  static Map<int, double> _moraQueQuedoElDia(
+    ContratoAlumno contrato,
+    Map<String, dynamic> pago,
+    List<Map<String, dynamic>> historial,
+  ) {
+    final inicio = _inicioDelDiaDelCobro(pago);
+    final quedo = <int, double>{};
+    if (inicio == null || historial.isEmpty) return quedo;
+    final despues = MoraTrackedOrigen.inferir(
+      contratoBase: contrato.copyWith(
+        moraExentaHasta: null,
+        moraFechaReferencia: null,
+        saldoDeudor: contrato.saldoDeudor > 0.01
+            ? contrato.saldoDeudor
+            : contrato.montoTotalPactado,
+      ),
+      pagos: historial,
+      trackedMonto: 1e12,
+      antesDe: inicio.add(const Duration(days: 1)),
+    );
+    final dia = ArTime.toAr(inicio);
+    for (final d in despues) {
+      final f = d.fechaPagoCuota;
+      if (f != null && f.year == dia.year && f.month == dia.month && f.day == dia.day) {
+        quedo[d.numeroCuota] = d.montoAtribuido;
+      }
+    }
+    return quedo;
+  }
+
+  /// Una línea de calendario de una sola cuota ("Interés mora cuota 4 (vto …)")
+  /// se guarda sin "(parcial)" aunque ese día se haya cobrado solo una parte de
+  /// su mora (revisión final de la 6.9.0): reimpresa, la tabla decía "Debía
+  /// $5.000 · Quedó $0" cuando se debían $8.000 y quedaron $3.000. Como
+  /// [_parcialesConfirmados] con las mixtas: si la reconstrucción confirma que a
+  /// la cuota le quedó mora después de ese día, lo que se debía es lo cobrado más
+  /// lo que quedó, y la línea va "(parcial)".
+  static void _confirmarParcialDeUnaCuota(
+    Map<String, dynamic> line,
+    ContratoAlumno contrato,
+    Map<String, dynamic> pago,
+    List<Map<String, dynamic>>? historial,
+  ) {
+    if (historial == null || historial.isEmpty) return;
+    if (line['cuotaPrevia'] != null || line['montoPleno'] != null) return;
+    final n = (line['numeroCuota'] as num?)?.toInt();
+    if (n == null) return;
+    final concepto = line['concepto'] as String? ?? '';
+    if (_esConceptoMoraMixtoOPendiente(concepto) ||
+        cuotasDeCalendarioEnConcepto(concepto).length != 1) {
+      return;
+    }
+    final resta = _moraQueQuedoElDia(contrato, pago, historial)[n];
+    if (resta == null || resta <= 0.01) return;
+    final m = (line['monto'] as num?)?.toDouble() ?? 0;
+    final pleno = double.parse((m + resta).toStringAsFixed(2));
+    line['montoPleno'] = pleno;
+    line['subtexto'] = MoraConceptoRotulo.subtextoParcialMora(pleno);
+    if (!concepto.contains(MoraConceptoRotulo.sufijoParcial)) {
+      line['concepto'] = '$concepto${MoraConceptoRotulo.sufijoParcial}';
+    }
+  }
+
   /// Una línea de mora que nombra varias cuotas, con la suma y sin repartir:
   /// la reimpresión no pudo decir cuánto fue de cada una.
   static Map<String, dynamic> _renglonDeVariasCuotas(
@@ -1394,32 +1502,7 @@ class ConceptoPagoDisplay {
           l['montoPleno'] != null,
     );
     if (parciales.isEmpty) return lineas;
-    final inicio = _inicioDelDiaDelCobro(pago);
-    final quedo = <int, double>{};
-    if (inicio != null && historial.isNotEmpty) {
-      final despues = MoraTrackedOrigen.inferir(
-        contratoBase: contrato.copyWith(
-          moraExentaHasta: null,
-          moraFechaReferencia: null,
-          saldoDeudor: contrato.saldoDeudor > 0.01
-              ? contrato.saldoDeudor
-              : contrato.montoTotalPactado,
-        ),
-        pagos: historial,
-        trackedMonto: 1e12,
-        antesDe: inicio.add(const Duration(days: 1)),
-      );
-      final dia = ArTime.toAr(inicio);
-      for (final d in despues) {
-        final f = d.fechaPagoCuota;
-        if (f != null &&
-            f.year == dia.year &&
-            f.month == dia.month &&
-            f.day == dia.day) {
-          quedo[d.numeroCuota] = d.montoAtribuido;
-        }
-      }
-    }
+    final quedo = _moraQueQuedoElDia(contrato, pago, historial);
     return [
       for (final l in lineas)
         if (!parciales.contains(l))
