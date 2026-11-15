@@ -88,7 +88,7 @@ class CierreDeEntradas {
       CierreDeEntradas._contar(
         soloDe: caja.id,
         cambioInicial: caja.cambioInicial,
-        cierres: {caja.id: caja.cerradaAt},
+        cajas: {caja.id: caja},
         ventas: ventas,
         anulaciones: anulaciones,
       );
@@ -104,21 +104,25 @@ class CierreDeEntradas {
         soloDe: null,
         cambioInicial:
             deCentavos(cajas.fold(0, (s, c) => s + centavos(c.cambioInicial))),
-        cierres: {for (final c in cajas) c.id: c.cerradaAt},
+        cajas: {for (final c in cajas) c.id: c},
         ventas: ventas,
         anulaciones: anulaciones,
       );
 
-  /// [soloDe] null: las de todas las cajas. [cierres] dice cuándo se cerró
-  /// cada caja (null: sigue abierta).
+  /// [soloDe] null: las de todas las cajas. [cajas]: cada caja por su id, como
+  /// está guardada (si se cerró, cuándo, lo contado y la diferencia).
   factory CierreDeEntradas._contar({
     required String? soloDe,
     required double cambioInicial,
-    required Map<String, String?> cierres,
+    required Map<String, CajaEntradas> cajas,
     required Iterable<VentaEntradas> ventas,
     required Iterable<AnulacionEntradas> anulaciones,
   }) {
     final anuladas = anulacionesPorVenta(anulaciones);
+    // Por caja, para saber qué efectivo anulado no conoció su cierre.
+    final efectivoPorCaja = <String, int>{};
+    final efAnuladoPorCaja = <String, int>{};
+    final efDespuesPorHora = <String, int>{};
     var cuentan = 0, nAnuladas = 0, mixtos = 0, conTransferencia = 0;
     var efectivo = 0, transferencia = 0, recargos = 0;
     var efAnulado = 0, trAnulada = 0, efDespues = 0, trDespues = 0;
@@ -129,17 +133,20 @@ class CierreDeEntradas {
     for (final v in ventas) {
       if (soloDe != null && v.cajaEntradasId != soloDe) continue;
       final anulacion = anuladas[v.id];
+      final caja = v.cajaEntradasId;
       if (anulacion != null) {
         nAnuladas++;
         efAnulado += centavos(v.efectivo);
         trAnulada += centavos(v.transferencia);
-        if (_despuesDelCierre(anulacion, cierres[v.cajaEntradasId])) {
-          efDespues += centavos(v.efectivo);
+        efAnuladoPorCaja[caja] = (efAnuladoPorCaja[caja] ?? 0) + centavos(v.efectivo);
+        if (_despuesDelCierre(anulacion, cajas[caja]?.cerradaAt)) {
+          efDespuesPorHora[caja] = (efDespuesPorHora[caja] ?? 0) + centavos(v.efectivo);
           trDespues += centavos(v.transferencia);
         }
         continue;
       }
       cuentan++;
+      efectivoPorCaja[caja] = (efectivoPorCaja[caja] ?? 0) + centavos(v.efectivo);
       if (v.medio == MedioBarra.mixto) mixtos++;
       if (centavos(v.transferencia) > 0) conTransferencia++;
       efectivo += centavos(v.efectivo);
@@ -175,6 +182,28 @@ class CierreDeEntradas {
         }
       }
     }
+    // **El efectivo anulado que el cierre no conoció sale de lo que la caja
+    // anotó al cerrar, no de comparar relojes** (revisión del 15-nov). La
+    // tablet que cierra sin internet no sabe de una venta que el jefe anuló
+    // antes desde la oficina: la contó en lo que tenía que haber. Con la hora
+    // del otro equipo, esa anulación quedaba "antes del cierre" y el efectivo
+    // desaparecía sin explicación. Lo que esperaba al cerrar es lo contado
+    // menos la diferencia; lo que falta para llegar a eso desde lo de ahora es
+    // efectivo anulado después (nunca más que lo anulado de esa caja: una venta
+    // que todavía no bajó no es una anulación).
+    final idsDeCajas = {...efectivoPorCaja.keys, ...efAnuladoPorCaja.keys};
+    for (final id in idsDeCajas) {
+      final caja = cajas[id];
+      final esperado = caja == null ? null : esperadoAlCerrar(caja);
+      if (esperado == null) {
+        efDespues += efDespuesPorHora[id] ?? 0;
+        continue;
+      }
+      final ahora = centavos(caja!.cambioInicial) + (efectivoPorCaja[id] ?? 0);
+      final faltan = centavos(esperado) - ahora;
+      final tope = efAnuladoPorCaja[id] ?? 0;
+      efDespues += faltan < 0 ? 0 : (faltan > tope ? tope : faltan);
+    }
     return CierreDeEntradas(
       cambioInicial: cambioInicial,
       ventas: cuentan,
@@ -199,9 +228,22 @@ class CierreDeEntradas {
     );
   }
 
+  /// Lo que [caja] tenía que tener de efectivo cuando se cerró: lo contado menos
+  /// la diferencia que se anotó. Null si sigue abierta (o no anotó lo contado).
+  /// **Es lo que dice "Tenía que haber" de una caja cerrada**, aunque después
+  /// se anule algo: el cierre no se corrige.
+  static double? esperadoAlCerrar(CajaEntradas caja) {
+    final contado = caja.efectivoContado;
+    final diferencia = caja.diferencia;
+    if (caja.abierta || contado == null || diferencia == null) return null;
+    return deCentavos(centavos(contado) - centavos(diferencia));
+  }
+
   /// Si [anulacion] se hizo con la caja ya cerrada (el criterio del cierre de
   /// cobros: el momento de la anulación contra el del cierre). Una caja
-  /// abierta, o un momento que no se entiende, no.
+  /// abierta, o un momento que no se entiende, no. **Solo para lo que no entra
+  /// en el arqueo** (la transferencia, y el efectivo de una caja cerrada sin lo
+  /// contado anotado): el efectivo sale de lo anotado al cerrar.
   static bool _despuesDelCierre(AnulacionEntradas anulacion, String? cerradaAt) {
     final cerrada = DateTime.tryParse(cerradaAt ?? '');
     final anulada = DateTime.tryParse(anulacion.createdAt);
@@ -266,4 +308,53 @@ class ResumenDeCajaEntradas {
         ),
     ];
   }
+}
+
+/// La venta de entradas de una fiesta en el cierre de caja (ENTRADAS, sección
+/// 9.2 del spec del 13-nov): si tiene precio, una línea por caja y los totales.
+///
+/// **Lo contado y la diferencia suman solo las cajas cerradas**, y la diferencia
+/// de cada una es la que se anotó al cerrar.
+class CajasDeEntradasDeLaFiesta {
+  final bool tienePrecio;
+  final List<ResumenDeCajaEntradas> cajas;
+
+  /// Todas las cajas juntas.
+  final CierreDeEntradas total;
+
+  const CajasDeEntradasDeLaFiesta({
+    required this.tienePrecio,
+    required this.cajas,
+    required this.total,
+  });
+
+  factory CajasDeEntradasDeLaFiesta.de({
+    required ConfigEntradas? config,
+    required Iterable<CajaEntradas> cajas,
+    required Iterable<VentaEntradas> ventas,
+    required Iterable<AnulacionEntradas> anulaciones,
+  }) {
+    final listaCajas = cajas.toList();
+    final listaVentas = ventas.toList();
+    final listaAnulaciones = anulaciones.toList();
+    return CajasDeEntradasDeLaFiesta(
+      tienePrecio: config?.tienePrecio ?? false,
+      cajas: ResumenDeCajaEntradas.porCaja(listaCajas, listaVentas, listaAnulaciones),
+      total: CierreDeEntradas.deLaFiesta(listaCajas, listaVentas, listaAnulaciones),
+    );
+  }
+
+  bool get sinCajas => cajas.isEmpty;
+  int get abiertas => cajas.where((c) => c.caja.abierta).length;
+  int get cerradas => cajas.length - abiertas;
+
+  /// Lo contado en las cajas cerradas.
+  double get contado => deCentavos(cajas
+      .where((c) => !c.caja.abierta)
+      .fold(0, (s, c) => s + centavos(c.contado ?? 0)));
+
+  /// La suma de las diferencias anotadas al cerrar cada caja.
+  double get diferencia => deCentavos(cajas
+      .where((c) => !c.caja.abierta)
+      .fold(0, (s, c) => s + centavos(c.diferencia ?? 0)));
 }

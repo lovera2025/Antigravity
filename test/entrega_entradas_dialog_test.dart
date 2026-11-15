@@ -35,6 +35,8 @@ Future<void> _abrir(
   EntradasRetiro? retiro,
   Map<String, List<TramoTalonario>> deOtros = const {},
   PermisosDeEntrega permisos = const PermisosDeEntrega.oficina(esJefe: true),
+  VentaAlCincuenta? venta,
+  void Function(AccionEntrega?)? alCerrar,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1200, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -53,7 +55,8 @@ Future<void> _abrir(
                 permisos: permisos,
                 retiro: retiro,
                 deOtros: deOtros,
-              ),
+                venta: venta,
+              ).then((a) => alCerrar?.call(a)),
               child: const Text('abrir'),
             ),
           ),
@@ -400,5 +403,76 @@ void main() {
     expect(find.text(kSoloEnModoJefe), findsOneWidget);
     expect(find.textContaining('el jefe anula esta entrega'), findsNothing,
         reason: 'la cuenta no cambió');
+  });
+
+  // 6.9.0, sección 9.3 del spec del 13-nov: lo que compró del 50 % y
+  // VENDERLE ESAS ENTRADAS. BENÍTEZ tiene 11 al 50 %.
+  group('la venta de las del 50 %', () {
+    testWidgets('sin la venta andando (sin precio, o en la web) se ve como siempre',
+        (tester) async {
+      await _abrir(tester);
+      expect(find.byKey(const Key('entrega_al_cincuenta')), findsOneWidget);
+      expect(find.byKey(const Key('entrega_compro')), findsNothing);
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+    });
+
+    testWidgets('con el permiso: cuántas compró y VENDERLE ESAS ENTRADAS', (tester) async {
+      AccionEntrega? accion;
+      await _abrir(
+        tester,
+        venta: const VentaAlCincuenta(compradas: 4, puedeVender: true),
+        alCerrar: (a) => accion = a,
+      );
+      expect(tester.widget<Text>(find.byKey(const Key('entrega_compro'))).data,
+          'Ya compró 4: le quedan 7.');
+      await tester.tap(find.byKey(const Key('entrega_venderle')));
+      await tester.pumpAndSettle();
+      expect(accion, isA<VenderAlCincuenta>());
+    });
+
+    testWidgets('si ya compró todas, no ofrece vender', (tester) async {
+      await _abrir(tester, venta: const VentaAlCincuenta(compradas: 11, puedeVender: true));
+      expect(tester.widget<Text>(find.byKey(const Key('entrega_compro'))).data,
+          'Ya compró las 11.');
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+      expect(find.byKey(const Key('entrega_se_las_vende')), findsNothing);
+    });
+
+    testWidgets('sin el permiso dice quién se las vende', (tester) async {
+      await _abrir(tester, venta: const VentaAlCincuenta(compradas: 0, puedeVender: false));
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+      expect(find.text('Se las vende quien tiene la caja de entradas.'), findsOneWidget);
+    });
+
+    testWidgets('con lo sin cargo ya retirado, las del 50 % se le venden igual',
+        (tester) async {
+      final entregado = RetiroEntradas.nuevaEntrega(
+        alumno: _alumno(),
+        entradas: RetiroEntradas.entradasDe(_alumno()),
+        tramos: const [TramoTalonario(1043, 1047)],
+        menores10: 0,
+        parentesco: ParentescoRetiro.madre,
+        nombre: 'Laura Benítez',
+        quien: 'Operador',
+        ahora: DateTime.utc(2026, 11, 12, 21, 40),
+      );
+      await _abrir(
+        tester,
+        retiro: entregado,
+        venta: const VentaAlCincuenta(compradas: 0, puedeVender: true),
+      );
+      expect(find.textContaining('Retiró el'), findsOneWidget);
+      expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
+    });
+
+    testWidgets('con las mesas mal cargadas no se ofrece: la cuenta del 50 % puede estar mal',
+        (tester) async {
+      await _abrir(
+        tester,
+        bloqueo: BloqueoRetiro.mesasNoCoinciden,
+        venta: const VentaAlCincuenta(compradas: 0, puedeVender: true),
+      );
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+    });
   });
 }

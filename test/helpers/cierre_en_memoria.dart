@@ -10,6 +10,7 @@ import 'package:arguello_events/features/cierre_caja/models/turno_caja.dart';
 import 'package:arguello_events/features/cierre_caja/providers/cierre_caja_provider.dart';
 import 'package:arguello_events/features/common/providers/admin_provider.dart';
 
+import 'entradas_en_memoria.dart';
 import 'noche_de_barra.dart';
 
 /// El modo jefe, prendido o apagado desde la prueba.
@@ -51,8 +52,15 @@ class CierreDePrueba extends CierreCajaNotifier {
 }
 
 /// Todo lo que el cierre necesita, con la barra de [noche] y el reloj fijo la mañana
-/// siguiente a TÉCNICA PINAROLI.
-List<Override> reemplazosDelCierre(NocheDeBarra noche, {bool modoJefe = true}) => [
+/// siguiente a TÉCNICA PINAROLI. La venta de entradas va siempre en memoria ([entradas],
+/// o una vacía): sin eso, la pestaña ENTRADAS leería la base de verdad del equipo.
+List<Override> reemplazosDelCierre(
+  NocheDeBarra noche, {
+  bool modoJefe = true,
+  EntradasEnMemoria? entradas,
+}) =>
+    [
+      ...(entradas ?? EntradasEnMemoria()).reemplazos,
       ...noche.operadores.reemplazos,
       ...noche.prueba.reemplazos,
       adminAuthProvider.overrideWith(() => ModoJefeDelCierre(modoJefe)),

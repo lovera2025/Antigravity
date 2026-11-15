@@ -15,7 +15,12 @@
 //     verificada, un número repetido y una anulada;
 //   • Entradas_11_anular.png: el cartel de anular;
 //   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante;
-//   • Historial_de_ventas.pdf: IMPRIMIR HISTORIAL, con las letras de la app.
+//   • Historial_de_ventas.pdf: IMPRIMIR HISTORIAL, con las letras de la app;
+//   • Entradas_12 a 15: CERRAR CAJA (contar a ciegas, confirmar, el cierre, y en
+//     el celular) y Cierre_de_caja_entradas.pdf, su papel;
+//   • Entradas_16 y 17: ENTRADAS en el cierre de caja (en la PC y en el celular);
+//   • Entradas_18 y 19: la entrega con lo vendido a la vista, y VENDERLE ESAS
+//     ENTRADAS en el cartel de una familia que debe.
 //
 // Los nombres y el precio de $ 10.000 son inventados.
 
@@ -28,6 +33,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,7 +44,13 @@ import 'package:arguello_events/features/entradas/cuentas/historial_de_entradas.
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
+import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
+import 'package:arguello_events/features/barra/providers/barra_providers.dart'
+    show eventosDeLaBarraProvider;
+import 'package:arguello_events/features/cierre_caja/widgets/sector_entradas.dart';
+import 'package:arguello_events/features/entradas/pdf/cierre_caja_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
+import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
@@ -58,6 +70,9 @@ void main() {
       ? _salida
       : Directory.systemTemp.createTempSync('venta_entradas_muestra').path;
   Directory(carpeta).createSync(recursive: true);
+
+  /// Los papeles del cierre que se abrieron (CERRAR CAJA los abre solos).
+  final cierres = <DatosDelCierreDeEntradas>[];
 
   Future<void> letras() async {
     SharedPreferences.setMockInitialValues({});
@@ -88,6 +103,9 @@ void main() {
     required Size tamano,
     bool jefe = false,
     bool conCaja = true,
+    List<Override> extra = const [],
+    Future<void> Function(EntradasEnMemoria)? antes,
+    bool asentar = true,
   }) async {
     await letras();
     tester.view.physicalSize = tamano;
@@ -97,6 +115,7 @@ void main() {
     final entradas = EntradasEnMemoria()
       ..conPrecio(idFiestaEntrega, anticipada: 8000, hasta: '2026-11-28');
     final comprobantes = <DatosDelComprobante>[];
+    cierres.clear();
     final c = ProviderContainer(overrides: [
       ...e.reemplazos(jefe: jefe),
       ...entradas.reemplazos,
@@ -106,6 +125,10 @@ void main() {
         (datos, {context}) async => comprobantes.add(datos),
       ),
       fiestasQueVienenProvider.overrideWith((ref) async => [fiestaDeLaEntrega]),
+      abrirCierreDeEntradasProvider.overrideWithValue(
+        (datos, {context}) async => cierres.add(datos),
+      ),
+      ...extra,
     ]);
     addTearDown(c.dispose);
     final carla = e.operador();
@@ -121,6 +144,7 @@ void main() {
         cambioInicial: 5000,
       );
     }
+    if (antes != null) await antes(entradas);
     final clave = GlobalKey();
     await tester.pumpWidget(RepaintBoundary(
       key: clave,
@@ -133,7 +157,14 @@ void main() {
         ),
       ),
     ));
-    await tester.pumpAndSettle();
+    if (asentar) {
+      await tester.pumpAndSettle();
+    } else {
+      // La entrega relee cada 15 s: sin pumpAndSettle.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
     return (clave, e, entradas, comprobantes);
   }
 
@@ -354,6 +385,133 @@ void main() {
           .writeAsBytesSync(bytes);
       print('── PDF en: $carpeta');
     });
+  });
+
+  testWidgets('cerrar la caja: contar a ciegas, confirmar y el cierre', (tester) async {
+    final (clave, _, entradas, _) = await montar(
+      tester,
+      tamano: const Size(1100, 900),
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await unaNocheDeVentas(tester, entradas);
+    await tocar(tester, 'vender_cerrar');
+    await tester.pumpAndSettle();
+    await poner(tester, 'cierre_contado', '64500');
+    await poner(tester, 'cierre_nota', 'un billete roto');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await guardar(tester, clave, 'Entradas_12_cerrar_contar.png');
+    await tocar(tester, 'cierre_cerrar');
+    await tester.pumpAndSettle();
+    await guardar(tester, clave, 'Entradas_13_cerrar_confirmar.png');
+    await tocar(tester, 'cierre_confirmar');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_14_cerrada.png');
+
+    // El papel del cierre, con las letras de la app.
+    final datos = cierres.single;
+    await tester.runAsync(() async {
+      final bytes = await CierreCajaEntradasPdf.armar(
+        datos,
+        fuentes: await PdfService.fuentesOutfit(),
+        logo: await isotipoDeLosPapeles(),
+      );
+      File('$carpeta${Platform.pathSeparator}Cierre_de_caja_entradas.pdf')
+          .writeAsBytesSync(bytes);
+      print('── PDF en: $carpeta');
+    });
+  });
+
+  testWidgets('cerrar la caja en el celular', (tester) async {
+    final (clave, _, entradas, _) = await montar(
+      tester,
+      tamano: const Size(390, 1100),
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await unaNocheDeVentas(tester, entradas);
+    await tocar(tester, 'vender_cerrar');
+    await tester.pumpAndSettle();
+    await poner(tester, 'cierre_contado', '65000');
+    await tocar(tester, 'cierre_cerrar');
+    await tester.pumpAndSettle();
+    await tocar(tester, 'cierre_confirmar');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_15_cerrada_celular.png');
+  });
+
+  for (final (nombre, tamano) in [
+    ('Entradas_16_cierre_por_sector.png', const Size(1100, 640)),
+    ('Entradas_17_cierre_por_sector_celular.png', const Size(390, 900)),
+  ]) {
+    testWidgets('ENTRADAS en el cierre de caja · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        jefe: true,
+        tamano: tamano,
+        extra: [
+          eventosDeLaBarraProvider.overrideWith((ref) async => [fiestaDeLaEntrega]),
+          relojDelJefeProvider.overrideWithValue(() => DateTime(2026, 11, 30, 12)),
+        ],
+        antes: (entradas) async {
+          await unaNocheDeVentas(tester, entradas);
+          await tester.runAsync(() async {
+            final maxi =
+                entradas.listaCajas.firstWhere((c) => c.operadorNombre == 'Maxi');
+            await entradas.cerrarCaja(maxi,
+                efectivoContado: 12500, diferencia: -500, quien: 'Maxi');
+          });
+        },
+        pantalla: const Scaffold(
+          body: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: SectorEntradasDelCierre(isDark: false),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('la entrega con lo vendido a la vista', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      jefe: true,
+      asentar: false,
+      tamano: const Size(1300, 950),
+      // PÉREZ, JUAN compró 3 de sus 8 al 50 %: le quedan 5.
+      antes: (entradas) => tester.runAsync(() async {
+        await entradas.vender(
+          caja: entradas.listaCajas.single,
+          contratoAlumnoId: EntregaEnMemoria.idPerez,
+          compradorNombre: 'PEREZ, MARTA',
+          renglones: [
+            RenglonEntradas.lugar(
+              nombre: PedidoDeEntradas.nombreDeLugar(50),
+              precioLista: 10000,
+              descuentoPct: 50,
+              cantidad: 3,
+            ),
+          ],
+          medio: MedioBarra.efectivo,
+          efectivo: 15000,
+          quien: 'Carla',
+        );
+      }),
+      pantalla: RetiroEntradasScreen(
+        evento: fiestaDeLaEntrega,
+        onCobrar: (_) async {},
+        onEditarAlumno: (_) async {},
+      ),
+    );
+    await guardar(tester, clave, 'Entradas_18_entrega.png');
+    await tester.tap(find.text('PÉREZ, JUAN').first);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await guardar(tester, clave, 'Entradas_19_entrega_venderle.png');
   });
 
   testWidgets('el cobro, la venta guardada y el comprobante', (tester) async {

@@ -4,23 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../barra/cuentas/cierre_de_barra.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../barra/jefe/barra_jefe_providers.dart';
-import '../../barra/jefe/elegir_fiesta.dart';
-import '../../barra/services/fiestas_del_jefe.dart';
-import '../../eventos/utils/evento_presentacion.dart';
+import 'estilo_del_sector.dart';
 
-const _gold = Color(0xFFD4AF37);
-const _efectivo = Color(0xFF00B894);
-const _transferencia = Color(0xFF6C63FF);
-
-Color _colorDiferencia(double d) {
-  final c = centavos(d);
-  if (c == 0) return const Color(0xFF2E9E5B);
-  return c < 0 ? const Color(0xFFE74C3C) : const Color(0xFFD68A00);
-}
-
-/// "Justo", "Sobran $ 500", "Faltan $ 1.500".
-String _diferencia(double d) =>
-    diferenciaEnPalabras(d).replaceFirst('Justo, sin diferencia', 'Justo');
+const _gold = oroDelSector;
+const _efectivo = efectivoDelSector;
+const _transferencia = transferenciaDelSector;
+const _colorDiferencia = colorDeLaDiferencia;
+const _diferencia = diferenciaCorta;
 
 /// BARRA en el cierre de caja (6.4.0): la fiesta (la próxima, o la de anoche hasta el día
 /// siguiente; CAMBIAR DE FIESTA para otra) y **una línea por caja** con el cambio, el
@@ -52,24 +42,15 @@ class SectorBarraDelCierre extends ConsumerWidget {
             style: TextStyle(color: muted),
           );
         }
-        final hoy = ref.read(relojDelJefeProvider)();
         final cajas = ref.watch(cajasDelJefeProvider(fiesta.id));
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Fiesta(
-              titulo: EventoPresentacion.tituloPrincipal(fiesta),
-              fecha: fechaConCuando(fiesta.fechaEvento, hoy, esLaQueAbre: fiesta.id == datos.laQueAbre?.id),
+            FiestaDelCierre(
+              fiestas: datos,
+              fiesta: fiesta,
               isDark: isDark,
-              onCambiar: datos.todas.length > 1
-                  ? () async {
-                      final id = await showDialog<String>(
-                        context: context,
-                        builder: (_) => ElegirFiestaDelJefe(fiestas: datos, actual: fiesta.id, hoy: hoy),
-                      );
-                      if (id != null) ref.read(fiestaElegidaDelJefeProvider.notifier).elegir(id);
-                    }
-                  : null,
+              clave: 'cierre_barra',
             ),
             const SizedBox(height: 8),
             Text(
@@ -100,62 +81,6 @@ class SectorBarraDelCierre extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _Fiesta extends StatelessWidget {
-  final String titulo;
-  final String fecha;
-  final bool isDark;
-  final VoidCallback? onCambiar;
-
-  const _Fiesta({required this.titulo, required this.fecha, required this.isDark, this.onCambiar});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _gold.withValues(alpha: 0.35)),
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'LA FIESTA',
-                style: TextStyle(fontSize: 9, letterSpacing: 1.5, fontWeight: FontWeight.w800, color: _gold),
-              ),
-              Text(
-                titulo,
-                key: const Key('cierre_barra_fiesta'),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-              Text(
-                fecha,
-                style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white60 : Colors.black54),
-              ),
-            ],
-          ),
-          OutlinedButton(
-            key: const Key('cierre_barra_cambiar_fiesta'),
-            onPressed: onCambiar,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _gold,
-              side: const BorderSide(color: _gold),
-            ),
-            child: const Text('CAMBIAR DE FIESTA', style: TextStyle(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -328,45 +253,6 @@ class _Resumen extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// ENTRADAS en el cierre de caja: todavía no hay venta de entradas en la app (las del
-/// 50 % se venden a mano). El lugar queda listo.
-class SectorEntradasDelCierre extends StatelessWidget {
-  final bool isDark;
-
-  const SectorEntradasDelCierre({super.key, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = isDark ? Colors.white60 : Colors.black54;
-    return Container(
-      key: const Key('cierre_entradas_vacio'),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.confirmation_number_outlined, size: 36, color: _gold),
-          const SizedBox(height: 10),
-          const Text(
-            'Todavía no hay ventas de entradas',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Hasta que esté la venta de entradas, las del 50 % se venden a mano, fuera de la '
-            'app. El lugar queda listo para cuando esté.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: muted),
-          ),
-        ],
-      ),
     );
   }
 }

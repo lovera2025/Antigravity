@@ -18,6 +18,9 @@ import '../common/utils/quien_opera.dart';
 import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
 import '../common/utils/texto_busqueda.dart';
+import '../entradas/cuentas/lugares_de_la_familia.dart';
+import '../entradas/cuentas/numeros_de_entradas.dart';
+import '../entradas/datos/entradas_repositorio.dart';
 import '../entradas/providers/entradas_providers.dart';
 import '../entradas/services/en_caja.dart';
 import '../entradas/services/nombre_de_la_fiesta.dart';
@@ -80,8 +83,21 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   bool _cargando = true;
   String? _errorCarga;
   List<ContratoAlumno> _alumnos = [];
+  /// Todos los alumnos de la fiesta, **también los de baja temporal**: sus
+  /// números entregados siguen teniendo dueño (revisión del 15-nov). La lista
+  /// que se ve deja afuera las bajas; los números ocupados, no.
+  List<ContratoAlumno> _todos = [];
   Map<String, DeudaAlumno> _deudas = {};
   Map<String, EntradasRetiro> _retiros = {};
+
+  /// La venta de entradas de la fiesta (6.9.0): lo vendido y lo anulado, para
+  /// mostrar cuántas del 50 % compró cada familia y para que la entrega no dé un
+  /// número ya vendido. [_ventaAndando]: la fiesta tiene precio y este equipo
+  /// tiene la base (en la web, no).
+  List<VentaEntradas> _ventas = [];
+  List<AnulacionEntradas> _anulaciones = [];
+  Map<String, int> _compradas = {};
+  bool _ventaAndando = false;
   bool _porDivision = false;
   bool _ocultarMontos = false;
   bool _ocupado = false;
@@ -107,6 +123,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     'entradas_retiro',
     'contratos_alumnos',
     'pagos_contrato_alumno',
+    'entradas_config',
+    'entradas_ventas',
+    'entradas_anulaciones',
   };
 
   @override
@@ -153,9 +172,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   Future<void> _cargar({bool silencioso = false}) async {
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      final alumnos = (await repo.getByEvento(widget.evento.id))
-          .where((a) => !a.esBajaTemporal)
-          .toList()
+      final todos = await repo.getByEvento(widget.evento.id);
+      final alumnos = todos.where((a) => !a.esBajaTemporal).toList()
         ..sort((x, y) => x.nombreAlumno.compareTo(y.nombreAlumno));
       final ids = [for (final a in alumnos) a.id];
       final pagos = <String, List<Map<String, dynamic>>>{};
@@ -166,7 +184,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       final mora = await repo.sumMoraCobradaHistorialPorContratos(ids);
       final retiros = await ref
           .read(entradasRetiroRepositoryProvider)
-          .obtenerPorContratoIds(ids);
+          .obtenerPorContratoIds([for (final a in todos) a.id]);
       final deudas = {
         for (final a in alumnos)
           a.id: RetiroEntradas.deudaDe(
@@ -175,11 +193,17 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
             moraCobradaHistorial: mora[a.id] ?? 0,
           ),
       };
+      final venta = await _leerLaVenta();
       if (!mounted) return;
       setState(() {
         _alumnos = alumnos;
+        _todos = todos;
         _deudas = deudas;
         _retiros = retiros;
+        _ventas = venta.ventas;
+        _anulaciones = venta.anulaciones;
+        _compradas = compradasPorFamilia(venta.ventas, venta.anulaciones);
+        _ventaAndando = venta.andando;
         _cargando = false;
         _errorCarga = null;
       });
@@ -192,6 +216,37 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       });
     }
   }
+
+  /// Lo vendido de la fiesta. **La entrega no depende de la venta**: si no se
+  /// puede leer, sigue como antes de la 6.9.0 (sin lo vendido a la vista).
+  Future<({List<VentaEntradas> ventas, List<AnulacionEntradas> anulaciones, bool andando})>
+      _leerLaVenta() async {
+    if (!ref.read(entradasEnEsteEquipoProvider)) {
+      return (ventas: <VentaEntradas>[], anulaciones: <AnulacionEntradas>[], andando: false);
+    }
+    try {
+      final entradas = ref.read(entradasDeLaFiestaProvider);
+      final id = widget.evento.id;
+      final config = await entradas.config(id);
+      return (
+        ventas: await entradas.ventas(id),
+        anulaciones: await entradas.anulaciones(id),
+        andando: config?.tienePrecio ?? false,
+      );
+    } catch (_) {
+      return (ventas: <VentaEntradas>[], anulaciones: <AnulacionEntradas>[], andando: false);
+    }
+  }
+
+  /// Los números que ya tienen dueño, salvo los de [alumnoId]: los entregados
+  /// sin cargo y los vendidos (una venta anulada con las entradas devueltas los
+  /// libera). Es el `deOtros` de la entrega: no deja dar un número vendido.
+  Map<String, List<TramoTalonario>> _ocupadosPara(String alumnoId) =>
+      NumerosDeEntradas.ocupados(
+        entregados: RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: alumnoId),
+        ventas: _ventas,
+        anulaciones: _anulaciones,
+      );
 
   /// Con las cuentas recién leídas (de esta PC, o bajadas cuando la otra cobró):
   /// en el mostrador, quién de "En caja" ya pagó, con un sonido corto la primera
@@ -298,8 +353,15 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         bloqueo: bloqueo,
         permisos: _permisos,
         retiro: retiro,
-        deOtros: RetiroEntradas.tramosDeOtros(_alumnos, _retiros, salvo: a.id),
+        deOtros: _ocupadosPara(a.id),
         cuentaCambio: _cuentaCambio,
+        venta: _ventaAndando
+            ? VentaAlCincuenta(
+                compradas: _compradas[a.id] ?? 0,
+                puedeVender: ref.read(puedeVenderEntradasProvider) &&
+                    ref.read(entradasEnEsteEquipoProvider),
+              )
+            : null,
       );
     } finally {
       _abiertoId = null;
@@ -329,7 +391,22 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         await _anular(a, motivo);
       case final EntregarEntradas datos:
         await _entregar(a, datos);
+      case VenderAlCincuenta():
+        await _venderAlCincuenta(a);
     }
+  }
+
+  /// VENDERLE ESAS ENTRADAS: VENDER con esa familia ya elegida. Al volver se
+  /// relee: lo que compró cambia lo que se ve.
+  Future<void> _venderAlCincuenta(ContratoAlumno a) async {
+    // Doble llave: el botón sale solo con el permiso.
+    if (!ref.read(puedeVenderEntradasProvider)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VenderEntradasScreen(evento: widget.evento, familiaId: a.id),
+      ),
+    );
+    if (mounted) await _cargar(silencioso: true);
   }
 
   /// PASAR A CAJA desde una entrega: se cierra la entrega (está encima de
@@ -450,7 +527,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       final errorTramos = RetiroEntradas.errorTramos(
         tramos: datos.tramos,
         generales: entradas.generales,
-        deOtros: RetiroEntradas.tramosDeOtros(_alumnos, _retiros, salvo: a.id),
+        deOtros: _ocupadosPara(a.id),
       );
       if (bloqueo != BloqueoRetiro.ninguno || errorTramos != null) {
         await _avisar(
@@ -900,7 +977,10 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
               ),
               // Las de las mesas adicionales y las sillas extra: no se entregan
               // acá, se compran aparte al 50 %.
-              _tarjeta('Al 50 %, aparte', '${resumen.alCincuenta}'),
+              // Con la venta de entradas andando, cuántas ya se vendieron.
+              _ventaAndando
+                  ? _tarjeta('Al 50 %', '${_vendidasAlCincuenta()} vendidas de ${resumen.alCincuenta}')
+                  : _tarjeta('Al 50 %, aparte', '${resumen.alCincuenta}'),
             ],
           ),
         ),
@@ -940,6 +1020,19 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         Expanded(child: _porDivision ? _vistaPorDivision() : _vistaMostrador()),
       ],
     );
+  }
+
+  /// Las del 50 % vendidas a las familias de la lista: de cada una, como mucho
+  /// las que le corresponden (si le sacaron una silla después, no suma de más).
+  int _vendidasAlCincuenta() {
+    var total = 0;
+    for (final a in _alumnos) {
+      final compradas = _compradas[a.id] ?? 0;
+      if (compradas == 0) continue;
+      final corresponden = RetiroEntradas.entradasDe(a).alCincuenta;
+      total += compradas < corresponden ? compradas : corresponden;
+    }
+    return total;
   }
 
   Widget _tarjeta(String rotulo, String valor, {Color? color}) => Expanded(
@@ -1092,7 +1185,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                     '${!compacta && division.isNotEmpty ? '$division · ' : ''}'
                     'mesa $mesa · ${e.sinCargo} sin cargo '
                     '(${e.vip} VIP + ${e.generales} generales)'
-                    '${e.alCincuenta > 0 ? ' · ${e.alCincuenta} al 50 %' : ''}',
+                    '${e.alCincuenta > 0 ? ' · ${e.alCincuenta} al 50 %' : ''}'
+                    '${e.alCincuenta > 0 && _ventaAndando && (_compradas[a.id] ?? 0) > 0 ? ' (compró ${_compradas[a.id]})' : ''}',
                     style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
                   ),
                   if (r != null && r.entregado && !compacta)

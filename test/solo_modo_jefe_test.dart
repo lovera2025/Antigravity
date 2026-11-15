@@ -596,7 +596,7 @@ void main() {
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá.
-    expect(encontradas, {'_abrir', '_cobrar'});
+    expect(encontradas, {'_abrir', '_cobrar', '_cerrarDeVerdad'});
   });
 
   test('PRECIOS se abre solo desde ENTRADAS de la fiesta, y con la llave', () {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../common/services/pdf_service.dart';
+import 'cierre_caja_entradas_pdf.dart';
 import 'comprobante_entradas_pdf.dart';
 import 'historial_entradas_pdf.dart';
 
@@ -40,6 +41,29 @@ final abrirComprobanteDeEntradasProvider =
     await PdfService.entregarPdf(
       bytes,
       ComprobanteEntradasPdf.nombreDelArchivo(datos),
+      context: context,
+    );
+  };
+});
+
+/// Arma el papel del cierre de una caja de entradas (media A4) y lo entrega
+/// como los demás papeles. Los tests lo reemplazan.
+typedef AbrirCierreDeEntradas = Future<void> Function(
+  DatosDelCierreDeEntradas datos, {
+  BuildContext? context,
+});
+
+final abrirCierreDeEntradasProvider = Provider<AbrirCierreDeEntradas>((ref) {
+  return (datos, {context}) async {
+    final bytes = await CierreCajaEntradasPdf.armar(
+      datos,
+      fuentes: await PdfService.fuentesOutfit(),
+      logo: await isotipoDeLosPapeles(),
+    );
+    if (context != null && !context.mounted) return;
+    await PdfService.entregarPdf(
+      bytes,
+      CierreCajaEntradasPdf.nombreDelArchivo(datos),
       context: context,
     );
   };

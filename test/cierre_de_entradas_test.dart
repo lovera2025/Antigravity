@@ -207,6 +207,51 @@ void main() {
     expect(resumen.cuentas.hayAnuladoDespues, isTrue);
   });
 
+  // Revisión del 15-nov: la tablet que cierra sin internet no sabe de una venta
+  // que el jefe anuló antes desde la oficina. Con la hora del otro equipo esa
+  // anulación quedaba "antes del cierre" y el efectivo desaparecía.
+  group('lo que el cierre no conoció', () {
+    test('una anulación con hora anterior al cierre, que la caja no conocía, va '
+        'en "anulado después del cierre"', () {
+      final abierta = _caja(cambio: 2000);
+      final v1 = _venta(abierta, sueltas: 3);
+      final v2 = _venta(abierta, sueltas: 1);
+      // La tablet cerró sin saber de la anulación: esperaba $42.000 y contó eso.
+      final cerrada =
+          abierta.cerrada(efectivoContado: 42000, diferencia: 0, ahora: _cierra);
+      final c = CierreDeEntradas.de(cerrada, [v1, v2], [_anulada(v2, cuando: _vende)]);
+      expect(CierreDeEntradas.esperadoAlCerrar(cerrada), 42000);
+      expect(c.efectivoEsperado, 32000, reason: 'lo de ahora, sin la anulada');
+      expect(c.efectivoAnuladoDespues, 10000);
+      expect(c.hayAnuladoDespues, isTrue);
+    });
+
+    test('una anulada que el cierre sí conoció no va aparte, sea cual sea su hora', () {
+      final abierta = _caja(cambio: 2000);
+      final v1 = _venta(abierta, sueltas: 3);
+      final v2 = _venta(abierta, sueltas: 1);
+      final cerrada =
+          abierta.cerrada(efectivoContado: 32000, diferencia: 0, ahora: _cierra);
+      // Con el reloj del otro equipo adelantado, la hora dice "después".
+      final c = CierreDeEntradas.de(cerrada, [v1, v2], [_anulada(v2, cuando: _despues)]);
+      expect(c.efectivoAnuladoDespues, 0);
+    });
+
+    test('una venta que todavía no bajó no se toma por anulada', () {
+      final abierta = _caja(cambio: 2000);
+      final v1 = _venta(abierta, sueltas: 3);
+      // Al cerrar tenía $42.000 (con otra venta que esta PC todavía no tiene).
+      final cerrada =
+          abierta.cerrada(efectivoContado: 42000, diferencia: 0, ahora: _cierra);
+      final c = CierreDeEntradas.de(cerrada, [v1], const []);
+      expect(c.efectivoAnuladoDespues, 0);
+    });
+
+    test('una caja abierta no tiene lo esperado al cerrar', () {
+      expect(CierreDeEntradas.esperadoAlCerrar(_caja(cambio: 2000)), isNull);
+    });
+  });
+
   test('lo anulado antes de cerrar no va en "después del cierre"', () {
     final abierta = _caja();
     final antes = _venta(abierta, sueltas: 1);
@@ -309,6 +354,54 @@ void main() {
     expect(c.entradas, 7);
     expect(c.vendido, 70000);
     expect(c.efectivo, 70000);
+  });
+
+  // ENTRADAS en el cierre de caja (6.9.0): una línea por caja y los totales.
+  group('las cajas de la fiesta', () {
+    final conPrecio = ConfigEntradas(
+      id: 'c',
+      eventoId: _fiesta,
+      valorEntrada: 10000,
+      createdAt: '2026-11-20T00:00:00Z',
+      updatedAt: '2026-11-20T00:00:00Z',
+    );
+
+    test('lo contado y la diferencia suman solo las cajas cerradas', () {
+      final abierta = _caja(cambio: 5000, operador: 'Carla');
+      final otra = _caja(cambio: 2000, operador: 'Maxi');
+      final cerrada =
+          otra.cerrada(efectivoContado: 41500, diferencia: -500, ahora: _cierra);
+      final d = CajasDeEntradasDeLaFiesta.de(
+        config: conPrecio,
+        cajas: [abierta, cerrada],
+        ventas: [
+          _venta(abierta, sueltas: 2),
+          _venta(otra, sueltas: 4),
+        ],
+        anulaciones: const [],
+      );
+      expect(d.tienePrecio, isTrue);
+      expect(d.abiertas, 1);
+      expect(d.cerradas, 1);
+      expect(d.contado, 41500);
+      expect(d.diferencia, -500);
+      expect(d.total.entradas, 6);
+      expect(d.total.cambioInicial, 7000);
+      expect([for (final c in d.cajas) c.caja.operadorNombre], ['Carla', 'Maxi']);
+    });
+
+    test('sin precio y sin cajas', () {
+      final d = CajasDeEntradasDeLaFiesta.de(
+        config: null,
+        cajas: const [],
+        ventas: const [],
+        anulaciones: const [],
+      );
+      expect(d.tienePrecio, isFalse);
+      expect(d.sinCajas, isTrue);
+      expect(d.contado, 0);
+      expect(d.diferencia, 0);
+    });
   });
 
   test('una caja sin ventas da todo en cero y espera su cambio', () {

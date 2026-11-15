@@ -11,10 +11,13 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
+import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/services/en_caja.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
+import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
+import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
 import 'helpers/entradas_en_memoria.dart';
@@ -37,13 +40,16 @@ Future<_Montada> _montar(
   bool mostrador = true,
   bool cobros = false,
   bool jefe = false,
+  bool vende = false,
   EntradasEnMemoria? entradas,
+  void Function(EntregaEnMemoria)? preparar,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1300, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
+  preparar?.call(e);
   // Siempre una venta de entradas en memoria: sin ella, lo que la pantalla lee
   // de la venta caería en la base de verdad del equipo.
   final c = ProviderContainer(overrides: [
@@ -55,7 +61,7 @@ Future<_Montada> _montar(
   if (mostrador) {
     await c.read(appRoleProvider.notifier).entrarComoEntradas(
           e.operador(cobros: cobros),
-          PermisosEfectivos(entradas: true, cobros: cobros),
+          PermisosEfectivos(entradas: true, cobros: cobros, vendeEntradas: vende),
         );
   }
   Future<void> anotar(ContratoAlumno a) async => cobrosDeLaOficina.add(a.id);
@@ -349,6 +355,176 @@ void main() {
       await _pasar(tester);
       expect(m.c.read(appRoleProvider).esCaja, isTrue);
       expect(m.enCaja.contiene(_perez), isTrue);
+    });
+  });
+
+  // 6.9.0, sección 9.3 del spec del 13-nov: la entrega sin cargo con lo vendido
+  // a la vista, y VENDERLE ESAS ENTRADAS.
+  group('lo vendido, a la vista en la entrega', () {
+    /// Una venta en la caja de Carla: [lugar] entradas de los lugares de
+    /// [familia] y [sueltas] sueltas, con [numeros].
+    Future<void> vender(
+      EntradasEnMemoria e, {
+      String? familia = _perez,
+      String comprador = 'PÉREZ, MARTA',
+      int lugar = 3,
+      int sueltas = 0,
+      String? numeros,
+    }) async {
+      final caja = e.listaCajas.isEmpty
+          ? await e.abrirCaja(
+              eventoId: idFiestaEntrega, operadorId: 'carla', operadorNombre: 'Carla')
+          : e.listaCajas.first;
+      await e.vender(
+        caja: caja,
+        contratoAlumnoId: familia,
+        compradorNombre: comprador,
+        renglones: [
+          if (lugar > 0)
+            RenglonEntradas.lugar(
+              nombre: 'Entrada de lugar adicional (50 %)',
+              precioLista: 10000,
+              descuentoPct: 50,
+              cantidad: lugar,
+            ),
+          if (sueltas > 0)
+            RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: sueltas),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 5000.0 * lugar + 10000.0 * sueltas,
+        numeros: numeros,
+        quien: 'Carla',
+      );
+    }
+
+    testWidgets('con precio: cuántas del 50 % se vendieron, y cuántas compró cada familia',
+        (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await vender(e, lugar: 3);
+      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      expect(find.text('Al 50 %'), findsOneWidget);
+      expect(find.text('3 vendidas de 8'), findsOneWidget);
+      expect(find.textContaining('8 al 50 % (compró 3)'), findsOneWidget);
+    });
+
+    testWidgets('una venta anulada no cuenta', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await vender(e, lugar: 3);
+      await e.anular(e.listaVentas.single,
+          motivo: 'error', devueltas: true, quien: 'Jefe');
+      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      expect(find.text('0 vendidas de 8'), findsOneWidget);
+      expect(find.textContaining('(compró'), findsNothing);
+    });
+
+    testWidgets('sin precio en la fiesta se ve como siempre', (tester) async {
+      await _montar(tester, mostrador: false, jefe: true, entradas: EntradasEnMemoria());
+      expect(find.text('Al 50 %, aparte'), findsOneWidget);
+      expect(find.textContaining('vendidas de'), findsNothing);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.byKey(const Key('entrega_compro')), findsNothing);
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+    });
+
+    testWidgets('el jefe se las vende desde la entrega, aunque la familia deba: VENDER '
+        'con la familia ya elegida', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await vender(e, lugar: 3);
+      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.textContaining('Debe'), findsWidgets, reason: 'debe: no se le entrega');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_compro'))).data,
+        'Ya compró 3: le quedan 5.',
+      );
+      await tester.tap(find.byKey(const Key('entrega_venderle')));
+      await _pasar(tester);
+      await _pasar(tester);
+      final venta = tester.widget<VenderEntradasScreen>(find.byType(VenderEntradasScreen));
+      expect(venta.familiaId, _perez);
+    });
+
+    testWidgets('en el mostrador, sin el permiso de vender, dice quién se las vende',
+        (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, entradas: e);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_compro'))).data,
+        'Todavía no compró ninguna.',
+      );
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+      expect(find.text('Se las vende quien tiene la caja de entradas.'), findsOneWidget);
+    });
+
+    testWidgets('en el mostrador, con "Vende entradas", también se las vende', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, vende: true, entradas: e);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
+    });
+
+    // Revisión del 15-nov: los números de un alumno que pasó a baja temporal
+    // después de retirar siguen teniendo dueño.
+    testWidgets('un número entregado a un alumno que después pasó a baja no se vuelve a dar',
+        (tester) async {
+      await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        entradas: EntradasEnMemoria()..conPrecio(idFiestaEntrega),
+        preparar: (e) {
+          final baja = alumnoDeLaEntrega(
+            id: 'a0000000-0000-4000-8000-000000000199',
+            nombre: '[BAJA] RÍOS, PEDRO',
+            mesas: const [16],
+          );
+          e.contratos.alumnos.add(baja);
+          e.entregas.filas[baja.id] = RetiroEntradas.nuevaEntrega(
+            alumno: baja,
+            entradas: RetiroEntradas.entradasDe(baja),
+            tramos: const [TramoTalonario(5001, 5007)],
+            menores10: 0,
+            parentesco: ParentescoRetiro.padre,
+            nombre: 'Pedro Ríos',
+            quien: 'Jefe',
+            ahora: DateTime.utc(2026, 11, 7, 18),
+          );
+        },
+      );
+      expect(find.textContaining('RÍOS'), findsNothing, reason: 'la baja no se lista');
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await tester.enterText(find.widgetWithText(TextField, 'Del'), '5001');
+      await tester.tap(find.text('Padre'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
+        'Hugo López',
+      );
+      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
+      await tester.pump();
+      await tester.tap(find.text('CONFIRMAR ENTREGA'));
+      await _pasar(tester);
+      expect(find.textContaining('El 5001 ya se le dio a [BAJA] RÍOS, PEDRO'), findsOneWidget);
+    });
+
+    testWidgets('un número del talonario ya vendido no se entrega sin cargo', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await vender(e, familia: null, comprador: 'GOMEZ, LUIS', lugar: 0, sueltas: 2,
+          numeros: '3001-3002');
+      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await tester.enterText(find.widgetWithText(TextField, 'Del'), '3001');
+      await tester.tap(find.text('Padre'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
+        'Hugo López',
+      );
+      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
+      await tester.pump();
+      await tester.tap(find.text('CONFIRMAR ENTREGA'));
+      await _pasar(tester);
+      expect(find.textContaining('El 3001 ya se le dio a GOMEZ, LUIS'), findsOneWidget);
+      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget, reason: 'no se entregó');
     });
   });
 

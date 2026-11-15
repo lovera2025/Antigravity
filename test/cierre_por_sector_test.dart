@@ -12,10 +12,15 @@ import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider
 import 'package:arguello_events/features/cierre_caja/cierre_caja_screen.dart';
 import 'package:arguello_events/features/cierre_caja/services/sector_del_cierre.dart';
 import 'package:arguello_events/features/cierre_caja/widgets/sector_barra.dart';
+import 'package:arguello_events/features/cierre_caja/widgets/sector_entradas.dart';
+import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart'
+    hide MedioBarra;
+import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/models/evento.dart';
 
 import 'helpers/barra_en_memoria.dart';
 import 'helpers/cierre_en_memoria.dart';
+import 'helpers/entradas_en_memoria.dart';
 import 'helpers/noche_de_barra.dart';
 
 /// El cierre de caja por sector (6.4.0, decidido el 5-nov): COBROS · BARRA · ENTRADAS
@@ -155,9 +160,132 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ENTRADAS: todavía no hay ventas', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SectorEntradasDelCierre(isDark: true))));
-    expect(find.text('Todavía no hay ventas de entradas'), findsOneWidget);
+  // ENTRADAS (6.9.0, sección 9.2 del spec del 13-nov): por fiesta, una línea por caja.
+  group('ENTRADAS', () {
+    Future<void> abrirEntradas(
+      WidgetTester tester,
+      EntradasEnMemoria entradas, {
+      Size tamano = const Size(1100, 900),
+      bool enLaWeb = false,
+    }) async {
+      tester.view.physicalSize = tamano;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ...prueba.reemplazos,
+          // En la web no hay base del equipo: la pantalla no la tiene que leer.
+          if (!enLaWeb) ...entradas.reemplazos,
+          if (enLaWeb) entradasEnEsteEquipoProvider.overrideWithValue(false),
+          barraDelJefeProvider.overrideWithValue(prueba.barra),
+          relojDelJefeProvider.overrideWithValue(() => hoy),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: SectorEntradasDelCierre(isDark: false)),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    RenglonEntradas sueltas(int n, {double descuento = 0}) => RenglonEntradas.suelta(
+          nombre: 'Entrada',
+          precioLista: 10000,
+          descuentoPct: descuento,
+          cantidad: n,
+        );
+
+    /// Carla, abierta: $ 5.000 de cambio, 2 en efectivo y 1 con el 50 % a mano por
+    /// transferencia. Maxi, cerrada con $ 500 de menos: 3 en efectivo, una venta
+    /// anulada antes de cerrar y otra después.
+    Future<(CajaEntradas, CajaEntradas)> dosCajas(EntradasEnMemoria e) async {
+      e.conPrecio(pinaroli.id);
+      final carla = await e.abrirCaja(
+          eventoId: pinaroli.id, operadorId: 'carla', operadorNombre: 'Carla', cambioInicial: 5000);
+      final maxi = await e.abrirCaja(
+          eventoId: pinaroli.id, operadorId: 'maxi', operadorNombre: 'Maxi', cambioInicial: 2000);
+      await e.vender(
+          caja: carla, compradorNombre: 'A', renglones: [sueltas(2)],
+          medio: MedioBarra.efectivo, efectivo: 20000, quien: 'Carla');
+      await e.vender(
+          caja: carla, compradorNombre: 'B', renglones: [sueltas(1, descuento: 50)],
+          medio: MedioBarra.transferencia, transferencia: 5000, quien: 'Carla');
+      await e.vender(
+          caja: maxi, compradorNombre: 'C', renglones: [sueltas(3)],
+          medio: MedioBarra.efectivo, efectivo: 30000, quien: 'Maxi');
+      final antes = await e.vender(
+          caja: maxi, compradorNombre: 'D', renglones: [sueltas(1)],
+          medio: MedioBarra.efectivo, efectivo: 10000, quien: 'Maxi');
+      final despues = await e.vender(
+          caja: maxi, compradorNombre: 'E', renglones: [sueltas(1)],
+          medio: MedioBarra.efectivo, efectivo: 10000, quien: 'Maxi');
+      await e.anular(antes, motivo: 'error', devueltas: true, quien: 'Jefe');
+      // Tenía que haber 2.000 + 30.000 + 10.000 = 42.000; contó 41.500.
+      final cerrada = await e.cerrarCaja(maxi,
+          efectivoContado: 41500, diferencia: -500, quien: 'Maxi');
+      e.adelantar(const Duration(hours: 3));
+      await e.anular(despues, motivo: 'pagó dos veces', devueltas: true, quien: 'Jefe');
+      return (carla, cerrada);
+    }
+
+    testWidgets('sin precio en la fiesta lo dice', (tester) async {
+      await abrirEntradas(tester, EntradasEnMemoria());
+      expect(texto(tester, 'cierre_entradas_fiesta'), 'TÉCNICA PINAROLI');
+      expect(texto(tester, 'cierre_entradas_sin_precio'),
+          'Esta fiesta todavía no tiene precio de entrada: se pone en ENTRADAS → PRECIOS.');
+    });
+
+    // Revisión del 15-nov: con la lista de BARRA podía abrir en un particular.
+    testWidgets('abre en el evento masivo, aunque antes haya un particular', (tester) async {
+      prueba.eventos.add(fiestaDePrueba(
+          BarraEnPrueba.id(9), 'CASAMIENTO', DateTime(2026, 12, 4, 12),
+          modalidad: 'particular'));
+      await abrirEntradas(tester, EntradasEnMemoria()..conPrecio(pinaroli.id));
+      expect(texto(tester, 'cierre_entradas_fiesta'), 'TÉCNICA PINAROLI');
+    });
+
+    testWidgets('con precio y sin cajas lo dice', (tester) async {
+      await abrirEntradas(tester, EntradasEnMemoria()..conPrecio(pinaroli.id));
+      expect(texto(tester, 'cierre_entradas_sin_cajas'),
+          'Todavía no se abrió ninguna caja de entradas en esta fiesta.');
+      expect(find.textContaining('fuera de la app'), findsNothing);
+    });
+
+    testWidgets('dos cajas: una abierta y una cerrada, los totales y lo anulado después',
+        (tester) async {
+      final e = EntradasEnMemoria();
+      final (carla, maxi) = await dosCajas(e);
+      await abrirEntradas(tester, e);
+      expect(texto(tester, 'cierre_entradas_caja_${carla.id}'), 'Carla · abierta');
+      expect(texto(tester, 'cierre_entradas_caja_${maxi.id}'), 'Maxi');
+      expect(texto(tester, 'cierre_entradas_diferencia_${maxi.id}'), r'Faltan $ 500');
+      expect(find.text('abierta'), findsOneWidget, reason: 'la diferencia de Carla');
+      expect(find.byKey(const Key('cierre_entradas_total')), findsOneWidget);
+      // Lo vendido: 20.000 + 5.000 + 30.000, sin las dos anuladas.
+      expect(find.text(r'$ 55.000'), findsOneWidget);
+      expect(find.text('6 entradas · 6 sueltas y 0 de lugares'), findsOneWidget);
+      // La anulada después del cierre va aparte.
+      expect(find.byKey(const Key('cierre_entradas_anulado_despues')), findsOneWidget);
+      expect(find.text('1 abierta'), findsOneWidget);
+      expect(find.text('1 cerrada'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('en la web no puede abrir la base del equipo: lo dice', (tester) async {
+      final e = EntradasEnMemoria();
+      await dosCajas(e);
+      await abrirEntradas(tester, e, enLaWeb: true);
+      expect(texto(tester, 'cierre_entradas_web'), kEntradasDesdeLaPc);
+      expect(find.byKey(const Key('cierre_entradas_total')), findsNothing);
+    });
+
+    testWidgets('en un celular no se desborda: la tabla se desliza de costado', (tester) async {
+      final e = EntradasEnMemoria();
+      await dosCajas(e);
+      await abrirEntradas(tester, e, tamano: const Size(360, 740));
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('la pantalla de verdad', () {
@@ -180,7 +308,7 @@ void main() {
     });
 
     testWidgets('en modo jefe: COBROS como siempre, BARRA con sus cajas y sin REGISTRAR '
-        'RETIRO, ENTRADAS vacío, y vuelve a COBROS', (tester) async {
+        'RETIRO, ENTRADAS con su fiesta, y vuelve a COBROS', (tester) async {
       await abrirCierre(tester, modoJefe: true);
       expect(find.byKey(const Key('cierre_sector')), findsOneWidget);
       expect(find.text('REGISTRAR RETIRO'), findsOneWidget);
@@ -195,7 +323,9 @@ void main() {
 
       await tester.tap(find.byKey(const Key('cierre_sector_entradas')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('cierre_entradas_vacio')), findsOneWidget);
+      expect(find.byKey(const Key('cierre_entradas_fiesta')), findsOneWidget);
+      expect(find.byKey(const Key('cierre_entradas_sin_precio')), findsOneWidget);
+      expect(find.text('REGISTRAR RETIRO'), findsNothing);
 
       await tester.tap(find.byKey(const Key('cierre_sector_cobros')));
       await tester.pumpAndSettle();

@@ -190,6 +190,7 @@ class _PreciosDeEntradasDialogState
           .read(entradasDelJefeProvider)
           .guardarConfig(nueva, quien: widget.quien);
       ref.invalidate(configDeEntradasProvider(widget.eventoId));
+      avisarQueCambioLaVenta(ref, widget.eventoId);
       if (mounted) Navigator.pop(context, guardada);
     } on ArgumentError {
       if (mounted) {

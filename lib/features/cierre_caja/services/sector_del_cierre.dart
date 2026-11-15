@@ -3,7 +3,7 @@
 ///
 /// - COBROS: las cuotas, lo de siempre (por día y por sesión de caja).
 /// - BARRA: lo de la barra **por fiesta** (la de anoche sigue al día siguiente).
-/// - ENTRADAS: queda listo para cuando esté la venta de entradas.
+/// - ENTRADAS: la venta de entradas **por fiesta**, una línea por caja (6.9.0).
 enum SectorDelCierre {
   cobros('COBROS'),
   barra('BARRA'),

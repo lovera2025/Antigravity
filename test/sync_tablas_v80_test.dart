@@ -192,6 +192,15 @@ void main() {
       }
     });
 
+    // Spec 7.3: la tablet que se prepara en la oficina vende sin internet. Con lo
+    // entregado sin cargo, para no vender un número que ya tiene dueño.
+    test('bajan con "Lista para trabajar sin internet", con lo entregado sin cargo', () {
+      for (final t in modelos.keys) {
+        expect(SyncEngine.tablasDeLaPuerta, contains(t), reason: t);
+      }
+      expect(SyncEngine.tablasDeLaPuerta, contains('entradas_retiro'));
+    });
+
     test('suben de padres a hijas', () {
       expect(motor,
           contains("if (table == 'entradas_config' || table == 'entradas_cajas') return 2;"));

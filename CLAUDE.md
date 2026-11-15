@@ -467,12 +467,25 @@ están en esta PC, **sin subir a GitHub**.
   "Vende entradas" (Entradas con un **2** en `permisos_operador.entradas`, sin SQL; la llave
   `puedeVenderEntradasProvider`) y PRECIOS (en ENTRADAS de la fiesta, solo en modo jefe). Hecha la **etapa 4**
   (14-nov): la caja de entradas, VENDER (`entradas/widgets/vender_entradas_screen.dart`, con la hoja del cobro de la
-  barra) y el comprobante de media hoja (`entradas/pdf/`). **La etapa 5 (VENTAS) quedó a medias el 14-nov, guardada
-  como está:** la pantalla (`entradas/widgets/ventas_de_entradas_screen.dart`: historial, reimprimir, "Pago
-  verificado" y anular, las dos últimas solo del jefe) y el historial impreso andan y tienen sus pruebas; **le
-  faltan** las pruebas de sus dos entradas, las roturas a propósito y mirarla en la muestra. **La 6** (cerrar la
-  caja, ENTRADAS del cierre y la entrega) **y la 7** (ventana de prueba, capturas y publicar), **sin empezar.** Lo
-  que falta de cada una, paso por paso: "Etapa 5" y "Etapa 6" del CONTEXTO.
+  barra) y el comprobante de media hoja (`entradas/pdf/`). **Hechas el 15-nov la etapa 5** (VENTAS:
+  `entradas/widgets/ventas_de_entradas_screen.dart`, historial, reimprimir, "Pago verificado" y anular, las dos
+  últimas solo del jefe, y el historial impreso) **y la 6**: CERRAR CAJA en VENDER
+  (`entradas/widgets/cerrar_caja_entradas_screen.dart`, a ciegas, con su papel de media hoja), ENTRADAS en el cierre
+  de caja (`cierre_caja/widgets/sector_entradas.dart`) y la entrega con lo vendido a la vista y VENDERLE ESAS
+  ENTRADAS. **Falta la 7** (la ventana de prueba, recorrerlo con el mouse, las capturas y publicar con el usuario):
+  "Lo que sigue" del CONTEXTO.
+  - **Quien vende no ve sumas de plata en VENTAS ni en su historial impreso** (`conPlata`): cuenta su caja a ciegas.
+  - **La entrega sin cargo no da un número vendido** (`NumerosDeEntradas.ocupados` es su `deOtros`), y **dos alumnos
+    con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta).
+  - **Las cinco tablas de entradas y `entradas_retiro` están en `tablasDeLaPuerta`**: sin el SQL de la v80 en la nube,
+    "Lista para trabajar sin internet" no queda lista.
+  - **El efectivo "anulado después del cierre" de una caja cerrada sale de lo anotado al cerrar**
+    (`CierreDeEntradas.esperadoAlCerrar` = lo contado menos la diferencia), no de comparar la hora de dos equipos: la
+    tablet que cierra sin internet no sabe de lo que el jefe anuló antes desde la oficina.
+  - **Lo que escribe la venta en este equipo avisa con `avisarQueCambioLaVenta`** (ENTRADAS del cierre no se entera
+    por la bajada: no baja de ningún lado). Una pantalla nueva que escriba en la venta tiene que avisar.
+  - Pendiente, con el motivo: anular la misma venta desde dos PCs a la vez
+    (`docs/pendientes/anular-dos-veces-desde-dos-pcs.md`).
 - **Para trabajar:** `bash tool/suite_por_tandas.sh` (la suite entera) y `bash tool/romper_una_regla.sh <casos>` (las
   roturas a propósito). Mientras corre la suite no se escribe en `lib/` ni en `test/`.
 - **Lo que dejó la etapa 4 como regla:**

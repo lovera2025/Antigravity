@@ -2956,6 +2956,16 @@ class SyncEngine {
     // Las sillas que ya se sumaron esa noche (v78): si la notebook se reinicia
     // sin internet, tiene que saber cuáles mesas ya están en el tope.
     'sillas_puerta',
+    // La venta de entradas (v80, 6.9.0): la tablet que se prepara en la oficina
+    // vende sin internet con el precio, lo vendido y lo entregado sin cargo (si
+    // no, podría vender un número del talonario que ya tiene dueño). Sin el SQL
+    // de la v80 en la nube, "Lista para trabajar sin internet" no queda lista.
+    'entradas_config',
+    'entradas_cajas',
+    'entradas_ventas',
+    'entradas_anulaciones',
+    'entradas_verificaciones',
+    'entradas_retiro',
   ];
 
   /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"

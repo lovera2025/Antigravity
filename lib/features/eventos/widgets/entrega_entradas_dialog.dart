@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -62,6 +64,26 @@ class EditarAlumno extends AccionEntrega {
   const EditarAlumno();
 }
 
+/// VENDERLE ESAS ENTRADAS (6.9.0): las del 50 % de esta familia, en VENDER con
+/// la familia ya elegida.
+class VenderAlCincuenta extends AccionEntrega {
+  const VenderAlCincuenta();
+}
+
+/// Lo de la venta de entradas que la entrega muestra de una familia (6.9.0,
+/// sección 9.3 del spec del 13-nov): cuántas del 50 % ya compró y si quien
+/// atiende puede vendérselas. Sin esto (la fiesta sin precio, o en la web) la
+/// entrega se ve como siempre.
+class VentaAlCincuenta {
+  /// Las de sus lugares adicionales que ya compró, en ventas que cuentan.
+  final int compradas;
+
+  /// Si quien atiende tiene "Vende entradas" (o el modo jefe) en este equipo.
+  final bool puedeVender;
+
+  const VentaAlCincuenta({required this.compradas, required this.puedeVender});
+}
+
 /// El diálogo del mostrador para un egresado: lo que se le entrega, a quién y
 /// con qué números; por qué no se le puede entregar todavía; o lo que ya se
 /// llevó, con la opción de anularlo.
@@ -81,6 +103,7 @@ Future<AccionEntrega?> mostrarEntregaEntradasDialog({
   EntradasRetiro? retiro,
   Map<String, List<TramoTalonario>> deOtros = const {},
   Listenable? cuentaCambio,
+  VentaAlCincuenta? venta,
 }) =>
     showDialog<AccionEntrega>(
       context: context,
@@ -94,6 +117,7 @@ Future<AccionEntrega?> mostrarEntregaEntradasDialog({
         retiro: retiro,
         deOtros: deOtros,
         cuentaCambio: cuentaCambio,
+        venta: venta,
       ),
     );
 
@@ -106,6 +130,7 @@ class _EntregaDialog extends StatefulWidget {
   final EntradasRetiro? retiro;
   final Map<String, List<TramoTalonario>> deOtros;
   final Listenable? cuentaCambio;
+  final VentaAlCincuenta? venta;
 
   const _EntregaDialog({
     required this.alumno,
@@ -116,6 +141,7 @@ class _EntregaDialog extends StatefulWidget {
     required this.retiro,
     required this.deOtros,
     required this.cuentaCambio,
+    required this.venta,
   });
 
   @override
@@ -369,6 +395,8 @@ class _EntregaDialogState extends State<_EntregaDialog> {
         'Lo registró ${r.entregadoPor ?? '-'}. Escribió su nombre en la planilla.',
         style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
       ),
+      // Con la venta de entradas andando: las del 50 % se le pueden vender igual.
+      if (widget.venta != null) ..._alCincuenta(),
       if (cambio) ...[
         const SizedBox(height: 10),
         _cartel(
@@ -504,6 +532,10 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     final anulada = widget.retiro;
     return [
       cartel,
+      // La deuda frena solo la entrega sin cargo: las del 50 % se le venden igual
+      // (con la venta de entradas andando).
+      if (widget.bloqueo == BloqueoRetiro.debe && widget.venta != null)
+        ..._alCincuenta(),
       if (anulada != null && !anulada.entregado) ...[
         const SizedBox(height: 8),
         Text(
@@ -567,6 +599,63 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     ].join(' y ');
   }
 
+  /// Las entradas de la mesa adicional y las sillas extra: no van sin cargo, se
+  /// compran aparte al 50 %. Con la venta de entradas andando (6.9.0), debajo
+  /// cuántas ya compró y VENDERLE ESAS ENTRADAS, o quién se las vende.
+  List<Widget> _alCincuenta() {
+    final a = widget.alumno;
+    final e = widget.entradas;
+    if (e.alCincuenta <= 0) return const [];
+    final venta = widget.venta;
+    final quedan = venta == null ? 0 : max(0, e.alCincuenta - venta.compradas);
+    final gris = TextStyle(fontSize: 12.5, color: Colors.grey.shade700);
+    return [
+      const SizedBox(height: 8),
+      Text(
+        key: const Key('entrega_al_cincuenta'),
+        '${e.alCincuenta == 1 ? 'La entrada' : 'Las ${e.alCincuenta} entradas'} '
+        'de ${_deDonde(a)} no ${e.alCincuenta == 1 ? 'va' : 'van'} sin cargo: '
+        '${e.alCincuenta == 1 ? 'se compra' : 'se compran'} aparte, al 50 %.',
+        style: TextStyle(
+          fontSize: 12.5,
+          color: Colors.orange.shade800,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      if (venta != null) ...[
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              key: const Key('entrega_compro'),
+              venta.compradas == 0
+                  ? 'Todavía no compró ninguna.'
+                  : quedan == 0
+                      ? 'Ya compró ${venta.compradas == 1 ? 'la suya' : 'las ${venta.compradas}'}.'
+                      : 'Ya compró ${venta.compradas}: le ${quedan == 1 ? 'queda 1' : 'quedan $quedan'}.',
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            ),
+            if (venta.puedeVender && quedan > 0)
+              FilledButton.tonal(
+                key: const Key('entrega_venderle'),
+                onPressed: () => Navigator.pop(context, const VenderAlCincuenta()),
+                child: const Text('VENDERLE ESAS ENTRADAS'),
+              ),
+          ],
+        ),
+        if (!venta.puedeVender && quedan > 0)
+          Text(
+            'Se las vende quien tiene la caja de entradas.',
+            key: const Key('entrega_se_las_vende'),
+            style: gris,
+          ),
+      ],
+    ];
+  }
+
   String _textoAnulada(EntradasRetiro r) =>
       'Tuvo una entrega anulada'
       '${r.anuladoAt == null ? '' : ' el ${ArTime.formatFechaHora(r.anuladoAt!)}'}'
@@ -621,20 +710,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
       ),
       // Solo la mesa del contrato trae sus entradas sin cargo: las de la mesa
       // adicional y las sillas extra no se entregan acá.
-      if (e.alCincuenta > 0) ...[
-        const SizedBox(height: 8),
-        Text(
-          key: const Key('entrega_al_cincuenta'),
-          '${e.alCincuenta == 1 ? 'La entrada' : 'Las ${e.alCincuenta} entradas'} '
-          'de ${_deDonde(a)} no ${e.alCincuenta == 1 ? 'va' : 'van'} sin cargo: '
-          '${e.alCincuenta == 1 ? 'se compra' : 'se compran'} aparte, al 50 %.',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: Colors.orange.shade800,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+      ..._alCincuenta(),
       if (widget.permisos.editar)
         Align(
           alignment: Alignment.centerLeft,

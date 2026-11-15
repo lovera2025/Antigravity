@@ -29,6 +29,9 @@ import 'widgets/anotacion_pdf_section.dart';
 import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
 import 'widgets/sector_barra.dart';
+import 'widgets/sector_entradas.dart';
+import '../entradas/providers/entradas_providers.dart'
+    show cajasDeEntradasDeLaFiestaProvider;
 
 class CierreCajaScreen extends ConsumerStatefulWidget {
   const CierreCajaScreen({super.key});
@@ -414,9 +417,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         : const Icon(Icons.refresh_rounded, color: _gold),
                     onPressed: state.cargando
                         ? null
-                        : () => ref
-                              .read(cierreCajaProvider.notifier)
-                              .refrescarManual(),
+                        : () {
+                            // ENTRADAS lee su propia cuenta: también vuelve a leer.
+                            ref.invalidate(cajasDeEntradasDeLaFiestaProvider);
+                            ref.read(cierreCajaProvider.notifier).refrescarManual();
+                          },
                   ),
                   if (modoJefe)
                     IconButton(

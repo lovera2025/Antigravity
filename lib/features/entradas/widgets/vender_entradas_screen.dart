@@ -30,6 +30,7 @@ import '../pdf/papeles_de_entradas.dart';
 import '../providers/entradas_providers.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'abrir_caja_entradas_dialog.dart';
+import 'cerrar_caja_entradas_screen.dart';
 import 'ventas_de_entradas_screen.dart';
 
 /// VENDER: la pantalla de la caja de entradas de una fiesta (6.9.0, sección 7.3
@@ -64,6 +65,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   ConfigEntradas? _config;
   CajaEntradas? _caja;
   List<ContratoAlumno> _alumnos = [];
+  /// Todos los alumnos de la fiesta, **también los de baja temporal**: sus
+  /// números entregados siguen teniendo dueño (revisión del 15-nov). La lista
+  /// que se ve deja afuera las bajas; los números ocupados, no.
+  List<ContratoAlumno> _todos = [];
   Map<String, DeudaAlumno> _deudas = {};
   Map<String, EntradasRetiro> _retiros = {};
   List<VentaEntradas> _ventas = [];
@@ -88,6 +93,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   bool _guardando = false;
   bool _pidiendoCaja = false;
+
+  /// La pantalla de cerrar la caja está abierta encima: no se pide caja.
+  bool _cerrandoCaja = false;
 
   /// La última venta guardada: su aviso queda arriba hasta la siguiente.
   VentaEntradas? _ultima;
@@ -150,9 +158,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       final entradas = ref.read(entradasDeLaCajaProvider);
       final repo = ref.read(contratosRepositoryProvider);
       final config = await entradas.config(id);
-      final alumnos = (await repo.getByEvento(id))
-          .where((a) => !a.esBajaTemporal)
-          .toList()
+      final todos = await repo.getByEvento(id);
+      final alumnos = todos.where((a) => !a.esBajaTemporal).toList()
         ..sort((x, y) => x.nombreAlumno.compareTo(y.nombreAlumno));
       final ids = [for (final a in alumnos) a.id];
       final pagos = <String, List<Map<String, dynamic>>>{};
@@ -163,7 +170,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       final mora = await repo.sumMoraCobradaHistorialPorContratos(ids);
       final retiros = await ref
           .read(entradasRetiroRepositoryProvider)
-          .obtenerPorContratoIds(ids);
+          .obtenerPorContratoIds([for (final a in todos) a.id]);
       final deudas = {
         for (final a in alumnos)
           a.id: RetiroEntradas.deudaDe(
@@ -187,6 +194,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         }
         _config = config;
         _alumnos = alumnos;
+        _todos = todos;
         _deudas = deudas;
         _retiros = retiros;
         _ventas = ventas;
@@ -197,7 +205,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _errorCarga = null;
       });
       // Sin caja abierta, VENDER la pide. Sin precio no: lo dice la pantalla.
-      if (caja == null && (config?.tienePrecio ?? false) && !_pidiendoCaja) {
+      if (caja == null &&
+          (config?.tienePrecio ?? false) &&
+          !_pidiendoCaja &&
+          !_cerrandoCaja) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _pedirCaja());
       }
     } catch (_) {
@@ -239,6 +250,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     );
     _pidiendoCaja = false;
     if (!mounted) return;
+    if (caja != null) avisarQueCambioLaVenta(ref, widget.evento.id);
     if (caja == null) {
       // Volvió sin abrir: no hay nada que hacer en VENDER.
       await Navigator.of(context).maybePop();
@@ -265,7 +277,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   /// Los números que ya tienen dueño: lo entregado sin cargo y lo vendido.
   Map<String, List<TramoTalonario>> get _ocupados => NumerosDeEntradas.ocupados(
-        entregados: RetiroEntradas.tramosDeOtros(_alumnos, _retiros, salvo: ''),
+        entregados: RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: ''),
         ventas: _ventas,
         anulaciones: _anulaciones,
       );
@@ -402,6 +414,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       return;
     }
     final guardada = venta;
+    avisarQueCambioLaVenta(ref, widget.evento.id);
     final datos = _datosDelComprobante(guardada);
     setState(() {
       _ultima = guardada;
@@ -463,6 +476,32 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     if (mounted) await _cargar(silencioso: true);
   }
 
+  /// CERRAR CAJA: se cuenta a ciegas y se cierra. Cerrada, VENDER también se
+  /// va (si se quedara, pediría abrir otra caja). Mientras tanto VENDER no pide
+  /// caja aunque relea: el cartel de abrir saldría encima del cierre.
+  Future<void> _cerrarCaja() async {
+    final caja = _caja;
+    if (caja == null) return;
+    _cerrandoCaja = true;
+    bool? cerrada;
+    try {
+      cerrada = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => CerrarCajaEntradasScreen(caja: caja, evento: widget.evento),
+        ),
+      );
+    } finally {
+      // Cerrada, VENDER se va: hasta desaparecer no vuelve a pedir caja.
+      if (cerrada != true) _cerrandoCaja = false;
+    }
+    if (!mounted) return;
+    if (cerrada == true) {
+      await Navigator.of(context).maybePop();
+      return;
+    }
+    await _cargar(silencioso: true);
+  }
+
   // ── Pantalla ─────────────────────────────────────────────────────────────
 
   @override
@@ -481,12 +520,18 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           ],
         ),
         actions: [
-          if (puede && _caja != null)
+          if (puede && _caja != null) ...[
             TextButton(
               key: const Key('vender_ventas'),
               onPressed: _guardando ? null : _abrirVentas,
               child: const Text('VENTAS'),
             ),
+            TextButton(
+              key: const Key('vender_cerrar'),
+              onPressed: _guardando ? null : _cerrarCaja,
+              child: const Text('CERRAR CAJA'),
+            ),
+          ],
           const SizedBox(width: 8),
         ],
       ),

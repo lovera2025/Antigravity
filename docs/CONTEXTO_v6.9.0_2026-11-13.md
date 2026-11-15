@@ -1,7 +1,8 @@
 # CONTEXTO — la 6.9.0: los arreglos de la noche y la venta de entradas
 
-**Estado (14-nov-2026, al cortar el chat):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`,
-todo en esta PC, **sin subir a GitHub**.
+**Estado (15-nov-2026):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`, todo en esta PC,
+**sin subir a GitHub**. **Las etapas 1 a 6 de la venta de entradas están hechas; falta la 7** (la prueba de punta a
+punta, las capturas y publicar con el usuario).
 
 ## Para retomar en otro chat
 
@@ -17,12 +18,17 @@ recomendé publicarla antes del 16, cuando la empresa empieza a cobrar; eligió 
   después sobre una copia nueva de la base, y mandárselos (cómo, en "Cómo se probó" del CONTEXTO de la 6.8.1). La
   versión anterior para comparar es la 6.8.0.
 - Hasta que salga: a las 4 familias del Anexo D, todo el remanente junto y nada de perdón por mes.
-- **Se sigue por la etapa 5 de la venta de entradas**, desde donde dice abajo.
+- ~~Se sigue por la etapa 5 de la venta de entradas~~: la 5 y la 6 se cerraron el 15-nov. **Sigue la etapa 7.**
 
 El plan general va por 9 partes (los arreglos de la noche, las 7 etapas de la venta de entradas y la 6.8.1 programada;
-publicar todo es la etapa 7): 6,5 de 9, **72 %**.
+publicar todo es la etapa 7): **8 de 9, 89 %** (15-nov).
 
-**Dónde quedó (14-nov, al cortar el chat a pedido del usuario):**
+**15-nov:** el usuario preguntó si todo sale junto en la 6.9.0: **sí** (los arreglos de la noche, la 6.8.1 y la venta de
+entradas entera), y se publica cuando él diga. Aprobó el plan de terminar la 5 y hacer la 6 ("sigamos?"). Se cerraron
+las dos, cada una con su commit (`cba8c7d` la 5); lo que se hizo, en "Etapa 5" y "Etapa 6", abajo. Se le mandaron las
+muestras de VENTAS y de la etapa 6.
+
+**Dónde quedó (14-nov, al cortar el chat a pedido del usuario; lo de la 5 y la 6 quedó viejo el 15-nov):**
 
 - **Parte A (los arreglos de la noche): hecha entera.** Faltan solo sus capturas con el mouse, antes de publicar.
 - **Parte B (la venta de entradas), 7 etapas:**
@@ -69,10 +75,9 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
 2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
 3. ~~La maqueta~~: hecha, mostrada y **aprobada el 14-nov** ("Sí, seguí").
 4. ~~Etapa 3 (el permiso y PRECIOS)~~ y ~~etapa 4 (la caja, VENDER y el comprobante)~~: hechas el 14-nov.
-5. **Terminar la etapa 5 (VENTAS): empezar acá.** Lo que le falta está en "Etapa 5", abajo. **Sin anular, un error
-   de carga no tiene arreglo: la 5 tiene que salir con la 4.**
-6. **Etapa 6** (cerrar la caja, ENTRADAS del cierre, la entrega): el plan, en "Etapa 6", abajo.
-7. **Etapa 7:** la ventana de prueba (`tool/venta_entradas_prueba.dart`), recorrerlo con el mouse, las capturas
+5. ~~Terminar la etapa 5 (VENTAS)~~: cerrada el 15-nov (`cba8c7d`).
+6. ~~Etapa 6 (cerrar la caja, ENTRADAS del cierre, la entrega)~~: cerrada el 15-nov.
+7. **Etapa 7, empezar acá:** la ventana de prueba (`tool/venta_entradas_prueba.dart`), recorrerlo con el mouse, las capturas
    para el usuario (las quiere ver antes de publicar), la migración v80 sobre una copia de la base real (con el
    programa cerrado: se le pide), y publicar con él (foto de la mora antes, el SQL con su OK, el instalador por
    pasos, la web). Al publicar: `pubspec.yaml` a `6.9.0`, y en `CLAUDE.md` sacar "sin programar" de "El retiro de
@@ -414,73 +419,117 @@ Los cinco archivos, como quedaron pensados:
 - **Distinto de la maqueta:** el comprobante se abre solo al guardar (la maqueta mostraba solo el botón); VENTAS y
   CERRAR CAJA todavía no están en la barra de VENDER (etapas 5 y 6).
 
-### Etapa 5, VENTAS — A MEDIAS (14-nov): la pantalla anda, falta cerrarla
-
-**Hecho y guardado** (con sus pruebas en verde):
+### Etapa 5, VENTAS — HECHA (14 y 15-nov, `cba8c7d`)
 
 - **La cuenta del historial**, sin pantalla: `cuentas/historial_de_entradas.dart` (`HistorialDeEntradas.de`,
   `VentaDelHistorial`, `FiltroDeVentas`). Cada venta con su anulación y su verificación, de la más nueva a la más
   vieja; `soloDeLaCaja` para quien vende. **Los números repetidos se buscan en toda la fiesta aunque se mire una
   caja.** Una anulada no cuenta como verificada ni espera verificación.
-- **La pantalla** `widgets/ventas_de_entradas_screen.dart`: quien vende ve las de su caja, el jefe todas; el aviso de
-  números repetidos arriba; el filtro Todas · Verificadas · Sin verificar; los totales en un renglón; cada venta con
-  REIMPRIMIR (COPIA, y ANULADA si corresponde), la casilla **Pago verificado** y **ANULAR**. Las dos últimas, solo el
-  jefe: apagadas con el motivo, y `_frenaSinModoJefe()` en `_verificar` y `_anular`
-  (`test/solo_modo_jefe_test.dart` ya espera `{'_guardar', '_anular', '_verificar'}`).
-- **Anular** abre un cartel (`_AnularVentaDialog`, en el mismo archivo): motivo obligatorio y **"¿Devolvieron las
-  entradas y las pulseras?"**, que también hay que contestar, con los números a la vista. La venta queda en la lista,
-  tachada, con quién, cuándo, el motivo y si devolvieron.
-- **El historial impreso** (`pdf/historial_entradas_pdf.dart`, A4, la tabla hija directa del `MultiPage`): la casilla
-  de la tilde va dibujada, las anuladas tachadas y con su motivo abajo, los totales y los repetidos. Lo abre
-  `abrirHistorialDeEntradasProvider` (`pdf/papeles_de_entradas.dart`).
-- **Las dos entradas:** el botón **VENTAS** en la barra de VENDER (`vender_ventas`; al volver relee, porque una
-  anulada cambia lo que le queda a la familia y los números libres) y en ENTRADAS de la fiesta (`entradas_ventas`,
-  solo en modo jefe, apagado con el motivo).
-- **Pruebas:** `test/historial_de_entradas_test.dart` (13: la cuenta y el PDF medido y leído) y
-  `test/ventas_de_entradas_test.dart` (12: la pantalla entera).
+- **La pantalla** `widgets/ventas_de_entradas_screen.dart`: quien vende ve las de su caja (y sin caja, ninguna), el
+  jefe todas; el aviso de números repetidos arriba; el filtro Todas · Verificadas · Sin verificar; los totales en un
+  renglón; cada venta con REIMPRIMIR (COPIA, y ANULADA si corresponde), **Pago verificado** y **ANULAR**, las dos
+  últimas solo del jefe (apagadas con el motivo, y `_frenaSinModoJefe()` en `_verificar` y `_anular`).
+- **Quien vende no ve sumas de plata** (revisión del 15-nov; la maqueta tampoco las mostraba): ni en el renglón de los
+  totales ni en su historial impreso (`DatosDelHistorial.conPlata`, `_conPlata`). Con el total de su caja abierta
+  sabía cuánto efectivo tenía que haber, y el cierre se cuenta a ciegas. El monto de cada venta sí, como en la barra.
+- **Anular** abre un cartel (`_AnularVentaDialog`): motivo obligatorio y **"¿Devolvieron las entradas y las
+  pulseras?"**, con los números a la vista. La venta queda en la lista, tachada, con quién, cuándo, el motivo y si
+  devolvieron.
+- **El historial impreso** (`pdf/historial_entradas_pdf.dart`, A4): la casilla de la tilde dibujada, las anuladas
+  tachadas con su motivo abajo, los totales y los repetidos; **cada fecha en un renglón** ("20/11 21:40",
+  `cuandoEnLaTabla`: con el año y el "hs" partía cada fila en dos).
+- **Las dos entradas:** VENTAS en la barra de VENDER (`vender_ventas`, solo con la caja abierta; al volver relee) y en
+  ENTRADAS de la fiesta (`entradas_ventas`, solo en modo jefe, apagado con el motivo, no en el mostrador).
+- **En el celular**, IMPRIMIR HISTORIAL es un ícono (con el texto, el título se cortaba) y los botones de cada venta
+  van en un `Wrap`; en la PC el "$" no se separa de su número (espacio duro).
+- **Lo que encontró la revisión independiente del 15-nov** (lectores que buscan y otros que intentan refutar), ya
+  arreglado:
+  - **dos alumnos con el mismo nombre se pisaban los números entregados** (`RetiroEntradas.tramosDeOtros` armaba el
+    mapa de una vez): el número de uno se podía vender, o entregar sin cargo, sin aviso. **Vale también para la
+    entrega sin cargo, que está en las PCs desde la 6.0.0**; ahora junta los tramos;
+  - VENDER seguía mostrando "guardada" la última venta después de anularla desde VENTAS, y su copia salía sin
+    ANULADA: ahora el aviso se va y la copia lleva la anulación;
+  - quien vende veía la suma de su caja (arriba).
+  - **Queda como pendiente** que el jefe anule la misma venta desde dos PCs antes de que una se entere de la otra:
+    `docs/pendientes/anular-dos-veces-desde-dos-pcs.md`.
+- **Pruebas:** `test/historial_de_entradas_test.dart` (16, con el total de cada renglón del PDF vigilado por su lugar
+  en la hoja), `test/ventas_de_entradas_test.dart` (13, con el celular), las dos entradas en
+  `vender_entradas_pantalla_test` y `retiro_entradas_screen_test`, y los homónimos en `retiro_entradas_test`.
+  **Catorce roturas a propósito, las catorce detectadas.** La suite entera: 5.008.
+- **Las muestras:** `tool/venta_entradas_muestra_test.dart` saca VENTAS como jefe, como quien vende y en el celular,
+  el cartel de anular y `Historial_de_ventas.pdf` (en `build/muestras_6.9.0/venta_entradas_v5/`). El PDF se miró
+  página por página.
+- **El arreglo de `retiro_entradas_screen_test`:** `_montar` pone siempre un `EntradasEnMemoria` (sin eso, lo que la
+  pantalla lee de la venta caería en la base de verdad).
 
-**Lo que le falta a la etapa 5 (empezar acá):**
+### Etapa 6, cerrar la caja, ENTRADAS del cierre y la entrega — HECHA (15-nov)
 
-1. **Las pruebas de las dos entradas a VENTAS**, que no se escribieron: en `vender_entradas_pantalla_test`, que
-   `vender_ventas` abre `VentasDeEntradasScreen` con su caja; en `retiro_entradas_screen_test`, que `entradas_ventas`
-   está apagado con `kSoloEnModoJefe` sin modo jefe, abre en modo jefe y no está en el mostrador.
-2. **Las roturas a propósito** (ninguna se hizo en esta etapa). Con `tool/romper_una_regla.sh`. Las que conviene:
-   quien vende ve solo su caja (`_soloDeLaCaja`); `_frenaSinModoJefe()` en `_verificar` y en `_anular`; anular sin
-   motivo; anular sin contestar si devolvieron; una anulada no cuenta como verificada (`verificada`); el filtro
-   "Sin verificar" sin las anuladas; los repetidos en toda la fiesta; el total del historial impreso.
-3. **Mirarla:** sumar a `tool/venta_entradas_muestra_test.dart` VENTAS como jefe y como quien vende, el cartel de
-   anular y el PDF del historial con las letras de la app. **El historial impreso no se miró nunca con los ojos.**
-4. La suite entera y el commit de cierre de la etapa.
-
-### Etapa 6, cerrar la caja, ENTRADAS del cierre y la entrega — SIN EMPEZAR
-
-Sección 9 del spec. Las cuentas ya están (`CierreDeEntradas`, `ResumenDeCajaEntradas.porCaja`,
-`compradasPorFamilia`, `NumerosDeEntradas.ocupados`); falta enchufarlas.
-
-1. **Cerrar la caja (9.1).** Botón **CERRAR CAJA** en la barra de VENDER, al lado de VENTAS. Se cuenta el efectivo
-   **a ciegas** (ninguna plata de la caja a la vista hasta cerrar), y recién después se ve lo que tenía que haber
-   (`CierreDeEntradas.de(caja, ventas, anulaciones).efectivoEsperado`) y la diferencia (`diferenciaEnPalabras`, de
-   la barra). Guarda con `cerrarCaja` del repositorio, con `_frenaSinPermiso()` antes (el test de
-   `solo_modo_jefe_test` espera hoy `{'_abrir', '_cobrar'}`: sumar la función nueva). Nota opcional, y `anotarCierre`
-   después. **Una caja cerrada no se vuelve a cerrar ni se corrige.** Su papel en `entradas/pdf/` con su provider en
-   `papeles_de_entradas.dart`. Sin el OK de una encargada: eso es de la barra. Modelo: `cerrar_caja_barra_screen.dart`.
-2. **La pestaña ENTRADAS del cierre de caja (9.2).** `SectorEntradasDelCierre` hoy es un cartel adentro de
-   `cierre_caja/widgets/sector_barra.dart`: pasa a un archivo propio (`cierre_caja/widgets/sector_entradas.dart`)
-   con la forma de `SectorBarraDelCierre`: por fiesta (la misma elección, CAMBIAR DE FIESTA), una línea por caja
-   (quién, cambio, efectivo, transferencia, mixtos, vendidas, descuentos a mano, anuladas, contó, diferencia, o
-   "abierta"), los totales ("vendidas N (sueltas y de lugares) = $ total") y "Anulado después del cierre" si hay.
-   Solo para mirar. Sin cajas: "Todavía no se abrió ninguna caja de entradas en esta fiesta."; sin precio: "Esta
-   fiesta todavía no tiene precio de entrada: se pone en ENTRADAS → PRECIOS." El texto de hoy ("se venden a mano,
-   fuera de la app") se va. **En la web no puede abrir la base** (`entradasEnEsteEquipoProvider`).
-   `tool/cierre_sector_prueba.dart` tiene que mostrarlo; test `cierre_por_sector_test` (sin cajas, sin precio, dos).
+1. **Cerrar la caja (9.1)**, `widgets/cerrar_caja_entradas_screen.dart`, desde **CERRAR CAJA** en la barra de VENDER
+   (`vender_cerrar`, al lado de VENTAS):
+   - **contar a ciegas**: el efectivo con el cambio y una nota opcional, sin ninguna plata de la caja a la vista
+     (`test/cerrar_caja_entradas_test.dart` lee `_contar()` y falla si aparece); VOLVER A VENDER · CERRAR LA CAJA;
+     confirma con el número grande ("¿Contaste todo el efectivo, con el cambio?");
+   - recién cerrada: Contaste · Tenía que haber · Justo / Sobran / Faltan (`diferenciaEnPalabras`), y las cuentas
+     (cambio, efectivo, transferencia, mixtas, vendidas "N (X sueltas y Y de lugares)", descuentos a mano, anuladas,
+     lo anulado después del cierre). **La diferencia se anota al cerrar**; después solo AGREGAR UNA NOTA
+     (`anotarCierre`). Sin el OK de una encargada (eso es de la barra);
+   - `_cerrarDeVerdad` lleva `_frenaSinPermiso()` (`solo_modo_jefe_test` espera ahora
+     `{'_abrir', '_cobrar', '_cerrarDeVerdad'}`);
+   - **cerrada, VENDER se va**, y mientras el cierre está abierto VENDER no pide caja aunque relea
+     (`_cerrandoCaja`): si no, el cartel de abrir saldría encima;
+   - **el papel** (`pdf/cierre_caja_entradas_pdf.dart`, media A4, una hoja; `abrirCierreDeEntradasProvider`): la
+     fiesta, quién, abierta y cerrada, lo vendido, la plata, lo que tenía que haber, lo contado, la diferencia y la
+     nota. **Se abre solo al cerrar** (como el comprobante; la maqueta mostraba solo el botón) y queda IMPRIMIR EL
+     CIERRE.
+2. **ENTRADAS en el cierre de caja (9.2)**, `cierre_caja/widgets/sector_entradas.dart`: la misma elección de fiesta que
+   BARRA (`FiestaDelCierre`, en `estilo_del_sector.dart`, que ahora usan las dos; BARRA se ve igual), una línea por
+   caja (CAJA · CAMBIO · EFECTIVO · TRANSF. · MIXTOS · VENDIDAS · DESC. · ANUL. · CONTÓ · DIFERENCIA, o "abierta"), la
+   fila TOTAL y las tarjetas TOTAL VENDIDO, ANULADO DESPUÉS DEL CIERRE (si hay) y CAJAS. La cuenta es
+   `CajasDeEntradasDeLaFiesta` (`cuentas/cierre_de_entradas.dart`: lo contado y la diferencia suman solo las
+   cerradas) y la lee `cajasDeEntradasDeLaFiestaProvider`. Sin precio, sin cajas y en la web lo dice. El cartel "se
+   venden a mano, fuera de la app" se fue. `tool/cierre_sector_prueba.dart` muestra dos cajas, y
+   `reemplazosDelCierre` pone siempre la venta en memoria.
 3. **La entrega con lo vendido a la vista (9.3)**, en `RetiroEntradasScreen` y `entrega_entradas_dialog.dart`:
-   la tarjeta "Al 50 %, aparte: 112" pasa a "Al 50 %: 40 vendidas de 112"; en cada familia "· 8 al 50 % (compró 3)";
-   y en el cartel de la entrega, con `puedeVenderEntradasProvider`, el botón **VENDERLE ESAS ENTRADAS**, que abre
-   `VenderEntradasScreen(evento:, familiaId:)` (**ya acepta `familiaId`**); sin el permiso, el texto de hoy más "Se
-   las vende quien tiene la caja de entradas." **Y enchufar `NumerosDeEntradas.ocupados` como el `deOtros` de la
-   entrega**, para que no deje repetir un número vendido. La planilla en papel no cambia.
-4. **Pendiente chico del spec (7.3):** que las cinco tablas de entradas bajen con "Lista para trabajar sin internet"
-   (para una tablet que se prepara en la oficina). No se hizo.
+   - la tarjeta **"Al 50 %: 3 vendidas de 8"** y en cada familia **"· 8 al 50 % (compró 3)"** (solo si compró
+     alguna); sin precio en la fiesta (o en la web) se ve como antes;
+   - en el cartel de la entrega, "Ya compró 3: le quedan 5." y **VENDERLE ESAS ENTRADAS**, que abre VENDER con la
+     familia elegida (`VenderAlCincuenta`; doble llave en `_venderAlCincuenta`); sin el permiso, "Se las vende quien
+     tiene la caja de entradas.". **También en el mostrador** (a quien tenga "Vende entradas"), **con la familia que
+     debe** (la deuda frena solo lo sin cargo) **y con la que ya retiró**; no con las mesas o la cuenta mal cargadas;
+   - **un número vendido no se entrega sin cargo**: la entrega usa `NumerosDeEntradas.ocupados` (`_ocupadosPara`) en
+     el cartel y al revalidar antes de guardar;
+   - **la entrega no depende de la venta**: si no se puede leer, sigue como antes de la 6.9.0.
+4. **Lo que baja con "Lista para trabajar sin internet" (7.3):** las cinco tablas de entradas y `entradas_retiro`
+   entran en `SyncEngine.tablasDeLaPuerta` (`sync_tablas_v80_test`). **Sin el SQL de la v80 en la nube, esa línea no
+   queda lista**: el SQL se corre antes de instalar, como siempre.
+
+- **Lo que encontró la revisión independiente del 15-nov** (9 confirmados, ya arreglados):
+  - **ENTRADAS del cierre seguía viejo** después de lo hecho en la misma PC (una caja recién cerrada figuraba
+    "abierta"): `cajasDeEntradasDeLaFiestaProvider` es `autoDispose`, y cerrar, la nota, vender, abrir la caja, anular
+    y PRECIOS avisan con `avisarQueCambioLaVenta`; el botón de recargar del cierre también lo relee.
+  - **"Anulado después del cierre" comparaba los relojes de dos equipos:** la tablet que cierra sin internet no sabe
+    de una venta que el jefe anuló antes desde la oficina, y ese efectivo desaparecía. Ahora, para una caja cerrada,
+    sale de lo anotado al cerrar (`CierreDeEntradas.esperadoAlCerrar` = lo contado menos la diferencia; lo que falta
+    desde lo de ahora es anulado después, con tope en lo anulado de esa caja). La hora queda solo para la
+    transferencia. "Tenía que haber" de una caja cerrada es lo anotado al cerrar, en la pantalla y en el papel.
+  - **ENTRADAS del cierre podía abrir en un evento particular** (la lista de BARRA trae todos):
+    `fiestasDeEntradasDelCierreProvider` lleva solo los masivos; la elección sigue compartida.
+  - **Los números entregados a un alumno que después pasó a baja temporal quedaban libres** (viene de antes): la
+    entrega y VENDER los cuentan (`_todos`, con las bajas, solo para los números ocupados).
+  - Cerrar la caja: Atrás y LISTO esperan a que termine de cerrar y de salir el papel; si el papel no salió, LISTO
+    pregunta ("Después no se puede volver a sacar"); VENDER, cerrada la caja, ya no puede pedir otra mientras se va.
+  - Descartado: al volver de VENDERLE ESAS ENTRADAS la entrega no se reabre sola (no se pierde nada guardado).
+  - Cinco roturas a propósito más, sobre estos arreglos: las cinco detectadas.
+- **Pruebas:** `test/cerrar_caja_entradas_test.dart` (17: la pantalla entera, a ciegas, sin permiso, el cierre por
+  sector que se entera, el papel que no salió, el papel medido y leído), `cierre_por_sector_test` (sin precio, sin cajas, dos cajas, la web, el celular), `cierre_de_entradas_test`
+  (la cuenta de la fiesta y lo que el cierre no conoció), `retiro_entradas_screen_test` y
+  `entrega_entradas_dialog_test` (lo vendido, VENDERLE con y sin permiso, el número vendido, el de un alumno de baja).
+  **Catorce roturas a propósito, las catorce detectadas.** La suite entera: 5.054.
+- **Las muestras** (`tool/venta_entradas_muestra_test.dart`, en `build/muestras_6.9.0/venta_entradas_v6/`): cerrar la
+  caja (contar, confirmar, cerrada, el celular), `Cierre_de_caja_entradas.pdf`, ENTRADAS del cierre (PC y celular) y
+  la entrega con VENDERLE ESAS ENTRADAS. Se miraron todas.
+- **No se probó:** con el mouse en una ventana, ni el PDF abierto desde el programa, ni en una tablet de verdad. Es la
+  etapa 7.
 
 ### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 

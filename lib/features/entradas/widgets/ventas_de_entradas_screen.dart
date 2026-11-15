@@ -183,6 +183,7 @@ class _VentasDeEntradasScreenState
             devueltas: respuesta.devueltas,
             quien: quienOpera(ref),
           );
+      avisarQueCambioLaVenta(ref, widget.evento.id);
       _decir('Venta ${ComprobanteEntradasPdf.numero(v.venta)} anulada.');
     } catch (_) {
       _decir('No se pudo anular. Probá de nuevo.');
