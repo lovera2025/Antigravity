@@ -33,6 +33,7 @@ import '../delegado/delegado_providers.dart';
 import 'widgets/encabezado_del_inicio.dart';
 import '../common/utils/cortes_pantalla.dart';
 import '../recepcion/providers/recepcion_provider.dart';
+import '../recepcion/widgets/otra_fiesta_en_la_tele.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
@@ -1081,6 +1082,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         // Deja el estado global coherente con lo que se va a proyectar: es lo
         // que después usa `SelectedEventNotifier.select` para seguir al tótem.
         ref.read(selectedEventProvider.notifier).select(eventoId);
+      } else {
+        // Con la tele ya en otra fiesta (un SOLO MIRAR ACÁ en Recepción), se
+        // pregunta antes de pasarla (revisión final de la 6.9.0).
+        final eventos = ref.read(eventosActivosProvider).asData?.value ?? const [];
+        if (!mounted) return;
+        final laQueVa = await fiestaParaAbrirLaTele(
+          context,
+          elegido: eventoId,
+          eventos: eventos,
+        );
+        if (laQueVa == null) return;
+        eventoId = laQueVa;
       }
 
       await KioskLauncher.launch(eventoId);

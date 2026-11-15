@@ -19,6 +19,7 @@ import '../impresion/papel_pdf.dart';
 import '../impresion/ticket_esc_pos.dart';
 import '../services/barra_sin_internet.dart';
 import '../services/fiestas_de_la_barra.dart';
+import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../services/papel_de_la_barra.dart';
 import 'barra_del_jefe_provider.dart';
 
@@ -40,11 +41,31 @@ final eventosDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
 /// Las fiestas que la cajera puede elegir: con precios en este equipo y por hacer. Se
 /// vuelve a leer cuando baja algo de la nube: en una tablet recién preparada, los
 /// precios llegan después de abrir esto.
+///
+/// Más las que ya pasaron donde la cajera tiene su caja abierta en este equipo
+/// (revisión final de la 6.9.0): así la puede cerrar.
 final fiestasDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
   ref.watch(operationalSyncRevisionProvider);
+  final operador = ref.watch(appRoleProvider).operador;
   final eventos = await ref.watch(eventosDeLaBarraProvider.future);
-  final conPrecio = await ref.read(barraDeLaCajaProvider).fiestasConPrecio();
-  return fiestasParaLaBarra(eventos, conPrecio, DateTime.now());
+  final barra = ref.read(barraDeLaCajaProvider);
+  final conPrecio = await barra.fiestasConPrecio();
+  final ahora = DateTime.now();
+  final conCaja = <String>{};
+  if (operador != null) {
+    final porDelante = {for (final e in fiestasParaLaBarra(eventos, conPrecio, ahora)) e.id};
+    for (final e in eventos) {
+      if (porDelante.contains(e.id) || !conPrecio.contains(e.id)) continue;
+      try {
+        if (await barra.cajaAbierta(eventoId: e.id, operadorId: operador.id) != null) {
+          conCaja.add(e.id);
+        }
+      } catch (_) {
+        // Si no se puede leer, la lista sale como siempre.
+      }
+    }
+  }
+  return fiestasParaLaBarra(eventos, conPrecio, ahora, conCajaAbierta: conCaja);
 });
 
 /// La impresora de este equipo, una sola mientras dure la app: se conecta sola a la

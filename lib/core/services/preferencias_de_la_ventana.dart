@@ -19,6 +19,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// pasa lo que quiere guardar por el puente ([usarElPuente]) y se lo acuerda
 /// ella misma en memoria, porque su copia del archivo es la del momento en que
 /// se abrió.
+///
+/// **Y lo que lee de la tele también se lo pregunta a la principal** (revisión
+/// final de la 6.9.0): con la tele abierta desde la tarde para otra fiesta, la
+/// config de la fiesta de la noche la guardaba la principal después, y la tele,
+/// sin internet, la buscaba en su copia vieja y salía con la de fábrica. Si la
+/// principal no contesta, se lee la copia de esta ventana, como antes.
 class PreferenciasDeLaVentana {
   PreferenciasDeLaVentana._();
 
@@ -32,15 +38,21 @@ class PreferenciasDeLaVentana {
 
   static Future<void> Function(String clave, String? valor)? _porElPuente;
 
+  /// Cómo le pregunta la ventana del tótem a la principal: lo que tiene guardado
+  /// en [clave] (`contesto` false si no contestó).
+  static Future<({bool contesto, String? valor})> Function(String clave)? _leerPorElPuente;
+
   /// Lo que esta ventana guardó por el puente: se lee de acá antes que de su
   /// copia del archivo.
   static final _propias = <String, String?>{};
 
   /// En la ventana del tótem: guardar es pedírselo a la principal con [enviar].
   static void usarElPuente(
-    Future<void> Function(String clave, String? valor) enviar,
-  ) {
+    Future<void> Function(String clave, String? valor) enviar, {
+    Future<({bool contesto, String? valor})> Function(String clave)? leer,
+  }) {
     _porElPuente = enviar;
+    _leerPorElPuente = leer;
   }
 
   /// Si esta ventana guarda por el puente (es la del tótem).
@@ -50,13 +62,37 @@ class PreferenciasDeLaVentana {
   @visibleForTesting
   static void reiniciar() {
     _porElPuente = null;
+    _leerPorElPuente = null;
     _propias.clear();
   }
 
   static Future<String?> leer(String clave) async {
     if (_propias.containsKey(clave)) return _propias[clave];
+    final preguntar = _leerPorElPuente;
+    if (preguntar != null && esDelTotem(clave)) {
+      try {
+        final r = await preguntar(clave);
+        if (r.contesto) return r.valor;
+      } catch (e) {
+        debugPrint('La ventana del tótem no pudo preguntar $clave: $e');
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(clave);
+  }
+
+  /// Si [clave] es una de las preferencias de la tele ([prefijosDelTotem]): el
+  /// prefijo y un id de evento, nada más.
+  static bool esDelTotem(Object? clave) =>
+      clave is String &&
+      prefijosDelTotem.any((p) => clave.startsWith(p) && clave.length == p.length + 36);
+
+  /// En la ventana principal: lo que tiene guardado en [clave], si es una de las
+  /// de la tele. Lee el archivo de esta ventana, que es la única que escribe.
+  static Future<String?> leerLoDelTotem(Object? clave) async {
+    if (!esDelTotem(clave)) return null;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(clave as String);
   }
 
   /// Guarda [valor] en [clave]; con null, la saca.
@@ -92,11 +128,7 @@ class PreferenciasDeLaVentana {
     if (clave is! String || (valor != null && valor is! String)) return false;
     final texto = valor as String?;
     if (texto != null && texto.length > largoMaximo) return false;
-    final esDelTotem = prefijosDelTotem.any(
-      // El prefijo y un id de evento, nada más.
-      (p) => clave.startsWith(p) && clave.length == p.length + 36,
-    );
-    if (!esDelTotem) return false;
+    if (!esDelTotem(clave)) return false;
     await escribirEnElArchivo(clave, texto);
     return true;
   }

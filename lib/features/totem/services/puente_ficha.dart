@@ -50,6 +50,11 @@ class PuenteFichaTotem {
   /// porque lo pisaría entero con una copia vieja (`PreferenciasDeLaVentana`).
   static const metodoGuardar = 'guardar_preferencia';
 
+  /// La ventana del tótem le pregunta a la principal una preferencia suya (la
+  /// config guardada de una fiesta): su copia del archivo es la del momento en
+  /// que se abrió (revisión final de la 6.9.0).
+  static const metodoLeer = 'leer_preferencia';
+
   /// La ventana principal es siempre la 0.
   static const ventanaPrincipal = 0;
 
@@ -82,6 +87,7 @@ class PuenteFichaTotem {
     Future<void> Function(String eventoId)? claveMala,
   }) async {
     if (call.method == metodoGuardar) return _guardarPreferencia(call.arguments);
+    if (call.method == metodoLeer) return _leerPreferencia(call.arguments);
     const metodos = {metodo, metodoLista, metodoClave, metodoClaveMala};
     if (!metodos.contains(call.method)) return null;
     final eventoId = call.arguments;
@@ -120,6 +126,43 @@ class PuenteFichaTotem {
     } catch (e) {
       debugPrint('No se pudo guardar la preferencia del tótem: $e');
       return null;
+    }
+  }
+
+  /// En la ventana principal: lo que tiene guardado en la preferencia de la tele
+  /// que se pidió, como `{"valor": …}` (null adentro si no hay nada). Null si no
+  /// es una de las de la tele.
+  static Future<String?> _leerPreferencia(Object? argumentos) async {
+    try {
+      if (!PreferenciasDeLaVentana.esDelTotem(argumentos)) return null;
+      final valor = await PreferenciasDeLaVentana.leerLoDelTotem(argumentos);
+      return jsonEncode({'valor': valor});
+    } catch (e) {
+      debugPrint('No se pudo leer la preferencia del tótem: $e');
+      return null;
+    }
+  }
+
+  /// En la ventana del tótem: le pregunta a la principal lo que tiene guardado
+  /// en [clave]. `contesto` false si no llegó o no contestó (todavía no está
+  /// lista): entonces se lee la copia propia.
+  static Future<({bool contesto, String? valor})> leerPreferencia(String clave) async {
+    try {
+      final respuesta = await DesktopMultiWindow.invokeMethod(
+        ventanaPrincipal,
+        metodoLeer,
+        clave,
+      ).timeout(const Duration(seconds: 2));
+      if (respuesta is! String) return (contesto: false, valor: null);
+      final mapa = jsonDecode(respuesta);
+      if (mapa is! Map || !mapa.containsKey('valor')) {
+        return (contesto: false, valor: null);
+      }
+      final valor = mapa['valor'];
+      return (contesto: true, valor: valor is String ? valor : null);
+    } catch (e) {
+      debugPrint('El tótem no pudo preguntar la preferencia $clave: $e');
+      return (contesto: false, valor: null);
     }
   }
 

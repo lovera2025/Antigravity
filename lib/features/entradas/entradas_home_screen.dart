@@ -8,17 +8,40 @@ import '../common/widgets/operational_sync_coordinator.dart';
 import '../eventos/repositories/eventos_repository.dart';
 import '../eventos/retiro_entradas_screen.dart';
 import '../eventos/utils/evento_presentacion.dart';
+import 'providers/entradas_providers.dart';
 import 'services/fiestas_que_vienen.dart';
 import 'widgets/vender_entradas_screen.dart';
 
 /// Los eventos masivos que vienen. Se vuelve a leer cuando baja algo de la otra
 /// PC: en una PC recién entrada, la primera bajada llega después de abrir esto.
+///
+/// Más las que ya pasaron donde quien entró tiene su caja de entradas abierta en
+/// este equipo (revisión final de la 6.9.0): así la puede cerrar.
 final fiestasQueVienenProvider = FutureProvider<List<Evento>>((ref) async {
   ref.watch(operationalSyncRevisionProvider);
+  final operador = ref.watch(appRoleProvider).operador;
   final eventos =
       await ref.read(eventosRepositoryProvider).getAll(modalidad: 'masivo');
-  return fiestasQueVienen(eventos, DateTime.now());
+  final ahora = DateTime.now();
+  final conCaja = <String>{};
+  if (operador != null && ref.read(entradasEnEsteEquipoProvider)) {
+    final porDelante = {for (final e in fiestasQueVienen(eventos, ahora)) e.id};
+    final caja = ref.read(entradasDeLaCajaProvider);
+    for (final e in eventos) {
+      if (porDelante.contains(e.id)) continue;
+      try {
+        final abierta = await caja.cajaAbierta(eventoId: e.id, operadorId: operador.id);
+        if (abierta != null) conCaja.add(e.id);
+      } catch (_) {
+        // Si no se puede leer, la lista sale como siempre.
+      }
+    }
+  }
+  return fiestasQueVienen(eventos, ahora, conCajaAbierta: conCaja);
 });
+
+/// Si [e] ya pasó (solo sigue en la lista por una caja abierta).
+bool _yaPaso(Evento e) => fiestasQueVienen([e], DateTime.now()).isEmpty;
 
 /// La pantalla de quien entró a Entradas: elegir la fiesta y entregar. No hay
 /// camino a cobrar ni a editar un alumno (`test/modo_entradas_cerrado_test.dart`).
@@ -123,7 +146,17 @@ class EntradasHomeScreen extends ConsumerWidget {
                           EventoPresentacion.tituloPrincipal(e),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
-                        subtitle: Text(_fecha(e.fechaEvento)),
+                        subtitle: _yaPaso(e)
+                            ? Text(
+                                '${_fecha(e.fechaEvento)} · Tu caja de entradas sigue '
+                                'abierta: cerrala desde VENDER',
+                                key: Key('caja_abierta_${e.id}'),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            : Text(_fecha(e.fechaEvento)),
                         trailing: botones == null
                             ? const Icon(Icons.chevron_right)
                             : (enCelular ? null : botones),

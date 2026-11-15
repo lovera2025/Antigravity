@@ -77,7 +77,10 @@ void main(List<String> args) async {
     // Esta ventana no escribe el archivo de preferencias: lo pisaría entero con
     // su copia, que es la del momento en que se abrió, y se llevaría puesta la
     // sesión de la principal. Lo que guarda, se lo pide a la principal.
-    PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia);
+    PreferenciasDeLaVentana.usarElPuente(
+      PuenteFichaTotem.guardarPreferencia,
+      leer: PuenteFichaTotem.leerPreferencia,
+    );
 
     runApp(
       ProviderScope(

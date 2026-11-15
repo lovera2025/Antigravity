@@ -78,3 +78,55 @@ Future<void> elegirEventoEnRecepcion(
   if (pasarla == null) return;
   notifier.select(eventoId, moverLaTele: pasarla);
 }
+
+/// El botón TÓTEM del Centro de Comando va a proyectar [elegido] (el evento de
+/// Recepción). Devuelve la fiesta con la que se abre la tele, o null si se cerró
+/// la pregunta sin elegir.
+///
+/// **Si la tele ya está con otra fiesta, pregunta** (revisión final del 15-nov):
+/// después de un SOLO MIRAR ACÁ, Recepción queda en otra fiesta que la tele, y
+/// volver a mostrar la tele desde acá la pasaba a esa sin avisar; con el filtro
+/// de la 6.9.0 la tele dejaba de saludar a los de esa noche. SEGUIR CON LA DE LA
+/// TELE la vuelve a mostrar con la fiesta que tenía.
+Future<String?> fiestaParaAbrirLaTele(
+  BuildContext context, {
+  required String elegido,
+  Iterable<Evento> eventos = const [],
+}) async {
+  final enLaTele = KioskLauncher.totemEventoId;
+  if (!hayQuePreguntarPorLaTele(
+    hayTotem: KioskLauncher.isTotemActive,
+    enLaTele: enLaTele,
+    nuevo: elegido,
+  )) {
+    return elegido;
+  }
+  final pasarla = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: const Key('otra_fiesta_al_abrir_la_tele'),
+      title: const Text('El tótem está con otra fiesta'),
+      content: Text(
+        'El tótem de la tele está con:\n'
+        '${_nombreDe(enLaTele!, eventos)}\n\n'
+        'En Recepción estás mirando:\n'
+        '${_nombreDe(elegido, eventos)}\n\n'
+        '¿Pasás el tótem a esa, o lo volvés a mostrar con la que tenía?',
+      ),
+      actions: [
+        TextButton(
+          key: const Key('tele_seguir_con_la_suya'),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('SEGUIR CON LA DE LA TELE'),
+        ),
+        FilledButton(
+          key: const Key('tele_pasarla_al_abrir'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('PASAR EL TÓTEM'),
+        ),
+      ],
+    ),
+  );
+  if (pasarla == null) return null;
+  return pasarla ? elegido : enLaTele;
+}

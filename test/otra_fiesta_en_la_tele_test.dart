@@ -191,6 +191,103 @@ void main() {
     });
   });
 
+  // Revisión final de la 6.9.0: después de un SOLO MIRAR ACÁ, el botón TÓTEM
+  // del Centro de Comando pasaba la tele a la fiesta de Recepción sin avisar.
+  group('al volver a mostrar la tele desde el Centro de Comando', () {
+    late _Ventanas ventanas;
+    String? laQueVa;
+    var contesto = false;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      KioskLauncher.reiniciar();
+      ventanas = _Ventanas();
+      KioskLauncher.ventanas = ventanas;
+      KioskLauncher.esperaEntreIntentos = Duration.zero;
+      laQueVa = null;
+      contesto = false;
+    });
+
+    tearDown(KioskLauncher.reiniciar);
+
+    Future<void> tocarTotem(WidgetTester tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: FilledButton(
+                onPressed: () async {
+                  laQueVa = await fiestaParaAbrirLaTele(
+                    context,
+                    elegido: eventoParticular,
+                    eventos: [
+                      eventoDePrueba(eventoMasivo, 'masivo'),
+                      eventoDePrueba(eventoParticular, 'particular'),
+                    ],
+                  );
+                  contesto = true;
+                },
+                child: const Text('TÓTEM'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('TÓTEM'));
+      await tester.pumpAndSettle();
+    }
+
+    final cartel = find.byKey(const Key('otra_fiesta_al_abrir_la_tele'));
+
+    testWidgets('sin tótem abierto, abre con la de Recepción sin preguntar',
+        (tester) async {
+      await tocarTotem(tester);
+      expect(cartel, findsNothing);
+      expect(laQueVa, eventoParticular);
+    });
+
+    testWidgets('con la tele en otra fiesta, pregunta; SEGUIR la deja con la suya',
+        (tester) async {
+      await tester.runAsync(() => KioskLauncher.launch(eventoMasivo));
+      await tocarTotem(tester);
+      expect(cartel, findsOneWidget);
+      expect(contesto, isFalse);
+      await tester.tap(find.byKey(const Key('tele_seguir_con_la_suya')));
+      await tester.pumpAndSettle();
+      expect(laQueVa, eventoMasivo);
+    });
+
+    testWidgets('PASAR EL TÓTEM la pasa a la de Recepción', (tester) async {
+      await tester.runAsync(() => KioskLauncher.launch(eventoMasivo));
+      await tocarTotem(tester);
+      await tester.tap(find.byKey(const Key('tele_pasarla_al_abrir')));
+      await tester.pumpAndSettle();
+      expect(laQueVa, eventoParticular);
+    });
+
+    testWidgets('cerrar la pregunta sin elegir no abre nada', (tester) async {
+      await tester.runAsync(() => KioskLauncher.launch(eventoMasivo));
+      await tocarTotem(tester);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(contesto, isTrue);
+      expect(laQueVa, isNull);
+    });
+  });
+
+  test('el botón TÓTEM del Centro de Comando pasa por la pregunta', () {
+    final fuente = File('lib/features/dashboard/dashboard_screen.dart')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+    final i = fuente.indexOf('Future<void> _abrirTotem() async {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n  }\n', i));
+    final pregunta = cuerpo.indexOf('fiestaParaAbrirLaTele(');
+    expect(pregunta, greaterThanOrEqualTo(0),
+        reason: 'con un evento elegido, el botón TÓTEM tiene que preguntar');
+    expect(cuerpo.indexOf('KioskLauncher.launch(eventoId)'), greaterThan(pregunta));
+  });
+
   test('el desplegable de Recepción pasa por la pregunta', () {
     // Si volviera a llamar a `select` derecho, la tele se movería sin avisar.
     final fuente =

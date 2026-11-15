@@ -98,6 +98,43 @@ void main() {
       expect(pedidos.single, (_claveConfig, null));
     });
 
+    // Revisión final de la 6.9.0: la config de la fiesta de la noche la guardó
+    // la principal después de que se abrió la tele; sin internet, la tele la
+    // buscaba en su copia vieja y salía con la de fábrica.
+    test('lo de la tele se lo pregunta a la principal antes que a su copia vieja',
+        () async {
+      SharedPreferences.setMockInitialValues({_claveGiro: 'vertical', _sesion: 'la-de-las-23hs'});
+      final preguntas = <String>[];
+      PreferenciasDeLaVentana.usarElPuente(
+        (clave, valor) async => pedidos.add((clave, valor)),
+        leer: (clave) async {
+          preguntas.add(clave);
+          return (contesto: true, valor: clave == _claveGiro ? 'horizontal' : null);
+        },
+      );
+      expect(await TotemOrientationStore.load(_evento), TotemOrientation.horizontal);
+      expect(await TotemConfigCache.load(_evento), isNull,
+          reason: 'la principal contestó que no tiene nada');
+      expect(preguntas, [_claveGiro, _claveConfig]);
+      expect(await PreferenciasDeLaVentana.leer(_sesion), 'la-de-las-23hs',
+          reason: 'lo que no es de la tele no se pregunta');
+      expect(preguntas, hasLength(2));
+    });
+
+    test('si la principal no contesta la pregunta, lee su copia', () async {
+      SharedPreferences.setMockInitialValues({_claveGiro: 'vertical'});
+      PreferenciasDeLaVentana.usarElPuente(
+        (clave, valor) async => pedidos.add((clave, valor)),
+        leer: (_) async => (contesto: false, valor: null),
+      );
+      expect(await TotemOrientationStore.load(_evento), TotemOrientation.vertical);
+      PreferenciasDeLaVentana.usarElPuente(
+        (clave, valor) async => pedidos.add((clave, valor)),
+        leer: (_) async => throw Exception('la principal no está lista'),
+      );
+      expect(await TotemOrientationStore.load(_evento), TotemOrientation.vertical);
+    });
+
     test('si la principal no contesta, no escribe igual: se lo acuerda ella',
         () async {
       PreferenciasDeLaVentana.usarElPuente(
@@ -159,6 +196,19 @@ void main() {
       expect((await archivo()).getKeys(), {_sesion});
     });
 
+    test('por el puente contesta lo que tiene de la tele, y nada más', () async {
+      SharedPreferences.setMockInitialValues({_claveGiro: 'vertical', _sesion: 's'});
+      Future<FichaTotem> armar(String id) async => FichaTotem.particular(id);
+      Future<String?> pedir(Object? clave) => PuenteFichaTotem.responder(
+            MethodCall(PuenteFichaTotem.metodoLeer, clave),
+            armar,
+          );
+      expect(await pedir(_claveGiro), jsonEncode({'valor': 'vertical'}));
+      expect(await pedir(_claveConfig), jsonEncode({'valor': null}));
+      expect(await pedir(_sesion), isNull, reason: 'la sesión no sale por el puente');
+      expect(await pedir(null), isNull);
+    });
+
     test('por el puente: contesta "ok", y lo mal armado no guarda nada', () async {
       Future<FichaTotem> armar(String id) async => FichaTotem.particular(id);
       Future<String?> pedir(Object? argumentos) => PuenteFichaTotem.responder(
@@ -189,9 +239,12 @@ void main() {
         main.indexOf("args.firstOrNull == 'multi_window'"),
         main.indexOf('// Activar Path URL Strategy'),
       );
+      final puente = secundaria.replaceAll(RegExp(r'\s+'), ' ');
       expect(
-        secundaria,
-        contains('PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia)'),
+        puente,
+        contains('PreferenciasDeLaVentana.usarElPuente( PuenteFichaTotem.guardarPreferencia, '
+            'leer: PuenteFichaTotem.leerPreferencia, )'),
+        reason: 'guarda y lee por el puente',
       );
       expect(
         secundaria.indexOf('PreferenciasDeLaVentana.usarElPuente'),

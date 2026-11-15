@@ -50,7 +50,10 @@ Future<void> main(List<String> args) async {
     DesktopMultiWindow.setMethodHandler((call, _) async => null);
     // Como en la app: esta ventana no escribe el archivo de preferencias, se lo
     // pide a la principal (6.9.0).
-    PreferenciasDeLaVentana.usarElPuente(PuenteFichaTotem.guardarPreferencia);
+    PreferenciasDeLaVentana.usarElPuente(
+      PuenteFichaTotem.guardarPreferencia,
+      leer: PuenteFichaTotem.leerPreferencia,
+    );
     if (_auto) {
       unawaited(Future<void>.delayed(const Duration(seconds: 4), () async {
         final antes = await TotemOrientationStore.load(_evento);
