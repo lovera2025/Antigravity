@@ -313,18 +313,23 @@ class RetiroEntradas {
 
   /// Los números ya entregados a otras familias del evento, por nombre, para
   /// que no se repitan. Solo cuentan las entregas vigentes.
+  ///
+  /// **Dos alumnos con el mismo nombre juntan sus números** (revisión del
+  /// 14-nov): con un mapa armado de una vez, el segundo pisaba al primero y sus
+  /// números se podían volver a dar o a vender sin aviso.
   static Map<String, List<TramoTalonario>> tramosDeOtros(
     Iterable<ContratoAlumno> alumnos,
     Map<String, EntradasRetiro> retiros, {
     required String salvo,
-  }) =>
-      {
-        for (final a in alumnos)
-          if (a.id != salvo &&
-              (retiros[a.id]?.entregado ?? false) &&
-              retiros[a.id]!.tramos.isNotEmpty)
-            a.nombreAlumno.trim(): retiros[a.id]!.tramos,
-      };
+  }) {
+    final otros = <String, List<TramoTalonario>>{};
+    for (final a in alumnos) {
+      final r = retiros[a.id];
+      if (a.id == salvo || r == null || !r.entregado || r.tramos.isEmpty) continue;
+      otros.putIfAbsent(a.nombreAlumno.trim(), () => []).addAll(r.tramos);
+    }
+    return otros;
+  }
 
   /// La entrega a guardar. Si antes hubo una anulada, conserva quién anuló y
   /// por qué: la fila es una sola por alumno.

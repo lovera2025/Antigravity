@@ -13,6 +13,7 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/services/en_caja.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
+import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
@@ -43,9 +44,11 @@ Future<_Montada> _montar(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
+  // Siempre una venta de entradas en memoria: sin ella, lo que la pantalla lee
+  // de la venta caería en la base de verdad del equipo.
   final c = ProviderContainer(overrides: [
     ...e.reemplazos(jefe: mostrador ? null : jefe),
-    ...?entradas?.reemplazos,
+    ...(entradas ?? EntradasEnMemoria()).reemplazos,
   ]);
   addTearDown(c.dispose);
   final cobrosDeLaOficina = <String>[];
@@ -146,6 +149,48 @@ void main() {
       expect(find.byType(VenderEntradasScreen), findsOneWidget);
       // Sin caja abierta, VENDER la pide.
       expect(find.text('Abrir la caja de entradas'), findsOneWidget);
+    });
+  });
+
+  group('VENTAS, en ENTRADAS de la fiesta (6.9.0)', () {
+    TextButton boton(WidgetTester tester) =>
+        tester.widget<TextButton>(find.byKey(const Key('entradas_ventas')));
+    // PRECIOS tiene el mismo motivo: se mira el del botón de VENTAS.
+    String? motivo(WidgetTester tester) => tester
+        .widget<Tooltip>(find.ancestor(
+          of: find.byKey(const Key('entradas_ventas')),
+          matching: find.byType(Tooltip),
+        ))
+        .message;
+
+    testWidgets('sin modo jefe se ve, apagado y con el motivo', (tester) async {
+      await _montar(tester, mostrador: false, entradas: EntradasEnMemoria());
+      expect(find.text('VENTAS'), findsOneWidget);
+      expect(boton(tester).onPressed, isNull);
+      expect(motivo(tester), kSoloEnModoJefe);
+    });
+
+    testWidgets('en modo jefe abre las ventas de toda la fiesta, sin elegir caja',
+        (tester) async {
+      final entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, mostrador: false, jefe: true, entradas: entradas);
+      expect(boton(tester).onPressed, isNotNull);
+      expect(motivo(tester), 'Las ventas de entradas de esta fiesta');
+      await tester.tap(find.byKey(const Key('entradas_ventas')));
+      await _pasar(tester);
+      await _pasar(tester);
+      final ventas =
+          tester.widget<VentasDeEntradasScreen>(find.byType(VentasDeEntradasScreen));
+      expect(ventas.caja, isNull);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('ventas_alcance'))).data,
+        contains('Todas las cajas'),
+      );
+    });
+
+    testWidgets('en el mostrador no está', (tester) async {
+      await _montar(tester, entradas: EntradasEnMemoria());
+      expect(find.byKey(const Key('entradas_ventas')), findsNothing);
     });
   });
 

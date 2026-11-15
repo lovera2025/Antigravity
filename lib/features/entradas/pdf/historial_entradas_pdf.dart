@@ -19,12 +19,19 @@ class DatosDelHistorial {
   final String alcance;
   final DateTime emitido;
 
+  /// Con las sumas de plata (efectivo, transferencia, total). **Quien vende
+  /// no las ve** (revisión del 14-nov): con el total de su caja abierta sabría
+  /// cuánto efectivo tiene que haber, y el cierre se cuenta a ciegas. El
+  /// monto de cada venta sí va, como en la barra.
+  final bool conPlata;
+
   const DatosDelHistorial({
     required this.historial,
     required this.fiesta,
     this.fechaFiesta,
     required this.alcance,
     required this.emitido,
+    this.conPlata = true,
   });
 }
 
@@ -46,6 +53,17 @@ class HistorialEntradasPdf {
 
   static String _dia(DateTime f) =>
       '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}/${f.year}';
+
+  /// "20/11 21:40", en hora de Argentina: el año ya está arriba (la fiesta y
+  /// cuándo se imprimió), y con el año y el "hs" la columna partía cada fecha en
+  /// dos renglones.
+  static String cuandoEnLaTabla(String iso) {
+    final t = DateTime.tryParse(iso);
+    if (t == null) return '';
+    final ar = ArTime.toAr(t);
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return '${dos(ar.day)}/${dos(ar.month)} ${dos(ar.hour)}:${dos(ar.minute)}';
+  }
 
   static String _medio(VentaEntradas v) => switch (v.medio) {
         MedioBarra.efectivo => 'Efectivo',
@@ -215,8 +233,7 @@ class HistorialEntradasPdf {
                     children: [
                       celda(v.venta.numero.toString().padLeft(4, '0'),
                           tachada: v.anulada),
-                      celda(ComprobanteEntradasPdf.cuando(v.venta.createdAt),
-                          tachada: v.anulada),
+                      celda(cuandoEnLaTabla(v.venta.createdAt), tachada: v.anulada),
                       celda(v.venta.compradorNombre, tachada: v.anulada),
                       celda('${v.venta.cantidad}', derecha: true, tachada: v.anulada),
                       celda(pesos(v.venta.cobrado),
@@ -257,15 +274,17 @@ class HistorialEntradasPdf {
           total(
             'Entradas vendidas: ${t.entradas} (${t.sueltas} sueltas y ${t.deLugar} '
             'de lugares adicionales${t.otras > 0 ? ', ${t.otras} otras' : ''})',
-            pesos(t.vendido),
+            d.conPlata ? pesos(t.vendido) : '',
             grande: true,
           ),
-          total('Efectivo', pesos(t.efectivo)),
-          total('Transferencia (con los recargos)', pesos(t.transferencia)),
-          if (t.recargos > 0) total('Recargos por transferencia', pesos(t.recargos)),
-          if (t.descuentos > 0)
-            total('Descuentos a mano (${t.conDescuento})', pesos(t.descuentos)),
-          total('Total cobrado', pesos(t.total), grande: true),
+          if (d.conPlata) ...[
+            total('Efectivo', pesos(t.efectivo)),
+            total('Transferencia (con los recargos)', pesos(t.transferencia)),
+            if (t.recargos > 0) total('Recargos por transferencia', pesos(t.recargos)),
+            if (t.descuentos > 0)
+              total('Descuentos a mano (${t.conDescuento})', pesos(t.descuentos)),
+            total('Total cobrado', pesos(t.total), grande: true),
+          ],
           total('Ventas', '${t.ventas}'),
           if (t.anuladas > 0) total('Anuladas (no cuentan)', '${t.anuladas}'),
           total(

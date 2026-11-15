@@ -9,6 +9,7 @@ import '../../../models/entradas_retiro.dart';
 import '../../../models/evento.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
+import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/quien_opera.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/repositories/contratos_repository.dart';
@@ -85,9 +86,14 @@ class _VentasDeEntradasScreenState
 
   String get _fiesta => nombreDeLaFiesta(widget.evento);
 
-  /// El jefe ve toda la fiesta; quien vende, su caja.
+  /// El jefe ve toda la fiesta; quien vende, su caja (y sin caja, ninguna).
   String? get _soloDeLaCaja =>
-      ref.read(esRolJefeProvider) ? null : widget.caja?.id;
+      ref.read(esRolJefeProvider) ? null : (widget.caja?.id ?? '');
+
+  /// Las sumas de plata, solo para el jefe: **quien vende cuenta su caja a
+  /// ciegas**, y con el total de su caja abierta sabría cuánto efectivo tiene
+  /// que haber (revisión del 14-nov). El monto de cada venta sí lo ve.
+  bool get _conPlata => ref.read(esRolJefeProvider);
 
   String get _alcance {
     if (_soloDeLaCaja == null) return 'Todas las cajas';
@@ -219,6 +225,7 @@ class _VentasDeEntradasScreenState
           fechaFiesta: widget.evento.fechaEvento,
           alcance: _alcance,
           emitido: DateTime.now(),
+          conPlata: _conPlata,
         ),
         context: context,
       );
@@ -247,11 +254,20 @@ class _VentasDeEntradasScreenState
           ],
         ),
         actions: [
-          TextButton(
-            key: const Key('ventas_imprimir'),
-            onPressed: h == null ? null : _imprimirHistorial,
-            child: const Text('IMPRIMIR HISTORIAL'),
-          ),
+          // En un celular, el ícono: con el texto, el título se cortaba.
+          if (CortesPantalla.esCelular(MediaQuery.sizeOf(context).width))
+            IconButton(
+              key: const Key('ventas_imprimir'),
+              tooltip: 'Imprimir el historial',
+              icon: const Icon(Icons.print_outlined),
+              onPressed: h == null ? null : _imprimirHistorial,
+            )
+          else
+            TextButton(
+              key: const Key('ventas_imprimir'),
+              onPressed: h == null ? null : _imprimirHistorial,
+              child: const Text('IMPRIMIR HISTORIAL'),
+            ),
           const SizedBox(width: 8),
         ],
       ),
@@ -326,8 +342,8 @@ class _VentasDeEntradasScreenState
             const SizedBox(height: 8),
             Text(
               '${t.ventas == 1 ? '1 venta' : '${t.ventas} ventas'} · '
-              '${t.entradas == 1 ? '1 entrada' : '${t.entradas} entradas'} · '
-              '${pesos(t.total)}'
+              '${t.entradas == 1 ? '1 entrada' : '${t.entradas} entradas'}'
+              '${_conPlata ? ' · ${pesos(t.total)}' : ''}'
               '${t.anuladas > 0 ? ' · ${t.anuladas == 1 ? '1 anulada' : '${t.anuladas} anuladas'}' : ''}'
               ' · pago verificado: ${h.verificadas} de ${h.verificadas + h.sinVerificar}',
               key: const Key('ventas_totales'),
@@ -389,7 +405,8 @@ class _VentasDeEntradasScreenState
                       pesos(venta.cobrado),
                       ComprobanteEntradasPdf.comoPago(venta),
                       if (v.vendio.isNotEmpty) 'vendió ${v.vendio}',
-                    ].join(' · '),
+                      // El "$" no se separa de su número al cortar el renglón.
+                    ].join(' · ').replaceAll(r'$ ', '\$ '),
                     style: tachado.copyWith(fontSize: 12.5, color: gris),
                   ),
                   if (numeros.isNotEmpty)
@@ -418,8 +435,10 @@ class _VentasDeEntradasScreenState
                 ],
               ),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            // Un Wrap y no un Row: en un celular, con letra grande, los botones
+            // bajan de renglón en vez de salirse de la tarjeta.
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (!v.anulada)
                   Tooltip(

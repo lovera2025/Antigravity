@@ -605,6 +605,30 @@ void main() {
       );
     });
 
+    // Revisión del 14-nov: con un mapa armado de una vez, el segundo alumno con
+    // el mismo nombre pisaba al primero y sus números quedaban libres.
+    test('dos alumnos con el mismo nombre juntan sus números: no se pierde ninguno',
+        () {
+      final otraAcosta = _alumno(id: 'a2', nombre: 'ACOSTA, VALENTINA');
+      final retiros = {
+        'a': entrega(a, const TramoTalonario(1001, 1007)),
+        'a2': entrega(otraAcosta, const TramoTalonario(2001, 2007)),
+      };
+      final otros = RetiroEntradas.tramosDeOtros([a, otraAcosta, b], retiros, salvo: 'b');
+      expect(otros.keys, ['ACOSTA, VALENTINA']);
+      expect([for (final t in otros['ACOSTA, VALENTINA']!) t.texto],
+          ['1001 al 1007', '2001 al 2007']);
+      // La entrega de una no se pisa con la suya: el 1001 no se le vuelve a dar.
+      expect(
+        RetiroEntradas.errorTramos(
+          tramos: const [TramoTalonario(1001, 1007)],
+          generales: 7,
+          deOtros: RetiroEntradas.tramosDeOtros([a, otraAcosta, b], retiros, salvo: 'a2'),
+        ),
+        contains('1001'),
+      );
+    });
+
     test('el resumen cuenta retiros, deudas y entradas', () {
       final retiros = {'b': entrega(b, const TramoTalonario(1, 7))};
       final deudas = {

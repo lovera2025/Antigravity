@@ -181,6 +181,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       final sinSubir = await entradas.ventasSinSubir();
       if (!mounted) return;
       setState(() {
+        // La última venta anulada ya no es "guardada": se va su aviso verde.
+        if (_ultima != null && anulaciones.any((a) => a.ventaId == _ultima!.id)) {
+          _ultima = null;
+        }
         _config = config;
         _alumnos = alumnos;
         _deudas = deudas;
@@ -413,6 +417,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     for (final a in _alumnos) {
       if (a.id == v.contratoAlumnoId) alumno = a;
     }
+    // Si la anularon (desde VENTAS, o el jefe desde otro equipo), la copia
+    // sale con ANULADA, como la de VENTAS.
+    AnulacionEntradas? anulacion;
+    for (final a in _anulaciones) {
+      if (a.ventaId == v.id) anulacion = a;
+    }
     return DatosDelComprobante(
       venta: v,
       fiesta: _fiesta,
@@ -420,6 +430,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       alumno: alumno?.nombreAlumno.trim(),
       mesa: alumno == null ? null : SalonMesas.textoMesasPuerta(alumno),
       copia: copia,
+      anulacion: anulacion,
     );
   }
 

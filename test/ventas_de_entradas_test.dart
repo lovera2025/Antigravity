@@ -57,9 +57,10 @@ Future<_Montada> _montar(
   WidgetTester tester, {
   bool jefe = false,
   bool conVentas = true,
+  Size tamano = const Size(1200, 1300),
 }) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(1200, 1300);
+  tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
@@ -145,8 +146,9 @@ void main() {
       expect(find.byKey(Key('venta_${m.v2.id}')), findsOneWidget);
       expect(find.byKey(Key('venta_${m.v3.id}')), findsNothing,
           reason: 'la de Maxi es de otra caja');
+      // Sin sumas de plata: cuenta su caja a ciegas (revisión del 14-nov).
       expect(_texto(tester, 'ventas_totales'),
-          r'2 ventas · 6 entradas · $ 60.000 · pago verificado: 0 de 2');
+          '2 ventas · 6 entradas · pago verificado: 0 de 2');
 
       final tilde = tester.widget<Checkbox>(find.byKey(Key('verificar_${m.v1.id}')));
       expect(tilde.onChanged, isNull);
@@ -318,6 +320,7 @@ void main() {
       await _tocar(tester, 'ventas_imprimir');
       final h = m.historiales.single;
       expect(h.alcance, 'La caja de Carla');
+      expect(h.conPlata, isFalse, reason: 'quien vende cuenta a ciegas');
       expect(h.fiesta, 'PUERTO VIEJO');
       expect(h.historial.ventas, hasLength(2));
       expect(h.historial.repetidos, hasLength(1));
@@ -327,7 +330,30 @@ void main() {
       final m = await _montar(tester, jefe: true);
       await _tocar(tester, 'ventas_imprimir');
       expect(m.historiales.single.alcance, 'Todas las cajas');
+      expect(m.historiales.single.conPlata, isTrue);
       expect(m.historiales.single.historial.ventas, hasLength(3));
+    });
+
+    // En un celular, con el texto IMPRIMIR HISTORIAL el título se cortaba
+    // ("Ventas de e…"): va el ícono, que deja lugar, y hace lo mismo. Que el
+    // título entra entero se mira en la muestra, con la letra de la app (la de
+    // las pruebas es mucho más ancha).
+    testWidgets('en un celular es un ícono chico, nada se desborda, y abre el papel',
+        (tester) async {
+      final m = await _montar(tester, jefe: true, tamano: const Size(390, 1250));
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('ventas_imprimir')),
+          matching: find.byIcon(Icons.print_outlined),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('IMPRIMIR HISTORIAL'), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('ventas_imprimir'))).width,
+          lessThanOrEqualTo(48));
+      await _tocar(tester, 'ventas_imprimir');
+      expect(m.historiales.single.alcance, 'Todas las cajas');
     });
   });
 }

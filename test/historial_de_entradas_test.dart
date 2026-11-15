@@ -210,6 +210,66 @@ void main() {
       }
     });
 
+    // Con un recargo, lo vendido y lo cobrado no dan lo mismo: así se ve que
+    // cada monto va en el renglón de su rótulo y no el de al lado.
+    test('cada total va en su renglón: lo vendido sin recargos, lo cobrado con ellos',
+        () async {
+      await n.entradas.vender(
+        caja: n.carla,
+        compradorNombre: 'DIAZ, LUCIA',
+        renglones: [
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 1),
+        ],
+        medio: MedioBarra.transferencia,
+        transferencia: 11000,
+        recargo: 1000,
+        recargoPct: 10,
+        quien: 'Carla',
+      );
+      final t = (await n.historial()).totales;
+      expect(t.vendido, 90000);
+      expect(t.total, 91000);
+      final palabras = palabrasDelPdf(await pdf(await n.historial()));
+      Set<String> renglonDe(String rotulo) {
+        final y = palabras.lastWhere((p) => p.texto == rotulo).y;
+        return {
+          for (final p in palabras)
+            if ((p.y - y).abs() < 2) p.texto,
+        };
+      }
+
+      expect(renglonDe('cobrado'), contains('91.000'));
+      expect(renglonDe('cobrado'), isNot(contains('90.000')));
+      expect(renglonDe('vendidas:'), contains('90.000'));
+      expect(renglonDe('recargos)'), contains('51.000'));
+      expect(renglonDe('Recargos'), contains('1.000'));
+    });
+
+    test('en la tabla, cuándo va en un renglón: día, mes y hora de Argentina', () {
+      expect(HistorialEntradasPdf.cuandoEnLaTabla('2026-11-21T13:05:00Z'), '21/11 10:05');
+      expect(HistorialEntradasPdf.cuandoEnLaTabla('2026-12-05T01:30:00Z'), '04/12 22:30');
+      expect(HistorialEntradasPdf.cuandoEnLaTabla(''), '');
+    });
+
+    // Quien vende cuenta su caja a ciegas: su papel no trae las sumas de plata
+    // (revisión del 14-nov). El monto de cada venta sí.
+    test('el de quien vende va sin las sumas de plata', () async {
+      final bytes = await HistorialEntradasPdf.armar(
+        DatosDelHistorial(
+          historial: await n.historial(caja: n.carla.id),
+          fiesta: 'INSTITUTO SAN LORENZO',
+          alcance: 'La caja de Carla',
+          emitido: DateTime.utc(2026, 11, 21, 13),
+          conPlata: false,
+        ),
+      );
+      final palabras = {for (final p in palabrasDelPdf(bytes)) p.texto};
+      expect(palabras, containsAll(['vendidas:', 'verificado', 'PEREZ,', '20.000']));
+      for (final no in ['cobrado', 'recargos)', '60.000']) {
+        expect(palabras, isNot(contains(no)), reason: 'no tiene que estar "$no"');
+      }
+    });
+
     test('con muchas ventas se parte en hojas, sin perder ninguna', () async {
       for (var i = 0; i < 90; i++) {
         await n._vender(n.carla, 'COMPRADOR NUMERO$i', sueltas: 1);

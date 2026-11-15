@@ -10,7 +10,12 @@
 //     familia que debe;
 //   • Entradas_6_cobro.png: la hoja del cobro (la de la barra), en mixto;
 //   • Entradas_7_guardada.png: la venta guardada;
-//   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante.
+//   • Entradas_8_ventas_jefe.png, Entradas_9_ventas_vendedor.png y
+//     Entradas_10_ventas_celular.png: VENTAS, con dos cajas, una venta
+//     verificada, un número repetido y una anulada;
+//   • Entradas_11_anular.png: el cartel de anular;
+//   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante;
+//   • Historial_de_ventas.pdf: IMPRIMIR HISTORIAL, con las letras de la app.
 //
 // Los nombres y el precio de $ 10.000 son inventados.
 
@@ -29,9 +34,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/entradas/cuentas/historial_de_entradas.dart';
+import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
+import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/precios_de_entradas_dialog.dart';
@@ -205,6 +213,148 @@ void main() {
       await guardar(tester, clave, nombre);
     });
   }
+
+  /// Una noche con dos cajas: la de Carla (la que abrió [montar]) y la de Maxi.
+  /// Una venta con el pago verificado, una mixta con un número que quedó en dos
+  /// ventas, y una anulada.
+  Future<void> unaNocheDeVentas(WidgetTester tester, EntradasEnMemoria entradas) async {
+    await tester.runAsync(() async {
+      final carla = entradas.listaCajas.single;
+      final maxi = await entradas.abrirCaja(
+        eventoId: idFiestaEntrega,
+        operadorId: 'maxi',
+        operadorNombre: 'Maxi',
+        cambioInicial: 3000,
+      );
+      final perez = await entradas.vender(
+        caja: carla,
+        contratoAlumnoId: EntregaEnMemoria.idPerez,
+        compradorNombre: 'PEREZ, MARTA',
+        compradorDni: '30111222',
+        renglones: [
+          RenglonEntradas.lugar(
+            nombre: PedidoDeEntradas.nombreDeLugar(50),
+            precioLista: 10000,
+            descuentoPct: 50,
+            cantidad: 8,
+          ),
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 2),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 60000,
+        numeros: '2000-2009',
+        quien: 'Carla',
+      );
+      await entradas.vender(
+        caja: carla,
+        compradorNombre: 'GOMEZ, LUIS',
+        renglones: [
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 2),
+        ],
+        medio: MedioBarra.transferencia,
+        transferencia: 20000,
+        numeros: '2010-2011',
+        quien: 'Carla',
+      );
+      await entradas.vender(
+        caja: maxi,
+        compradorNombre: 'RUIZ, ANA',
+        renglones: [
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 3),
+        ],
+        medio: MedioBarra.mixto,
+        efectivo: 10000,
+        transferencia: 20000,
+        numeros: '2011-2013',
+        quien: 'Maxi',
+      );
+      final sosa = await entradas.vender(
+        caja: maxi,
+        compradorNombre: 'SOSA, DIEGO',
+        renglones: [
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 1),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 10000,
+        numeros: '2014',
+        quien: 'Maxi',
+      );
+      await entradas.verificar(perez, verificado: true, quien: 'Jefe');
+      await entradas.anular(sosa,
+          motivo: 'se cargó dos veces', devueltas: true, quien: 'Jefe');
+    });
+  }
+
+  for (final (nombre, tamano, jefe) in [
+    ('Entradas_8_ventas_jefe.png', const Size(1100, 1000), true),
+    ('Entradas_9_ventas_vendedor.png', const Size(1100, 800), false),
+    ('Entradas_10_ventas_celular.png', const Size(390, 1250), true),
+  ]) {
+    testWidgets('VENTAS · $nombre', (tester) async {
+      final (clave, _, entradas, _) = await montar(
+        tester,
+        jefe: jefe,
+        tamano: tamano,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await unaNocheDeVentas(tester, entradas);
+      await tocar(tester, 'vender_ventas');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('el cartel de anular', (tester) async {
+    final (clave, _, entradas, _) = await montar(
+      tester,
+      jefe: true,
+      tamano: const Size(1100, 1000),
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await unaNocheDeVentas(tester, entradas);
+    await tocar(tester, 'vender_ventas');
+    await tester.pumpAndSettle();
+    final gomez = entradas.listaVentas.firstWhere((v) => v.compradorNombre == 'GOMEZ, LUIS');
+    await tester.tap(find.byKey(Key('anular_${gomez.id}')));
+    await tester.pumpAndSettle();
+    await poner(tester, 'anular_motivo', 'pagó con otra transferencia');
+    await tester.tap(find.byKey(const Key('anular_devolvieron_no')));
+    await tester.pumpAndSettle();
+    await guardar(tester, clave, 'Entradas_11_anular.png');
+  });
+
+  testWidgets('el historial impreso', (tester) async {
+    final (_, _, entradas, _) = await montar(
+      tester,
+      jefe: true,
+      tamano: const Size(900, 600),
+      pantalla: const SizedBox(),
+    );
+    await unaNocheDeVentas(tester, entradas);
+    await tester.runAsync(() async {
+      final h = HistorialDeEntradas.de(
+        cajas: await entradas.cajas(idFiestaEntrega),
+        ventas: await entradas.ventas(idFiestaEntrega),
+        anulaciones: await entradas.anulaciones(idFiestaEntrega),
+        verificaciones: await entradas.verificaciones(idFiestaEntrega),
+      );
+      final bytes = await HistorialEntradasPdf.armar(
+        DatosDelHistorial(
+          historial: h,
+          fiesta: 'PUERTO VIEJO',
+          fechaFiesta: fiestaDeLaEntrega.fechaEvento,
+          alcance: 'Todas las cajas',
+          emitido: DateTime.utc(2026, 11, 30, 15),
+        ),
+        fuentes: await PdfService.fuentesOutfit(),
+        logo: await isotipoDeLosPapeles(),
+      );
+      File('$carpeta${Platform.pathSeparator}Historial_de_ventas.pdf')
+          .writeAsBytesSync(bytes);
+      print('── PDF en: $carpeta');
+    });
+  });
 
   testWidgets('el cobro, la venta guardada y el comprobante', (tester) async {
     final (clave, _, entradas, comprobantes) = await montar(

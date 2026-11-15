@@ -116,6 +116,13 @@ priorizó el sorteo de noviembre. El contexto está en
   el 10-nov: cajeras y encargada en el chat, con solapas TODOS · RECEPCIÓN ·
   BARRA, y un puente entre las dos notebooks. Postergado por él: la 6.5.0 sale sin esto.
 
+### La venta de entradas (6.9.0)
+
+- [Anular la misma venta de entradas desde dos PCs a la vez](anular-dos-veces-desde-dos-pcs.md) —
+  encontrado por la revisión de VENTAS del 15-nov: la segunda anulación pisa a la primera en la nube.
+  Postergado: necesita que el jefe anule la misma venta en dos PCs en segundos, y el arreglo toca la
+  subida del motor.
+
 ## Hechos
 
 - [Que el tótem no se desconecte ni salude tarde](totem-comunicacion.md) — hecho

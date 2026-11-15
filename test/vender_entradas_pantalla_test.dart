@@ -16,6 +16,7 @@ import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/abrir_caja_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
+import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
@@ -502,6 +503,51 @@ void main() {
       await tester.pumpAndSettle();
       expect(_texto(tester, 'vender_linea_texto'),
           'Caja abierta · Carla · Sin internet · 1 venta por subir');
+    });
+  });
+
+  group('VENTAS, desde la barra de VENDER', () {
+    testWidgets('abre las ventas de la caja de quien vende, y al volver sigue en VENDER',
+        (tester) async {
+      final m = await _montar(tester);
+      await _tocar(tester, 'vender_ventas');
+      await tester.pumpAndSettle();
+      final ventas =
+          tester.widget<VentasDeEntradasScreen>(find.byType(VentasDeEntradasScreen));
+      expect(ventas.caja?.id, m.entradas.listaCajas.single.id);
+      expect(_texto(tester, 'ventas_alcance'), contains('La caja de Carla'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(VentasDeEntradasScreen), findsNothing);
+      expect(find.byType(VenderEntradasScreen), findsOneWidget);
+    });
+
+    // Revisión del 14-nov: al volver con la última venta anulada, el aviso verde
+    // de "guardada" seguía arriba y su comprobante salía sin ANULADA.
+    testWidgets('si se anula la última venta, se va el aviso de guardada y su copia '
+        'sale ANULADA', (tester) async {
+      final m = await _montar(tester, jefe: true);
+      await _aAlguienDeAfuera(tester);
+      await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
+      await _tocar(tester, 'vender_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(find.byKey(const Key('vender_guardada')), findsOneWidget);
+      final venta = m.entradas.listaVentas.single;
+      // Antes de anular, la copia sale limpia.
+      expect(m.comprobantes.single.anulacion, isNull);
+      await m.entradas.anular(venta, motivo: 'error de carga', devueltas: true, quien: 'Jefe');
+      await _tocar(tester, 'vender_ventas');
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('vender_guardada')), findsNothing);
+    });
+
+    testWidgets('sin caja abierta no está', (tester) async {
+      await _montar(tester, conCaja: false);
+      // VENDER pide la caja: se vuelve sin abrirla y no queda VENTAS a la vista.
+      expect(find.byKey(const Key('vender_ventas')), findsNothing);
     });
   });
 }
