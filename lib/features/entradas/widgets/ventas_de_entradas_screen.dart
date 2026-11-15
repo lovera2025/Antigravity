@@ -23,6 +23,7 @@ import '../pdf/historial_entradas_pdf.dart';
 import '../pdf/papeles_de_entradas.dart';
 import '../providers/entradas_providers.dart';
 import '../services/nombre_de_la_fiesta.dart';
+import 'imprimir_por_hojas.dart';
 
 /// VENTAS: el historial de la venta de entradas de una fiesta (6.9.0, sección 8
 /// del spec del 13-nov).
@@ -56,6 +57,10 @@ class _VentasDeEntradasScreenState
   List<ContratoAlumno> _alumnos = [];
   FiltroDeVentas _filtro = FiltroDeVentas.todas;
   bool _ocupado = false;
+
+  /// Las tandas del historial que ya se imprimieron en esta pantalla (por su
+  /// primera hoja), para marcarlas en el cartel.
+  final _tandasImpresas = <int>{};
   StreamSubscription<Set<String>>? _cambiosSub;
 
   static const _tablasQueMiro = {
@@ -215,21 +220,46 @@ class _VentasDeEntradasScreenState
     }
   }
 
+  /// La familia de cada alumno, para el historial: "PÉREZ, JUAN m.12-13".
+  Map<String, String> _familias() => {
+        for (final a in _alumnos)
+          a.id: () {
+            final mesa = SalonMesas.textoMesasPuerta(a);
+            return '${a.nombreAlumno.trim()}${mesa == null ? '' : ' m.$mesa'}';
+          }(),
+      };
+
+  /// IMPRIMIR HISTORIAL. **Si son muchas hojas, pregunta antes** (pedido del
+  /// usuario, 15-nov): todo junto, o por hojas (de a tandas, o un tramo).
   Future<void> _imprimirHistorial() async {
     final h = _historial;
     if (h == null) return;
-    try {
-      await ref.read(abrirHistorialDeEntradasProvider)(
-        DatosDelHistorial(
-          historial: h,
-          fiesta: _fiesta,
-          fechaFiesta: widget.evento.fechaEvento,
-          alcance: _alcance,
-          emitido: DateTime.now(),
-          conPlata: _conPlata,
-        ),
-        context: context,
+    var datos = DatosDelHistorial(
+      historial: h,
+      fiesta: _fiesta,
+      fechaFiesta: widget.evento.fechaEvento,
+      alcance: _alcance,
+      emitido: DateTime.now(),
+      conPlata: _conPlata,
+      familias: _familias(),
+    );
+    final hojas = HistorialEntradasPdf.hojas(datos);
+    if (hojas > kHojasParaPreguntar) {
+      final elegidas = await elegirHojasParaImprimir(
+        context,
+        hojas: hojas,
+        ventas: h.ventas.length,
+        impresas: _tandasImpresas,
       );
+      if (elegidas == null || !mounted) return;
+      if (elegidas.desde != 1 || elegidas.hasta != hojas) {
+        datos = datos.soloLasHojas(elegidas.desde, elegidas.hasta);
+      }
+      if (elegidas.tanda) _tandasImpresas.add(elegidas.desde);
+    }
+    if (!mounted) return;
+    try {
+      await ref.read(abrirHistorialDeEntradasProvider)(datos, context: context);
     } catch (_) {
       _decir('No se pudo armar el historial. Probá de nuevo.');
     }

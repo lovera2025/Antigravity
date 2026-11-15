@@ -192,6 +192,8 @@ void main() {
             reason: '"${p.texto}" empieza antes del margen');
         expect(p.x + p.ancho, lessThanOrEqualTo(hoja.width - hoja.marginRight + 0.5),
             reason: '"${p.texto}" termina fuera de la hoja');
+        expect(p.y, greaterThanOrEqualTo(hoja.marginBottom - 0.5),
+            reason: '"${p.texto}" cae debajo del margen de abajo');
       }
     });
 
@@ -202,8 +204,8 @@ void main() {
       for (final esperada in [
         'INSTITUTO', 'HISTORIAL', 'ENTRADAS', '04/12/2026',
         'PEREZ,', 'RUIZ,', 'SOSA,', 'LEDESMA,',
-        'Carla', 'Maxi', 'Efectivo', 'Transferencia',
-        'Anulada', 'ANULADAS', 'equivoco', 'devolvieron',
+        'Carla', 'Maxi', 'Efectivo', 'Transf.',
+        'Anul.', 'ANULADA', 'equivoco', 'devolvieron',
         '80.000', 'verificado', 'revisar.',
       ]) {
         expect(palabras, contains(esperada), reason: 'falta "$esperada"');
@@ -292,4 +294,159 @@ void main() {
       expect(palabras, contains('ventas.'));
     });
   });
+
+  // La forma C que eligió el usuario el 15-nov: un renglón por venta, y otro
+  // solo si hay algo que explicar; por hojas cuando son muchas.
+  group('la forma C', () {
+    DatosDelHistorial datos(HistorialDeEntradas h, {Map<String, String> familias = const {}}) =>
+        DatosDelHistorial(
+          historial: h,
+          fiesta: 'INSTITUTO SAN LORENZO',
+          fechaFiesta: DateTime(2026, 12, 4),
+          alcance: 'Todas las cajas',
+          emitido: DateTime.utc(2026, 11, 21, 13),
+          familias: familias,
+        );
+
+    RenglonEntradas anticipadas(int n) =>
+        RenglonEntradas.suelta(nombre: 'Entrada anticipada', precioLista: 8000, cantidad: n);
+    RenglonEntradas lugar(int n) => RenglonEntradas.lugar(
+        nombre: 'Entrada de lugar adicional (50 %)', precioLista: 10000, descuentoPct: 50, cantidad: n);
+
+    Future<VentaEntradas> vender(
+      String comprador,
+      List<RenglonEntradas> renglones, {
+      MedioBarra medio = MedioBarra.efectivo,
+      double? efectivo,
+      double transferencia = 0,
+      String? familia,
+      String? numeros,
+    }) {
+      final total = renglones.fold<double>(0, (s, r) => s + r.subtotal);
+      return n.entradas.vender(
+        caja: n.carla,
+        contratoAlumnoId: familia,
+        compradorNombre: comprador,
+        renglones: renglones,
+        medio: medio,
+        efectivo: efectivo ?? (medio == MedioBarra.efectivo ? total : 0),
+        transferencia: transferencia,
+        numeros: numeros,
+        quien: 'Carla',
+      );
+    }
+
+    test('qué entradas, corto: el lugar dice lo que paga del valor', () async {
+      Future<String> corto(List<RenglonEntradas> r) async {
+        final v = await vender('X', r, familia: 'f');
+        return HistorialEntradasPdf.entradasCorto(v);
+      }
+
+      expect(await corto([anticipadas(2)]), '2 anticip.');
+      expect(await corto([lugar(3)]), '3 lugar 50 %');
+      expect(await corto([anticipadas(1), lugar(2)]), '1 anticip. + 2 lugar');
+      expect(
+        await corto([RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 1)]),
+        '1 entrada',
+      );
+    });
+
+    test('el segundo renglón, solo cuando hay algo que explicar', () async {
+      await vender('MIXTO, MARIA', [anticipadas(2)],
+          medio: MedioBarra.mixto, efectivo: 10000, transferencia: 6000);
+      await vender('CORTO, ANA', [lugar(2)], familia: 'f1');
+      await vender('CON UN NOMBRE BASTANTE LARGO, MARIA JOSEFINA', [lugar(2)], familia: 'f2');
+      final filas = HistorialEntradasPdf.filas(datos(
+        await n.historial(),
+        familias: {
+          'f1': 'CORTO, JUAN m.12',
+          'f2': 'OTRO NOMBRE TAMBIEN LARGO, JUAN CARLOS m.40-41',
+        },
+      ));
+      FilaDelHistorial de(String comprador) =>
+          filas.firstWhere((f) => f.venta.venta.compradorNombre == comprador);
+
+      expect(de('PEREZ, ANA').abajo, isNull, reason: 'una venta común: un renglón');
+      expect(de('PEREZ, ANA').renglonesAbajo, 0);
+      expect(de('MIXTO, MARIA').abajo, r'efectivo $ 10.000 + transf. $ 6.000');
+      expect(de('CORTO, ANA').familia, 'CORTO, JUAN m.12');
+      expect(de('CORTO, ANA').abajo, isNull);
+      final larga = de('CON UN NOMBRE BASTANTE LARGO, MARIA JOSEFINA');
+      expect(larga.familia, isNull, reason: 'no entra arriba');
+      expect(larga.abajo, startsWith('fam. OTRO NOMBRE'));
+      expect(de('SOSA, DIEGO').abajo, contains('ANULADA por Jefe'));
+      expect(de('SOSA, DIEGO').abajo, contains('se equivoco de persona'));
+    });
+
+    test('1.000 entradas: unas 8 hojas, ninguna venta afuera ni repetida, nada se sale de la hoja',
+        () async {
+      var entradas = 0;
+      for (var i = 0; entradas < 1000; i++) {
+        final r = switch (i % 4) {
+          0 => [lugar(4)],
+          1 => [anticipadas(2)],
+          2 => [anticipadas(1), lugar(2)],
+          _ => [anticipadas(3)],
+        };
+        entradas += r.fold(0, (s, x) => s + x.cantidad);
+        final total = r.fold<double>(0, (s, x) => s + x.subtotal);
+        await vender(
+          'COMPRADOR NUMERO$i',
+          r,
+          medio: i % 9 == 0 ? MedioBarra.mixto : MedioBarra.efectivo,
+          efectivo: i % 9 == 0 ? 5000 : null,
+          transferencia: i % 9 == 0 ? total - 5000 : 0,
+          familia: i.isEven ? 'f$i' : null,
+          numeros: '${3000 + i * 4}-${3000 + i * 4 + 3}',
+        );
+      }
+      final d = datos(
+        await n.historial(),
+        familias: {for (var i = 0; i < 400; i += 2) 'f$i': 'FAMILIA NUMERO$i m.${10 + i % 50}'},
+      );
+      final hojas = HistorialEntradasPdf.hojas(d);
+      expect(hojas, inInclusiveRange(7, 10), reason: 'unas 40 ventas por hoja');
+      final bytes = await HistorialEntradasPdf.armar(d);
+      expect(paginasDelPdf(bytes), hojas);
+      final palabras = palabrasDelPdf(bytes);
+      final hoja = HistorialEntradasPdf.hoja;
+      for (final p in palabras) {
+        expect(p.y, greaterThanOrEqualTo(hoja.marginBottom - 0.5),
+            reason: '"${p.texto}" se sale por abajo');
+        expect(p.x + p.ancho, lessThanOrEqualTo(hoja.width - hoja.marginRight + 0.5),
+            reason: '"${p.texto}" se sale por la derecha');
+      }
+      final textos = [for (final p in palabras) p.texto];
+      for (var i = 0; i < d.historial.ventas.length - 4; i++) {
+        expect(textos.where((t) => t == 'NUMERO$i').length, greaterThanOrEqualTo(1),
+            reason: 'NUMERO$i');
+      }
+      expect(textos.where((t) => t == 'cobrado').length, 1, reason: 'los totales, una vez');
+    });
+
+    test('por hojas: solo las del tramo, con la numeración del papel entero', () async {
+      for (var i = 0; i < 150; i++) {
+        await vender('COMPRADOR NUMERO$i', [anticipadas(1)]);
+      }
+      final d = datos(await n.historial());
+      final total = HistorialEntradasPdf.hojas(d);
+      expect(total, greaterThanOrEqualTo(4));
+      final bytes = await HistorialEntradasPdf.armar(d.soloLasHojas(2, 3));
+      expect(paginasDelPdf(bytes), 2);
+      final textos = [for (final p in palabrasDelPdf(bytes)) p.texto];
+      final numeros = {
+        for (var i = 0; i < textos.length - 1; i++)
+          if (textos[i] == 'Hoja') textos[i + 1],
+      };
+      expect(numeros, {'2', '3'});
+      expect(textos, contains('$total'), reason: '"Hoja 2 de $total"');
+      expect(textos, isNot(contains('cobrado')), reason: 'los totales van en la última');
+      expect(textos, isNot(contains('NUMERO0')), reason: 'la primera hoja no sale');
+      expect(
+        HistorialEntradasPdf.nombreDelArchivo(d.soloLasHojas(2, 3)),
+        'Ventas_de_entradas_INSTITUTO_SAN_LORENZO_hojas_2_a_3.pdf',
+      );
+    });
+  });
+
 }

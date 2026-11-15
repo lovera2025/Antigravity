@@ -478,6 +478,11 @@ están en esta PC, **sin subir a GitHub**.
   guardado a los 2 s (CORTAR INTERNET lo deja en la cola); `test/venta_entradas_prueba_test.dart` la vigila. Se le
   mandaron las capturas (`build/capturas_6.9.0/`). Al recorrerla apareció que **VENDER quedaba en "1 venta subiendo"
   con la venta ya en la nube**: ahora escucha `pendingStream` del motor (`MotorDePrueba.pendiente` en las pruebas).
+  La revisión final de toda la 6.9.0 encontró 6 problemas medios (la tele, la caja abierta después del mediodía y tres
+  del recibo reimpreso), arreglados. **En curso: la hoja A4 del historial de ventas en la "forma C"** que eligió el
+  usuario (un renglón por venta y otro solo si hace falta; las hojas armadas con medidas fijas para imprimir **por
+  hojas**, con el cartel Todo junto · Por hojas): programada, faltan las roturas, la muestra para él y la revisión
+  (ver "DÓNDE QUEDÓ" del CONTEXTO).
   - **Quien vende no ve sumas de plata en VENTAS ni en su historial impreso** (`conPlata`): cuenta su caja a ciegas.
   - **La entrega sin cargo no da un número vendido** (`NumerosDeEntradas.ocupados` es su `deOtros`), y **dos alumnos
     con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta).

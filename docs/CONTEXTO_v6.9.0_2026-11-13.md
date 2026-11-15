@@ -6,8 +6,40 @@ prueba, el recorrido con el mouse, las capturas (mandadas) y la revisión final 
 
 ## Para retomar en otro chat
 
+**DÓNDE QUEDÓ (15-nov, al cortar el chat: "actualizá el contexto… hacé lo de siempre"):**
+- **Eligió la forma C ("La C me gustó") y está PROGRAMADA, sin terminar de cerrar** (commit "en curso", ver abajo). El
+  N° se dejó como está (cada caja numera desde 1; la columna VEND. dice de qué caja es): no contestó a la pregunta de
+  separar por caja, y "Sí, así" era la primera opción.
+  - `lib/features/entradas/pdf/historial_entradas_pdf.dart` reescrito: **las hojas se arman acá con medidas fijas**
+    (`paginar`, `hojas`, `filas`, `FilaDelHistorial`, `entradasCorto`, `talonario`, `detalleAbajo`): cada renglón mide
+    lo mismo y un texto que no entra se corta en su renglón, así se sabe qué ventas van en cada hoja y se imprime un
+    tramo con la numeración del papel entero (`DatosDelHistorial.soloLasHojas`, `desdeHoja`/`hastaHoja`; el archivo
+    sale `…_hojas_11_a_20.pdf`). La familia arriba si entra (`_letrasArriba` 44), si no al segundo renglón; el
+    talonario largo también va abajo. Sin DNI (no estaba en la C que aprobó: está en el comprobante). Sin la lista
+    "ANULADAS" aparte: la anulación es el segundo renglón, en rojo. Totales en la última hoja (o solos en una más).
+  - `lib/features/entradas/widgets/imprimir_por_hojas.dart` (nuevo): el cartel **Todo junto · Por hojas**
+    (`elegirHojasParaImprimir`, tandas de `kHojasPorTanda` = 10 con "impresa" las que ya salieron, y "de la hoja X a
+    la Y" con su error). VENTAS (`_imprimirHistorial`) lo abre solo con más de `kHojasParaPreguntar` (10) hojas, y le
+    pasa `familias` (`_familias()`: "PÉREZ, JUAN m.12-13").
+  - Pruebas: `test/historial_de_entradas_test.dart` (grupo "la forma C": el segundo renglón solo cuando hace falta,
+    **1.000 entradas en 7 a 10 hojas sin que nada se salga de la hoja**, un tramo con su numeración) y
+    `test/imprimir_por_hojas_test.dart` (el cartel y VENTAS con 30 y con 600 ventas). Pasan (65 con las vecinas).
+- **Lo que falta para cerrar la hoja C, en orden:**
+  1. Las roturas a propósito (`bash tool/romper_una_regla.sh`): por ejemplo `paginar` sin cortar hoja, el segundo
+     renglón siempre, VENTAS sin preguntar con muchas hojas, el tramo sin respetar `desdeHoja`.
+  2. **La muestra con las letras de la app** (`tool/venta_entradas_muestra_test.dart`, sumarle un historial de 1.000
+     entradas inventadas, en `build/muestras_6.9.0/`): mirar el PDF hoja por hoja con la herramienta de leer archivos
+     (con Outfit el ancho de las letras cambia: ver que nada importante se corte) y **mandárselo** (lo quiere ver).
+     También una captura del cartel (en `tool/venta_entradas_prueba.dart`, que ya tiene VENTAS: hacen falta muchas
+     ventas para que aparezca).
+  3. La revisión independiente (un Workflow de lectores y verificadores, como en la etapa 7) y la suite entera
+     (`bash tool/suite_por_tandas.sh`; la última dio 5.094 antes de la hoja C).
+  4. Un commit que la dé por cerrada, y anotarla arriba en "Etapa 7".
+- Después, lo de siempre para publicar (paso 4 y 5 de "Lo que sigue").
+
 **Lo último (15-nov, a la tarde):**
-- **Pendiente de su respuesta: la hoja A4 del historial de ventas de entradas, "con todos los detalles".** Lo pidió él al
+- **Pendiente de su respuesta: la hoja A4 del historial de ventas de entradas, "con todos los detalles".** (Ya contestó:
+  la C. Ver arriba.) Lo pidió él al
   ver las capturas ("imaginá 1.000 entradas"). Se le mostró la **forma C** (una muestra de verdad en tamaño A4,
   `build/muestras_6.9.0/historial_c/historial_c_hoja1.png`, armada con `build/muestras_6.9.0/historial_c/hoja_c.py` y Edge sin ventana): un renglón por
   venta (N°, hora, comprador · familia y mesa, entradas, talonario, total, pagó, vendió, verificado) y un segundo
