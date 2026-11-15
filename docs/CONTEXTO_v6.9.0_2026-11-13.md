@@ -23,29 +23,33 @@ recomendé publicarla antes del 16, cuando la empresa empieza a cobrar; eligió 
 El plan general va por 9 partes (los arreglos de la noche, las 7 etapas de la venta de entradas y la 6.8.1 programada;
 publicar todo es la etapa 7): **8 de 9, 89 %** (15-nov).
 
-**15-nov:** el usuario preguntó si todo sale junto en la 6.9.0: **sí** (los arreglos de la noche, la 6.8.1 y la venta de
-entradas entera), y se publica cuando él diga. Aprobó el plan de terminar la 5 y hacer la 6 ("sigamos?"). Se cerraron
-las dos, cada una con su commit (`cba8c7d` la 5); lo que se hizo, en "Etapa 5" y "Etapa 6", abajo. Se le mandaron las
-muestras de VENTAS y de la etapa 6.
+**Dónde quedó (15-nov, al cortar el chat a pedido del usuario: "actualizá tu contexto y retomamos en otro chat"):**
 
-**Dónde quedó (14-nov, al cortar el chat a pedido del usuario; lo de la 5 y la 6 quedó viejo el 15-nov):**
+- **Parte A (los arreglos de la noche): hecha entera**, sin instalar. Faltan sus capturas con el mouse y dos
+  comprobaciones con aparatos de verdad (abajo).
+- **Parte B (la venta de entradas): etapas 1 a 6 hechas y guardadas** (`cba8c7d` la 5, `d259ea1` la 6; lo hecho, en
+  "Etapa 5" y "Etapa 6", abajo). Ya se vende con comprobante, se ve VENTAS, se cierra la caja con su papel, el jefe la
+  ve en ENTRADAS del cierre de caja y la entrega muestra lo vendido. **Falta la 7.**
+- **La suite entera pasa: 5.054 pruebas** (`FIN fallo=0`). El repositorio, sin cambios sueltos.
+- Se le mandaron las muestras de VENTAS y de la etapa 6 (`build/muestras_6.9.0/venta_entradas_v5/` y `_v6/`).
 
-- **Parte A (los arreglos de la noche): hecha entera.** Faltan solo sus capturas con el mouse, antes de publicar.
-- **Parte B (la venta de entradas), 7 etapas:**
-  - **1 a 4, hechas y guardadas:** los datos (v80), las cuentas, el permiso "Vende entradas" con PRECIOS, y la
-    caja con VENDER y el comprobante. **Ya se puede vender con comprobante.**
-  - **5 (VENTAS), a medias y guardada como está:** la pantalla anda y tiene sus pruebas (ver "Etapa 5", abajo, con
-    **lo que le falta**). **Empezar por ahí.**
-  - **6 (cerrar la caja, la pestaña ENTRADAS del cierre y la entrega): sin empezar.** El plan, en "Etapa 6", abajo.
-  - **7 (la ventana de prueba, recorrerlo con el mouse, las capturas y publicar): sin empezar.**
-- **El usuario aprobó la maqueta el 14-nov ("Sí, seguí")**: las pantallas se programan como están ahí
-  (`docs/maqueta_venta_de_entradas_2026-11-14.html`). Ya vio VENDER de verdad y el comprobante (se le mandaron las
-  muestras); no opinó todavía.
-- **Preguntó dos veces cuánto falta para publicar.** Se le dijo: terminar la 5, hacer la 6, la prueba de punta a
-  punta, y publicar con él; entre 2 y 4 tandas de trabajo, con margen para el 4-dic.
-- Antes de cortar se dejó todo en verde: **la suite entera pasa (4.947 pruebas, 288 archivos, 8 tandas)** y el
-  repositorio sin cambios sueltos. El 14-nov, al retomar después de una compactación, lo primero fue comprobar que
-  nada había quedado a medias (la suite en verde, 4.803) antes de escribir nada.
+**Lo que preguntó y se le contestó el 15-nov (no volver a preguntarlo):**
+
+- "¿Todo saldrá como 6.9.0, todo incluido?" → **Sí**: los arreglos de la noche, la 6.8.1 y la venta de entradas
+  entera, en una sola versión, cuando él diga.
+- Aprobó el plan de la 5 y la 6 ("sigamos?") con cuatro decisiones mías que no objetó: VENDERLE ESAS ENTRADAS también
+  en el mostrador (a quien tenga "Vende entradas"), también con la familia que debe o que ya retiró, "(compró N)" solo
+  si compró alguna, y el papel del cierre que se abre solo al cerrar.
+- "¿Todo ok? ¿No dejaste nada por alto?" → se le dijo que sí, con la lista de lo no probado y lo dejado afuera (abajo,
+  en "Lo que sigue"). **Lo que más importa que sepa:** la revisión encontró que la entrega sin cargo que ya usa (desde
+  la 6.0.0) no veía los números de dos alumnos con el mismo nombre ni los de un alumno que pasó a baja temporal: se
+  podía dar dos veces el mismo número. Sus datos están bien; se corrige con la 6.9.0.
+- "Esa noche, ¿ya no habrá problema después de las doce, y si se minimiza sin internet?" → **Sí, está solucionado en
+  la Parte A, pero no instalado**: la fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente
+  (P2), la tele sin internet se queda con lo guardado y no vuelve a la de fábrica (P1), y la notebook no se duerme con
+  la tele a la vista o la central prendida (P9; cerrar la tapa la duerme igual). Hasta instalar la 6.9.0, las PCs
+  siguen como antes. Se le preguntó si con "minimizar" quería decir otra cosa (el programa minimizado): **no
+  contestó todavía**; si lo trae, revisarlo.
 
 **Nada de esto está en las PCs ni en la nube**: no se publicó, no se instaló, no se corrió ningún SQL, no se tocó la
 base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.yaml`: se sube a `6.9.0` al publicar.
@@ -56,7 +60,7 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
   (`docs/SPEC_arreglos_antes_de_las_fiestas_2026-11-13.md`; el informe con capturas,
   `docs/REVISION_ANTES_DE_LAS_FIESTAS_2026-11-13.md`). **Programada y guardada entera** (5 commits). Sin SQL ni migración.
 - **Parte B — la venta de entradas.** `docs/SPEC_venta_de_entradas_2026-11-13.md` (cinco tablas nuevas, v80, un SQL solo
-  de agregar). **Empezada** (ver "Parte B", abajo). La primera recepción es el 4-dic.
+  de agregar). **Etapas 1 a 6 hechas; falta la 7** (ver "Parte B", abajo). La primera recepción es el 4-dic.
 
 **Lo que decidió el usuario el 13-nov** (no volver a preguntarlo):
 
@@ -69,22 +73,41 @@ base de verdad ni ningún sorteo. La versión sigue en `6.8.0+74` en `pubspec.ya
   sin preguntar.
 - Publicar, correr el SQL y cada instalación: con él, preguntando en el momento, con las capturas.
 
-**Lo que sigue, en orden:**
+**Lo que sigue, en orden** (las etapas 1 a 6 están hechas; queda la 7):
 
-1. ~~Parte B, etapa 1 (los datos)~~: hecha (`c5521e0`).
-2. ~~Etapa 2 (las cuentas)~~: hecha el 14-nov (ver "Etapa 2", abajo).
-3. ~~La maqueta~~: hecha, mostrada y **aprobada el 14-nov** ("Sí, seguí").
-4. ~~Etapa 3 (el permiso y PRECIOS)~~ y ~~etapa 4 (la caja, VENDER y el comprobante)~~: hechas el 14-nov.
-5. ~~Terminar la etapa 5 (VENTAS)~~: cerrada el 15-nov (`cba8c7d`).
-6. ~~Etapa 6 (cerrar la caja, ENTRADAS del cierre, la entrega)~~: cerrada el 15-nov.
-7. **Etapa 7, empezar acá:** la ventana de prueba (`tool/venta_entradas_prueba.dart`), recorrerlo con el mouse, las capturas
-   para el usuario (las quiere ver antes de publicar), la migración v80 sobre una copia de la base real (con el
-   programa cerrado: se le pide), y publicar con él (foto de la mora antes, el SQL con su OK, el instalador por
-   pasos, la web). Al publicar: `pubspec.yaml` a `6.9.0`, y en `CLAUDE.md` sacar "sin programar" de "El retiro de
-   entradas".
+1. **La ventana de prueba** `tool/venta_entradas_prueba.dart` (no existe: sin base ni nube, como
+   `tool/entradas_prueba.dart` y `tool/barra_prueba.dart`), con dos equipos sobre la misma venta en memoria: uno vende
+   y cierra, el otro ve VENTAS, el cierre por sector y la entrega; una familia compra las de sus lugares y la entrega
+   lo muestra (spec 11.7).
+2. **Recorrerla con el mouse y sacar las capturas** que el usuario quiere ver antes de publicar: la venta (VENDER,
+   VENTAS, cerrar la caja, ENTRADAS del cierre, la entrega) y **los carteles de la Parte A** (la pregunta de la tele,
+   la de los celulares). El permiso de computer-use es por `arguello_events.exe` (pedirlo; el 13-nov no se aprobó).
+3. **Comprobaciones con aparatos de verdad, cuando estén:** la notebook sola unos minutos con la tele abierta, que no
+   se apague (P9); el OK de la encargada desde el iPhone (P4); los papeles abiertos desde el programa (el cartel de
+   imprimir de Windows); una tablet.
+4. **Antes de publicar:** la migración v80 sobre una copia de la base real (con el programa cerrado: se le pide);
+   correr otra vez el comparador de la mora de la 6.8.1 sobre una copia nueva y mandarle los papeles de antes y
+   después (cómo, en el CONTEXTO de la 6.8.1).
+5. **Publicar con él** (lo de siempre, preguntando en cada paso): la foto de la mora "antes de 6.9.0"; el SQL de la v80
+   (`supabase/migrations/20261113200000_venta_de_entradas.sql`) con su OK y los conteos; `pubspec.yaml` a `6.9.0`; el
+   instalador por pasos (tarda más que el tope de 10 minutos; mirar los tres archivos de la página del celular antes
+   de `ISCC`, ver el CONTEXTO de la 6.6.0), el APK, el tag, el release y la web. Las novedades nombran la venta de
+   entradas y "correcciones en la mora y en los recibos". En `CLAUDE.md`, sacar "sin programar" de "El retiro de
+   entradas" y sumar a Trampas las reglas de la venta.
+6. **Después de instalar:** la foto "después de 6.9.0". **No tildar "Vende entradas" ni cargar precios hasta que todas
+   las PCs y las tablets tengan la versión.**
 
-**Pendiente de la Parte A, antes de publicar:** las capturas con el mouse de los carteles nuevos (el permiso para
-manejar la ventana de prueba se pidió y no se aprobó esa noche: volver a pedirlo), y lo de "Lo que no se probó".
+**Se le ofreció y no contestó (no frena nada):**
+- Un botón para **volver a sacar el papel del cierre de una caja** desde ENTRADAS del cierre de caja: hoy se saca solo
+  desde la pantalla del cierre, y si la cajera elige "salir igual" sin papel, se pierde (el aviso lo dice).
+
+**Quedó afuera, y se le dijo:**
+- `docs/pendientes/anular-dos-veces-desde-dos-pcs.md`: anular la misma venta desde dos PCs antes de que una se entere
+  de la otra (la segunda pisa a la primera en la nube). Muy improbable; toca la subida del motor.
+- Al volver de VENDERLE ESAS ENTRADAS, el cartel de la entrega no se vuelve a abrir solo (no se pierde nada guardado).
+- **Dos arreglos sin una prueba que los vigile:** que Atrás no deje salir mientras se cierra la caja, y la segunda
+  llave de VENDERLE ESAS ENTRADAS (sin el permiso el botón no aparece). Se pueden sumar en la etapa 7.
+- De la Parte A, lo anotado en el spec sin hacer (abajo, "Lo demás de la tabla").
 
 **Cómo se trabaja acá** (lo que hizo falta aprender en este chat):
 
@@ -95,6 +118,18 @@ manejar la ventana de prueba se pidió y no se aprobó esa noche: volver a pedir
 - Los cambios de varias líneas a archivos grandes (`local_database.dart`, `sync_engine.dart`) se hicieron con un
   script escrito a un archivo y corrido, no con texto pegado en la consola.
 - Cada commit: el mensaje en un archivo y `git commit -F`. Sin nombres de alumnos (el repositorio es público).
+- **15-nov:** cada etapa se cerró con **una revisión independiente** (un Workflow de tres lectores, uno por tema, y un
+  verificador por hallazgo que intenta refutarlo), en solo lectura y mientras corría la suite. Encontró lo que las
+  pruebas no veían (13 confirmados entre las dos etapas). Conviene repetirlo en la etapa 7 antes de publicar.
+- **Los PDF se miran con la herramienta de leer archivos** (muestra las hojas): así se vio que el historial partía
+  cada fecha en dos renglones.
+- `tool/romper_una_regla.sh` imprime cada caso en un renglón que empieza con `[`: filtrar con `grep "^\["` (con
+  `tail` se cortan los primeros).
+- Para guardar una etapa sin lo de la siguiente que ya estaba empezado: la versión del archivo compartido armada
+  aparte (`git hash-object -w` + `git update-index --cacheinfo`), `git stash push --keep-index --include-untracked`
+  para correr las pruebas de lo que se guarda, y `git stash pop`.
+- Las ediciones de varias líneas van en un script de Python escrito a un archivo (un heredoc con comillas mezcladas
+  falla en esta PC), con un `assert` de que el texto a cambiar aparece una sola vez.
 - **Los dos scripts del trabajo quedaron en el repositorio** (14-nov): `bash tool/suite_por_tandas.sh` (la suite
   entera; termina con `FIN fallo=0 total=N`) y `bash tool/romper_una_regla.sh <casos>` (las roturas a propósito: un
   caso son cinco renglones y uno de `---`; lo explica arriba del archivo).
