@@ -456,6 +456,12 @@ class MotorDePrueba implements SyncEngine {
   @override
   Stream<Set<String>> get cambiosBajadosStream => bajo.stream;
 
+  /// Lo que queda en la cola, como avisa el motor después de subir.
+  final pendiente = StreamController<int>.broadcast();
+
+  @override
+  Stream<int> get pendingStream => pendiente.stream;
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);

@@ -41,16 +41,20 @@ class LocalDatabase {
   /// Para las ventanas de prueba: desde acá, [instance] y [dbPath] fallan.
   static void cerrarParaLaPrueba() => _cerradaParaLaPrueba = true;
 
+  static void _frenarSiEstaCerrada() {
+    if (_cerradaParaLaPrueba) throw StateError(kCerradaParaLaPrueba);
+  }
+
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
-    if (_cerradaParaLaPrueba) throw StateError(kCerradaParaLaPrueba);
+    _frenarSiEstaCerrada();
     if (_db != null && _db!.isOpen) return _db!;
     _db = await _initDb();
     return _db!;
   }
 
   static Future<String> get dbPath async {
-    if (_cerradaParaLaPrueba) throw StateError(kCerradaParaLaPrueba);
+    _frenarSiEstaCerrada();
     // Almacenar en Mis Documentos/Junior Eventos/
     final docsDir = await getApplicationDocumentsDirectory();
     final oldDir = Directory(

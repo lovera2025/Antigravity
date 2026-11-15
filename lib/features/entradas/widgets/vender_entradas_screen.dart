@@ -122,11 +122,29 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _cargar(silencioso: true);
       }
     });
+    // El aviso de arriba sale al bajar, no al subir: cuando el motor termina de
+    // subir, la línea vuelve a contar lo que falta (etapa 7: quedaba en "1 venta
+    // subiendo" con la venta ya en la nube, hasta la próxima venta o bajada).
+    _pendienteSub =
+        ref.read(syncEngineProvider).pendingStream.listen((_) => _contarSinSubir());
+  }
+
+  StreamSubscription<int>? _pendienteSub;
+
+  /// Solo lo que espera subir, para la línea de arriba: no relee nada más.
+  Future<void> _contarSinSubir() async {
+    try {
+      final n = await ref.read(entradasDeLaCajaProvider).ventasSinSubir();
+      if (mounted && n != _sinSubir) setState(() => _sinSubir = n);
+    } catch (_) {
+      // Si no se puede contar, queda lo último que se contó.
+    }
   }
 
   @override
   void dispose() {
     _cambiosSub?.cancel();
+    _pendienteSub?.cancel();
     for (final c in [
       _busqueda,
       _comprador,

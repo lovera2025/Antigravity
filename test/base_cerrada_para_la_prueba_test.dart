@@ -18,6 +18,13 @@ void main() {
         LocalDatabase.kCerradaParaLaPrueba,
       )),
     );
-    await expectLater(LocalDatabase.dbPath, throwsA(isA<StateError>()));
+    await expectLater(
+      LocalDatabase.dbPath,
+      throwsA(isA<StateError>().having(
+        (e) => e.message,
+        'mensaje',
+        LocalDatabase.kCerradaParaLaPrueba,
+      )),
+    );
   });
 }

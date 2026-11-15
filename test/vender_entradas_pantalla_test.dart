@@ -504,6 +504,25 @@ void main() {
       expect(_texto(tester, 'vender_linea_texto'),
           'Caja abierta · Carla · Sin internet · 1 venta por subir');
     });
+
+    // Etapa 7: el aviso del motor sale al bajar, no al subir. Sin escuchar lo
+    // pendiente, la línea quedaba en "1 venta subiendo" aunque la venta ya hubiera
+    // subido, hasta la próxima venta o la próxima bajada.
+    testWidgets('cuando la venta termina de subir, dice "Todo subido" sola', (tester) async {
+      final m = await _montar(tester);
+      await _aAlguienDeAfuera(tester);
+      await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
+      await _tocar(tester, 'vender_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(_texto(tester, 'vender_linea_texto'),
+          'Caja abierta · Carla · 1 venta subiendo');
+      // El motor terminó de subir: la cola quedó vacía y avisa lo pendiente.
+      m.entradas.sinSubir = 0;
+      m.e.motor.pendiente.add(0);
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
+    });
   });
 
   group('VENTAS, desde la barra de VENDER', () {

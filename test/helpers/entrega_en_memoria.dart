@@ -179,13 +179,17 @@ class EntregaEnMemoria {
     motor.bajo.add({'pagos_contrato_alumno', 'contratos_alumnos'});
   }
 
-  /// Un operador que entra con su PIN a Entradas (y Cobros si [cobros]).
-  OperadorCaja operador({bool cobros = false}) {
+  /// Un operador que entra con su PIN a Entradas (y Cobros si [cobros]; y con
+  /// "Vende entradas" si [vende]).
+  OperadorCaja operador({bool cobros = false, bool vende = false}) {
     final op = operadorDePrueba('a0000000-0000-4000-8000-000000000201', 'Carla', '4321');
     if (!operadores.operadores.lista.any((o) => o.id == op.id)) {
       operadores.operadores.lista.add(op);
     }
-    operadores.permisos.poner(op.id, PermisosEfectivos(entradas: true, cobros: cobros));
+    operadores.permisos.poner(
+      op.id,
+      PermisosEfectivos(entradas: true, cobros: cobros, vendeEntradas: vende),
+    );
     return op;
   }
 
