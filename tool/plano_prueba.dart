@@ -21,6 +21,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
@@ -51,13 +52,17 @@ import 'package:arguello_events/models/plano_evento.dart';
 
 import '../test/helpers/salon_puerto_viejo.dart';
 
-void main() => runApp(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(useMaterial3: true),
-        home: const PruebaDelPlano(),
-      ),
-    );
+void main() {
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true),
+      home: const PruebaDelPlano(),
+    ),
+  );
+}
 
 /// Una familia inventada: [extras] mesas adicionales y, si ya tiene, sus [mesas].
 ContratoAlumno _familia(

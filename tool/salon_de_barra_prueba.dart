@@ -154,6 +154,10 @@ EquipoDePrueba armarEquipo({
     if (papel != null) papelDeLaBarraProvider.overrideWithValue(papel),
     subirVentaProvider.overrideWithValue((v) async {}),
     subirDeLaBarraProvider.overrideWithValue((tabla, id) async {}),
+    // Ni la nube ni la carpeta del programa (6.9.0, etapa 7): el pedido del cierre no
+    // pregunta a ningún lado (cruza por la red del salón) y los PDF no se guardan.
+    bajarCierresDeLaBarraProvider.overrideWithValue(() async {}),
+    guardarPdfDeLaBarraProvider.overrideWithValue((lineas, {required titulo, required nombre, context}) async {}),
     accesosBarraProvider.overrideWithValue(AccesosBarra(
       bajar: () async => operadores.conexion.currentStatus == AppConnectivity.online,
       contarFiestas: () async => (await barra.fiestasConPrecio()).length,

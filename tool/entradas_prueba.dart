@@ -11,6 +11,9 @@
 //   "pagó una parte" o "pagó: ya podés entregar", con el sonido del sistema.
 // - CORTAR INTERNET: la línea de arriba lo dice.
 // - CON COBROS: Carla también tiene Cobros, y aparece PASAR A CAJA.
+//
+// No usar el ícono de la impresora de la entrega: la planilla sale por el camino de
+// la app y queda en Documentos\Junior Eventos\PDFs, la carpeta del programa.
 
 import 'dart:async';
 
@@ -19,16 +22,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/currency_extensions.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
 
+import '../test/helpers/entradas_en_memoria.dart';
 import '../test/helpers/entrega_en_memoria.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
   runApp(const _Prueba());
@@ -55,6 +62,12 @@ class _Prueba extends StatefulWidget {
 
 class _PruebaState extends State<_Prueba> {
   final _e = EntregaEnMemoria();
+
+  /// La venta de entradas, en memoria y sin precio: la entrega se ve como antes
+  /// de la 6.9.0. Sin esto, lo que la entrega lee de la venta (desde la etapa 6)
+  /// caía en la base de verdad de la PC y la migraba. La venta se prueba en
+  /// `tool/venta_entradas_prueba.dart`.
+  final _venta = EntradasEnMemoria();
   late ProviderContainer _c;
   bool _conCobros = false;
   int _vuelta = 0;
@@ -68,6 +81,7 @@ class _PruebaState extends State<_Prueba> {
   void _armar() {
     _c = ProviderContainer(overrides: [
       ..._e.reemplazos(),
+      ..._venta.reemplazos,
       fiestasQueVienenProvider.overrideWith((ref) async => [fiestaDeLaEntrega]),
     ]);
     unawaited(_c.read(appRoleProvider.notifier).entrarComoEntradas(

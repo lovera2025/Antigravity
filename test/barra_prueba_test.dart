@@ -11,9 +11,12 @@ import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
+import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
 
 import '../tool/barra_prueba.dart';
+import 'helpers/barra_en_memoria.dart';
 
 void main() {
   late LadosDeLaPrueba lados;
@@ -29,6 +32,32 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
   }
+
+  // 6.9.0, etapa 7: nada de la ventana va a la base de la PC ni a la carpeta del
+  // programa. La tablet que espera el OK no le pregunta a la nube (el motor de
+  // verdad abriría la base), la notebook cuenta lo suyo en memoria y los PDF se
+  // anotan (en la ventana, quedan en build/barra_prueba).
+  test('pedir el cierre, la central y los PDF, sin la base ni la carpeta del programa',
+      () async {
+    await lados.cajera.read(bajarCierresDeLaBarraProvider)();
+    expect(lados.cajera.exists(syncEngineProvider), isFalse);
+    expect(lados.prueba.preguntasPorElCierre, 1);
+    for (final c in [lados.cajera, lados.jefe]) {
+      expect(c.read(barraDeLaRedProvider), same(lados.barra));
+    }
+    await lados.jefe.read(guardarPdfDeLaBarraProvider)(const [], titulo: 'Precios', nombre: 'Precios');
+    expect(lados.prueba.pdfs.single.nombre, 'Precios');
+  });
+
+  test('sin impresora elegida, ningún papel sale; LA DE ANOCHE con sus precios', () async {
+    final otros = armarLados(papelEnPantalla: true, sinImpresoraElegida: true, conLaDeAnoche: true);
+    addTearDown(otros.dispose);
+    expect(otros.papel!.sinElegir, isTrue);
+    expect(await otros.papel!.imprimir(const []), isFalse);
+    expect(otros.papel!.sinImpresora, isTrue);
+    final fiestas = await otros.barra.fiestasConPrecio();
+    expect(fiestas, contains(BarraEnPrueba.id(4)));
+  });
 
   Future<void> abrir(WidgetTester tester) async {
     tester.view.physicalSize = const Size(2000, 1000);

@@ -20,20 +20,67 @@
 // candado: sumar desde dos celulares a la vez a una familia con un lugar, el
 // mismo vale dos veces, quitar con motivo, y el reloj de los segundos desde el
 // celular. Las sillas quedan en memoria: al cerrar se pierden.
+//
+// Las preferencias van en memoria (no las del programa instalado) y Personalizar
+// tótem guarda en memoria. Para las capturas de la 6.9.0, con `--dart-define`:
+// - `red=local`: la central escucha solo en esta PC (sin el cartel del
+//   cortafuegos; los celulares de verdad no llegan). CELULARES, cambiar a la
+//   fiesta "· particular" y CELULARES otra vez: "Los celulares están con otra
+//   fiesta";
+// - `tele=masivo`: arranca con el tótem "abierto" en el evento masivo (una
+//   ventana de mentira, no se abre nada). Elegir "· particular": "El tótem está
+//   con otra fiesta" (PASAR EL TÓTEM · SOLO MIRAR ACÁ);
+// - `personalizar=cambio`: en Personalizar (la paleta), GUARDAR dice que lo de la
+//   nube ya no es lo que se abrió; `personalizar=sin_internet`, que no pudo;
+// - `sillas=2`: la línea de arriba cuenta 2 sillas de la noche sin subir.
+// "Actualizar la lista" (Más) dice que no pudo: acá no hay nube.
 
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
+import 'package:arguello_events/core/services/kiosk_launcher.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/recepcion/recepcion_unified_screen.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
+import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
 import 'package:arguello_events/models/invitado.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
+import '../test/helpers/repo_totem_en_memoria.dart';
+
+const _redLocal = String.fromEnvironment('red') == 'local';
+const _teleEn = String.fromEnvironment('tele');
+const _personalizar = String.fromEnvironment('personalizar');
+const _sillas = int.fromEnvironment('sillas');
+
+/// La tele del salón, de mentira: el tótem "abierto" sin abrir ninguna ventana.
+class _TeleDeMentira implements VentanasTotem {
+  final _abiertas = <int>[];
+
+  @override
+  Future<dynamic> invocar(int id, String metodo, [dynamic args]) async => null;
+
+  @override
+  Future<List<int>> abiertas() async => List.of(_abiertas);
+
+  @override
+  Future<int> crear(String argumentos, {required Size tamanio, required String titulo}) async {
+    _abiertas.add(1);
+    return 1;
+  }
+
+  @override
+  Future<void> mostrar(int id) async {}
+
+  @override
+  Future<void> esconder(int id) async {}
+}
 
 final _familias = [
   ('PÉREZ, JUAN MARTÍN', ['GÓMEZ, ANA', 'PÉREZ, LUIS'], 'Tusa · Karol G'),
@@ -52,6 +99,11 @@ final _familias = [
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
+  // Las preferencias, en memoria: no las del programa instalado.
+  // ignore: invalid_use_of_visible_for_testing_member
+  SharedPreferences.setMockInitialValues({});
   GoogleFonts.config.allowRuntimeFetching = false;
 
   final alumnos = [
@@ -82,16 +134,30 @@ Future<void> main() async {
         updatedAt: DateTime.now().toUtc(),
       ),
     ],
-  )
-    ..escuchaCentral = InternetAddress.anyIPv4
-    ..puertoCentral = kPuertoCentral
-    ..leerDirecciones = direccionesDeEstaPc
-    ..paginaDelCelular = Directory('build${Platform.pathSeparator}puesto');
+  )..paginaDelCelular = Directory('build${Platform.pathSeparator}puesto');
+  if (!_redLocal) {
+    mundo
+      ..escuchaCentral = InternetAddress.anyIPv4
+      ..puertoCentral = kPuertoCentral
+      ..leerDirecciones = direccionesDeEstaPc;
+  }
+  mundo.sinInternet.sillasSinSubir = _sillas;
   mundo.invitados.hora = () => DateTime.now().toUtc();
   mundo.sillasPuerta.hora = () => DateTime.now().toUtc();
+
+  if (_teleEn.isNotEmpty) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    KioskLauncher.ventanas = _TeleDeMentira();
+    await KioskLauncher.launch(_teleEn == 'particular' ? eventoParticular : eventoMasivo);
+  }
 
   runApp(mundo.recepcion(
     const RecepcionUnifiedScreen(),
     elegido: eventoMasivo,
+    extra: [
+      totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria()
+        ..cambioEnLaNube = _personalizar == 'cambio'
+        ..fallar = _personalizar == 'sin_internet'),
+    ],
   ));
 }

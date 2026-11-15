@@ -15,15 +15,19 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/recepcion_unified_screen.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
+import '../test/helpers/repo_totem_en_memoria.dart';
 
 const _estilo = String.fromEnvironment('estilo');
 
@@ -40,6 +44,11 @@ final _familias = [
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
+  // Las preferencias, en memoria: no las del programa instalado.
+  // ignore: invalid_use_of_visible_for_testing_member
+  SharedPreferences.setMockInitialValues({});
   GoogleFonts.config.allowRuntimeFetching = false;
   await cargarFuentesTotem();
 
@@ -83,5 +92,7 @@ Future<void> main() async {
         estilo: _estilo.isEmpty ? null : _estilo,
       ),
     },
+    // Personalizar guarda en memoria: no hay nube.
+    extra: [totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria())],
   ));
 }

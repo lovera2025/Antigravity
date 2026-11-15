@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 
@@ -24,6 +25,8 @@ import 'salon_de_barra_prueba.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // Nada queda guardado en el celular: ni la impresora elegida ni la central.
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});

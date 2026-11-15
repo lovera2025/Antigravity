@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/operadores_caja_screen.dart';
@@ -19,9 +20,12 @@ import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
 import 'package:arguello_events/models/evento.dart';
 
+import '../test/helpers/entradas_en_memoria.dart';
 import '../test/helpers/operadores_en_memoria.dart';
 
 void main() {
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // En memoria: el PIN maestro de siempre, sin tocar las preferencias de la PC.
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
@@ -55,6 +59,8 @@ void main() {
   runApp(ProviderScope(
     overrides: [
       ...prueba.reemplazos,
+      // La venta de entradas en memoria: nada de la base de la PC (6.9.0).
+      ...EntradasEnMemoria().reemplazos,
       fiestasQueVienenProvider.overrideWith(
         (ref) async => [
           for (final (id, nombre, dia) in [
@@ -111,6 +117,18 @@ class _Arriba extends ConsumerWidget {
                   builder: (_) => AlertDialog(
                     content: Text(
                       'Acá abre la entrega de entradas de ${e.encabezadoEvento}.',
+                    ),
+                  ),
+                ),
+                // Quien tiene "Vende entradas" ve VENDER (6.9.0). La venta de verdad se
+                // prueba en tool/venta_entradas_prueba.dart: acá no hay venta en memoria
+                // y la pantalla de verdad iría a la base de la PC.
+                onVenderFiesta: (context, e) => showDialog<void>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    content: Text(
+                      'Acá abre VENDER de ${e.encabezadoEvento}. La venta se prueba en '
+                      'tool/venta_entradas_prueba.dart.',
                     ),
                   ),
                 ),

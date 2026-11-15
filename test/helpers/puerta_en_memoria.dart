@@ -26,6 +26,8 @@ import 'package:arguello_events/features/recepcion/providers/recepcion_provider.
 import 'package:arguello_events/features/recepcion/providers/sin_internet_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
 import 'package:arguello_events/features/recepcion/repositories/sillas_puerta_repository.dart';
+import 'package:arguello_events/features/recepcion/services/lista_puerta.dart'
+    show PlanListaPuerta;
 import 'package:arguello_events/features/recepcion/services/lista_sin_internet.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
@@ -118,6 +120,9 @@ class SinInternetEnMemoria {
   var bajaFondo = true;
   final fondosGuardados = <String>{};
   var sinSubir = 0;
+
+  /// Las sillas de la noche que esperan subir (6.9.0: "Todo subido" las cuenta).
+  var sillasSinSubir = 0;
   final alDia = <String, DateTime>{};
   var listasBajadas = 0;
   var alumnosBajados = 0;
@@ -143,6 +148,7 @@ class SinInternetEnMemoria {
         },
         fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         contarSinSubir: (_) async => sinSubir,
+        contarSillasSinSubir: (_) async => sillasSinSubir,
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,
         ahora: () => ahora,
@@ -150,6 +156,13 @@ class SinInternetEnMemoria {
 }
 
 /// La lista de la puerta de esta PC, en memoria, y lo que se pidió marcar.
+///
+/// **Ningún método llega a la base de la PC** (6.9.0, etapa 7): todo lo que en
+/// [InvitadosRepository] abre `LocalDatabase.instance` está reemplazado acá. En
+/// las ventanas de prueba (`tool/central_puerta_prueba.dart`,
+/// `tool/totem_salon_prueba.dart`) "Actualizar la lista" abría, y migraba, la
+/// base de verdad. `test/arneses_sin_base_test.dart` lee el repositorio y falla
+/// si aparece un método nuevo que la abra y no esté reemplazado acá.
 class InvitadosEnMemoria extends InvitadosRepository {
   InvitadosEnMemoria(SupabaseClient supabase, this.filas)
       : super(supabase, ConexionApagada());
@@ -238,6 +251,86 @@ class InvitadosEnMemoria extends InvitadosRepository {
     filas.removeWhere((f) => f.id == id);
     _cambios.add(null);
   }
+
+  /// "Actualizar la lista": acá no hay nube. Con `false` (lo de siempre) dice
+  /// que no pudo; con `true`, "Lista actualizada".
+  bool bajaDeLaNube = false;
+  var actualizaciones = 0;
+  var _otroId = 0;
+
+  // Cada reemplazo de la base en un renglón: la rotura a propósito borra uno.
+  @override Future<bool> forceRefresh(String eventoId) async { actualizaciones++; return bajaDeLaNube; }
+  @override Future<bool> bajarListaDelEvento(String eventoId) async => false;
+  @override Future<List<Invitado>> getByEvento(String eventoId) async => _del(eventoId);
+  @override Future<List<Invitado>> getLocalesByEvento(String eventoId) async => _del(eventoId);
+  @override Future<Set<String>> idsSinSubir(String eventoId) async => const {};
+  @override Future<void> registrarIntentoFallido(String invitadoId) async {}
+  @override Future<void> resetearIntentos(String invitadoId) async {}
+
+  @override
+  Future<Map<String, int>> getEstadisticas(String eventoId) async {
+    final todos = _del(eventoId);
+    final adentro =
+        todos.where((i) => i.estadoIngreso == EstadoIngreso.ingresado).length;
+    return {
+      'total': todos.length,
+      'ingresados': adentro,
+      'pendientes': todos.length - adentro,
+    };
+  }
+
+  @override
+  Future<void> vaciarEvento(String eventoId) async {
+    filas.removeWhere((f) => f.eventoId == eventoId);
+    _cambios.add(null);
+  }
+
+  @override
+  Future<String> agregar({
+    required String eventoId,
+    required String nombreCompleto,
+    String? dni,
+    String? numeroMesa,
+  }) async {
+    final id = 'agregado-${++_otroId}';
+    filas.add(Invitado(
+      id: id,
+      eventoId: eventoId,
+      nombreCompleto: nombreCompleto,
+      dni: dni ?? '',
+      numeroMesa: numeroMesa,
+      estadoIngreso: EstadoIngreso.pendiente,
+      updatedAt: hora(),
+    ));
+    _cambios.add(null);
+    return id;
+  }
+
+  @override
+  Future<int> agregarBatch({
+    required String eventoId,
+    required List<Map<String, String>> invitados,
+  }) async {
+    var n = 0;
+    for (final i in invitados) {
+      final nombre = i['nombre_completo']?.trim() ?? '';
+      if (nombre.isEmpty) continue;
+      await agregar(
+        eventoId: eventoId,
+        nombreCompleto: nombre,
+        dni: i['dni'],
+        numeroMesa: i['numero_mesa'],
+      );
+      n++;
+    }
+    return n;
+  }
+
+  /// Armar la lista desde los alumnos es de la oficina (las pantallas del
+  /// salón), no de Recepción.
+  @override
+  Future<void> aplicarListaPuerta(String eventoId, PlanListaPuerta plan) async =>
+      throw StateError('En la prueba no: armar la lista es de la oficina');
 }
 
 class ContratosEnMemoria extends ContratosRepository {

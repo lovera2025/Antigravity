@@ -22,8 +22,20 @@
 // de la impresora de la cajera); la misma impresora para los dos lados. Sin gastar papel:
 // `--dart-define=papel=pantalla`, y PAPEL, arriba, muestra el último como texto (las
 // líneas grandes, con >>).
+//
+// Para las capturas de la 6.9.0:
+// - `--dart-define=impresora=ninguna`: el equipo sin impresora elegida (como papel=pantalla,
+//   pero ningún papel sale y el vale dice "Este equipo no tiene impresora elegida…");
+// - `--dart-define=anoche=si`: suma LA DE ANOCHE, una fiesta de ayer, que hasta el mediodía
+//   de hoy sigue en la lista de la cajera (la 6.9.0; antes desaparecía a las 00:00).
+//
+// Los PDF de la barra (la lista de precios, el cierre) no van a la carpeta del programa:
+// quedan en build/barra_prueba y se abren con el visor. La base de la PC no se abre nunca
+// (`LocalDatabase.cerrarParaLaPrueba`): la central de la barra, el pedido del cierre a la
+// nube y lo que la notebook tiene sin subir van por la barra en memoria.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -32,11 +44,13 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/canal_universal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
+import 'package:arguello_events/features/barra/impresion/papel_pdf.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
@@ -46,6 +60,7 @@ import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
+import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/widgets/operational_sync_coordinator.dart';
 
 import '../test/helpers/barra_en_memoria.dart';
@@ -53,17 +68,23 @@ import '../test/helpers/operadores_en_memoria.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // La impresora que ya eligió esta PC, para que se conecte sola; el resto, en memoria,
   // sin tocar las preferencias de la PC (el PIN maestro de siempre).
-  final real = await const ImpresoraRecordada().leer();
+  final real = _sinImpresora ? null : await const ImpresoraRecordada().leer();
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
   if (real != null) {
     await const ImpresoraRecordada().guardar(real);
   }
+  final enPantalla = _papelEnPantalla || _sinImpresora;
   runApp(PruebaDeLaBarra(armarLados(
-    papelEnPantalla: _papelEnPantalla,
-    impresora: _papelEnPantalla
+    papelEnPantalla: enPantalla,
+    sinImpresoraElegida: _sinImpresora,
+    conLaDeAnoche: _conLaDeAnoche,
+    carpetaDeLosPdf: Directory('build/barra_prueba').absolute,
+    impresora: enPantalla
         ? null
         : ImpresoraBluetooth(CanalUniversalBle(), recordada: const ImpresoraRecordada()),
   )));
@@ -85,6 +106,8 @@ Future<void> _agrandarCuandoSeVea() async {
 }
 
 const _papelEnPantalla = String.fromEnvironment('papel') == 'pantalla';
+const _sinImpresora = String.fromEnvironment('impresora') == 'ninguna';
+const _conLaDeAnoche = String.fromEnvironment('anoche') == 'si';
 
 /// Puerto Viejo, la fiesta de hoy: con stock y la silla extra.
 final idPuertoViejo = BarraEnPrueba.id(1);
@@ -112,12 +135,17 @@ class LadosDeLaPrueba {
   /// Con `papel=pantalla`: los papeles que "salieron", de los dos lados.
   final PapelEnMemoria? papel;
 
+  /// Lo que en la app iría a la nube o a la carpeta del programa: cuántas veces la
+  /// tablet que espera el OK preguntó por el cierre, y los PDF que se guardaron.
+  final BarraEnPrueba prueba;
+
   LadosDeLaPrueba._({
     required this.cajera,
     required this.jefe,
     required this.barra,
     required this.conexion,
     required this.papel,
+    required this.prueba,
   });
 
   bool get hayInternet => conexion.currentStatus == AppConnectivity.online;
@@ -147,8 +175,17 @@ class LadosDeLaPrueba {
 void _bajaEn(ProviderContainer otro) => otro.read(operationalSyncRevisionProvider.notifier).bump();
 
 /// Arma los datos inventados y los dos lados. [impresora]: la TP-POS58 de verdad, una
-/// sola para los dos (dos se pelearían por ella). Con [papelEnPantalla], ninguna.
-LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? impresora}) {
+/// sola para los dos (dos se pelearían por ella). Con [papelEnPantalla], ninguna; y con
+/// [sinImpresoraElegida], el equipo no tiene ninguna elegida (no sale ningún papel).
+/// [carpetaDeLosPdf]: dónde quedan los PDF de la barra (y se abren con el visor); sin
+/// carpeta (los tests), solo se anotan.
+LadosDeLaPrueba armarLados({
+  bool papelEnPantalla = false,
+  bool sinImpresoraElegida = false,
+  bool conLaDeAnoche = false,
+  Directory? carpetaDeLosPdf,
+  ImpresoraBluetooth? impresora,
+}) {
   final operadores = OperadoresEnPrueba();
   operadores.operadores.lista.addAll([
     operadorDePrueba('a0000000-0000-4000-8000-000000000001', 'Marta (solo Barra)', '1111'),
@@ -165,6 +202,7 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
     ..poner('a0000000-0000-4000-8000-000000000007', const PermisosEfectivos(encargadaBarra: true));
 
   final prueba = BarraEnPrueba();
+  if (sinImpresoraElegida) prueba.papel.sinElegir = true;
   final hoy = DateTime.now();
   final puertoViejo = fiestaDePrueba(idPuertoViejo, 'PUERTO VIEJO', hoy);
   final tecnica = fiestaDePrueba(BarraEnPrueba.id(2), 'TÉCNICA', hoy.add(const Duration(days: 1)));
@@ -173,6 +211,11 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
     tecnica,
     fiestaDePrueba(idBuenaVista, 'BUENA VISTA (sin precios)', hoy.add(const Duration(days: 9))),
   ]);
+  // La de anoche: hasta el mediodía de hoy sigue en la lista de la cajera.
+  final anoche = conLaDeAnoche
+      ? fiestaDePrueba(BarraEnPrueba.id(4), 'LA DE ANOCHE', hoy.subtract(const Duration(days: 1)))
+      : null;
+  if (anoche != null) prueba.eventos.insert(0, anoche);
   final b = prueba.barra
     // Las horas de las cajas y las ventas, las de verdad: la barra en memoria trae una fija.
     ..reloj = (() => DateTime.now().toUtc());
@@ -192,6 +235,7 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
     final p = b.producto(nombre, categoria: categoria, orden: orden);
     b.precio(puertoViejo.id, p, precio, orden: orden, stock: stock, aviso: stock == null ? null : 2);
     b.precio(tecnica.id, p, precio + 500, orden: orden);
+    if (anoche != null) b.precio(anoche.id, p, precio, orden: orden);
     orden++;
   }
 
@@ -213,6 +257,24 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
         eventosDeLaBarraProvider.overrideWith((ref) async => prueba.eventos),
         if (papelEnPantalla) papelDeLaBarraProvider.overrideWithValue(prueba.papel),
         if (impresora != null) impresoraDeLaBarraProvider.overrideWithValue(impresora),
+        // Nada de esto va a la base de la PC (6.9.0, etapa 7): la notebook cuenta lo suyo
+        // sin subir en la barra en memoria, y la tablet que espera el OK de la encargada
+        // ya lo ve en la misma barra (no hay nube a la que preguntarle).
+        barraDeLaRedProvider.overrideWithValue(b),
+        bajarCierresDeLaBarraProvider.overrideWithValue(() async => prueba.preguntasPorElCierre++),
+        guardarPdfDeLaBarraProvider.overrideWithValue(
+          (lineas, {required titulo, required nombre, context}) async {
+            prueba.pdfs.add((nombre: nombre, titulo: titulo, lineas: lineas));
+            if (carpetaDeLosPdf == null) return;
+            final bytes = await PapelPdf.armar(lineas, titulo: titulo, fuentes: await PdfService.fuentesOutfit());
+            carpetaDeLosPdf.createSync(recursive: true);
+            final limpio = nombre.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+            final conPdf = limpio.toLowerCase().endsWith('.pdf') ? limpio : '$limpio.pdf';
+            final archivo = File('${carpetaDeLosPdf.path}${Platform.pathSeparator}$conPdf')
+              ..writeAsBytesSync(bytes);
+            await Process.run('cmd', ['/c', 'start', '', archivo.path]);
+          },
+        ),
       ];
 
   cajera = ProviderContainer(overrides: [
@@ -257,6 +319,7 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
     barra: b,
     conexion: conexion,
     papel: papelEnPantalla ? prueba.papel : null,
+    prueba: prueba,
   );
 }
 

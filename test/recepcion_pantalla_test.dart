@@ -269,6 +269,26 @@ void main() {
       }
     });
   }
+  // 6.9.0: "Actualizar la lista" dice si bajó o no (antes decía "actualizada"
+  // igual). Y en las ventanas de prueba no va a la base de la PC: si la lista en
+  // memoria no lo reemplazara, acá saldría "Error al actualizar…".
+  for (final baja in [false, true]) {
+    testWidgets(
+        'Actualizar la lista: ${baja ? 'bajó, "Lista actualizada"' : 'sin nube, dice que no pudo'}',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      mundo.invitados.bajaDeLaNube = baja;
+      await tester.tap(find.byTooltip('Más'));
+      await _asentar(tester);
+      await tester.tap(find.text('Actualizar la lista'));
+      await _asentar(tester);
+      expect(mundo.invitados.actualizaciones, 1);
+      expect(find.text(baja ? kListaActualizada : kListaSinActualizar), findsOneWidget);
+      expect(find.textContaining('Error al actualizar'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+    });
+  }
+
   testWidgets('de punta a punta: sumar una silla en la puerta, sin tocar el tótem',
       (tester) async {
     final mundo = await _abrir(tester);

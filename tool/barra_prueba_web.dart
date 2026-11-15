@@ -12,10 +12,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'barra_prueba.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
   runApp(PruebaDeLaBarra(armarLados(papelEnPantalla: true)));

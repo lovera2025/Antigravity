@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/preferencias_de_la_ventana.dart';
 import 'package:arguello_events/features/totem/services/puente_ficha.dart';
 import 'package:arguello_events/features/totem/totem_display.dart';
@@ -39,6 +40,8 @@ const _auto = bool.fromEnvironment('auto');
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
 
   if (args.isNotEmpty && args.first == 'multi_window') {
     final id = int.parse(args[1]);

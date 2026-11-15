@@ -16,6 +16,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
@@ -31,6 +32,8 @@ const _evento = 'deadbeef-0000-4000-8000-0000000f0d00';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   final png = await pngDePrueba(ancho: 540, alto: 960);
   final lectura = await LecturaDelFondo.deBytes(png);
   // Antes de mostrar nada: la barra dice si el shader anda.

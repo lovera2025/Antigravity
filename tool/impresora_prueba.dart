@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
@@ -20,10 +21,14 @@ import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dar
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/widgets/elegir_vales.dart';
 
-void main() => runApp(const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: PruebaDeImpresora(),
-    ));
+void main() {
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: PruebaDeImpresora(),
+  ));
+}
 
 class PruebaDeImpresora extends StatefulWidget {
   const PruebaDeImpresora({super.key});

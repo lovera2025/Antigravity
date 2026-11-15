@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/cierre_caja/cierre_caja_screen.dart';
 import 'package:arguello_events/features/common/providers/admin_provider.dart';
 
@@ -65,6 +66,8 @@ Future<EntradasEnMemoria> _entradasDeLaNoche(String fiesta) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
   final noche = await nocheDeBarra(fotos: false);

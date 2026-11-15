@@ -28,14 +28,29 @@ class LocalDatabase {
   static const String _dbName = 'data.db';
   static const int _version = 80;
 
+  /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
+  /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
+  /// abrir la base, o escribir al lado de ella, falla en vez de abrir (y migrar)
+  /// la de verdad de la PC. La app nunca la cierra.
+  static bool _cerradaParaLaPrueba = false;
+
+  /// Lo que dice el error cuando una ventana de prueba quiere abrir la base.
+  static const kCerradaParaLaPrueba =
+      'Esta ventana de prueba no abre la base de la PC';
+
+  /// Para las ventanas de prueba: desde acá, [instance] y [dbPath] fallan.
+  static void cerrarParaLaPrueba() => _cerradaParaLaPrueba = true;
+
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
+    if (_cerradaParaLaPrueba) throw StateError(kCerradaParaLaPrueba);
     if (_db != null && _db!.isOpen) return _db!;
     _db = await _initDb();
     return _db!;
   }
 
   static Future<String> get dbPath async {
+    if (_cerradaParaLaPrueba) throw StateError(kCerradaParaLaPrueba);
     // Almacenar en Mis Documentos/Junior Eventos/
     final docsDir = await getApplicationDocumentsDirectory();
     final oldDir = Directory(

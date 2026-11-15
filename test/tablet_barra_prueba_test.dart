@@ -11,10 +11,13 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
+import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 import 'package:arguello_events/features/dashboard/widgets/actualizar_app.dart';
 
 import '../tool/central_barra_prueba.dart';
 import '../tool/salon_de_barra_prueba.dart';
+import 'helpers/barra_en_memoria.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -61,6 +64,17 @@ void main() {
     expect(c.read(puertoBusquedaBarraProvider), kPuertoBusquedaBarra);
     expect(c.read(destinosBusquedaBarraProvider), same(destinosDeLaRed));
     expect(await c.read(versionNuevaEnLaTabletProvider.future), isNull);
+  });
+
+  // 6.9.0, etapa 7: la tablet que espera el OK de la encargada no le pregunta a la
+  // nube (el motor de verdad abriría la base de la PC), y los PDF no van a la
+  // carpeta del programa.
+  test('pedir el cierre no sale a la nube ni abre la base', () async {
+    final c = celular().container;
+    addTearDown(c.dispose);
+    await c.read(bajarCierresDeLaBarraProvider)();
+    expect(c.exists(syncEngineProvider), isFalse);
+    expect(c.read(barraDeLaRedProvider), isA<BarraEnMemoria>());
   });
 
   testWidgets('el celular abre en el PIN de su cajera', (tester) async {

@@ -18,6 +18,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/dashboard/widgets/alertas_del_delegado.dart';
 import 'package:arguello_events/features/delegado/datos/link_del_delegado.dart';
@@ -36,6 +37,8 @@ void main() {
   // Con `&sinlectura` en la dirección queda como en un celular cualquiera:
   // la lectura de pantalla prendida cambia cómo se mueve una lista.
   WidgetsFlutterBinding.ensureInitialized();
+  // Ninguna ventana de prueba abre la base de la PC: si algo se escapa, falla.
+  LocalDatabase.cerrarParaLaPrueba();
   if (!Uri.base.toString().contains('sinlectura')) {
     SemanticsBinding.instance.ensureSemantics();
   }
