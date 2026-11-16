@@ -2237,14 +2237,10 @@ class PdfService {
         return null;
       }
       final parciales = filasMoraCobrada.where((f) => f.parcial).length;
-      if (parciales == 0) return null;
-      final enteras = filasMoraCobrada.length - parciales;
-      String moras(int n) => n == 1 ? '1 mora' : '$n moras';
-      return enteras == 0
-          ? 'Se pagaron ${moras(parciales)} parcialmente.'
-          : 'Se ${enteras == 1 ? 'pagó' : 'pagaron'} ${moras(enteras)} '
-              '${enteras == 1 ? 'entera' : 'enteras'} y ${moras(parciales)} '
-              'parcialmente.';
+      return pieDeMorasParciales(
+        enteras: filasMoraCobrada.length - parciales,
+        parciales: parciales,
+      );
     }();
 
     final double? efDet = montoEfectivoDetalle;

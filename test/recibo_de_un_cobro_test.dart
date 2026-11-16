@@ -370,6 +370,16 @@ void main() {
     });
   });
 
+  test('el pie de las moras a medias concuerda en número', () {
+    expect(pieDeMorasParciales(enteras: 0, parciales: 1), 'Se pagó 1 mora parcialmente.');
+    expect(pieDeMorasParciales(enteras: 0, parciales: 2), 'Se pagaron 2 moras parcialmente.');
+    expect(pieDeMorasParciales(enteras: 1, parciales: 1),
+        'Se pagó 1 mora entera y 1 mora parcialmente.');
+    expect(pieDeMorasParciales(enteras: 2, parciales: 1),
+        'Se pagaron 2 moras enteras y 1 mora parcialmente.');
+    expect(pieDeMorasParciales(enteras: 3, parciales: 0), isNull);
+  });
+
   group('el papel de verdad', () {
     TestWidgetsFlutterBinding.ensureInitialized();
     late Directory destino;

@@ -123,6 +123,19 @@ void anexarMetadatosMoraDisplay(Map<String, dynamic> line) {
 /// **No mira la mora de hoy** (revisión final de la 6.9.0): en una reimpresión
 /// la mora que se debe hoy puede ser de una cuota que el día del cobro no estaba
 /// vencida, y el título decía "PARCIALMENTE" al lado de una tabla con "Quedó $0".
+/// El pie del recuadro verde cuando alguna mora se pagó a medias: "Se pagó 1
+/// mora parcialmente.", "Se pagaron 2 moras enteras y 1 parcialmente." Null si
+/// ninguna fue a medias. (Decía "Se pagaron 1 mora": revisión del 15-nov.)
+String? pieDeMorasParciales({required int enteras, required int parciales}) {
+  if (parciales == 0) return null;
+  String moras(int n) => n == 1 ? '1 mora' : '$n moras';
+  String se(int n) => n == 1 ? 'pagó' : 'pagaron';
+  return enteras == 0
+      ? 'Se ${se(parciales)} ${moras(parciales)} parcialmente.'
+      : 'Se ${se(enteras)} ${moras(enteras)} ${enteras == 1 ? 'entera' : 'enteras'} '
+          'y ${moras(parciales)} parcialmente.';
+}
+
 String tituloMoraCobradaPdf({
   required bool saldada,
   required double? totalAntes,

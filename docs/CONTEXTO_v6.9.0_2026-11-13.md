@@ -12,7 +12,27 @@ prueba, el recorrido con el mouse, las capturas (mandadas) y la revisión final 
   1.000 entradas con las letras de la app (3 PDF: el del jefe, la caja de Carla sin sumas, y un tramo "de la hoja 11
   a la 19" de uno de 2.200) y las capturas del cartel Todo junto · Por hojas (PC y celular), en
   `build/muestras_6.9.0/historial_1000/`.
-- **Lo que sigue, en orden** (la etapa 2 del plan):
+- **La etapa 2 (antes de publicar) quedó HECHA el 15-nov a la noche**, con el programa cerrado:
+  - **La copia de la base** (`tool/copiar_base_solo_lectura.py`, la base real quedó igual): era del 14-nov a las
+    15:41 (el programa no se había abierto después en esta PC); 642 alumnos, 5.275 pagos, el último del 14-nov a las
+    14:29. La huella de la base dio IGUAL antes y después.
+  - **La migración v80 sobre la copia: pasó** (`tool/verificar_migracion_v80_test.dart`): las 46 tablas de antes con
+    los mismos datos, las 5 de la venta de entradas nuevas y vacías, el esquema de lo que ya existía igual (87
+    tablas, índices y triggers), y la vuelta a la 6.8.0 y de nuevo a la 6.9.0 con los datos iguales.
+  - **El comparador de la mora (6.8.0 → 6.9.0): "Todo en orden: ninguna suma se movió"**; 4 fichas cambian (las del
+    Anexo D de la 6.8.1), 2.934 cobros, ninguno deja de sumar lo cobrado. Contra la 6.8.1 (corrida en
+    `..\arguello_events_6.8.x`), **cambian 25 recibos reimpresos y ninguna suma**: 16 confirman "(parcial)" con lo
+    que se debía (la mora de una sola cuota cobrada a medias) y 9 juntan la mora partida en efectivo y
+    transferencia. Son los arreglos de la revisión final; ninguno más.
+  - **Mirando esos recibos apareció "Se pagaron 1 mora parcialmente"**: ahora "Se pagó 1 mora parcialmente"
+    (`pieDeMorasParciales`, con su prueba). La suite entera, después: 5.128 pruebas, todas pasan.
+  - **Se le mandaron** el informe del comparador y 5 recibos de antes y después (en `build/papeles_6.9.0/`, con
+    nombres: fuera de git). La copia, los JSON y el worktree de la 6.8.0 quedaron en el scratchpad de la sesión.
+  - La prueba de "retomar la caja" que pidió (cerrar el programa, volver a entrar con el PIN y seguir con la misma
+    caja; desde otra tablet no): `test/retomar_la_caja_test.dart` (`03aca9b`).
+- **Lo que sigue: publicar con él, paso por paso** (punto 5 de "Lo que sigue", abajo). Primero preguntarle si la
+  6.8.0 ya está en las tres PCs (si sí, la foto de la mora "después de 6.8.0" va antes que la de "antes de 6.9.0").
+- **Lo que seguía antes de la etapa 2** (quedó hecho; se deja como referencia):
   1. Pedirle que abra el programa (para que baje lo del día) y lo cierre. Copia:
      `python -I tool/copiar_base_solo_lectura.py <scratchpad>\copia.db`.
   2. `flutter test tool/verificar_migracion_v80_test.dart --dart-define=base=<copia>` (**escrito el 15-nov, sin
