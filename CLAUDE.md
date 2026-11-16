@@ -391,7 +391,8 @@ que no se probó**). Sin SQL ni migración. Salió de que el usuario probó la
 listada, por un cobro del 12-nov que no saldó toda la mora), el SQL del link corrido con los conteos iguales y **probado
 en la nube de verdad** (30 comprobaciones en un bloque que se deshace solo), el tag `v6.8.0`, el release con el Setup y
 el APK, y la web. Las novedades dicen "Acompañantes y música desde el celular, y nuevas capacidades en el modo jefe".
-**Falta que instale, primero la PC que sortea, y la foto "después de 6.8.0"**, que cubre de la 6.6.1 en adelante;
+**No se instaló: el usuario prefirió instalar directo la 6.9.0** (dicho el 15-nov), así que no hay foto "después de
+6.8.0";
 `docs/CONTEXTO_v6.8.0_2026-11-12.md`, que empieza con "Para retomar en otro chat": ahí está **cómo se publicó, lo que
 falta y lo que no se probó**). **Un SQL en la nube, solo de agregar, corrido el 13-nov**
 (`supabase/migrations/20261113120000_link_delegado.sql`: tres tablas y 17 funciones); **sin migración en las PCs**. El usuario pidió algo más fácil que
@@ -452,10 +453,15 @@ una cuota ya cobrada, y el jefe avisó que los recibos reimpresos salían con me
   la mora pagada en partes y el pie. Con un perdón en la ficha, solo lo pagado. La tabla no junta cuotas en "y N cuotas
   más".
 
-**La 6.9.0, EN CURSO y SIN PUBLICAR: los arreglos de la noche y la venta de entradas** (plan aprobado el 13-nov;
-`docs/CONTEXTO_v6.9.0_2026-11-13.md`, que empieza con "Para retomar en otro chat": ahí está **dónde quedó, lo que sigue
-y lo que no se probó**). Una sola versión, cuando el usuario diga. `pubspec.yaml` sigue en `6.8.0+74`. Los commits
-están en esta PC, **sin subir a GitHub**.
+**La 6.9.0: los arreglos de la noche, la 6.8.1 adentro y la venta de entradas — PUBLICADA el 15-nov a la noche, con
+el usuario** (plan aprobado el 13-nov; `docs/CONTEXTO_v6.9.0_2026-11-13.md`, que empieza con "Para retomar en otro
+chat": ahí está **cómo se publicó, lo que falta y lo que no se probó**). Versión `6.9.0+75`, tag `v6.9.0`, release
+"Junior Eventos 6.9.0" con el Setup y el APK, y la web. Las novedades dicen "Venta de entradas, y correcciones en la
+mora y en los recibos". **Un SQL en la nube, solo de agregar, corrido el 15-nov**
+(`supabase/migrations/20261113200000_venta_de_entradas.sql`: las cinco tablas, con los conteos iguales y probado que
+un anónimo no ve ni escribe nada). **La 6.8.0 no se instaló: las PCs saltan directo a la 6.9.0** (las de la 6.5.1, con
+la base de la 78 a la 80: probado sobre una copia). **Falta: que instale (primero la PC que sortea) y avise, y la foto
+de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Parte A, programada y guardada entera** (sin SQL ni migración): 8 de los 9 problemas de la revisión del 13-nov
   (`docs/SPEC_arreglos_antes_de_las_fiestas_2026-11-13.md`, con la segunda revisión al final) y ocho chicos.
   **El P6 (la mesa "principal" con "Al final") no se toca: un sorteo hecho queda como está** (decisión del usuario).
@@ -533,8 +539,8 @@ están en esta PC, **sin subir a GitHub**.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v80: no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen
-  la 79). Los arneses que no abren la base sí.
+- **La base del equipo va por la v80: no correr la app desde esta carpeta contra la base de verdad** hasta que esta
+  PC tenga la 6.9.0 instalada (hasta entonces tiene la 79). Los arneses que no abren la base sí.
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
     (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
@@ -555,9 +561,9 @@ están en esta PC, **sin subir a GitHub**.
   - Recepción pregunta antes de pasar la tele o la central de los celulares a otra fiesta (`elegirEventoEnRecepcion`).
   - `tool/kiosco_prueba.dart --dart-define=auto=true` corre solo, sin mouse, y no escribe las preferencias del
     programa instalado (comparte ese archivo: `%APPDATA%\Junior Eventos\Junior Eventos\shared_preferences.json`).
-- **Falta antes de publicar:** las capturas con el mouse de los carteles nuevos (el usuario las quiere ver), la
-  migración v80 sobre una copia de la base real (con la app cerrada: se le pide), la foto de la mora, el SQL con su OK.
-  **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la versión.**
+- **Publicada el 15-nov** (lo de antes de publicar quedó hecho: la migración v80 sobre copias de la base real desde
+  la 79 y desde la 78, el comparador de la mora sin sumas movidas, la foto "antes de 6.9.0" sin nada sospechoso, el SQL
+  con su OK). **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la 6.9.0.**
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -1013,8 +1019,8 @@ Están diseñados y aprobados con maquetas: son los seis pendientes de "Tótem y
 oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
 - **Solo la mesa del contrato trae sus 8 entradas sin cargo** (6.3.1, regla del usuario del 4-nov). La mesa adicional y las sillas
   extra pagan el lugar, no la entrada: esas se compran aparte, **al 50 %** de su valor, y no se entregan en el retiro
-  (`EntradasDeAlumno.alCincuenta`). El precio de la entrada todavía no se sabe: nada lleva un precio fijo. Cobrarlas es la venta de
-  entradas (sección 8 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), sin programar. Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
+  (`EntradasDeAlumno.alCincuenta`). El precio de la entrada no va fijo: lo pone el jefe en PRECIOS. Cobrarlas es la venta de
+  entradas de la 6.9.0 (`lib/features/entradas/`, ver "La 6.9.0"). Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
 
 **Los que se sientan en una mesa reservada** (los profes; 6.5.0, sin publicar; etapa 9 del CONTEXTO de la 6.5.0) **aparecen en Recepción
 y el tótem los saluda con su mesa, como a un alumno.**

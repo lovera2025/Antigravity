@@ -1,10 +1,49 @@
 # CONTEXTO — la 6.9.0: los arreglos de la noche y la venta de entradas
 
-**Estado (15-nov-2026, a la noche):** en curso, **sin publicar**. La hoja C del historial, cerrada; sigue lo de antes de publicar (la v80 y el comparador de la mora sobre una copia de la base, con el programa cerrado). Rama `feature/v4.6-cierre-por-sesiones`, todo en esta
-PC, **sin subir a GitHub**. **Las etapas 1 a 7 de la venta de entradas están hechas, menos publicar**: la ventana de
-prueba, el recorrido con el mouse, las capturas (mandadas) y la revisión final con sus 6 arreglos (ver "Etapa 7").
+**Estado (15-nov-2026, 23 hs): PUBLICADA, con el usuario** ("Dale pública"). Falta que instale (primero la PC que sortea) y avise, y la foto de la mora "después de 6.9.0".
 
 ## Para retomar en otro chat
+
+### Cómo se publicó (15-nov, de 22:40 a 23:05)
+
+- **La 6.8.0 no se instaló**: el usuario prefirió instalar todo junto, la 6.9.0. Las PCs saltan directo desde lo que
+  tengan. **Una PC con la 6.5.1 tiene la base en la 78 y salta de una a la 80**: probado sobre una copia de
+  `backups\antes_de_v79.db` de esta PC (`tool/verificar_migracion_v80_test.dart --dart-define=desde=78`): los datos
+  iguales y seis tablas nuevas vacías (`barra_cierres` y las cinco de la venta).
+- **Foto de la mora "antes de 6.9.0"** (`7982f870…`, 642 alumnos, por el conector). Comparada con la de "antes de
+  6.8.0" (`c8f8ee6d…`) lista 6 alumnos, todos explicados por `mora_cambios` del 13-nov: 3 perdones del jefe (la ficha
+  a 0) y 3 cobros que pagaron cuotas sin toda su mora (la mora pendiente sube con el cobro). Ninguna mora revivida.
+  Nombres en la foto, no acá.
+- **El SQL de la venta de entradas, corrido** por el conector en tres partes, en orden. Antes y después: 642 alumnos,
+  5.281 pagos, 235 sesiones, 0 retiros, 31 eventos. Las cinco tablas con RLS, un disparador de insert y uno de update
+  cada una, su policy de "authenticated" y fuera de Realtime. **Probado en la nube de verdad** con un bloque que se
+  deshace solo: un anónimo ve 0 filas y no puede insertar (42501); un usuario con sesión sí. Las tablas quedaron
+  vacías.
+- **Versión `6.9.0+75`** (`pubspec.yaml` y el `.iss`); el programa compilado dice `6.9.0+75`.
+- **El instalador, por pasos** (`build/armado_690/`, con sus registros): la clave de firma, la página del celular de
+  cero con sus tres archivos y **146 archivos en el registro de `ISCC`, la misma lista que la 6.8.0**, y el APK con
+  `apksigner` ("CN=Junior Eventos"). `Setup Junior Eventos v6.9.0.exe` (41.334.761 bytes) y `Junior Eventos
+  v6.9.0.apk` (54.155.620 bytes, arm64).
+- **Antes de subir a GitHub, los 40 commits se compararon con los 642 nombres de la copia de la base**: apareció uno
+  inventado en una prueba que coincidía con un alumno real; se cambió y se sacó de la historia (sin subir todavía).
+  Después, ninguno.
+- **Tag `v6.9.0`** en `149e844`. **Release** "Junior Eventos 6.9.0" con `Setup.Junior.Eventos.v6.9.0.exe` y
+  `Junior.Eventos.v6.9.0.apk` (los tamaños, los de esta PC), marcado como el último. Las novedades dicen **"Venta de
+  entradas, y correcciones en la mora y en los recibos"**.
+- **Web** en Vercel, producción: `arguello-events-boc7zfuf4`; `version.json` da 6.9.0/75. La anterior, para volver
+  atrás desde Vercel: `arguello-events-4581dapee` (la 6.8.0).
+
+### Lo que falta ahora
+
+1. **Que instale, primero la PC que sortea**, y avise en cuáles (también las tablets: la tablet se entera en la
+   pantalla del PIN).
+2. **La foto de la mora "después de 6.9.0"** y la comparación con `7982f870…`. Cubre de la 6.6.1 en adelante.
+3. **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la 6.9.0.** Lo mismo con
+   lo de la 6.8.0: no crear links del delegado hasta que las PCs la tengan (ahora, la 6.9.0).
+4. Con la versión instalada, lo que ni el sandbox ni las pruebas pudieron probar: la notebook unos minutos con la tele
+   abierta (que no se apague), el OK de la encargada desde el iPhone, los papeles abiertos desde el programa (el
+   cartel de imprimir de Windows), una tablet vendiendo, y un link del delegado de verdad.
+
 
 **DÓNDE QUEDÓ (15-nov, a la noche, segundo chat: "hagamos lo que falta", con el plan aprobado en
 `C:\Users\lover\.claude\plans\cuchame-hagamos-lo-que-resilient-karp.md`):**
