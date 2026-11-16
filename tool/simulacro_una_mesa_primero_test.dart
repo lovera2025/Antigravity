@@ -8,6 +8,10 @@
 // Nunca abre la base real ni la nube: lee la copia en solo lectura y no guarda
 // nada. La salida no lleva nombres de alumnos, pero va igual a `build/`.
 //
+// Un evento masivo que todavía no tiene plano (16-nov: Sagrado Corazón) se prueba
+// igual, en un salón a medida del playón de Costa Surubí con las mesas justas
+// para lo que se sortea, numerado "Fila por fila": el caso más difícil.
+//
 //   python -I tool/copiar_base_solo_lectura.py <copia>
 //   flutter test tool/simulacro_una_mesa_primero_test.dart
 //     --dart-define=copia=<copia de data.db>
@@ -26,6 +30,8 @@ import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_del_cartel.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
+import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
@@ -88,16 +94,27 @@ void main() {
     var fallas = 0;
     var fiestas = 0;
     try {
-      final planos = await db.query('planos_evento');
-      for (final fila in planos) {
+      // Las fiestas con plano, y los eventos masivos sin plano (con null).
+      final aProbar = <(String, PlanoEvento?)>[];
+      for (final fila in await db.query('planos_evento')) {
         final plano = PlanoEvento.fromMap(Map<String, dynamic>.from(fila));
-        final guardado = plano.armadoONull;
-        if (guardado == null || guardado.mesas.isEmpty) continue;
+        aProbar.add((plano.eventoId, plano));
+      }
+      final conPlano = {for (final x in aProbar) x.$1};
+      for (final fila in await db.query(
+        'eventos',
+        columns: ['id'],
+        where: "lower(modalidad) = 'masivo'",
+      )) {
+        final id = fila['id'] as String;
+        if (!conPlano.contains(id)) aProbar.add((id, null));
+      }
+      for (final (eventoId, planoGuardado) in aProbar) {
         final alumnosGuardados = [
           for (final r in await db.query(
             'contratos_alumnos',
             where: 'evento_id = ?',
-            whereArgs: [plano.eventoId],
+            whereArgs: [eventoId],
           ))
             ContratoAlumno.fromJson(Map<String, dynamic>.from(r)),
         ];
@@ -130,6 +147,28 @@ void main() {
           sinMesa: exclusion.sinMesa,
           soloBase: exclusion.soloBase,
         );
+        // Sin plano: un salón a medida con las mesas justas.
+        final sinPlano = planoGuardado == null;
+        final plano = planoGuardado ??
+            PlanoEvento.nuevo(
+              eventoId: eventoId,
+              armado: ArmarAMedida.armar(
+                OpcionesAMedida(
+                  playon: const PlayonReal(
+                    frenteM: 30,
+                    fondoM: 46,
+                    profundidadM: 39,
+                  ),
+                  cantidad: pedidos.fold<int>(0, (s, p) => s + p.mesas),
+                  fin: FinNumeracion.filas,
+                ),
+              ).armado,
+              estilo: EstiloPlano.gala,
+              modo: ModoSorteo.entera,
+              ahora: DateTime.utc(2026, 11, 16),
+            );
+        final guardado = plano.armadoONull;
+        if (guardado == null || guardado.mesas.isEmpty) continue;
         // Las que tienen una mesa fijada a mano quedan fuera de los grupos,
         // como en la app (el control final no las mira): se quedan con su
         // fijada esté donde esté.
@@ -161,7 +200,8 @@ void main() {
             '${activos.length} alumnos activos, ${pedidos.length} se sortean '
             '(${pedidos.length - conAdicional} de una sola mesa, '
             '$conAdicional con adicional); ${salon.mesas.length} mesas en el '
-            'plano${ArmarAMedida.esAMedida(guardado) ? ', numeradas fila por fila' : ' (del Canva)'}'
+            'plano${sinPlano ? ' (SIN PLANO GUARDADO: uno a medida del playón de Costa Surubí, con las mesas justas)' : ''}'
+            '${ArmarAMedida.esAMedida(guardado) ? ', numeradas fila por fila' : ' (del Canva)'}'
             '${fijadas.isEmpty ? '' : '; ${fijadas.length} familias con mesa fijada a mano (quedan fuera de los grupos)'}. ==');
 
         // Los "lejos" que el cartel trae tildados: más de 3 mesas.

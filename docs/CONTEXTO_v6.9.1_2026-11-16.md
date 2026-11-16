@@ -136,8 +136,10 @@ del commit.
   de la otra lleva cápsula.
 - **8 reglas rotas a propósito** (`tool/romper_una_regla.sh`, casos en el scratchpad de la sesión): las pruebas fallan
   en las 8. La de "las menos posibles" no la agarraba ninguna prueba hasta que se sumó la de fuerza bruta.
-- **Simulacro sobre una copia de la base del 16-nov** (`build/simulacro_691/`, sin nombres): 8 fiestas, ningún sorteo
-  con problemas y **ninguna "NO ENTRA con el tilde"**. La fiesta 6 (la que antes frenaba) entra con 2 familias una
+- **Simulacro sobre una copia de la base del 16-nov** (`build/simulacro_691/`, sin nombres): **las 9 fiestas
+  masivas**, ningún sorteo con problemas y **ninguna "NO ENTRA con el tilde"**. Sagrado Corazón no tiene plano (ni en
+  la copia ni en la nube): el simulacro ahora prueba un evento masivo sin plano en un salón a medida del playón de
+  Costa Surubí con las mesas justas (entra, con Cumplimiento por columnas una familia una detrás de la otra). La fiesta 6 (la que antes frenaba) entra con 2 familias una
   detrás de la otra, lo mismo que dice el cartel. Con Cumplimiento, 0 familias partidas con el tilde (sin el tilde,
   hasta 1 en algunas fiestas, como siempre). El simulacro ahora cuenta las partidas con `MesasJuntas` (las que
   pidieron "lejos" no cuentan) y las que quedan una detrás de la otra.
