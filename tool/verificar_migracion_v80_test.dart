@@ -25,7 +25,9 @@
 //
 // Se corre sobre una copia sacada antes con `python -I tool/copiar_base_solo_lectura.py`
 // (con el programa cerrado): así esta prueba ni abre la base de la PC. Sin
-// --dart-define=base usa la base de la PC (solo lectura).
+// --dart-define=base usa la base de la PC (solo lectura). Con --dart-define=desde=78, el salto
+// de una PC que todavía tiene la 6.5.1 (la base en la 78): de una a la 80, con
+// `barra_cierres` también nueva.
 
 // ignore_for_file: avoid_print
 
@@ -44,6 +46,9 @@ String _baseReal() {
   final perfil = Platform.environment['USERPROFILE'] ?? '';
   return '$perfil\\Documents\\Junior Eventos\\data.db';
 }
+
+/// De qué versión salta la base: 79 (las PCs con la 6.6.0 a la 6.8.0) o 78 (la 6.5.1).
+const _desde = int.fromEnvironment('desde', defaultValue: 79);
 
 const _deLaV80 = {
   'entradas_config',
@@ -107,9 +112,8 @@ void main() {
       await abierta.close();
       abierta = null;
       print('Base real: $real (v$versionReal), copiada a la carpeta temporal.');
-      expect(versionReal, 79,
-          reason: 'las PCs están en la v79 (la 6.8.0): esta prueba es para ese salto');
-      const nuevas = _deLaV80;
+      expect(versionReal, _desde, reason: 'la base de la que se prueba el salto');
+      final nuevas = {..._deLaV80, if (_desde == 78) 'barra_cierres'};
 
       abierta = await factory.openDatabase(copia);
       final antes = await _foto(abierta, nuevas);
@@ -152,13 +156,13 @@ void main() {
       expect(despues.esquema, antes.esquema, reason: 'cambió el esquema de algo que ya existía');
       print('Esquema de lo que ya existía: igual (${antes.esquema.length} tablas, índices y triggers).');
 
-      // La vuelta atrás: la 6.8.0 pide la versión 79 y no tiene onDowngrade.
-      abierta = await factory.openDatabase(copia, options: OpenDatabaseOptions(version: 79));
-      expect(await abierta.getVersion(), 79);
+      // La vuelta atrás: la versión de antes pide la suya y no tiene onDowngrade.
+      abierta = await factory.openDatabase(copia, options: OpenDatabaseOptions(version: _desde));
+      expect(await abierta.getVersion(), _desde);
       final conLaVieja = await _foto(abierta, nuevas);
       await abierta.close();
       abierta = null;
-      expect(conLaVieja.huellas, despues.huellas, reason: 'al volver a la 6.8.0 cambió algún dato');
+      expect(conLaVieja.huellas, despues.huellas, reason: 'al volver a la versión de antes cambió algún dato');
 
       abierta = await factory.openDatabase(
         copia,
@@ -169,7 +173,7 @@ void main() {
       await abierta.close();
       abierta = null;
       expect(otraVez.huellas, despues.huellas, reason: 'al reinstalar la versión nueva cambió algún dato');
-      print('Vuelta a la 6.8.0 y de nuevo a la versión nueva: los datos igual.');
+      print('Vuelta a la versión de antes (base v$_desde) y de nuevo a la nueva: los datos igual.');
     } finally {
       try {
         await abierta?.close();
