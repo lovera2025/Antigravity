@@ -100,6 +100,13 @@ class EntradaSorteoPlano {
   /// cantidad y las excepciones): acá solo se cumple.
   final Map<String, int> alFinal;
 
+  /// "Primero las familias de una sola mesa" (pedido del jefe el
+  /// 16-nov-2026): las familias nuevas con una sola mesa en el contrato van
+  /// en los primeros casilleros, y detrás las que tienen adicional. Solo vale
+  /// en el sorteo entero. Quién va en cada grupo lo dice
+  /// [SorteoConPlano.primerGrupo].
+  final bool unaMesaPrimero;
+
   const EntradaSorteoPlano({
     required this.armado,
     this.config = ConfigPlano.vacia,
@@ -113,6 +120,7 @@ class EntradaSorteoPlano {
     this.hastaMesa,
     this.zonas = const {},
     this.alFinal = const {},
+    this.unaMesaPrimero = false,
   });
 
   EntradaSorteoPlano conPasto(bool usar) => EntradaSorteoPlano(
@@ -128,6 +136,7 @@ class EntradaSorteoPlano {
         hastaMesa: hastaMesa,
         zonas: zonas,
         alFinal: alFinal,
+        unaMesaPrimero: unaMesaPrimero,
       );
 }
 
@@ -205,6 +214,12 @@ class PlanSorteo {
   final int? alFinalDesde;
   final int? alFinalHasta;
 
+  /// Con "Primero las familias de una sola mesa" (16-nov-2026): hasta qué mesa
+  /// van las de una sola mesa, y desde cuál las que tienen adicional (que
+  /// llegan hasta [hastaMesa]). Null si el tilde no parte el sorteo.
+  final int? unaMesaHasta;
+  final int? conAdicionalDesde;
+
   const PlanSorteo({
     required this.modo,
     this.modoForzado = false,
@@ -219,6 +234,8 @@ class PlanSorteo {
     this.mesasAlFinal = 0,
     this.alFinalDesde,
     this.alFinalHasta,
+    this.unaMesaHasta,
+    this.conAdicionalDesde,
   });
 }
 
@@ -338,6 +355,10 @@ class SorteoConPlano {
         mesas: plan.$1.mesas,
         avisos: plan.$1.avisos,
         mesasAlFinal: plan.$1.mesasAlFinal,
+        alFinalDesde: plan.$1.alFinalDesde,
+        alFinalHasta: plan.$1.alFinalHasta,
+        unaMesaHasta: plan.$1.unaMesaHasta,
+        conAdicionalDesde: plan.$1.conAdicionalDesde,
       );
     } on _LejosNoEntra {
       return PlanSorteo(
@@ -379,6 +400,31 @@ class SorteoConPlano {
   /// Con qué nombre entra al motor el pedido de las mesas del final de una
   /// familia: es otro pedido, aparte del de sus mesas de adelante.
   static const _sufijoAlFinal = '#al-final';
+
+  // ── Primero las de una sola mesa (16-nov-2026) ──────────────────────────
+
+  /// Las familias del **primer grupo** con "Primero las familias de una sola
+  /// mesa": las que tienen **una sola mesa en el contrato**. Quien contrató
+  /// una adicional va atrás aunque hoy se le sortee solo la principal porque
+  /// no la pagó (lo decidió el usuario: cuenta lo que contrató). Vacío si no
+  /// se pidió o si el sorteo no es entero. Es la misma cuenta para sortear y
+  /// para [validar].
+  static Set<String> primerGrupo(EntradaSorteoPlano e) {
+    if (!_separaPorGrupos(e)) return const {};
+    return {
+      for (final x in e.alumnos)
+        if (MesasExtraUtils.cantidadMesasFisicasSorteo(x) <= 1) x.id,
+    };
+  }
+
+  /// Si [alumnoId] va en el primer grupo ([primerGrupo]).
+  static bool vaEnElPrimerGrupo(EntradaSorteoPlano e, String alumnoId) =>
+      primerGrupo(e).contains(alumnoId);
+
+  /// Si el sorteo se parte en grupos: el tilde puesto y toda la escuela junta.
+  /// Por división cada bloque es de su división, como con "Al final".
+  static bool _separaPorGrupos(EntradaSorteoPlano e) =>
+      e.unaMesaPrimero && e.modo == ModoSorteo.entera;
 
   /// Lo que el cartel del sorteo le pide a [EntradaSorteoPlano.alFinal] cuando
   /// el jefe elige "Al final": de cada familia que todavía no tiene mesa y
@@ -656,6 +702,17 @@ class SorteoConPlano {
     final cas = CasillerosPlano.de(a);
     final deAdelante = <int>[];
     final delFinal = <int>[];
+    // "Primero las familias de una sola mesa" (16-nov-2026): las de adelante
+    // de cada grupo, para mirar que ninguna con adicional quede antes.
+    final separa = _separaPorGrupos(e);
+    final unas = primerGrupo(e);
+    final delPrimerGrupo = <int>[];
+    final delSegundoGrupo = <int>[];
+    void alGrupo(String id, List<int> nums) {
+      if (!separa) return;
+      (unas.contains(id) ? delPrimerGrupo : delSegundoGrupo).addAll(nums);
+    }
+
     for (final entrada in r.asignaciones.entries) {
       final id = entrada.key;
       final nums = entrada.value;
@@ -718,8 +775,10 @@ class SorteoConPlano {
         }
         deAdelante.addAll(adelante);
         delFinal.addAll(alFinal);
+        alGrupo(id, adelante);
         continue;
       }
+      alGrupo(id, nums);
       final pedidas = e.separaciones[id] ?? 0;
       // Una familia entera y sin "lejos" es toda de adelante.
       if (pedidas == 0) deAdelante.addAll(nums);
@@ -742,6 +801,17 @@ class SorteoConPlano {
       if (primeraDelFinal < ultimaDeAdelante) {
         return 'Una mesa de las que iban al final quedó antes que una de '
             'adelante.';
+      }
+    }
+    // Lo que se pidió con "Primero las familias de una sola mesa": ninguna mesa
+    // de una familia con adicional antes que una de una sola mesa.
+    if (delPrimerGrupo.isNotEmpty && delSegundoGrupo.isNotEmpty) {
+      int lugar(int n) => cas.casillero(n) ?? 0;
+      final ultimaDeUna = delPrimerGrupo.map(lugar).reduce(max);
+      final primeraConAdicional = delSegundoGrupo.map(lugar).reduce(min);
+      if (primeraConAdicional < ultimaDeUna) {
+        return 'Una mesa de una familia con adicionales quedó antes que una de '
+            'una sola mesa.';
       }
     }
     return null;
@@ -1184,6 +1254,21 @@ class SorteoConPlano {
         PedidoSorteo(alumnoId: '${p.alumnoId}$_sufijoAlFinal', mesas: n),
       );
     }
+    // "Primero las familias de una sola mesa" (16-nov-2026): la pasada de
+    // adelante se parte en dos, con el mismo [_sortearEn]. Primero las de una
+    // sola mesa (y lo que se completa a quien ya tiene mesa); después, desde el
+    // casillero que sigue y con todo lo de antes tapado, las familias nuevas
+    // con adicional. Así ninguna de esas queda antes que una de una sola mesa.
+    final unas = primerGrupo(e);
+    final primeros = <PedidoSorteo>[];
+    final segundos = <PedidoSorteo>[];
+    for (final p in adelante) {
+      if (_separaPorGrupos(e) && p.esNuevo && !unas.contains(p.alumnoId)) {
+        segundos.add(p);
+      } else {
+        primeros.add(p);
+      }
+    }
     var ocupadas = b.ocupadas;
     var deFijos = const <String, List<int>>{};
     var hayLugarParaFijos = true;
@@ -1201,6 +1286,10 @@ class SorteoConPlano {
       }
     }
     int? minima;
+    // Con los dos grupos: hasta dónde llegan las de una sola mesa, y lo que
+    // queda tapado para las que tienen adicional.
+    int? finPrimeros;
+    var ocupadasSegundos = const <int>{};
     if (!hayLugarParaFijos) {
       minima = null;
     } else if (fijos.isNotEmpty && resto.isEmpty) {
@@ -1210,6 +1299,50 @@ class SorteoConPlano {
         b.masAltoAsignado,
         for (final l in deFijos.values) ...l,
       ].fold<int>(0, max);
+    } else if (segundos.isNotEmpty) {
+      finPrimeros = _minimaCapacidad(
+        primeros,
+        ocupadas,
+        max(1, b.masAltoAsignado),
+        cas.total,
+      );
+      if (finPrimeros != null && primeros.any((p) => p.separadas > 0)) {
+        finPrimeros =
+            _minimaConLejos(b, e, primeros, ocupadas, finPrimeros, cas.total);
+      }
+      if (finPrimeros != null) {
+        ocupadasSegundos = {
+          ...ocupadas,
+          for (var c = 1; c <= finPrimeros; c++) c,
+        };
+        minima = _minimaCapacidad(
+          segundos,
+          ocupadasSegundos,
+          finPrimeros + 1,
+          cas.total,
+        );
+        if (minima != null && segundos.any((p) => p.separadas > 0)) {
+          minima = _minimaConLejos(
+            b,
+            e,
+            segundos,
+            ocupadasSegundos,
+            minima,
+            cas.total,
+          );
+        }
+      }
+      // Con el salón justo puede no entrar: una familia con adicional no se
+      // parte en la pasarela y quedan huecos que ella no puede usar (sin el
+      // tilde, los tapa una de una sola mesa). Ninguna de una sola mesa va
+      // atrás y la principal va con sus adicionales (pedido del jefe,
+      // 16-nov): entonces no se sortea así y el cartel lo dice. Qué hacer en
+      // ese caso quedó para decidir (CONTEXTO de la 6.9.1).
+      if (minima == null) {
+        avisos.add('Las familias con mesas adicionales no entran después de '
+            'las de una sola mesa: faltan mesas en el salón. Agregá mesas, o '
+            'sacá el tilde de "Primero las familias de una sola mesa".');
+      }
     } else {
       // Nunca por debajo de la mesa más alta que ya tiene familia, igual que
       // el sorteo sin plano: si no, a quien compró una mesa después se la daba
@@ -1227,14 +1360,26 @@ class SorteoConPlano {
     int? capacidad = minima;
     if (e.hastaMesa != null && minima != null) {
       final pedida = cas.casillero(e.hastaMesa!);
+      // Con los dos grupos, "hasta qué mesa" estira el de las que tienen
+      // adicional: las de una sola mesa quedan juntas adelante.
       if (pedida != null &&
           pedida >= minima &&
           SorteoMesasMotor.esFactible(
-            pedidos: adelante,
-            ocupadas: ocupadas,
+            pedidos: segundos.isEmpty ? adelante : segundos,
+            ocupadas: segundos.isEmpty ? ocupadas : ocupadasSegundos,
             capacidad: pedida,
           )) {
         capacidad = pedida;
+      }
+    }
+    // Para la vista previa: desde qué mesa van las que tienen adicional.
+    int? conAdicionalDesde;
+    if (segundos.isNotEmpty && finPrimeros != null && capacidad != null) {
+      for (var c = finPrimeros + 1; c <= capacidad; c++) {
+        if (!ocupadasSegundos.contains(c)) {
+          conAdicionalDesde = cas.numero(c);
+          break;
+        }
       }
     }
     // Las del final empiezan en el casillero que sigue al último de adelante:
@@ -1278,9 +1423,37 @@ class SorteoConPlano {
       mesasAlFinal: atras.fold<int>(0, (s, p) => s + p.mesas),
       alFinalDesde: alFinalDesde,
       alFinalHasta: alFinalHasta,
+      unaMesaHasta: segundos.isEmpty || finPrimeros == null || finPrimeros < 1
+          ? null
+          : _ultimaMesaHasta(cas, finPrimeros),
+      conAdicionalDesde: conAdicionalDesde,
     );
     if (rng == null || capacidad == null || !entra) return (plan, null);
-    final deAdelante = _sortearEn(b, e, adelante, ocupadas, capacidad, rng);
+    final Map<String, List<int>> deAdelante;
+    if (segundos.isEmpty) {
+      deAdelante = _sortearEn(b, e, adelante, ocupadas, capacidad, rng);
+    } else {
+      final dePrimeros =
+          _sortearEn(b, e, primeros, ocupadas, finPrimeros!, rng);
+      // Lo que se dio a las de una sola mesa ya está ocupado, también lo
+      // completado a quien ya tenía, aunque haya caído fuera del tramo.
+      final tomadas = {
+        ...ocupadasSegundos,
+        for (final l in dePrimeros.values) ...l,
+      };
+      if (!SorteoMesasMotor.esFactible(
+        pedidos: segundos,
+        ocupadas: tomadas,
+        capacidad: capacidad,
+      )) {
+        throw StateError('Las familias con mesas adicionales no entraron '
+            'después de las de una sola mesa.');
+      }
+      deAdelante = {
+        ...dePrimeros,
+        ..._sortearEn(b, e, segundos, tomadas, capacidad, rng),
+      };
+    }
     final r = <String, List<int>>{...deFijos, ...deAdelante};
     if (atras.isNotEmpty && capacidadAtras != null) {
       // Lo que se dio adelante ya está ocupado, también una "lejos" que haya

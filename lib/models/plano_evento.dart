@@ -266,12 +266,19 @@ class OrdenDelPlano {
   /// así el botón lo recuerda.
   final RecorridoDelOrden recorrido;
 
+  /// Se ordenó con "Primero las familias de una sola mesa" (16-nov-2026):
+  /// [lugares] tiene primero las de una sola mesa y después las que tienen
+  /// adicional. Solo para mostrar los dos grupos en el porqué; una versión
+  /// anterior que vuelva a guardar el plano la pierde y los muestra seguidos.
+  final bool unaMesaPrimero;
+
   const OrdenDelPlano({
     required this.prendido,
     this.el,
     this.por,
     this.lugares = const [],
     this.recorrido = RecorridoDelOrden.columnas,
+    this.unaMesaPrimero = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -281,6 +288,7 @@ class OrdenDelPlano {
         // Sin la clave, por columnas: lo único que había al principio.
         if (recorrido != RecorridoDelOrden.columnas)
           'recorrido': recorrido.clave,
+        if (unaMesaPrimero) 'una': true,
         'orden': [for (final l in lugares) l.toMap()],
       };
 
@@ -292,6 +300,7 @@ class OrdenDelPlano {
       el: _momento(v['el']),
       por: _texto(v['por']),
       recorrido: RecorridoDelOrden.desde(v['recorrido']),
+      unaMesaPrimero: v['una'] == true,
       lugares: [
         if (o is List)
           for (final x in o) ?LugarPorOrden.fromMap(x),

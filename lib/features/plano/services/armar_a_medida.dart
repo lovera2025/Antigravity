@@ -164,6 +164,10 @@ class ArmarAMedida {
   static bool _esAMedida(ArmadoSalon a) =>
       a.clave == claveArmado || a.clave == claveVacio || idDePredio(a) != null;
 
+  /// Si [a] es un salón armado a medida (no del Canva): el único que se
+  /// numera con [FinNumeracion].
+  static bool esAMedida(ArmadoSalon a) => _esAMedida(a);
+
   /// El espacio de [a] para guardarlo como el predio [id]: el borde de cada
   /// hoja y los sectores, sin mesas. Sin la distancia entre mesas ni el último
   /// número dado: son de cada fiesta.

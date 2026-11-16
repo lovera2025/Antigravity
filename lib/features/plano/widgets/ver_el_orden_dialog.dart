@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
+import '../../eventos/services/mesas_extra_utils.dart';
 import '../services/cambios_de_mesa.dart';
 
 /// "Ver el orden" (6.7.0): las familias de la mejor ubicada a la última, con
@@ -42,6 +43,21 @@ class VerElOrdenDialog extends StatelessWidget {
       for (final a in alumnos) a.id: CambiosDeMesa.apellido(a),
     };
     final conMesa = orden.lugares.where((l) => l.mesas.isNotEmpty).length;
+    // "Primero las familias de una sola mesa" (16-nov-2026): los dos grupos
+    // con su título. Una familia que ya no está cuenta como de una sola mesa.
+    final mesasDelContrato = {
+      for (final a in alumnos)
+        a.id: MesasExtraUtils.cantidadMesasFisicasSorteo(a),
+    };
+    bool deUnaMesa(LugarPorOrden l) => (mesasDelContrato[l.alumnoId] ?? 1) <= 1;
+    String? tituloDelGrupo(int i) {
+      if (!orden.unaMesaPrimero) return null;
+      final l = orden.lugares[i];
+      if (i > 0 && deUnaMesa(orden.lugares[i - 1]) == deUnaMesa(l)) {
+        return null;
+      }
+      return deUnaMesa(l) ? 'Una sola mesa' : 'Con adicionales';
+    }
     final cuando = orden.el == null
         ? null
         : ArTime.formatFechaHora(orden.el!);
@@ -68,9 +84,11 @@ class VerElOrdenDialog extends StatelessWidget {
                 itemCount: orden.lugares.length,
                 itemBuilder: (context, i) {
                   final l = orden.lugares[i];
-                  // Una raya entre los grupos, sin título.
-                  final cambiaElGrupo =
-                      i > 0 && orden.lugares[i - 1].grupo != l.grupo;
+                  final titulo = tituloDelGrupo(i);
+                  // Una raya entre los grupos de cumplimiento, sin título.
+                  final cambiaElGrupo = titulo == null &&
+                      i > 0 &&
+                      orden.lugares[i - 1].grupo != l.grupo;
                   final mesas = l.mesas.isEmpty
                       ? 'sin mesa en el salón'
                       : l.mesas.length == 1
@@ -80,6 +98,17 @@ class VerElOrdenDialog extends StatelessWidget {
                     key: Key('orden_${l.puesto}'),
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (titulo != null)
+                        Padding(
+                          padding: EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 2),
+                          child: Text(
+                            titulo,
+                            key: Key('orden_titulo_$i'),
+                            style: tema.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
                       if (cambiaElGrupo) const Divider(thickness: 2),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),

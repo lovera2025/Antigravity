@@ -22,11 +22,9 @@ import '../plano/repositories/mesas_movimientos_repository.dart';
 import '../plano/services/historial_sorteo.dart';
 import '../plano/services/mesa_nueva_sola.dart';
 import '../plano/services/mesa_nueva_sola_de_la_app.dart';
-import '../plano/services/mesas_nuevas_al_fondo.dart';
 import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
-import '../plano/services/orden_en_el_salon.dart';
 import '../plano/services/sorteo_con_plano.dart';
 import '../plano/widgets/ver_el_orden_dialog.dart';
 import '../../core/utils/uuid_utils.dart';
@@ -65,6 +63,7 @@ import 'services/registro_sorteo.dart';
 import 'services/reparto_de_sillas.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
+import 'services/sorteo_del_cartel.dart';
 import 'services/sorteo_mesas_motor.dart';
 import 'services/ultimos_sorteados.dart';
 import '../../core/services/connectivity_service.dart';
@@ -4014,94 +4013,33 @@ class _DetalleEventoMasivoScreenState
   ) async {
     if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
-    // Lo que dejó el tilde de la 6.7.0 (fijaba las mesas antes de sortear, a
-    // la vista) no entra al sorteo ni se vuelve a guardar.
-    final configBase =
-        OrdenEnElSalon.sinFijadasDelOrden(plano.config) ?? plano.config;
-    // "Cumplimiento debido" (6.7.1): se calcula acá, al sortear, con lo recién
-    // leído. Le fija a cada familia su mesa solo para esta corrida; el sorteo
-    // de siempre se las entrega. Con el sorteo ya hecho, reacomoda.
-    OrdenParaElSorteo? orden;
-    if (config.porCumplimiento) {
-      orden = OrdenEnElSalon.paraElSorteo(
-        eventoId: widget.evento.id,
-        armado: plano.armado,
-        config: configBase,
-        alumnos: alumnos,
-        pagos: pagosCrudos,
-        hoyAr: ArTime.nowAr(),
-        ahora: ArTime.nowUtc(),
-        exclusion: exclusion,
-        modo: config.modo!,
-        recorrido: config.recorrido,
-        usarPasto: config.usarPasto,
-        adicionalesAlFinal: config.adicionalesAlFinal,
-        juntasConLaPrincipal: config.juntasConLaPrincipal,
-        por: quienOpera(ref),
-      );
-      if (!orden.sePuede) {
-        if (mounted) {
-          await _avisarSorteo('No se guardó nada', orden.problema!);
-        }
-        return;
-      }
-    }
-    // Con el sorteo ya hecho, las mesas que faltan van en mesas nuevas, al
-    // fondo (6.5.1): se agregan al salón y quedan fijadas para su familia, y el
-    // sorteo de siempre se las entrega. Es la misma cuenta que mostró el
-    // cartel, con los datos recién leídos.
-    PlanMesasNuevas? nuevas;
-    if (orden == null &&
-        config.mesasNuevasAlFondo &&
-        MesasNuevasAlFondo.motivoSinMesasNuevas(plano.armado, alumnos) ==
-            null) {
-      final plan = MesasNuevasAlFondo.planear(
-        armado: plano.armado,
-        config: configBase,
-        alumnos: alumnos,
-        pedidos: SorteoMesasMotor.pedidos(
-          alumnos,
-          separaciones: config.separaciones,
-          sinMesa: exclusion.sinMesa,
-          soloBase: exclusion.soloBase,
-        ),
-        llegada: llegadaPorPago(pagos),
-        por: quienOpera(ref),
-        ahora: ArTime.nowUtc(),
-      );
-      if (!plan.vacio) nuevas = plan;
-    }
-    // Lo que se guarda del plano. Un sorteo entero sin el tilde no deja escrito
-    // el porqué de otro.
-    final nadieTeniaMesa = alumnos.every(
-      (a) => MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isEmpty,
+    // De lo elegido en el cartel a lo que se sortea: el mismo camino que usan
+    // la ventana de prueba y las pruebas de punta a punta (16-nov-2026).
+    final delCartel = SorteoDelCartel.armar(
+      eventoId: widget.evento.id,
+      plano: plano,
+      alumnos: alumnos,
+      config: config,
+      exclusion: exclusion,
+      pagos: pagos,
+      pagosCrudos: pagosCrudos,
+      hoyAr: ArTime.nowAr(),
+      ahora: ArTime.nowUtc(),
+      por: quienOpera(ref),
     );
-    final sinOrden = nuevas?.config ?? configBase;
-    final configDelPlano = orden?.configAGuardar ??
-        (nadieTeniaMesa ? OrdenEnElSalon.apagado(sinOrden) ?? sinOrden : sinOrden);
-    final entrada = orden != null
-        ? OrdenEnElSalon.entrada(
-            orden,
-            armado: plano.armado,
-            usarPasto: config.usarPasto,
-          )
-        : EntradaSorteoPlano(
-            armado: nuevas?.armado ?? plano.armado,
-            config: sinOrden,
-            alumnos: alumnos,
-            exclusion: exclusion,
-            separaciones: config.separaciones,
-            distancias: config.distancias,
-            modo: config.modo!,
-            ordenDivisiones: config.ordenDivisiones,
-            usarPasto: config.usarPasto,
-            hastaMesa: config.hastaMesa,
-            zonas: config.zonas,
-            alFinal: config.alFinal,
-          );
+    if (!delCartel.sePuede) {
+      if (mounted) {
+        await _avisarSorteo('No se guardó nada', delCartel.problema!);
+      }
+      return;
+    }
+    final orden = delCartel.orden;
+    final nuevas = delCartel.nuevas;
+    final configDelPlano = delCartel.configDelPlano!;
+    final entrada = delCartel.entrada!;
     final ResultadoSorteoPlano resultado;
     try {
-      resultado = SorteoConPlano.sortear(entrada);
+      resultado = delCartel.sortear();
     } on StateError catch (e) {
       // El diálogo no deja llegar acá si no entra; si igual pasa, que se lea.
       debugPrint('Sorteo con plano: no entra. ${e.message}');
@@ -4126,8 +4064,9 @@ class _DetalleEventoMasivoScreenState
       return;
     }
     // Red de seguridad: no debería encontrar nada nunca. Si encuentra algo, no
-    // se guarda ni un número.
-    final problema = SorteoConPlano.validar(entrada, resultado);
+    // se guarda ni un número. Con "Cumplimiento debido", además: cada familia
+    // en la mesa que le tocó.
+    final problema = delCartel.controlFinal(resultado);
     if (problema != null) {
       debugPrint('Sorteo con plano frenado por la validación final: $problema');
       if (mounted) {
@@ -4135,20 +4074,6 @@ class _DetalleEventoMasivoScreenState
           'No se guardó nada',
           'El control final encontró un problema y el sorteo no se guardó: '
               '$problema',
-        );
-      }
-      return;
-    }
-    // Con "Cumplimiento debido", además: cada familia en la mesa que le tocó.
-    final noCumple =
-        orden == null ? null : OrdenEnElSalon.noCumple(orden, resultado);
-    if (noCumple != null) {
-      debugPrint('Sorteo por cumplimiento frenado: $noCumple');
-      if (mounted) {
-        await _avisarSorteo(
-          'No se guardó nada',
-          'El control final encontró un problema y el sorteo no se guardó: '
-              '$noCumple',
         );
       }
       return;
@@ -4168,6 +4093,7 @@ class _DetalleEventoMasivoScreenState
       // Con familias ya sentadas, el tilde las cambió de lugar: queda dicho,
       // para que deshacer solo este sorteo las devuelva a donde estaban.
       reacomodo: orden != null && orden.cambian > 0,
+      unaMesaPrimero: config.unaMesaPrimero,
       nuevas: nuevas == null
           ? null
           : {
@@ -4673,6 +4599,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? nuevas,
     Map<String, String>? alFinal,
     bool reacomodo = false,
+    bool unaMesaPrimero = false,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4686,6 +4613,7 @@ class _DetalleEventoMasivoScreenState
         nuevas: nuevas == null || nuevas.isEmpty ? null : nuevas,
         alFinal: alFinal == null || alFinal.isEmpty ? null : alFinal,
         reacomodo: reacomodo,
+        unaMesaPrimero: unaMesaPrimero,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );

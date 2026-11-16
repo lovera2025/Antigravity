@@ -149,6 +149,7 @@ class OrdenEnElSalon {
     required Map<String, int> mesasDe,
     Map<String, int> alFinal = const {},
     Set<int> noUsar = const {},
+    bool juntasEnLaFila = false,
   }) {
     final libres = [
       for (final n in paso.enOrden)
@@ -166,6 +167,29 @@ class OrdenEnElSalon {
       return n;
     }
 
+    // Con "Primero las familias de una sola mesa" (16-nov-2026) las familias
+    // con adicional arrancan a mitad de una fila, y la de varias mesas quedaba
+    // partida en el borde. Con [juntasEnLaFila], las [cuantas] van en la
+    // primera tira libre de su fila y su lado, una detrás de la otra; si no
+    // hay ninguna, lo de siempre. Un hueco que deja una familia grande lo puede
+    // tomar una más chica que viene después, como en el sorteo de siempre.
+    List<int>? enUnaTira(int cuantas) {
+      if (!juntasEnLaFila || cuantas < 2) return null;
+      for (final p in libres) {
+        final tira = [p];
+        while (tira.length < cuantas) {
+          final d = paso.detras(tira.last);
+          if (d == null || !libres.contains(d) || tira.contains(d)) break;
+          tira.add(d);
+        }
+        if (tira.length == cuantas) {
+          libres.removeWhere(tira.contains);
+          return tira;
+        }
+      }
+      return null;
+    }
+
     final r = <String, List<int>>{};
     final atrasDe = <String, int>{};
     for (final p in orden) {
@@ -174,6 +198,11 @@ class OrdenEnElSalon {
       // La principal queda siempre adelante.
       final atras = min(max(0, alFinal[id] ?? 0), cuantas - 1);
       atrasDe[id] = atras;
+      final tira = enUnaTira(cuantas - atras);
+      if (tira != null) {
+        r[id] = tira;
+        continue;
+      }
       final suyas = <int>[];
       if (libres.isNotEmpty) {
         suyas.add(libres.removeAt(0));
@@ -185,11 +214,37 @@ class OrdenEnElSalon {
       }
       r[id] = suyas;
     }
+    // Las del final van después de todas las de adelante: un hueco que dejó
+    // una tira antes de la última de adelante queda vacío. Con el salón justo
+    // no: si sin esos huecos no entran las del final, se usan.
+    if (juntasEnLaFila && atrasDe.values.any((a) => a > 0)) {
+      final puesto = {
+        for (var i = 0; i < paso.enOrden.length; i++) paso.enOrden[i]: i,
+      };
+      final ultima = [
+        for (final l in r.values) ...l,
+      ].map((n) => puesto[n] ?? -1).fold<int>(-1, max);
+      final despues = [
+        for (final n in libres)
+          if ((puesto[n] ?? -1) >= ultima) n,
+      ];
+      final hacenFalta = atrasDe.values.fold<int>(0, (s, a) => s + a);
+      if (despues.length >= hacenFalta) {
+        libres
+          ..clear()
+          ..addAll(despues);
+      }
+    }
     for (final p in orden) {
       final id = p.alumno.id;
       final atras = atrasDe[id] ?? 0;
       // Sin la principal no hay adicionales.
       if (atras == 0 || r[id]!.isEmpty || libres.isEmpty) continue;
+      final tira = enUnaTira(atras);
+      if (tira != null) {
+        r[id]!.addAll(tira);
+        continue;
+      }
       final delFinal = <int>[libres.removeAt(0)];
       while (delFinal.length < atras) {
         final n = laQueSigue(delFinal);
@@ -227,6 +282,7 @@ class OrdenEnElSalon {
     bool adicionalesAlFinal = false,
     int juntasConLaPrincipal = 0,
     Set<String> dejarJuntas = const {},
+    bool unaMesaPrimero = false,
     String? por,
   }) {
     List<int> mesasDeHoy(ContratoAlumno a) =>
@@ -291,13 +347,16 @@ class OrdenEnElSalon {
         soloBase.remove(a.id);
       }
     }
-    final orden = OrdenPorCumplimiento.de(
+    final porCumplimiento = OrdenPorCumplimiento.de(
       alumnos: alumnos,
       pagos: pagos,
       corteAr: hoyAr,
       rng: Random(semillaDe(eventoId)),
       entran: metas.keys.toSet(),
     );
+    final orden = unaMesaPrimero
+        ? primeroUnaMesa(porCumplimiento)
+        : porCumplimiento;
     if (orden.isEmpty) {
       return const OrdenParaElSorteo.noSePuede(
         'No hay ninguna familia para ubicar.',
@@ -323,6 +382,7 @@ class OrdenEnElSalon {
         for (final a in alumnos)
           if (!entran.contains(a.id)) ...mesasDeHoy(a),
       },
+      juntasEnLaFila: unaMesaPrimero,
     );
     final fijadas = <int, MesaFijada>{...aMano};
     for (final p in orden) {
@@ -340,6 +400,7 @@ class OrdenEnElSalon {
       el: ahora,
       por: por,
       recorrido: recorrido,
+      unaMesaPrimero: unaMesaPrimero,
       lugares: [
         for (final p in orden)
           LugarPorOrden(
@@ -347,7 +408,9 @@ class OrdenEnElSalon {
             puesto: p.puesto,
             grupo: p.grupo.numero,
             mesas: lugares[p.alumno.id] ?? const [],
-            frase: p.frase,
+            frase: unaMesaPrimero && !_deUnaMesa(p.alumno)
+                ? '${p.frase} $fraseConAdicional'
+                : p.frase,
           ),
       ],
     );
@@ -372,6 +435,46 @@ class OrdenEnElSalon {
       lugares: lugares,
       cambian: cambian,
     );
+  }
+
+  /// Lo que se le suma a la oración de una familia con adicional cuando se
+  /// sorteó con "Primero las familias de una sola mesa": por qué está detrás
+  /// de familias que cumplieron peor.
+  static const fraseConAdicional =
+      'Tiene mesas adicionales: va después de las familias de una sola mesa.';
+
+  /// Una sola mesa en el contrato: la misma cuenta que
+  /// [SorteoConPlano.primerGrupo]. Quien contrató una adicional y no la pagó
+  /// va con las que tienen adicional.
+  static bool _deUnaMesa(ContratoAlumno a) =>
+      MesasExtraUtils.cantidadMesasFisicasSorteo(a) <= 1;
+
+  /// "Primero las familias de una sola mesa" con Cumplimiento debido
+  /// (16-nov-2026): primero las de una sola mesa y después las que tienen
+  /// adicional, **cada grupo en el orden por cumplimiento de [orden]**. El
+  /// puntaje no cambia: solo se parte la lista y se vuelve a numerar el
+  /// puesto, así el porqué se lee en el orden en que quedaron.
+  static List<PuestoDelOrden> primeroUnaMesa(List<PuestoDelOrden> orden) {
+    final partido = [
+      for (final p in orden)
+        if (_deUnaMesa(p.alumno)) p,
+      for (final p in orden)
+        if (!_deUnaMesa(p.alumno)) p,
+    ];
+    return [
+      for (var i = 0; i < partido.length; i++)
+        PuestoDelOrden(
+          alumno: partido[i].alumno,
+          puesto: i + 1,
+          grupo: partido[i].grupo,
+          cumplimiento: partido[i].cumplimiento,
+          aMano: partido[i].aMano,
+          inicioDelPlan: partido[i].inicioDelPlan,
+          planDistinto: partido[i].planDistinto,
+          empatadas: partido[i].empatadas,
+          corte: partido[i].corte,
+        ),
+    ];
   }
 
   /// La entrada del sorteo de siempre con el orden puesto: toda la escuela

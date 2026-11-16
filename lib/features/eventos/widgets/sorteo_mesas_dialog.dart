@@ -8,6 +8,8 @@ import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../plano/modelo/armado_salon.dart';
+import '../../plano/modelo/numeracion.dart';
+import '../../plano/services/armar_a_medida.dart';
 import '../../plano/services/cambios_de_mesa.dart';
 import '../../plano/services/divisiones.dart';
 import '../../plano/services/mesas_nuevas_al_fondo.dart';
@@ -152,6 +154,15 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
           dejarJuntas: _dejarJuntas,
         );
 
+  // ── Primero las familias de una sola mesa (16-nov-2026) ──
+
+  /// El tilde. Viene destildado: el jefe lo elige en cada sorteo.
+  bool _unaMesaPrimero = false;
+
+  /// Vale como "Al final": sobre el plano y con toda la escuela junta.
+  bool get _unaMesaActiva =>
+      _unaMesaPrimero && _plano != null && _modo == ModoSorteo.entera;
+
   // ── Cumplimiento debido (6.7.1) ──
 
   /// El tilde. Viene destildado: el jefe lo elige en cada sorteo.
@@ -183,6 +194,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       _usarPasto,
       _alFinalActivo,
       _juntasConLaPrincipal,
+      _unaMesaActiva,
       (ex.sinMesa.toList()..sort()).join(','),
       (ex.soloBase.toList()..sort()).join(','),
     ].join('|');
@@ -202,6 +214,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         usarPasto: _usarPasto,
         adicionalesAlFinal: _alFinalActivo,
         juntasConLaPrincipal: _juntasConLaPrincipal,
+        unaMesaPrimero: _unaMesaActiva,
       );
     }
     return _ordenMemo;
@@ -339,6 +352,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         hastaMesa: int.tryParse(_hastaCtrl.text.trim()),
         zonas: _zonasElegidas,
         alFinal: _alFinal,
+        unaMesaPrimero: _unaMesaActiva,
       );
 
   /// Lo que va a hacer el sorteo sobre el plano. Se recalcula solo si cambió
@@ -350,6 +364,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       _recorrido.clave,
       _alFinalActivo,
       _juntasConLaPrincipal,
+      _unaMesaActiva,
       _modo.name,
       _alFondo,
       _orden.join(','),
@@ -431,6 +446,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     _recorrido = widget.inicial?.recorrido ?? RecorridoDelOrden.columnas;
     _adicionalesAlFinal = widget.inicial?.adicionalesAlFinal ?? false;
     _juntasConLaPrincipal = widget.inicial?.juntasConLaPrincipal ?? 0;
+    _unaMesaPrimero = widget.inicial?.unaMesaPrimero ?? false;
     _dejarJuntas = {...?widget.inicial?.dejarJuntas};
     _sinNingunaMesa = {
       for (final a in widget.alumnos)
@@ -950,6 +966,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                       alFinal: _alFinal,
                       porCumplimiento: _cumplimiento,
                       recorrido: _recorrido,
+                      unaMesaPrimero: _unaMesaActiva,
                     ),
                   )
               : null,
@@ -1296,18 +1313,31 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
           ),
         ],
       ),
+      ..._elTildeDeUnaMesa(entera),
       if (!entera) ...[
         const SizedBox(height: 4),
         Text(
-          'Para mandarlas al final, elegí "Toda la escuela junta": por '
-          'división, cada bloque es de su división.',
+          'Para mandarlas al final o poner primero las de una sola mesa, '
+          'elegí "Toda la escuela junta": por división, cada bloque es de su '
+          'división.',
           key: const Key('adicionales_motivo'),
           style: gris,
         ),
       ] else if (!_alFinalActivo) ...[
         const SizedBox(height: 4),
+        if (_unaMesaActiva && !_cumplimiento) ...[
+          _rangosDeUnaMesa(plan, alFinal: false),
+          const SizedBox(height: 2),
+        ],
         Text(
-          'Cada familia queda con todas sus mesas juntas, como siempre.',
+          !_unaMesaActiva
+              ? 'Cada familia queda con todas sus mesas juntas, como siempre.'
+              : _cumplimiento
+                  ? 'Primero las de una sola mesa; después, las familias con '
+                      'adicionales, con todas sus mesas juntas. Cada grupo, de '
+                      'la que mejor cumplió a la que peor.'
+                  : 'Cada familia con adicionales queda con todas sus mesas '
+                      'juntas, detrás de las de una sola mesa.',
           key: const Key('adicionales_explica'),
           style: gris,
         ),
@@ -1340,11 +1370,23 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         const SizedBox(height: 6),
         if (_cumplimiento)
           Text(
-            'Primero todas las principales; después, las adicionales.',
+            _unaMesaActiva
+                ? 'Primero las de una sola mesa; después, las principales de '
+                    'las demás; al final, las adicionales. Cada grupo, de la '
+                    'que mejor cumplió a la que peor.'
+                : 'Primero todas las principales; después, las adicionales.',
             key: const Key('adicionales_por_cumplimiento'),
             style: gris,
           )
-        else ...[
+        else if (_unaMesaActiva) ...[
+          _rangosDeUnaMesa(plan, alFinal: true),
+          const SizedBox(height: 2),
+          Text(
+            'Cada grupo se sortea entre sí. Si una familia pidió estar junta, '
+            'tocá "Dejar juntas" en su renglón, más abajo.',
+            style: gris,
+          ),
+        ] else ...[
         Text(
           plan.mesasAlFinal == 0
               ? 'Con lo elegido, ninguna mesa va al final: cada familia queda '
@@ -1373,6 +1415,101 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         ],
       ],
     ];
+  }
+
+  /// "Primero las familias de una sola mesa" (16-nov-2026, pedido del jefe):
+  /// el tilde, debajo de "Las mesas adicionales", porque se combina con esa
+  /// elección. Si el salón no deja que "primero" sea "las filas de adelante",
+  /// lo avisa.
+  List<Widget> _elTildeDeUnaMesa(bool entera) {
+    final avisoStyle = TextStyle(fontSize: 12.5, color: Colors.orange.shade900);
+    String? aviso;
+    if (_unaMesaActiva) {
+      if (_cumplimiento) {
+        if (_recorrido == RecorridoDelOrden.columnas) {
+          aviso = 'Por columnas, las de una sola mesa van primero en la columna '
+              'pegada a la pasarela, del escenario al fondo. Para las filas de '
+              'adelante, elegí "Por filas".';
+        }
+      } else if (ArmarAMedida.esAMedida(_armado) &&
+          _config.numeracion != FinNumeracion.filas) {
+        aviso = 'Este salón está numerado "${_config.numeracion.texto}": las de '
+            'una sola mesa quedan en los primeros números, que no son las filas '
+            'de adelante. Para las filas de adelante, numeralo "Fila por fila" '
+            'en Acomodar.';
+      }
+    }
+    return [
+      CheckboxListTile(
+        key: const Key('primero_una_sola_mesa'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const Text(
+          'Primero las familias de una sola mesa',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: const Text(
+          'Adelante, las que no tienen adicionales; detrás, las que sí.',
+          key: Key('primero_una_sola_mesa_dice'),
+        ),
+        value: _unaMesaPrimero && entera,
+        onChanged: entera
+            ? (v) => _cambiar(() => _unaMesaPrimero = v == true)
+            : null,
+      ),
+      if (aviso != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 40, bottom: 4),
+          child: Text(
+            aviso,
+            key: const Key('una_mesa_aviso'),
+            style: avisoStyle,
+          ),
+        ),
+    ];
+  }
+
+  /// Lo que la vista previa dice con "Primero las familias de una sola mesa":
+  /// de qué mesa a qué mesa va cada grupo. Sale del mismo plan que después
+  /// sortea ([SorteoConPlano.preparar]).
+  Widget _rangosDeUnaMesa(PlanSorteo plan, {required bool alFinal}) {
+    String tramo(int desde, int hasta) =>
+        desde == hasta ? 'la $desde' : 'de la $desde a la $hasta';
+    final unaHasta = plan.unaMesaHasta;
+    final conDesde = plan.conAdicionalDesde;
+    final hasta = plan.hastaMesa;
+    final noEntra = !plan.entra;
+    final String texto;
+    if (noEntra) {
+      // Con el salón justo puede no entrar (CONTEXTO de la 6.9.1: qué hacer
+      // ahí quedó para decidir).
+      texto = 'Las familias con adicionales no entran después de las de una '
+          'sola mesa: faltan mesas en el salón. Agregá mesas en Acomodar, o '
+          'sacá el tilde.';
+    } else if (unaHasta == null || conDesde == null || hasta == null) {
+      texto = 'Con lo elegido no hay dos grupos para separar: se sortea como '
+          'siempre.';
+    } else {
+      final partes = [
+        'Una sola mesa: ${tramo(1, unaHasta)}',
+        '${alFinal ? 'Principales de las demás' : 'Con adicionales'}: '
+            '${tramo(conDesde, hasta)}',
+        if (alFinal && plan.mesasAlFinal > 0 &&
+            plan.alFinalDesde != null && plan.alFinalHasta != null)
+          'Al final: ${tramo(plan.alFinalDesde!, plan.alFinalHasta!)}',
+      ];
+      texto = '${partes.join(' · ')}.';
+    }
+    return Text(
+      texto,
+      key: const Key('una_mesa_rangos'),
+      style: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
+        color: noEntra ? Colors.red.shade700 : Colors.deepPurple,
+      ),
+    );
   }
 
   /// "¿Dónde van las mesas que faltan?" (6.5.1): con el sorteo ya hecho, quien

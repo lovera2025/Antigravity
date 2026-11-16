@@ -95,6 +95,12 @@ class SorteoMesasDialogResult {
   final bool porCumplimiento;
   final RecorridoDelOrden recorrido;
 
+  /// Con plano, entero: "Primero las familias de una sola mesa"
+  /// (16-nov-2026). Las de una sola mesa en el contrato van en los primeros
+  /// números y detrás las que tienen adicional
+  /// (`EntradaSorteoPlano.unaMesaPrimero`).
+  final bool unaMesaPrimero;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
@@ -114,6 +120,7 @@ class SorteoMesasDialogResult {
     this.alFinal = const {},
     this.porCumplimiento = false,
     this.recorrido = RecorridoDelOrden.columnas,
+    this.unaMesaPrimero = false,
   });
 }
 

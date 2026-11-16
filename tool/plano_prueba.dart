@@ -25,6 +25,7 @@ import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/sorteo_del_cartel.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
 import 'package:arguello_events/features/eventos/widgets/sorteo_mesas_dialog.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
@@ -37,7 +38,6 @@ import 'package:arguello_events/features/plano/services/historial_sorteo.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
 import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
 import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
-import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
 import 'package:arguello_events/features/plano/widgets/ver_el_orden_dialog.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
@@ -408,19 +408,20 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
         a.id: PagoAlumno(base: 1000, mesas: a.mesaExtraPrecio),
     };
     final crudos = pagosDePrueba();
+    final plano = PlanoEvento.nuevo(
+      eventoId: 'prueba',
+      armado: _armado,
+      estilo: EstiloPlano.arquitecto,
+      modo: ModoSorteo.entera,
+      ahora: ahora,
+    ).copyWith(config: _config, ahora: ahora);
     final elegido = await mostrarSorteoMesasDialog(
       context: context,
       tituloInstitucion: 'VENTANA DE PRUEBA',
       alumnos: alumnos,
       avisos: const [],
       pagos: pagos,
-      plano: PlanoEvento.nuevo(
-        eventoId: 'prueba',
-        armado: _armado,
-        estilo: EstiloPlano.arquitecto,
-        modo: ModoSorteo.entera,
-        ahora: ahora,
-      ).copyWith(config: _config, ahora: ahora),
+      plano: plano,
       eventoId: 'prueba',
       pagosCrudos: crudos,
     );
@@ -431,69 +432,53 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       incluirBase: elegido.incluirBase,
       incluirExtras: elegido.incluirExtras,
     );
-    OrdenParaElSorteo? orden;
-    if (elegido.porCumplimiento) {
-      orden = OrdenEnElSalon.paraElSorteo(
-        eventoId: 'prueba',
-        armado: _armado,
-        config: _config,
-        alumnos: alumnos,
-        pagos: crudos,
-        hoyAr: DateTime(2026, 11, 12),
-        ahora: ahora,
-        exclusion: exclusion,
-        modo: elegido.modo ?? ModoSorteo.entera,
-        recorrido: elegido.recorrido,
-        usarPasto: elegido.usarPasto,
-        adicionalesAlFinal: elegido.adicionalesAlFinal,
-        juntasConLaPrincipal: elegido.juntasConLaPrincipal,
-        por: 'Prueba',
+    // El mismo camino que la pantalla de la fiesta (16-nov-2026): de lo elegido
+    // en el cartel al sorteo y el control final.
+    final delCartel = SorteoDelCartel.armar(
+      eventoId: 'prueba',
+      plano: plano,
+      alumnos: alumnos,
+      config: elegido,
+      exclusion: exclusion,
+      pagos: pagos,
+      pagosCrudos: crudos,
+      hoyAr: DateTime(2026, 11, 12),
+      ahora: ahora,
+      por: 'Prueba',
+    );
+    if (!delCartel.sePuede) {
+      setState(
+        () => _aviso = AvisoDelPlano(delCartel.problema!, esError: true),
       );
-      if (!orden.sePuede) {
-        setState(() => _aviso = AvisoDelPlano(orden!.problema!, esError: true));
-        return;
-      }
+      return;
     }
-    final entrada = orden != null
-        ? OrdenEnElSalon.entrada(
-            orden,
-            armado: _armado,
-            usarPasto: elegido.usarPasto,
-          )
-        : EntradaSorteoPlano(
-            armado: _armado,
-            config: _config,
-            alumnos: alumnos,
-            exclusion: exclusion,
-            separaciones: elegido.separaciones,
-            distancias: elegido.distancias,
-            modo: elegido.modo ?? ModoSorteo.entera,
-            ordenDivisiones: elegido.ordenDivisiones,
-            usarPasto: elegido.usarPasto,
-            hastaMesa: elegido.hastaMesa,
-            zonas: elegido.zonas,
-            alFinal: elegido.alFinal,
-          );
+    final orden = delCartel.orden;
+    final entrada = delCartel.entrada!;
     setState(() {
       final ResultadoSorteoPlano resultado;
       try {
-        resultado = SorteoConPlano.sortear(entrada);
+        resultado = delCartel.sortear();
       } on StateError catch (e) {
         _aviso = AvisoDelPlano('No entra: ${e.message}', esError: true);
         return;
       }
-      final problema = SorteoConPlano.validar(entrada, resultado) ??
-          (orden == null ? null : OrdenEnElSalon.noCumple(orden, resultado));
+      final problema = delCartel.controlFinal(resultado);
       if (problema != null) {
         _aviso = AvisoDelPlano('El control final: $problema', esError: true);
         return;
       }
       _asignaciones = {...?_asignaciones, ...resultado.asignaciones};
+      _armado = delCartel.nuevas?.armado ?? _armado;
+      _config = delCartel.configDelPlano!.copyWith(
+        bloques: resultado.bloques.isNotEmpty
+            ? resultado.bloques
+            : delCartel.configDelPlano!.bloques,
+      );
       if (orden != null) {
-        _config = orden.configAGuardar!;
         _aviso = AvisoDelPlano(
           'Sorteo por cumplimiento: ${orden.ubicadas} familias.'
-          '${orden.cambian == 0 ? '' : ' ${orden.cambian} cambiaron de mesa.'}',
+          '${orden.cambian == 0 ? '' : ' ${orden.cambian} cambiaron de mesa.'}'
+          '${elegido.unaMesaPrimero ? ' Primero las de una sola mesa.' : ''}',
         );
         return;
       }
@@ -502,6 +487,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       ]..sort();
       _aviso = AvisoDelPlano(
         'Sorteo con el cartel: ${resultado.asignaciones.length} familias.'
+        '${elegido.unaMesaPrimero ? ' Primero las de una sola mesa.' : ''}'
         '${delFinal.isEmpty ? ' Cada familia con sus mesas juntas.' : ' Al final: ${delFinal.join(', ')}.'}',
       );
     });
