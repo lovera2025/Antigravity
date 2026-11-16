@@ -566,15 +566,24 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
   con su OK). **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la 6.9.0.**
 
 **La 6.9.1: "Primero las familias de una sola mesa" en el cartel del SORTEO — PROGRAMADA, SIN PUBLICAR** (16-nov;
-`docs/CONTEXTO_v6.9.1_2026-11-16.md`, que empieza con "Para retomar en otro chat": ahí está **la decisión abierta del
-salón justo y lo que falta, en orden**). Pedido del jefe: las familias con una sola mesa en el contrato adelante y las
+`docs/CONTEXTO_v6.9.1_2026-11-16.md`, que empieza con "Para retomar en otro chat": ahí está **lo que falta, en
+orden**). Pedido del jefe: las familias con una sola mesa en el contrato adelante y las
 que tienen adicional detrás; se combina con "Con su familia · Al final" y con Cumplimiento debido (cada grupo por
 cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumplimiento no se tocaron.
 - **De lo que elige el cartel a lo que se sortea hay un solo camino: `SorteoDelCartel`** (`eventos/services/
   sorteo_del_cartel.dart`), que usan la pantalla de la fiesta, `tool/plano_prueba.dart` y las pruebas de punta a punta
   (`test/helpers/plano_en_memoria.dart` monta el PLANO de verdad).
 - **Reglas del usuario (16-nov): ninguna familia de una sola mesa va atrás, y la principal va siempre con sus
-  adicionales.** Con el salón justo el tilde no entra y el cartel frena en rojo; qué hacer ahí quedó para decidir.
+  adicionales.**
+- **El salón justo (decidido el 16-nov sobre un dibujo): solo cuando no entra de otra forma, la familia con
+  adicional tapa el hueco junto a la pasarela con sus mesas una detrás de la otra**, del mismo lado
+  (`FamiliasEnLosHuecos`, las menos familias posibles; también en Cumplimiento debido, que antes las dejaba
+  partidas sin avisar). El cartel lo dice en gris (`una_mesa_detras`); el rojo, solo si ni así entra.
+- **"Juntas" es una sola regla, `MesasJuntas`** (`plano/services/mesas_juntas.dart`): seguidas y pegadas (los
+  tramos de siempre) o una detrás de la otra, nunca en diagonal ni a los dos lados de la pasarela. La usan el
+  control final del sorteo (`validar`), el dibujo y el papel (`FamiliasEnElPlano`: cápsula, no aro punteado) y
+  el aviso de Mover. **El motor y `tramosPegados` no cambiaron.** En un plano ya sorteado no cambia ninguna mesa:
+  solo se dibuja con cápsula una familia que ya tenía una mesa justo detrás de la otra.
 - La mesa adicional "a confirmar" (Recepción discreta; COBRAR y ANULAR en el PLANO, solo en modo jefe) quedó **sin
   terminar en `git stash`** (`stash@{0}`), con el detalle en el mismo CONTEXTO.
 

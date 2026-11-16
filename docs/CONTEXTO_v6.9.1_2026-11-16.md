@@ -1,9 +1,9 @@
 # CONTEXTO — la 6.9.1: "Primero las familias de una sola mesa" en el cartel del SORTEO
 
-**Estado (16-nov-2026, a la tarde): PROGRAMADA y probada en el sandbox, SIN PUBLICAR.** El usuario eligió publicar el
-tilde solo, primero, como **versión 6.9.1** (todavía no se cambió en `pubspec.yaml` ni en el `.iss`). Queda **una
-decisión abierta** (el salón justo, abajo) y, recién después, publicar con él. La mesa adicional "a confirmar" (la
-Parte B) quedó guardada aparte, sin terminar.
+**Estado (16-nov-2026, a la noche): PROGRAMADA y probada en el sandbox, con el salón justo resuelto. Falta publicar
+con el usuario.** El usuario eligió publicar el tilde solo, primero, como **versión 6.9.1**. La decisión del salón
+justo la tomó en el segundo chat del 16-nov, sobre un dibujo (ver "El salón justo: una detrás de la otra", abajo).
+La mesa adicional "a confirmar" (la Parte B) quedó guardada aparte, sin terminar.
 
 ## Para retomar en otro chat
 
@@ -18,7 +18,7 @@ Parte B) quedó guardada aparte, sin terminar.
 - **Reglas que el usuario repitió el 16-nov y no se negocian:** ninguna familia de una sola mesa va atrás, y **la
   principal y sus adicionales van siempre juntas** (con "Con su familia").
 
-### Lo programado (sin commit al escribir esto; ver "Lo que falta", paso 1)
+### Lo programado del tilde (commit `ed01cec`)
 
 - `lib/features/plano/services/sorteo_con_plano.dart` (**el motor no se tocó**):
   - `EntradaSorteoPlano.unaMesaPrimero` (y en `conPasto`); `SorteoConPlano.primerGrupo(e)` y `vaEnElPrimerGrupo`: una
@@ -64,7 +64,42 @@ Parte B) quedó guardada aparte, sin terminar.
 - **Con el mouse** en `tool/plano_prueba.dart` (huella de la base IGUAL antes y después). Las capturas, en
   `build/capturas_tilde/` (se le mandaron).
 
-### LA DECISIÓN ABIERTA: el salón justo
+### El salón justo: una detrás de la otra (decidido y programado el 16-nov, segundo chat)
+
+Lo que dijo el usuario: "que los que tienen mesa principal, o sea juntas, que van atrás, ellos o algunos de ellos,
+mientras sea juntos, ocupen algunos huecos". Se le mostró un dibujo (izquierda: hoy, dos huecos de una mesa junto a la
+pasarela y una familia sin lugar; derecha: esa familia con la mesa del hueco y la de atrás) y eligió **"Sí, así"**:
+**solo cuando no entra de otra forma, la familia con adicional tapa el hueco junto a la pasarela con sus mesas una
+detrás de la otra, del mismo lado de la pasarela.** Nadie de una sola mesa va atrás y cada familia queda junta. El
+plan aprobado: `C:\Users\lover\.claude\plans\sigamos-donde-nos-quedamos-vectorized-adleman.md`.
+
+Lo programado (el motor del sorteo **no** se tocó):
+- **`plano/services/mesas_juntas.dart` (`MesasJuntas`)**: una sola regla de "juntas" para el control final, la
+  pantalla y el papel. Juntas = seguidas y pegadas (los tramos de siempre, `tramosPegados`) **o una detrás de la
+  otra** (`unaDetrasDeLaOtra`: pegadas y en línea, nunca en diagonal ni a los dos lados de la pasarela). `grupos`,
+  `juntas`, `usaUnaDetrasDeLaOtra` y `capsulas` (la línea de la cápsula: el tramo, o el recorrido que pasa por la de
+  atrás).
+- **`plano/services/familias_en_los_huecos.dart` (`FamiliasEnLosHuecos.acomodar`)**: búsqueda con vuelta atrás sobre
+  las mesas libres en el orden del recorrido; cada familia en mesas seguidas o una detrás de la otra, y **las menos
+  familias posibles una detrás de la otra**. Sin azar da siempre lo mismo y la primera de la lista toma el primer
+  lugar (Cumplimiento); con azar, cada sorteo distinto. Guarda los callejones sin salida (`fallidas`) y tiene un tope
+  de pasos: nunca se cuelga.
+- **`sorteo_con_plano.dart` `_entera`**: si las familias con adicional no entran en mesas seguidas detrás de las de
+  una sola mesa (y ninguna tiene "lejos"), `_enLosHuecos` las ubica con la menor capacidad (buscada por mitades) y
+  `PlanSorteo.unaDetrasDeLaOtra` dice cuántas. `validar` mide "juntas" con `MesasJuntas`.
+- **`orden_en_el_salon.dart` `repartir(armado:)`** (Cumplimiento debido con el tilde): si con las tiras alguna
+  familia con adicional quedaba partida, se ubican de nuevo con `FamiliasEnLosHuecos`, en el orden del cumplimiento.
+  **Antes, con el salón justo, Cumplimiento dejaba familias partidas sin avisar** (una quedó con la 1, la 21 y la
+  22): lo mostró la prueba nueva.
+- **El dibujo y el papel** (`familias_en_el_plano.dart`): la familia una detrás de la otra lleva la cápsula, no el
+  aro punteado. **En un plano ya sorteado no cambia ninguna mesa**: solo una familia que ya tenía una mesa justo
+  detrás de la otra con números no seguidos (p. ej. una adicional completada pegada) se dibuja con la cápsula en vez
+  del aro y la flecha. `cambios_de_mesa.dart` dice "queda con sus mesas juntas" con la misma regla.
+- **El cartel** (`sorteo_mesas_dialog.dart`): sin rojo; debajo de los rangos, en gris (`una_mesa_detras`): "Con el
+  salón justo, N familias con adicional quedan con sus mesas una detrás de la otra, junto a la pasarela." El rojo
+  queda solo si ni así entra. Con Cumplimiento debido no hay línea de rangos (como antes): se ve en el plano.
+
+### (Historia) La decisión que estuvo abierta: el salón justo
 
 Con el salón **justo** (las mesas exactas, como la ventana de prueba con 35 mesas para 35, o 1 de las 8 fiestas del
 simulacro con "Con su familia"), **con el tilde no entra**: las familias con adicional no se parten en la pasarela y
@@ -77,9 +112,8 @@ se pueden cumplir en un salón justo.** Lo que ya se probó y se descartó:
 - Mandar atrás a las menos de una sola mesa que hagan falta → **rechazado** ("que no vayan atrás").
 - Separar la adicional de una familia a otra mesa libre → **rechazado** ("deben ir juntas").
 
-**Lo que queda por proponerle (con un dibujo, antes de programar):** que el cartel, con el salón justo, **agregue solo
-las mesas que faltan al fondo** (como las mesas nuevas al fondo de la 6.5.1, `MesasNuevasAlFondo`) y deje sortear,
-diciendo "se agregan N mesas al fondo"; o sugerir "Al final" con un botón. Preguntarle cuál.
+Lo que se iba a proponer (agregar las mesas que faltan al fondo, o sugerir "Al final") quedó de lado: el 16-nov
+eligió "una detrás de la otra" (arriba).
 
 **Estado del código en este momento:** se volvió a la versión **estricta** (la probada): con el salón justo, frena con el
 cartel rojo ("Agregá mesas en Acomodar, o sacá el tilde") y SORTEAR queda apagado; sacando el tilde, deja sortear. En
@@ -87,21 +121,45 @@ cartel rojo ("Agregá mesas en Acomodar, o sacá el tilde") y SORTEAR queda apag
 descartados. Las pruebas del tilde (35) pasan, también la del salón justo (frena), y la suite entera se corrió antes
 del commit.
 
+### Lo que se probó del salón justo (16-nov, segundo chat)
+
+- **Pruebas nuevas**: `test/mesas_juntas_test.dart` (qué es juntas, la cápsula) y `test/familias_en_los_huecos_test.dart`
+  (el salón de 35 para 35: entra con una sola familia una detrás de la otra, la 25 con la 33; nunca cruzando la
+  pasarela ni en diagonal; sin azar siempre igual y la primera de la lista en el primer lugar; con azar, distinto
+  cada vez; **las menos posibles, comparado con una cuenta a fuerza bruta en 300 pedazos de salón al azar**; un salón
+  de 81 mesas no tarda, entre o no entre).
+- **Cambiadas**: "salón por salón" (de 25 a 40 mesas: si sin el tilde entra, con el tilde también, y en los sorteos
+  las que quedan una detrás de la otra son las que dijo la vista previa), la de punta a punta (el cartel de verdad sin
+  rojo y con la línea gris, SORTEAR con 40 semillas, y el PLANO de verdad sin familias separadas y con la cápsula por
+  las dos mesas) y una nueva de punta a punta con **Cumplimiento debido (por filas y por columnas, con su familia y
+  "Al final") en el salón justo: cada familia junta**. `test/familias_en_el_plano_test.dart`: la familia una detrás
+  de la otra lleva cápsula.
+- **8 reglas rotas a propósito** (`tool/romper_una_regla.sh`, casos en el scratchpad de la sesión): las pruebas fallan
+  en las 8. La de "las menos posibles" no la agarraba ninguna prueba hasta que se sumó la de fuerza bruta.
+- **Simulacro sobre una copia de la base del 16-nov** (`build/simulacro_691/`, sin nombres): 8 fiestas, ningún sorteo
+  con problemas y **ninguna "NO ENTRA con el tilde"**. La fiesta 6 (la que antes frenaba) entra con 2 familias una
+  detrás de la otra, lo mismo que dice el cartel. Con Cumplimiento, 0 familias partidas con el tilde (sin el tilde,
+  hasta 1 en algunas fiestas, como siempre). El simulacro ahora cuenta las partidas con `MesasJuntas` (las que
+  pidieron "lejos" no cuentan) y las que quedan una detrás de la otra.
+- **Con el mouse** en `tool/plano_prueba.dart` (35 mesas para 35, numerado "Fila por fila"): el cartel con la línea
+  gris, el plano después de sortear (la familia de 3 en la 30, la 29 y la 33, con la línea en L) y Cumplimiento
+  debido por filas (una familia en la 29 y la 33). Capturas en `build/capturas_691/` (**se le mandaron**). IMPRIMIR
+  dejó el PDF (`build/plano_prueba/`); no se pudo pasar a imagen en esta PC, pero el papel usa las mismas cápsulas
+  (`FamiliasEnElPlano.capsulas`) y sus pruebas pasan. La huella de la base dio IGUAL antes y después.
+- **Ojo:** la huella dice que **la base de esta PC ya está en la versión 80** (la de la 6.9.0): la 6.9.0 se abrió en
+  esta PC. Preguntarle al usuario en qué PCs la instaló antes de dar por hecho lo de "ninguna PC la tiene".
+
 ### Lo que falta, en orden
 
-1. ~~Dejar las pruebas en verde~~ (hecho el 16-nov antes del commit).
-2. **Decidir con el usuario el salón justo** (arriba) y, si elige una opción, programarla con su prueba (las del salón
-   justo, en `test/sorteo_una_mesa_primero_test.dart` "salón por salón…" y en la de punta a punta "en un salón justo
-   el cartel frena…", que hoy esperan que frene). El simulacro (`tool/simulacro_una_mesa_primero_test.dart`) cuenta
-   los "NO ENTRA con el tilde".
-3. **Versión 6.9.1** (lo pidió el usuario): `pubspec.yaml` → `6.9.1+76`; `installer/junior_eventos_setup.iss` →
-   `MyAppVersion "6.9.1"`.
-4. **Commit** (solo el tilde: la Parte B está en el stash, ver abajo). Mensaje con el efecto para el usuario.
-5. **Publicar con él**, como la 6.9.0 (su "Cómo se publicó"): la foto de la mora "antes de 6.9.1" (`supabase/
-   mora_fotos.sql`, por el conector), **sin SQL**, el instalador **por pasos** (la clave de firma, la página del
-   celular de cero con sus tres archivos, `ISCC` y su lista de archivos, el APK con `apksigner`), comparar los commits
-   con los nombres de la copia antes de subir, el tag `v6.9.1`, el release con el Setup y el APK y las novedades, y la
-   web en Vercel. **Ninguna PC tiene todavía la 6.9.0**: saltan a la 6.9.1.
+1. ~~Decidir el salón justo~~ (16-nov: una detrás de la otra) y ~~programarlo con sus pruebas~~ (hecho).
+2. ~~Versión 6.9.1~~: `pubspec.yaml` → `6.9.1+76`; `installer/junior_eventos_setup.iss` → `MyAppVersion "6.9.1"`.
+3. ~~La suite entera~~ (5.182 pruebas, ninguna falla) y ~~el commit~~ (solo el tilde y el salón justo: la Parte B
+   sigue en el stash).
+4. **Publicar con él**, como la 6.9.0 (su "Cómo se publicó"), preguntando cada paso: la foto de la mora "antes de
+   6.9.1" (`supabase/mora_fotos.sql`, por el conector), **sin SQL**, el instalador **por pasos** (el script de la
+   6.9.0 está copiado en el scratchpad de la sesión: la clave de firma, la página del celular de cero con sus tres
+   archivos, `ISCC` y su lista de archivos, el APK con `apksigner`), comparar los commits con los nombres de la copia
+   antes de subir, el tag `v6.9.1`, el release con el Setup y el APK y las novedades, y la web en Vercel.
 
 ### La Parte B: la mesa adicional "a confirmar" (sin terminar)
 

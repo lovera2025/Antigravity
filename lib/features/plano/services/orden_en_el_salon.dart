@@ -7,7 +7,9 @@ import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/sorteo_mesas_motor.dart';
 import '../modelo/armado_salon.dart';
+import 'familias_en_los_huecos.dart';
 import 'mesas_del_paso.dart';
+import 'mesas_juntas.dart';
 import 'mesas_nuevas_al_fondo.dart';
 import 'sorteo_con_plano.dart';
 
@@ -143,6 +145,11 @@ class OrdenEnElSalon {
   /// final"): primero se reparten las de adelante de todos y después esas, en
   /// el mismo orden. [noUsar] son las mesas que no se reparten. Una familia sin
   /// lugar queda con la lista vacía: el salón no tiene más mesas.
+  ///
+  /// Con [juntasEnLaFila] y el [armado], si con las tiras alguna familia con
+  /// adicional quedaba partida (el salón justo), las que tienen adicional se
+  /// ubican de nuevo con [FamiliasEnLosHuecos]: juntas, en mesas seguidas o
+  /// una detrás de la otra, y en el orden del cumplimiento (16-nov-2026).
   static Map<String, List<int>> repartir({
     required MesasDelPaso paso,
     required List<PuestoDelOrden> orden,
@@ -150,6 +157,7 @@ class OrdenEnElSalon {
     Map<String, int> alFinal = const {},
     Set<int> noUsar = const {},
     bool juntasEnLaFila = false,
+    ArmadoSalon? armado,
   }) {
     final libres = [
       for (final n in paso.enOrden)
@@ -192,12 +200,20 @@ class OrdenEnElSalon {
 
     final r = <String, List<int>>{};
     final atrasDe = <String, int>{};
-    for (final p in orden) {
+    // Desde qué familia van las que tienen adicional (con el tilde, van todas
+    // juntas después de las de una sola mesa), y qué mesas quedaban ahí.
+    int? desdeConAdicional;
+    List<int>? libresParaLasConAdicional;
+    for (final (k, p) in orden.indexed) {
       final id = p.alumno.id;
       final cuantas = max(1, mesasDe[id] ?? 1);
       // La principal queda siempre adelante.
       final atras = min(max(0, alFinal[id] ?? 0), cuantas - 1);
       atrasDe[id] = atras;
+      if (desdeConAdicional == null && cuantas - atras > 1) {
+        desdeConAdicional = k;
+        libresParaLasConAdicional = [...libres];
+      }
       final tira = enUnaTira(cuantas - atras);
       if (tira != null) {
         r[id] = tira;
@@ -213,6 +229,47 @@ class OrdenEnElSalon {
         }
       }
       r[id] = suyas;
+    }
+    // El salón justo (16-nov-2026): con las tiras y "lo de siempre", alguna
+    // familia con adicional quedaba partida. Se ubican de nuevo, desde la
+    // primera que tiene adicional, con [FamiliasEnLosHuecos]: cada una junta
+    // (seguidas o una detrás de la otra), y la que mejor cumplió en el primer
+    // lugar que se pueda. Si ni así, queda lo de antes.
+    if (juntasEnLaFila &&
+        armado != null &&
+        desdeConAdicional != null &&
+        libresParaLasConAdicional != null) {
+      final resto = orden.sublist(desdeConAdicional);
+      final partida = resto.any((p) {
+        final suyas = r[p.alumno.id] ?? const <int>[];
+        return suyas.length > 1 && !MesasJuntas.juntas(armado, suyas);
+      });
+      if (partida) {
+        final acomodo = FamiliasEnLosHuecos.acomodar(
+          armado: armado,
+          libres: libresParaLasConAdicional,
+          familias: [
+            for (final p in resto)
+              (
+                id: p.alumno.id,
+                mesas: max(1, mesasDe[p.alumno.id] ?? 1) -
+                    (atrasDe[p.alumno.id] ?? 0),
+              ),
+          ],
+        );
+        if (acomodo != null) {
+          for (final p in resto) {
+            r[p.alumno.id] = [...?acomodo.mesas[p.alumno.id]];
+          }
+          final usadas = {for (final l in acomodo.mesas.values) ...l};
+          libres
+            ..clear()
+            ..addAll([
+              for (final n in libresParaLasConAdicional)
+                if (!usadas.contains(n)) n,
+            ]);
+        }
+      }
     }
     // Las del final van después de todas las de adelante: un hueco que dejó
     // una tira antes de la última de adelante queda vacío. Con el salón justo
@@ -383,6 +440,7 @@ class OrdenEnElSalon {
           if (!entran.contains(a.id)) ...mesasDeHoy(a),
       },
       juntasEnLaFila: unaMesaPrimero,
+      armado: armado,
     );
     final fijadas = <int, MesaFijada>{...aMano};
     for (final p in orden) {

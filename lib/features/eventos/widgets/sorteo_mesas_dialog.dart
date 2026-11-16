@@ -1482,8 +1482,8 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     final noEntra = !plan.entra;
     final String texto;
     if (noEntra) {
-      // Con el salón justo puede no entrar (CONTEXTO de la 6.9.1: qué hacer
-      // ahí quedó para decidir).
+      // Ni tapando los huecos con mesas una detrás de la otra (o alguna pidió
+      // "lejos"): faltan mesas de verdad.
       texto = 'Las familias con adicionales no entran después de las de una '
           'sola mesa: faltan mesas en el salón. Agregá mesas en Acomodar, o '
           'sacá el tilde.';
@@ -1501,7 +1501,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       ];
       texto = '${partes.join(' · ')}.';
     }
-    return Text(
+    final rangos = Text(
       texto,
       key: const Key('una_mesa_rangos'),
       style: TextStyle(
@@ -1509,6 +1509,28 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         fontWeight: FontWeight.w700,
         color: noEntra ? Colors.red.shade700 : Colors.deepPurple,
       ),
+    );
+    // Con el salón justo (16-nov-2026): las familias con adicional que tapan
+    // un hueco junto a la pasarela con sus mesas una detrás de la otra. Es lo
+    // que eligió el usuario, no un problema: va en gris, sin pedir que se
+    // revise nada.
+    final detras = plan.entra ? plan.unaDetrasDeLaOtra : 0;
+    if (detras == 0) return rangos;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        rangos,
+        const SizedBox(height: 2),
+        Text(
+          detras == 1
+              ? 'Con el salón justo, 1 familia con adicional queda con sus '
+                  'mesas una detrás de la otra, junto a la pasarela.'
+              : 'Con el salón justo, $detras familias con adicional quedan con '
+                  'sus mesas una detrás de la otra, junto a la pasarela.',
+          key: const Key('una_mesa_detras'),
+          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+        ),
+      ],
     );
   }
 

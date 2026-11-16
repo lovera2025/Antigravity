@@ -19,6 +19,7 @@ import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
+import 'package:arguello_events/features/plano/services/mesas_juntas.dart';
 import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/features/eventos/services/cumplimiento_de_cuotas.dart';
@@ -75,7 +76,8 @@ const _conAdicional = {'a1', 'a2', 'a3', 'b1', 'c1'};
 
 /// La escuela de la ventana de prueba: 24 familias de una sola mesa, cuatro con
 /// una adicional y una con dos (ninguna con "lejos"). 35 mesas: en un salón
-/// justo, las que tienen adicional dejan huecos junto a la pasarela.
+/// justo, en mesas seguidas las que tienen adicional dejan huecos junto a la
+/// pasarela, y alguna los tapa con sus mesas una detrás de la otra.
 List<ContratoAlumno> _escuelaJusta() => [
       _familia('a1', extras: 1),
       _familia('a2', extras: 1),
@@ -85,6 +87,8 @@ List<ContratoAlumno> _escuelaJusta() => [
       for (var i = 0; i < 24; i++)
         _familia('s$i', division: i.isEven ? '5° A' : '5° B'),
     ];
+
+const _conAdicionalJusta = {'a1', 'a2', 'a3', 'a4', 'b1'};
 
 /// Lo que arma el cartel con "Al final" elegido.
 Map<String, int> _alFinal(
@@ -113,10 +117,16 @@ Map<int, int> _filas(ArmadoSalon salon) {
 /// Las comprobaciones de lo que ve el jefe en el plano: las de una sola mesa
 /// en las filas de adelante; detrás las que tienen adicional; las del final, al
 /// fondo; y cada familia junta.
+///
+/// [unaDetrasDeLaOtra]: con el salón justo, una familia puede quedar junta con
+/// sus mesas una detrás de la otra ([MesasJuntas]); si no, en un solo tramo de
+/// mesas seguidas, como siempre.
 void _comprobarGrupos(
   ArmadoSalon salon,
   ResultadoSorteoPlano r, {
   required Map<String, int> alFinal,
+  Set<String> conAdicional = _conAdicional,
+  bool unaDetrasDeLaOtra = false,
   String razon = '',
 }) {
   final fila = _filas(salon);
@@ -125,7 +135,7 @@ void _comprobarGrupos(
   final ultimo = <int>[];
   for (final x in r.asignaciones.entries) {
     final nums = [...x.value]..sort();
-    if (!_conAdicional.contains(x.key)) {
+    if (!conAdicional.contains(x.key)) {
       expect(nums, hasLength(1), reason: '$razon ${x.key}');
       primero.addAll(nums);
       continue;
@@ -135,8 +145,13 @@ void _comprobarGrupos(
     final delFinal = nums.sublist(nums.length - atras);
     segundo.addAll(adelante);
     ultimo.addAll(delFinal);
-    expect(SorteoConPlano.tramosPegados(salon, adelante), hasLength(1),
-        reason: '$razon ${x.key} no quedó junta: $nums');
+    if (unaDetrasDeLaOtra) {
+      expect(MesasJuntas.juntas(salon, adelante), isTrue,
+          reason: '$razon ${x.key} no quedó junta: $nums');
+    } else {
+      expect(SorteoConPlano.tramosPegados(salon, adelante), hasLength(1),
+          reason: '$razon ${x.key} no quedó junta: $nums');
+    }
     if (delFinal.isNotEmpty) {
       expect(SorteoConPlano.tramosPegados(salon, delFinal), hasLength(1),
           reason: '$razon las del final de ${x.key} no quedaron juntas');
@@ -303,11 +318,14 @@ void main() {
       );
     });
 
-    test('salón por salón: si dice que entra, sortea; si no, lo dice y no '
-        'sortea (con el salón justo, frena: decisión abierta, CONTEXTO 6.9.1)',
-        () {
-      var unoQueNoEntraPorElTilde = false;
-      for (final escuela in [alumnos, _escuelaJusta()]) {
+    test('salón por salón: si sin el tilde entra, con el tilde también; con el '
+        'salón justo, las familias con adicional tapan los huecos con sus mesas '
+        'una detrás de la otra (16-nov-2026)', () {
+      var algunaUnaDetrasDeLaOtra = false;
+      for (final (escuela, conAdicional) in [
+        (alumnos, _conAdicional),
+        (_escuelaJusta(), _conAdicionalJusta),
+      ]) {
         for (var mesas = 25; mesas <= 40; mesas++) {
           final chico = _salon(mesas);
           final con = EntradaSorteoPlano(
@@ -317,25 +335,39 @@ void main() {
           );
           final sin = EntradaSorteoPlano(armado: chico, alumnos: escuela);
           final plan = SorteoConPlano.preparar(con);
-          if (plan.entra) {
-            for (var semilla = 0; semilla < 10; semilla++) {
-              final r = SorteoConPlano.sortear(con, random: Random(semilla));
-              expect(SorteoConPlano.validar(con, r), isNull,
-                  reason: '$mesas mesas, semilla $semilla');
-            }
+          if (SorteoConPlano.preparar(sin).entra) {
+            expect(plan.entra, isTrue,
+                reason: '$mesas mesas: ${plan.avisos.join(' ')}');
+          }
+          if (!plan.entra) {
+            expect(() => SorteoConPlano.sortear(con, random: Random(1)),
+                throwsStateError);
             continue;
           }
-          expect(() => SorteoConPlano.sortear(con, random: Random(1)),
-              throwsStateError);
-          if (SorteoConPlano.preparar(sin).entra) {
-            unoQueNoEntraPorElTilde = true;
-            expect(plan.avisos.join(' '), contains('una sola mesa'),
-                reason: '$mesas mesas');
+          if (plan.unaDetrasDeLaOtra > 0) algunaUnaDetrasDeLaOtra = true;
+          for (var semilla = 0; semilla < 10; semilla++) {
+            final razon = '$mesas mesas, semilla $semilla';
+            final r = SorteoConPlano.sortear(con, random: Random(semilla));
+            expect(SorteoConPlano.validar(con, r), isNull, reason: razon);
+            _comprobarGrupos(
+              chico,
+              r,
+              alFinal: const {},
+              conAdicional: conAdicional,
+              unaDetrasDeLaOtra: plan.unaDetrasDeLaOtra > 0,
+              razon: razon,
+            );
+            // Las que quedan una detrás de la otra son las que dijo la vista
+            // previa: las menos posibles.
+            final usan = r.asignaciones.values
+                .where((m) => MesasJuntas.usaUnaDetrasDeLaOtra(chico, m))
+                .length;
+            expect(usan, plan.unaDetrasDeLaOtra, reason: razon);
           }
         }
       }
-      expect(unoQueNoEntraPorElTilde, isTrue,
-          reason: 'con 35 mesas para 35, sin el tilde entra y con el tilde no');
+      expect(algunaUnaDetrasDeLaOtra, isTrue,
+          reason: 'con 35 mesas para 35, en mesas seguidas no entra');
     });
   });
 

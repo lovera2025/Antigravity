@@ -24,8 +24,10 @@ import 'package:arguello_events/features/eventos/widgets/sorteo_mesas_dialog.dar
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
+import 'package:arguello_events/features/plano/services/mesas_juntas.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -568,11 +570,12 @@ void main() {
     expect(unas, [for (var n = 1; n <= 15; n++) n]);
   });
 
-  testWidgets('en un salón justo el cartel frena en rojo y dice qué hacer '
-      '(decisión abierta: CONTEXTO de la 6.9.1)', (tester) async {
+  testWidgets('en un salón justo deja sortear: la familia con adicional tapa '
+      'el hueco junto a la pasarela con sus mesas una detrás de la otra, y el '
+      'plano la dibuja junta (16-nov-2026)', (tester) async {
     // La escuela de la ventana de prueba: 24 familias de una sola mesa y 5 con
-    // adicional (ninguna de más de 3 mesas: el cartel no trae "lejos", que con
-    // sus mesas sueltas taparía los huecos del salón justo). 35 mesas.
+    // adicional (ninguna de más de 3 mesas: el cartel no trae "lejos"). Con
+    // las mesas justas, en mesas seguidas no entran.
     final alumnos = [
       _familia('a1', extras: 1),
       _familia('a2', extras: 1),
@@ -582,6 +585,7 @@ void main() {
       for (var i = 0; i < 24; i++)
         _familia('s$i', division: i.isEven ? '5° A' : '5° B'),
     ];
+    const conAdicional = {'a1', 'a2', 'a3', 'a4', 'b1'};
     PlanoEvento conMesas(int n) => PlanoEvento.nuevo(
           eventoId: _eventoId,
           armado: ArmarAMedida.armar(
@@ -599,64 +603,196 @@ void main() {
           config: ConfigPlano.vacia.copyWith(numeracion: FinNumeracion.filas),
           ahora: _ahora,
         );
-    bool entra(PlanoEvento p, {required bool tilde}) => SorteoConPlano.preparar(
+    PlanSorteo plan(PlanoEvento p, {required bool tilde}) =>
+        SorteoConPlano.preparar(
           EntradaSorteoPlano(
             armado: p.armado,
             config: p.config,
             alumnos: alumnos,
             unaMesaPrimero: tilde,
           ),
-        ).entra;
-    // Un salón justo: sin el tilde entra, con el tilde no.
+        );
+    // Un salón justo: sin el tilde entra; con el tilde, solo tapando huecos.
     PlanoEvento? justo;
     for (var n = 30; n <= 38 && justo == null; n++) {
       final p = conMesas(n);
-      if (entra(p, tilde: false) && !entra(p, tilde: true)) justo = p;
+      if (plan(p, tilde: false).entra &&
+          plan(p, tilde: true).unaDetrasDeLaOtra > 0) {
+        justo = p;
+      }
     }
     expect(justo, isNotNull, reason: 'hace falta un salón justo');
-    // La cuenta que se usa abajo, para que el analizador no la dé por sobrante.
+    final detras = plan(justo!, tilde: true).unaDetrasDeLaOtra;
     expect(SorteoMesasMotor.pedidos(alumnos), hasLength(29));
 
-    Future<void> abrir(PlanoEvento p) async {
-      tester.view.physicalSize = const Size(1200, 2400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: SorteoMesasDialog(
-            tituloInstitucion: 'ESCUELA DE PRUEBA',
-            alumnos: alumnos,
-            avisos: const [],
-            pagos: _pagos(alumnos),
-            plano: p,
-          ),
+    // 1. El cartel: sin rojo, la línea gris, y SORTEAR prendido.
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SorteoMesasDialog(
+          tituloInstitucion: 'ESCUELA DE PRUEBA',
+          alumnos: alumnos,
+          avisos: const [],
+          pagos: _pagos(alumnos),
+          plano: justo,
         ),
-      );
-      await tester.pumpAndSettle();
-      await _tocar(tester, find.byKey(const Key('primero_una_sola_mesa')));
-    }
-
-    String rangos() =>
-        tester.widget<Text>(find.byKey(const Key('una_mesa_rangos'))).data!;
-
-    await abrir(justo!);
-    expect(rangos(), contains('Agregá mesas en Acomodar, o sacá el tilde'));
-    expect(
-      tester
-          .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'SORTEAR'))
-          .onPressed,
-      isNull,
-      reason: 'con el salón justo y el tilde, no deja sortear',
+      ),
     );
-    // Sacando el tilde, deja sortear.
+    await tester.pumpAndSettle();
     await _tocar(tester, find.byKey(const Key('primero_una_sola_mesa')));
+    final rangos =
+        tester.widget<Text>(find.byKey(const Key('una_mesa_rangos'))).data!;
+    expect(rangos, startsWith('Una sola mesa: de la 1 a la 24'));
+    expect(rangos, isNot(contains('Agregá mesas')));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('una_mesa_detras'))).data,
+      contains('una detrás de la otra, junto a la pasarela'),
+    );
     expect(
       tester
           .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'SORTEAR'))
           .onPressed,
       isNotNull,
+      reason: 'con el salón justo y el tilde, deja sortear',
     );
+
+    // 2. SORTEAR por el camino de la app, con 40 semillas: las de una sola
+    //    mesa adelante, cada familia junta, y una detrás de la otra solo las
+    //    que dijo el cartel.
+    final cartel =
+        await _cartel(tester, alumnos: alumnos, plano: justo, e: const _Elegir());
+    expect(cartel.elegido.unaMesaPrimero, isTrue);
+    late ({
+      List<ContratoAlumno> alumnos,
+      PlanoEvento plano,
+      SorteoDelCartel delCartel,
+      ResultadoSorteoPlano resultado,
+    }) primero;
+    for (var semilla = 0; semilla < 40; semilla++) {
+      final hecho =
+          _sortearComoLaApp(alumnos, justo, cartel.elegido, semilla: semilla);
+      if (semilla == 0) primero = hecho;
+      final r = hecho.resultado.asignaciones;
+      final unas = [
+        for (final x in r.entries)
+          if (!conAdicional.contains(x.key)) ...x.value,
+      ];
+      final con = [
+        for (final x in r.entries)
+          if (conAdicional.contains(x.key)) ...x.value,
+      ];
+      expect(unas, hasLength(24));
+      expect(con.reduce(min), greaterThan(unas.reduce(max)),
+          reason: 'semilla $semilla: ninguna de una sola mesa va atrás');
+      for (final id in conAdicional) {
+        expect(MesasJuntas.juntas(justo.armado, r[id]!), isTrue,
+            reason: 'semilla $semilla: $id ${r[id]}');
+      }
+      expect(
+        conAdicional
+            .where((id) => MesasJuntas.usaUnaDetrasDeLaOtra(justo!.armado, r[id]!))
+            .length,
+        detras,
+        reason: 'semilla $semilla',
+      );
+    }
+
+    // 3. El plano de verdad: ninguna familia separada, y la cápsula pasa por
+    //    las dos mesas una detrás de la otra.
+    await montarPlanoDeLaFiesta(
+      tester,
+      evento: _evento,
+      plano: primero.plano,
+      alumnos: primero.alumnos,
+    );
+    final familias = tester.widget<VistaPlano>(find.byType(VistaPlano)).familias!;
+    expect(familias.haySeparadas, isFalse);
+    final r = primero.resultado.asignaciones;
+    for (final id in conAdicional) {
+      if (!MesasJuntas.usaUnaDetrasDeLaOtra(justo.armado, r[id]!)) continue;
+      expect(
+        familias.capsulas.any((c) => r[id]!.every(c.contains)),
+        isTrue,
+        reason: 'la cápsula de $id pasa por ${r[id]}',
+      );
+    }
   });
+
+  for (final (recorrido, alFinal) in [
+    for (final r in RecorridoDelOrden.values) ...[(r, false), (r, true)],
+  ]) {
+    testWidgets('en un salón justo, con Cumplimiento debido "${recorrido.clave}"'
+        '${alFinal ? ' y "Al final"' : ''}: las de una sola mesa primero y cada '
+        'familia junta (16-nov-2026)', (tester) async {
+      final alumnos = [
+        _familia('a1', extras: 1),
+        _familia('a2', extras: 1),
+        _familia('a3', extras: 1, division: '5° B'),
+        _familia('a4', extras: 1),
+        _familia('b1', extras: 2, division: '5° B'),
+        for (var i = 0; i < 24; i++)
+          _familia('s$i', division: i.isEven ? '5° A' : '5° B'),
+      ];
+      const conAdicional = {'a1', 'a2', 'a3', 'a4', 'b1'};
+      // 35 mesas para 35: el salón de la ventana de prueba.
+      final justo = PlanoEvento.nuevo(
+        eventoId: _eventoId,
+        armado: ArmarAMedida.armar(
+          OpcionesAMedida(
+            playon: const PlayonReal(frenteM: 30, fondoM: 46, profundidadM: 39),
+            cantidad: 35,
+            fin: FinNumeracion.filas,
+          ),
+        ).armado,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.entera,
+        ahora: _ahora,
+      ).copyWith(
+        config: ConfigPlano.vacia.copyWith(numeracion: FinNumeracion.filas),
+        ahora: _ahora,
+      );
+      final cartel = await _cartel(
+        tester,
+        alumnos: alumnos,
+        plano: justo,
+        e: _Elegir(cumplimiento: true, recorrido: recorrido, alFinal: alFinal),
+      );
+      final paso = MesasDelPaso.de(justo.armado, recorrido: recorrido)!;
+      int puesto(int n) => paso.enOrden.indexOf(n);
+      for (var semilla = 0; semilla < 10; semilla++) {
+        final hecho =
+            _sortearComoLaApp(alumnos, justo, cartel.elegido, semilla: semilla);
+        final r = hecho.resultado.asignaciones;
+        expect(r.keys, hasLength(29), reason: 'semilla $semilla');
+        final unas = [
+          for (final x in r.entries)
+            if (!conAdicional.contains(x.key)) ...x.value,
+        ];
+        final con = [
+          for (final x in r.entries)
+            if (conAdicional.contains(x.key)) ...x.value,
+        ];
+        expect(con.map(puesto).reduce(min),
+            greaterThan(unas.map(puesto).reduce(max)),
+            reason: 'semilla $semilla: ninguna de una sola mesa va atrás');
+        for (final id in conAdicional) {
+          expect(r[id], hasLength(id == 'b1' ? 3 : 2));
+          if (!alFinal) {
+            expect(MesasJuntas.juntas(justo.armado, r[id]!), isTrue,
+                reason: 'semilla $semilla: $id ${r[id]}');
+            continue;
+          }
+          // Con "Al final": la principal adelante y las adicionales al final,
+          // juntas entre sí.
+          final suyas = [...r[id]!]..sort((x, y) => puesto(x) - puesto(y));
+          expect(MesasJuntas.juntas(justo.armado, suyas.sublist(1)), isTrue,
+              reason: 'semilla $semilla: las del final de $id ${r[id]}');
+        }
+      }
+    });
+  }
 
   testWidgets('por división el tilde está apagado, con el motivo',
       (tester) async {

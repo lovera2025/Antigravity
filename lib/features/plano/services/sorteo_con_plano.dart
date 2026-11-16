@@ -8,6 +8,8 @@ import '../../eventos/services/sorteo_mesas_motor.dart';
 import '../modelo/armado_salon.dart';
 import 'armar_a_medida.dart';
 import 'divisiones.dart';
+import 'familias_en_los_huecos.dart';
+import 'mesas_juntas.dart';
 
 /// Las mesas del plano puestas en fila para el motor del sorteo.
 ///
@@ -220,6 +222,11 @@ class PlanSorteo {
   final int? unaMesaHasta;
   final int? conAdicionalDesde;
 
+  /// Con el salón justo y el tilde (16-nov-2026): cuántas familias con
+  /// adicional tapan un hueco junto a la pasarela con sus mesas una detrás de
+  /// la otra ([FamiliasEnLosHuecos]). 0 si todas van en mesas seguidas.
+  final int unaDetrasDeLaOtra;
+
   const PlanSorteo({
     required this.modo,
     this.modoForzado = false,
@@ -236,6 +243,7 @@ class PlanSorteo {
     this.alFinalHasta,
     this.unaMesaHasta,
     this.conAdicionalDesde,
+    this.unaDetrasDeLaOtra = 0,
   });
 }
 
@@ -359,6 +367,7 @@ class SorteoConPlano {
         alFinalHasta: plan.$1.alFinalHasta,
         unaMesaHasta: plan.$1.unaMesaHasta,
         conAdicionalDesde: plan.$1.conAdicionalDesde,
+        unaDetrasDeLaOtra: plan.$1.unaDetrasDeLaOtra,
       );
     } on _LejosNoEntra {
       return PlanSorteo(
@@ -782,7 +791,10 @@ class SorteoConPlano {
       final pedidas = e.separaciones[id] ?? 0;
       // Una familia entera y sin "lejos" es toda de adelante.
       if (pedidas == 0) deAdelante.addAll(nums);
-      if (pedidas == 0 && tramosPegados(a, nums).length > 1) {
+      // Juntas: seguidas, o una detrás de la otra (el salón justo con "Primero
+      // las familias de una sola mesa", 16-nov-2026). Nunca a los dos lados de
+      // la pasarela ni en diagonal.
+      if (pedidas == 0 && !MesasJuntas.juntas(a, nums)) {
         return 'Las mesas de una familia no quedaron juntas.';
       }
       // "Lejos" también se mira en el salón (6.1.0): sin tocar a la familia.
@@ -1080,6 +1092,71 @@ class SorteoConPlano {
     return null;
   }
 
+  /// Las familias con adicional ([segundos]) en las mesas libres que siguen a
+  /// las de una sola mesa, tapando los huecos con sus mesas una detrás de la
+  /// otra ([FamiliasEnLosHuecos]). Con la menor capacidad que alcance, o en
+  /// [capacidad] si se pide. En casilleros; null si ni así entran.
+  static ({int capacidad, Map<String, List<int>> casilleros, int detras})?
+      _enLosHuecos(
+    EntradaSorteoPlano e,
+    CasillerosPlano cas,
+    List<PedidoSorteo> segundos,
+    Set<int> ocupadas,
+    int finPrimeros, {
+    Random? rng,
+    int? capacidad,
+  }) {
+    final familias = [
+      for (final p in segundos) (id: p.alumnoId, mesas: p.faltan),
+    ];
+    final necesarias = familias.fold<int>(0, (s, f) => s + f.mesas);
+    ({int capacidad, Map<String, List<int>> casilleros, int detras})? en(
+      int c,
+    ) {
+      final libres = [
+        for (var k = finPrimeros + 1; k <= c; k++)
+          if (!ocupadas.contains(k) && cas.numero(k) != null) cas.numero(k)!,
+      ];
+      if (libres.length < necesarias) return null;
+      final a = FamiliasEnLosHuecos.acomodar(
+        armado: e.armado,
+        libres: libres,
+        familias: familias,
+        rng: rng,
+        desde: 1,
+      );
+      if (a == null) return null;
+      return (
+        capacidad: c,
+        casilleros: {
+          for (final x in a.mesas.entries)
+            x.key: [for (final n in x.value) cas.casillero(n)!],
+        },
+        detras: a.unaDetrasDeLaOtra,
+      );
+    }
+
+    if (capacidad != null) return en(capacidad);
+    // Con más mesas siempre entra lo que entraba con menos: si con todo el
+    // salón no entran, no entran; si entran, la menor capacidad se busca por
+    // mitades (el cartel lo pregunta en cada cambio y no puede tardar).
+    var mejor = en(cas.total);
+    if (mejor == null) return null;
+    var bajo = finPrimeros + necesarias;
+    var alto = cas.total - 1;
+    while (bajo <= alto) {
+      final medio = (bajo + alto) ~/ 2;
+      final r = en(medio);
+      if (r != null) {
+        mejor = r;
+        alto = medio - 1;
+      } else {
+        bajo = medio + 1;
+      }
+    }
+    return mejor;
+  }
+
   static Map<String, List<int>> _aNumeros(
     CasillerosPlano cas,
     Map<String, List<int>> porCasillero,
@@ -1290,6 +1367,9 @@ class SorteoConPlano {
     // queda tapado para las que tienen adicional.
     int? finPrimeros;
     var ocupadasSegundos = const <int>{};
+    // Con el salón justo: las familias con adicional en los huecos.
+    ({int capacidad, Map<String, List<int>> casilleros, int detras})?
+        enLosHuecos;
     if (!hayLugarParaFijos) {
       minima = null;
     } else if (fijos.isNotEmpty && resto.isEmpty) {
@@ -1332,12 +1412,25 @@ class SorteoConPlano {
           );
         }
       }
-      // Con el salón justo puede no entrar: una familia con adicional no se
-      // parte en la pasarela y quedan huecos que ella no puede usar (sin el
-      // tilde, los tapa una de una sola mesa). Ninguna de una sola mesa va
-      // atrás y la principal va con sus adicionales (pedido del jefe,
-      // 16-nov): entonces no se sortea así y el cartel lo dice. Qué hacer en
-      // ese caso quedó para decidir (CONTEXTO de la 6.9.1).
+      // Con el salón justo puede no entrar en mesas seguidas: una familia con
+      // adicional no se parte en la pasarela y quedan huecos de una mesa junto
+      // a ella. Ninguna de una sola mesa va atrás y la principal va con sus
+      // adicionales (pedido del jefe, 16-nov). Lo que eligió el usuario ese
+      // día, sobre un dibujo: solo en ese caso, la familia tapa el hueco con
+      // sus mesas una detrás de la otra ([FamiliasEnLosHuecos]). Con "lejos"
+      // no: esas siguen con el aviso.
+      if (minima == null &&
+          finPrimeros != null &&
+          segundos.every((p) => p.separadas == 0)) {
+        enLosHuecos = _enLosHuecos(
+          e,
+          cas,
+          segundos,
+          ocupadasSegundos,
+          finPrimeros,
+        );
+        if (enLosHuecos != null) minima = enLosHuecos.capacidad;
+      }
       if (minima == null) {
         avisos.add('Las familias con mesas adicionales no entran después de '
             'las de una sola mesa: faltan mesas en el salón. Agregá mesas, o '
@@ -1427,6 +1520,7 @@ class SorteoConPlano {
           ? null
           : _ultimaMesaHasta(cas, finPrimeros),
       conAdicionalDesde: conAdicionalDesde,
+      unaDetrasDeLaOtra: enLosHuecos?.detras ?? 0,
     );
     if (rng == null || capacidad == null || !entra) return (plan, null);
     final Map<String, List<int>> deAdelante;
@@ -1441,18 +1535,40 @@ class SorteoConPlano {
         ...ocupadasSegundos,
         for (final l in dePrimeros.values) ...l,
       };
-      if (!SorteoMesasMotor.esFactible(
-        pedidos: segundos,
-        ocupadas: tomadas,
-        capacidad: capacidad,
-      )) {
-        throw StateError('Las familias con mesas adicionales no entraron '
-            'después de las de una sola mesa.');
+      final Map<String, List<int>> deSegundos;
+      if (enLosHuecos != null) {
+        // Con azar, como cualquier sorteo; si así no entra (no debería: lo
+        // de adelante ocupa lo mismo), lo que encontró la vista previa.
+        final conAzar = _enLosHuecos(
+          e,
+          cas,
+          segundos,
+          tomadas,
+          finPrimeros,
+          rng: rng,
+          capacidad: capacidad,
+        );
+        final previa = enLosHuecos.casilleros.values.expand((l) => l);
+        if (conAzar != null) {
+          deSegundos = conAzar.casilleros;
+        } else if (!previa.any(tomadas.contains)) {
+          deSegundos = enLosHuecos.casilleros;
+        } else {
+          throw StateError('Las familias con mesas adicionales no entraron '
+              'después de las de una sola mesa.');
+        }
+      } else {
+        if (!SorteoMesasMotor.esFactible(
+          pedidos: segundos,
+          ocupadas: tomadas,
+          capacidad: capacidad,
+        )) {
+          throw StateError('Las familias con mesas adicionales no entraron '
+              'después de las de una sola mesa.');
+        }
+        deSegundos = _sortearEn(b, e, segundos, tomadas, capacidad, rng);
       }
-      deAdelante = {
-        ...dePrimeros,
-        ..._sortearEn(b, e, segundos, tomadas, capacidad, rng),
-      };
+      deAdelante = {...dePrimeros, ...deSegundos};
     }
     final r = <String, List<int>>{...deFijos, ...deAdelante};
     if (atras.isNotEmpty && capacidadAtras != null) {

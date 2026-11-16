@@ -1,6 +1,6 @@
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
-import 'sorteo_con_plano.dart';
+import 'mesas_juntas.dart';
 
 /// Lo que lleva una mesa de una familia con más de una mesa.
 class MarcaDeMesa {
@@ -34,13 +34,14 @@ class MarcaDeMesa {
 }
 
 /// Qué familias tienen adicional en el salón, y si quedaron juntas o separadas.
-/// Sin dato nuevo: se mide con [SorteoConPlano.tramosPegados], lo mismo que usa
-/// el sorteo.
+/// Sin dato nuevo: se mide con [MesasJuntas], lo mismo que usa el control final
+/// del sorteo (mesas seguidas y pegadas, o una detrás de la otra: 16-nov-2026).
 ///
 /// - **Una mesa:** nada.
-/// - **Un solo tramo de dos o más:** juntas. Una cápsula une sus mesas.
-/// - **Más de un tramo:** separadas. Un aro punteado en cada mesa y la flecha a la
-///   otra. Un tramo de dos o más dentro de una familia separada lleva su cápsula.
+/// - **Un solo grupo de dos o más:** juntas. Una cápsula une sus mesas
+///   ([MesasJuntas.capsulas]: la serpentina y, si hace falta, la mesa de atrás).
+/// - **Más de un grupo:** separadas. Un aro punteado en cada mesa y la flecha a la
+///   otra. Un grupo de dos o más dentro de una familia separada lleva su cápsula.
 ///
 /// Antes del sorteo vale lo mismo con las mesas fijadas. Lo dibujan la pantalla y
 /// el papel: nunca es solo un color, así se lee igual en blanco y negro.
@@ -48,7 +49,7 @@ class FamiliasEnElPlano {
   /// Mesa → su marca.
   final Map<int, MarcaDeMesa> marcas;
 
-  /// Cada tramo de mesas pegadas, en orden de número.
+  /// Cada cápsula: las mesas por las que pasa su línea, en ese orden.
   final List<List<int>> capsulas;
   final bool hayJuntas;
   final bool haySeparadas;
@@ -83,16 +84,16 @@ class FamiliasEnElPlano {
     for (final id in familias) {
       final numeros = porFamilia[id]!;
       if (numeros.length < 2) continue;
-      final tramos = SorteoConPlano.tramosPegados(armado, numeros);
-      final separada = tramos.length > 1;
+      final grupos = MesasJuntas.grupos(armado, numeros);
+      final separada = grupos.length > 1;
       if (separada) {
         haySeparadas = true;
       } else {
         hayJuntas = true;
       }
-      for (final (i, tramo) in tramos.indexed) {
-        if (tramo.length > 1) capsulas.add(tramo);
-        for (final n in tramo) {
+      for (final (i, grupo) in grupos.indexed) {
+        capsulas.addAll(MesasJuntas.capsulas(armado, grupo));
+        for (final n in grupo) {
           // Una mesa de dos familias es un conflicto, que ya se avisa: se queda
           // con la primera marca.
           marcas.putIfAbsent(
@@ -101,7 +102,7 @@ class FamiliasEnElPlano {
               principal: estado.info(n).principal,
               apellido: apellidos[id]!,
               separada: separada,
-              otra: separada ? tramos[(i + 1) % tramos.length].first : null,
+              otra: separada ? grupos[(i + 1) % grupos.length].first : null,
             ),
           );
         }

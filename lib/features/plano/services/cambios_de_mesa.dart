@@ -5,7 +5,7 @@ import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../modelo/armado_salon.dart';
 import 'divisiones.dart';
-import 'sorteo_con_plano.dart';
+import 'mesas_juntas.dart';
 
 /// Un cambio en lo que se configura del plano (fijar una mesa, dejarla libre),
 /// ya calculado. Si no se puede, [problema] dice por qué en palabras y [config]
@@ -757,10 +757,11 @@ class CambiosDeMesa {
         'el mismo motivo.',
       );
     }
-    // Juntas o separadas, medido como lo dibuja el plano (`tramosPegados`).
+    // Juntas o separadas, medido como lo dibuja el plano ([MesasJuntas]:
+    // seguidas, o una detrás de la otra).
     if (nuevas.length > 1) {
-      final juntas = SorteoConPlano.tramosPegados(armado, nuevas).length == 1;
-      final antes = SorteoConPlano.tramosPegados(armado, viejas).length == 1;
+      final juntas = MesasJuntas.juntas(armado, nuevas);
+      final antes = MesasJuntas.juntas(armado, viejas);
       if (juntas) {
         if (!antes) avisos.add('$nombre queda con sus mesas juntas.');
       } else if (_unidasEnElSalon(armado, nuevas)) {

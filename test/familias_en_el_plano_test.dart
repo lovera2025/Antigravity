@@ -14,6 +14,7 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/familias_en_el_plano.dart';
+import 'package:arguello_events/features/plano/services/mesas_juntas.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/widgets/imprimir_plano_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
@@ -106,6 +107,33 @@ void main() {
     expect(f.marcas[5]!.separada, isTrue);
     expect(f.marcas[5]!.otra, 30);
     expect(f.marcas[30]!.otra, 5);
+  });
+
+  test('una detrás de la otra (16-nov-2026): juntas, con la cápsula entre '
+      'las dos, sin aro punteado', () {
+    // Dos mesas de filas seguidas, en la misma columna y con números que no
+    // son seguidos: lo que hace el sorteo con el salón justo.
+    (int, int)? par;
+    for (final m in salon.mesas) {
+      for (final o in salon.mesas) {
+        if (o.numero > m.numero + 1 &&
+            MesasJuntas.unaDetrasDeLaOtra(salon, m.numero, o.numero)) {
+          par = (m.numero, o.numero);
+          break;
+        }
+      }
+      if (par != null) break;
+    }
+    final (n, m) = par!;
+    final f = de([_familia('a', [n, m], extras: 1)]);
+    expect(f.hayJuntas, isTrue);
+    expect(f.haySeparadas, isFalse);
+    expect(f.capsulas, [
+      [n, m],
+    ]);
+    expect(f.marcas[n]!.separada, isFalse);
+    expect(f.marcas[m]!.separada, isFalse);
+    expect(f.marcas[n]!.otra, isNull);
   });
 
   test('cada mesa de una familia separada sabe de quién es', () {

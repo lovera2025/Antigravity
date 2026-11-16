@@ -29,6 +29,7 @@ import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dar
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_del_paso.dart';
+import 'package:arguello_events/features/plano/services/mesas_juntas.dart';
 import 'package:arguello_events/features/plano/services/orden_en_el_salon.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -249,7 +250,7 @@ void main() {
                 final adelante =
                     e.value.where((n) => !atras.contains(n)).toList();
                 if (adelante.length > 1 &&
-                    SorteoConPlano.gruposEnElSalon(salon, adelante).length > 1) {
+                    !MesasJuntas.juntas(salon, adelante)) {
                   partidasSinTilde++;
                 }
               }
@@ -262,6 +263,7 @@ void main() {
               paso == null ? (cas.casillero(n) ?? 0) : paso.enOrden.indexOf(n);
           var malos = 0;
           var partidas = 0;
+          var detras = 0;
           final vueltas = caso.cumplimiento ? 20 : _sorteos;
           for (var semilla = 0; semilla < vueltas; semilla++) {
             try {
@@ -294,11 +296,17 @@ void main() {
                   final adelante =
                       x.value.where((n) => !atras.contains(n)).toList();
                   con.addAll(adelante);
-                  if (caso.cumplimiento &&
+                  // Juntas (16-nov-2026): seguidas, o una detrás de la otra.
+                  // La que pidió "lejos" queda separada a propósito.
+                  final pidioLejos =
+                      (elegido.separaciones[x.key] ?? 0) > 0;
+                  if (!pidioLejos &&
                       adelante.length > 1 &&
-                      SorteoConPlano.gruposEnElSalon(salon, adelante).length >
-                          1) {
+                      !MesasJuntas.juntas(salon, adelante)) {
                     partidas++;
+                  }
+                  if (MesasJuntas.usaUnaDetrasDeLaOtra(salon, adelante)) {
+                    detras++;
                   }
                 }
               }
@@ -323,7 +331,10 @@ void main() {
                   '${plan.mesasAlFinal > 0 ? ' · al final: de la ${plan.alFinalDesde} a la ${plan.alFinalHasta}' : ''}.';
           b.writeln('  ${caso.nombre}: entra.$rangos $vueltas sorteos: '
               '${malos == 0 ? 'todos pasaron' : '$malos CON PROBLEMAS'}'
-              '${caso.cumplimiento ? ' · familias partidas en el borde de una fila: ${partidas ~/ vueltas} con el tilde, $partidasSinTilde sin el tilde' : ''}.');
+              '${caso.cumplimiento ? ' · familias partidas: ${partidas ~/ vueltas} con el tilde, $partidasSinTilde sin el tilde' : partidas > 0 ? ' · FAMILIAS PARTIDAS: $partidas' : ''}'
+              '${detras > 0 ? ' · una detrás de la otra: ${(detras / vueltas).toStringAsFixed(1)} familias por sorteo' : ''}'
+              '${plan.unaDetrasDeLaOtra > 0 ? ' (el cartel dice ${plan.unaDetrasDeLaOtra})' : ''}.');
+          if (partidas > 0) fallas += partidas;
         }
         b.writeln();
       }
