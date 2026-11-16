@@ -104,6 +104,26 @@ void main() {
     expect(find.text('PASADA'), findsNothing);
   });
 
+  // Revisión del 15-nov: con fiestas dos noches seguidas, la de anoche con la
+  // caja olvidada salía primera y sin marca, y se vendía en la fiesta equivocada.
+  testWidgets('una fiesta que ya pasó, con la caja abierta, va al final y marcada', (tester) async {
+    await barra.barra.abrirCaja(
+      eventoId: BarraEnPrueba.id(3),
+      operadorId: _marta,
+      operadorNombre: 'Marta',
+      numeroCaja: 1,
+    );
+    await abrir(tester);
+    expect(find.text('PASADA'), findsOneWidget);
+    expect(find.byKey(Key('barra_caja_abierta_${BarraEnPrueba.id(3)}')), findsOneWidget);
+    expect(find.byKey(Key('barra_caja_abierta_${puertoViejo.id}')), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('PASADA')).dy,
+      greaterThan(tester.getTopLeft(find.text('PUERTO VIEJO')).dy),
+      reason: 'la que ya pasó va al final',
+    );
+  });
+
   testWidgets('sin fiestas con precios, lo dice', (tester) async {
     barra.barra.preciosGuardados.clear();
     await abrir(tester);

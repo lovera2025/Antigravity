@@ -16,6 +16,9 @@
 //   • Entradas_11_anular.png: el cartel de anular;
 //   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante;
 //   • Historial_de_ventas.pdf: IMPRIMIR HISTORIAL, con las letras de la app;
+//   • historial_1000/: el historial de una fiesta inventada con 1.000 entradas
+//     (el del jefe y el de la caja de Carla, sin sumas) y las hojas 11 a 20 de
+//     uno de 2.200, impresas por tandas;
 //   • Entradas_12 a 15: CERRAR CAJA (contar a ciegas, confirmar, el cierre, y en
 //     el celular) y Cierre_de_caja_entradas.pdf, su papel;
 //   • Entradas_16 y 17: ENTRADAS en el cierre de caja (en la PC y en el celular);
@@ -54,6 +57,7 @@ import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
+import 'package:arguello_events/features/entradas/widgets/imprimir_por_hojas.dart';
 import 'package:arguello_events/features/entradas/widgets/precios_de_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
@@ -336,6 +340,56 @@ void main() {
     });
   }
 
+  // IMPRIMIR HISTORIAL con muchas hojas (la forma C, 15-nov): el cartel Todo
+  // junto · Por hojas, de la pantalla de verdad.
+  for (final (nombre, tamano, tocarTanda) in [
+    ('Entradas_20_imprimir_por_hojas.png', const Size(1100, 1000), false),
+    ('Entradas_21_imprimir_tanda_impresa.png', const Size(1100, 1000), true),
+    ('Entradas_22_imprimir_por_hojas_celular.png', const Size(390, 900), false),
+  ]) {
+    testWidgets('IMPRIMIR HISTORIAL · $nombre', (tester) async {
+      final (clave, _, entradas, _) = await montar(
+        tester,
+        jefe: true,
+        tamano: tamano,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+        extra: [
+          abrirHistorialDeEntradasProvider.overrideWithValue((datos, {context}) async {}),
+        ],
+      );
+      await tester.runAsync(() async {
+        final caja = entradas.listaCajas.single;
+        for (var i = 0; i < 600; i++) {
+          await entradas.vender(
+            caja: caja,
+            compradorNombre: 'COMPRADOR DE PRUEBA ${i + 1}',
+            renglones: [
+              RenglonEntradas.suelta(
+                  nombre: PedidoDeEntradas.nombreSuelta, precioLista: 10000, cantidad: 1),
+            ],
+            medio: MedioBarra.efectivo,
+            efectivo: 10000,
+            numeros: '${5001 + i}',
+            quien: 'Carla',
+          );
+        }
+      });
+      await tocar(tester, 'vender_ventas');
+      await tester.pumpAndSettle();
+      await tocar(tester, 'ventas_imprimir');
+      await tester.pumpAndSettle();
+      if (tocarTanda) {
+        await tocar(tester, 'hojas_tanda_1');
+        await tester.pumpAndSettle();
+        await tocar(tester, 'ventas_imprimir');
+        await tester.pumpAndSettle();
+      }
+      expect(find.byKey(const Key('hojas_cartel')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
   testWidgets('el cartel de anular', (tester) async {
     final (clave, _, entradas, _) = await montar(
       tester,
@@ -384,6 +438,215 @@ void main() {
       File('$carpeta${Platform.pathSeparator}Historial_de_ventas.pdf')
           .writeAsBytesSync(bytes);
       print('── PDF en: $carpeta');
+    });
+  });
+
+  // ── El historial con muchas ventas (la forma C, 15-nov) ────────────────────
+
+  /// Una fiesta inventada con unas [hasta] entradas vendidas en dos cajas, a lo
+  /// largo de varios días (de 9 a 19 hs): lugares al 50 % con su familia,
+  /// anticipadas, mixtos, transferencias con recargo, descuentos a mano,
+  /// talonarios partidos, nombres largos, algunas anuladas y un número
+  /// repetido. Los nombres son inventados.
+  Future<(EntradasEnMemoria, Map<String, String>, CajaEntradas)> unaFiestaGrande(
+    int hasta,
+  ) async {
+    const apellidos = [
+      'ACOSTA', 'BENITEZ', 'CABRERA', 'DOMINGUEZ', 'ESCOBAR', 'FERREYRA', 'GIMENEZ',
+      'HERRERA', 'IBARRA', 'JUAREZ', 'LEDESMA', 'MOLINA', 'NAVARRO', 'OJEDA', 'PAEZ',
+      'QUIROGA', 'RAMIREZ', 'SOSA', 'TOLEDO', 'VERA', 'ZARATE', 'AGUIRRE', 'BRITEZ',
+      'CACERES', 'DIAZ', 'FRANCO', 'GODOY', 'LUNA', 'MEDINA', 'ORTIZ', 'PERALTA', 'ROMERO',
+    ];
+    const nombres = [
+      'ANA', 'LUIS', 'MARTA', 'JUAN', 'SOFIA', 'DIEGO', 'LAURA', 'PABLO', 'CARLA',
+      'JORGE', 'NATALIA', 'RAMON', 'VALERIA', 'HUGO', 'GABRIELA', 'OSCAR', 'ROMINA',
+    ];
+    String persona(int i) =>
+        '${apellidos[(i * 7) % apellidos.length]}, ${nombres[(i * 5) % nombres.length]}';
+    String largo(int i) =>
+        '${apellidos[i % apellidos.length]} ${apellidos[(i + 9) % apellidos.length]} '
+        'DE LA FUENTE, MARIA DE LOS ANGELES';
+    RenglonEntradas anticipadas(int n) => RenglonEntradas.suelta(
+        nombre: PedidoDeEntradas.nombreAnticipada, precioLista: 8000, cantidad: n);
+    RenglonEntradas lugar(int n) => RenglonEntradas.lugar(
+        nombre: PedidoDeEntradas.nombreDeLugar(50),
+        precioLista: 10000,
+        descuentoPct: 50,
+        cantidad: n);
+    RenglonEntradas sueltas(int n, {double descuento = 0}) => RenglonEntradas.suelta(
+        nombre: PedidoDeEntradas.nombreSuelta,
+        precioLista: 10000,
+        descuentoPct: descuento,
+        cantidad: n);
+
+    // El 17-nov a las 9 de Argentina.
+    final entradas = EntradasEnMemoria(ahora: DateTime.utc(2026, 11, 17, 12));
+    final carla = await entradas.abrirCaja(
+      eventoId: idFiestaEntrega,
+      operadorId: 'carla',
+      operadorNombre: 'Carla',
+    );
+    final maxi = await entradas.abrirCaja(
+      eventoId: idFiestaEntrega,
+      operadorId: 'maxi',
+      operadorNombre: 'Maxi',
+    );
+    final familias = <String, String>{};
+    var hechas = 0;
+    var talonario = 3001;
+    var otroTalonario = 9001;
+    String? paraRepetir;
+    for (var i = 0; hechas < hasta; i++) {
+      final ahora = entradas.reloj();
+      final ar = ahora.subtract(const Duration(hours: 3));
+      if (ar.hour >= 19) {
+        // Al otro día, a las 9.
+        entradas.adelantar(
+          DateTime.utc(ar.year, ar.month, ar.day + 1, 12).difference(ahora),
+        );
+      }
+      final renglones = switch (i % 5) {
+        0 => [lugar(2 + i % 7)],
+        1 => [anticipadas(2)],
+        2 => [anticipadas(1), lugar(2)],
+        3 => [sueltas(4, descuento: i % 23 == 3 ? 20 : 0)],
+        _ => [anticipadas(3)],
+      };
+      final conLugar = renglones.any((r) => r.tipo == TipoRenglonEntradas.lugar);
+      String? familia;
+      if (conLugar || i % 4 == 0) {
+        familia = 'fam$i';
+        final mesa = 10 + i % 90;
+        familias[familia] = '${persona(i + 3)} m.$mesa${i % 6 == 0 ? '-${mesa + 1}' : ''}';
+      }
+      final total = renglones.fold<double>(0, (s, r) => s + r.subtotal);
+      final cuantas = renglones.fold<int>(0, (s, r) => s + r.cantidad);
+      var medio = MedioBarra.efectivo;
+      var efectivo = total;
+      var transferencia = 0.0;
+      var recargo = 0.0;
+      double? recargoPct;
+      if (i % 7 == 0) {
+        medio = MedioBarra.mixto;
+        efectivo = (total / 2).roundToDouble();
+        transferencia = total - efectivo;
+      } else if (i % 7 == 3) {
+        medio = MedioBarra.transferencia;
+        efectivo = 0;
+        if (i % 14 == 3) {
+          recargoPct = 10;
+          recargo = (total * 0.1).roundToDouble();
+        }
+        transferencia = total + recargo;
+      }
+      String numeros;
+      if (i == 150 && paraRepetir != null) {
+        numeros = paraRepetir;
+      } else if (i % 19 == 0 && cuantas > 1) {
+        final mitad = cuantas ~/ 2;
+        numeros = '$talonario-${talonario + mitad - 1}, '
+            '$otroTalonario-${otroTalonario + cuantas - mitad - 1}';
+        talonario += mitad;
+        otroTalonario += cuantas - mitad;
+      } else {
+        numeros = cuantas == 1 ? '$talonario' : '$talonario-${talonario + cuantas - 1}';
+        talonario += cuantas;
+      }
+      if (i == 40) paraRepetir = numeros;
+      final caja = (i ~/ 25).isEven ? carla : maxi;
+      final v = await entradas.vender(
+        caja: caja,
+        contratoAlumnoId: familia,
+        compradorNombre: i % 17 == 0 ? largo(i) : persona(i),
+        renglones: renglones,
+        medio: medio,
+        efectivo: efectivo,
+        transferencia: transferencia,
+        recargo: recargo,
+        recargoPct: recargoPct,
+        // Alguna sin el número del talonario (no es obligatorio).
+        numeros: i % 37 == 11 ? null : numeros,
+        quien: caja == carla ? 'Carla' : 'Maxi',
+      );
+      hechas += cuantas;
+      if (i % 41 == 7) {
+        await entradas.anular(
+          v,
+          motivo: i.isEven
+              ? 'se cargó dos veces'
+              : 'la familia pidió la devolución, pagó con otra transferencia',
+          devueltas: i % 3 != 0,
+          quien: 'Jefe',
+        );
+        hechas -= cuantas;
+      } else if (medio != MedioBarra.efectivo && i % 3 != 0) {
+        await entradas.verificar(v, verificado: true, quien: 'Jefe');
+      }
+      entradas.adelantar(Duration(minutes: 2 + (i * 3) % 9));
+    }
+    return (entradas, familias, carla);
+  }
+
+  HistorialDeEntradas historialDe(EntradasEnMemoria e, {String? caja}) => HistorialDeEntradas.de(
+        cajas: e.listaCajas,
+        ventas: e.listaVentas,
+        anulaciones: e.listaAnulaciones,
+        verificaciones: e.listaVerificaciones,
+        soloDeLaCaja: caja,
+      );
+
+  testWidgets('el historial de 1.000 entradas, y uno largo impreso por hojas', (tester) async {
+    await letras();
+    await tester.runAsync(() async {
+      final fuentes = await PdfService.fuentesOutfit();
+      final logo = await isotipoDeLosPapeles();
+      final dir = Directory('$carpeta${Platform.pathSeparator}historial_1000')
+        ..createSync(recursive: true);
+      Future<void> escribir(String nombre, DatosDelHistorial d) async {
+        final bytes = await HistorialEntradasPdf.armar(d, fuentes: fuentes, logo: logo);
+        File('${dir.path}${Platform.pathSeparator}$nombre').writeAsBytesSync(bytes);
+        print('── $nombre (${d.historial.totales.entradas} entradas, '
+            '${d.historial.ventas.length} ventas, ${HistorialEntradasPdf.hojas(d)} hojas en total)');
+      }
+
+      DatosDelHistorial datos(
+        HistorialDeEntradas h,
+        Map<String, String> familias, {
+        String alcance = 'Todas las cajas',
+        bool conPlata = true,
+      }) =>
+          DatosDelHistorial(
+            historial: h,
+            fiesta: 'PUERTO VIEJO',
+            fechaFiesta: fiestaDeLaEntrega.fechaEvento,
+            alcance: alcance,
+            emitido: DateTime.utc(2026, 11, 30, 15),
+            conPlata: conPlata,
+            familias: familias,
+          );
+
+      final (mil, familias, carla) = await unaFiestaGrande(1000);
+      await escribir('1_Historial_1000_entradas_el_jefe.pdf', datos(historialDe(mil), familias));
+      await escribir(
+        '2_Historial_la_caja_de_Carla_sin_sumas.pdf',
+        datos(
+          historialDe(mil, caja: carla.id),
+          familias,
+          alcance: 'La caja de Carla',
+          conPlata: false,
+        ),
+      );
+
+      final (grande, familiasGrande, _) = await unaFiestaGrande(2200);
+      final todo = datos(historialDe(grande), familiasGrande);
+      final total = HistorialEntradasPdf.hojas(todo);
+      expect(total, greaterThan(kHojasParaPreguntar));
+      final hasta = total < 20 ? total : 20;
+      await escribir(
+        '3_Historial_2200_entradas_hojas_11_a_$hasta.pdf',
+        todo.soloLasHojas(11, hasta),
+      );
+      print('── PDF en: ${dir.path}');
     });
   });
 

@@ -1,41 +1,32 @@
 # CONTEXTO — la 6.9.0: los arreglos de la noche y la venta de entradas
 
-**Estado (15-nov-2026, a la tarde):** en curso, **sin publicar**. Rama `feature/v4.6-cierre-por-sesiones`, todo en esta
+**Estado (15-nov-2026, a la noche):** en curso, **sin publicar**. La hoja C del historial, cerrada; sigue lo de antes de publicar (la v80 y el comparador de la mora sobre una copia de la base, con el programa cerrado). Rama `feature/v4.6-cierre-por-sesiones`, todo en esta
 PC, **sin subir a GitHub**. **Las etapas 1 a 7 de la venta de entradas están hechas, menos publicar**: la ventana de
 prueba, el recorrido con el mouse, las capturas (mandadas) y la revisión final con sus 6 arreglos (ver "Etapa 7").
 
 ## Para retomar en otro chat
 
-**DÓNDE QUEDÓ (15-nov, al cortar el chat: "actualizá el contexto… hacé lo de siempre"):**
-- **Eligió la forma C ("La C me gustó") y está PROGRAMADA, sin terminar de cerrar** (commit "en curso", ver abajo). El
-  N° se dejó como está (cada caja numera desde 1; la columna VEND. dice de qué caja es): no contestó a la pregunta de
-  separar por caja, y "Sí, así" era la primera opción.
-  - `lib/features/entradas/pdf/historial_entradas_pdf.dart` reescrito: **las hojas se arman acá con medidas fijas**
-    (`paginar`, `hojas`, `filas`, `FilaDelHistorial`, `entradasCorto`, `talonario`, `detalleAbajo`): cada renglón mide
-    lo mismo y un texto que no entra se corta en su renglón, así se sabe qué ventas van en cada hoja y se imprime un
-    tramo con la numeración del papel entero (`DatosDelHistorial.soloLasHojas`, `desdeHoja`/`hastaHoja`; el archivo
-    sale `…_hojas_11_a_20.pdf`). La familia arriba si entra (`_letrasArriba` 44), si no al segundo renglón; el
-    talonario largo también va abajo. Sin DNI (no estaba en la C que aprobó: está en el comprobante). Sin la lista
-    "ANULADAS" aparte: la anulación es el segundo renglón, en rojo. Totales en la última hoja (o solos en una más).
-  - `lib/features/entradas/widgets/imprimir_por_hojas.dart` (nuevo): el cartel **Todo junto · Por hojas**
-    (`elegirHojasParaImprimir`, tandas de `kHojasPorTanda` = 10 con "impresa" las que ya salieron, y "de la hoja X a
-    la Y" con su error). VENTAS (`_imprimirHistorial`) lo abre solo con más de `kHojasParaPreguntar` (10) hojas, y le
-    pasa `familias` (`_familias()`: "PÉREZ, JUAN m.12-13").
-  - Pruebas: `test/historial_de_entradas_test.dart` (grupo "la forma C": el segundo renglón solo cuando hace falta,
-    **1.000 entradas en 7 a 10 hojas sin que nada se salga de la hoja**, un tramo con su numeración) y
-    `test/imprimir_por_hojas_test.dart` (el cartel y VENTAS con 30 y con 600 ventas). Pasan (65 con las vecinas).
-- **Lo que falta para cerrar la hoja C, en orden:**
-  1. Las roturas a propósito (`bash tool/romper_una_regla.sh`): por ejemplo `paginar` sin cortar hoja, el segundo
-     renglón siempre, VENTAS sin preguntar con muchas hojas, el tramo sin respetar `desdeHoja`.
-  2. **La muestra con las letras de la app** (`tool/venta_entradas_muestra_test.dart`, sumarle un historial de 1.000
-     entradas inventadas, en `build/muestras_6.9.0/`): mirar el PDF hoja por hoja con la herramienta de leer archivos
-     (con Outfit el ancho de las letras cambia: ver que nada importante se corte) y **mandárselo** (lo quiere ver).
-     También una captura del cartel (en `tool/venta_entradas_prueba.dart`, que ya tiene VENTAS: hacen falta muchas
-     ventas para que aparezca).
-  3. La revisión independiente (un Workflow de lectores y verificadores, como en la etapa 7) y la suite entera
-     (`bash tool/suite_por_tandas.sh`; la última dio 5.094 antes de la hoja C).
-  4. Un commit que la dé por cerrada, y anotarla arriba en "Etapa 7".
-- Después, lo de siempre para publicar (paso 4 y 5 de "Lo que sigue").
+**DÓNDE QUEDÓ (15-nov, a la noche, segundo chat: "hagamos lo que falta", con el plan aprobado en
+`C:\Users\lover\.claude\plans\cuchame-hagamos-lo-que-resilient-karp.md`):**
+- **La hoja C (el historial de ventas en A4) está CERRADA** (ver "8." en "Etapa 7"). Se le mandaron la muestra de
+  1.000 entradas con las letras de la app (3 PDF: el del jefe, la caja de Carla sin sumas, y un tramo "de la hoja 11
+  a la 19" de uno de 2.200) y las capturas del cartel Todo junto · Por hojas (PC y celular), en
+  `build/muestras_6.9.0/historial_1000/`.
+- **Lo que sigue, en orden** (la etapa 2 del plan):
+  1. Pedirle que abra el programa (para que baje lo del día) y lo cierre. Copia:
+     `python -I tool/copiar_base_solo_lectura.py <scratchpad>\copia.db`.
+  2. `flutter test tool/verificar_migracion_v80_test.dart --dart-define=base=<copia>` (**escrito el 15-nov, sin
+     correr**: necesita la copia; la base de esta PC está en la 79).
+  3. El comparador de la mora como en la 6.8.1 (worktree con `v6.8.0`, `tool/rotulo_mora_antes_despues_test.dart` en
+     las dos y `python -I tool/comparar_rotulo_mora.py`), los papeles de antes y después a `build/papeles_6.9.0/` y
+     mandárselos. Tiene que mostrar los cambios de la 6.8.1, los tres del recibo reimpreso de la revisión final y el
+     del perdón de esta revisión, sin ninguna suma movida.
+  4. Publicar con él, paso por paso (punto 5 de "Lo que sigue", abajo).
+- **No se pudo manejar la ventana de prueba con el mouse**: el permiso de computer-use para `arguello_events.exe` se
+  pidió y no se dio. La captura del cartel salió de la pantalla VENTAS de verdad montada en la muestra
+  (`tool/venta_entradas_muestra_test.dart`, "IMPRIMIR HISTORIAL"). `tool/venta_entradas_prueba.dart` acepta
+  `--dart-define=ventas=muchas` (700 ventas más en la caja de Maxi) para verlo con el mouse.
+- **La huella de la base dio IGUAL** antes y después de abrir la ventana de prueba compilada (se cerró sin usarla).
 
 **Lo último (15-nov, a la tarde):**
 - **Pendiente de su respuesta: la hoja A4 del historial de ventas de entradas, "con todos los detalles".** (Ya contestó:
@@ -677,6 +668,38 @@ Plan aprobado el 15-nov ("prosigamos", con el botón): `C:\Users\lover\.claude\p
    - **Los tres del recibo tocan cómo se nombra la mora al reimprimir: antes de publicar, el comparador de la mora de la
      6.8.1 (`tool/rotulo_mora_antes_despues_test.dart` en la 6.8.0 y en la versión, `tool/comparar_rotulo_mora.py`) tiene
      que mostrar esos cambios y ningún otro.**
+8. **La hoja C, cerrada (15-nov, a la noche).** La forma C del historial impreso (programada en `d3dee79`):
+   - **Las roturas:** 22 sobre lo programado; dos no se detectaban (el talonario largo que no bajaba y el segundo
+     renglón largo cortado a uno) y una solo la veía una prueba vecina (los totales sin hoja propia: **no se salen de
+     la hoja, desaparecen**, porque lo que no entra en una `pw.Page` no se dibuja). Se sumaron las pruebas.
+   - **La muestra con las letras de la app mostró lo que las pruebas no veían** (con Helvetica sí entraba): el N°
+     cortado ("0004" salía "000": Outfit tiene los números de distinto ancho), "VERIF." cortado, los nombres largos sin
+     el final, y en el cartel el "10" cortado en su cajita. Arreglado: las columnas se miden con la letra de verdad en
+     un test (`PdfFont.stringMetrics`; **un PDF con Outfit no se lee palabra por palabra**), el nombre que no entra
+     va entero en el segundo renglón y la cajita va con poco relleno.
+   - **La revisión independiente** (Workflow, 4 lectores —la hoja C, el cartel y VENTAS, la tele y la caja, el
+     recibo reimpreso— y 3 verificadores por hallazgo que intentan refutarlo; resultado en
+     `build/revision_hoja_c.json`, fuera de git): **15 hallazgos, 13 confirmados (1 medio, 12 bajos), ninguno cambia
+     plata ni datos**. Arreglados 11, cada uno con su prueba:
+     - ENTRADAS, CUÁNDO, TOTAL y VEND. cortaban texto ("8 lugar + 2", la hora con ceros, "$ 1.000.000" como "$",
+       "Juan Pablo" y "Juan Carlos" los dos "Juan"): columnas medidas con los peores casos reales, y lo que igual no
+       entra baja entero al segundo renglón ("13 en total" arriba).
+     - Con muchos números repetidos los totales no entraban ni en una hoja: ahora siguen en otra
+       (`HojaDelHistorial`); si entran juntos, van juntos.
+     - La marca "impresa" de una tanda seguía aunque sus hojas cambiaran: ahora va con lo que decían
+       (`firmaDeLasHojas`).
+     - **(el medio)** En la barra, la fiesta de anoche con la caja olvidada salía primera y sin marca, y se vendía
+       en ella: ahora las que ya pasaron van al final y marcadas en Entradas y en la barra (`laFiestaYaPaso`,
+       `enElOrdenDeLasFiestas`).
+     - Cerrada esa caja, la lista no se releía (seguía "Tu caja sigue abierta"): se relee al volver de VENDER.
+     - La tele sin internet podía salir con una config de la tarde que ella había guardado: lo que le llegó a la
+       principal ya no le gana a la principal (`PreferenciasDeLaVentana._sinEntregar`).
+     - Con un perdón en la ficha, el recibo reimpreso podía decir "a medias" una mora pagada entera: con un perdón,
+       la línea sale como se guardó (`_confirmarParcialDeUnaCuota`).
+   - **Los otros dos son los límites ya anotados en la 6.8.1** ("Límites conocidos" de su CONTEXTO): dos cobros del
+     mismo alumno el mismo día, y el título "EN SU TOTALIDAD" de un reimpreso que mira la mora de hoy. Quedan así.
+   - **Las roturas de los arreglos: 21 de 21** (la del tope de 4 cifras de la cajita necesitó su prueba).
+   - Nombres y números de la muestra, inventados.
 
 ### La maqueta — HECHA, mostrada y **APROBADA el 14-nov** ("Sí, seguí")
 

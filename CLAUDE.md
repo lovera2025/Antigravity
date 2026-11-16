@@ -479,10 +479,21 @@ están en esta PC, **sin subir a GitHub**.
   mandaron las capturas (`build/capturas_6.9.0/`). Al recorrerla apareció que **VENDER quedaba en "1 venta subiendo"
   con la venta ya en la nube**: ahora escucha `pendingStream` del motor (`MotorDePrueba.pendiente` en las pruebas).
   La revisión final de toda la 6.9.0 encontró 6 problemas medios (la tele, la caja abierta después del mediodía y tres
-  del recibo reimpreso), arreglados. **En curso: la hoja A4 del historial de ventas en la "forma C"** que eligió el
-  usuario (un renglón por venta y otro solo si hace falta; las hojas armadas con medidas fijas para imprimir **por
-  hojas**, con el cartel Todo junto · Por hojas): programada, faltan las roturas, la muestra para él y la revisión
-  (ver "DÓNDE QUEDÓ" del CONTEXTO).
+  del recibo reimpreso), arreglados. **La hoja A4 del historial de ventas en la "forma C"** que eligió el usuario
+  (un renglón por venta y otro solo si hace falta; las hojas armadas con medidas fijas para imprimir **por hojas**,
+  con el cartel Todo junto · Por hojas) **se cerró el 15-nov a la noche**: muestra de 1.000 entradas mandada, 43
+  roturas detectadas y una segunda revisión independiente (13 confirmados, 11 arreglados, 2 eran límites ya
+  anotados en la 6.8.1). Falta lo de antes de publicar (la v80 y el comparador sobre una copia de la base).
+  - **El papel con medidas fijas se mide con la letra de la app** (`test/historial_de_entradas_test.dart`, "con las
+    letras de la app"): Outfit tiene los números de distinto ancho ("0004" salía "000") y **un PDF con Outfit no se
+    lee palabra por palabra** (`palabrasDelPdf` da vacío), así que se mide con `PdfFont.stringMetrics`. **Lo que no
+    entra en una pw.Page no se dibuja, sin error**: los totales con muchos repetidos desaparecían; ahora se parten
+    entre hojas (`HojaDelHistorial`). Lo que no entra en su columna va entero en el segundo renglón.
+  - **Una tanda está "impresa" solo si sus hojas dicen lo mismo** (`HistorialEntradasPdf.firmaDeLasHojas`).
+  - **La fiesta que ya pasó y sigue por una caja abierta va al final y marcada**, en Entradas y en la barra
+    (`laFiestaYaPaso`, `enElOrdenDeLasFiestas` en `dia_de_la_fiesta.dart`), y la lista se relee al volver de VENDER.
+  - **En la ventana del tótem, lo que guardó y le llegó a la principal no le gana a la principal**
+    (`PreferenciasDeLaVentana`, `_sinEntregar`).
   - **Quien vende no ve sumas de plata en VENTAS ni en su historial impreso** (`conPlata`): cuenta su caja a ciegas.
   - **La entrega sin cargo no da un número vendido** (`NumerosDeEntradas.ocupados` es su `deOtros`), y **dos alumnos
     con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta).

@@ -5,7 +5,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
+import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/entradas/cuentas/historial_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
@@ -69,6 +71,8 @@ class _Noche {
 }
 
 void main() {
+  // Para leer las letras de la app (Outfit) de los assets.
+  TestWidgetsFlutterBinding.ensureInitialized();
   late _Noche n;
 
   setUp(() async {
@@ -373,9 +377,246 @@ void main() {
       expect(de('CORTO, ANA').abajo, isNull);
       final larga = de('CON UN NOMBRE BASTANTE LARGO, MARIA JOSEFINA');
       expect(larga.familia, isNull, reason: 'no entra arriba');
-      expect(larga.abajo, startsWith('fam. OTRO NOMBRE'));
+      expect(
+        larga.abajo,
+        startsWith('CON UN NOMBRE BASTANTE LARGO, MARIA JOSEFINA · fam. OTRO NOMBRE'),
+        reason: 'el nombre que no entra arriba va entero abajo, y la familia después',
+      );
       expect(de('SOSA, DIEGO').abajo, contains('ANULADA por Jefe'));
       expect(de('SOSA, DIEGO').abajo, contains('se equivoco de persona'));
+    });
+
+    // Un talonario partido no entra en su columna: la columna dice "abajo" y
+    // los números van enteros en el segundo renglón.
+    test('el talonario largo va abajo, entero', () async {
+      await vender('DIAZ, LUCIA', [anticipadas(4)], numeros: '3001-3002, 9001-9002');
+      final d = datos(await n.historial());
+      final fila = HistorialEntradasPdf.filas(d)
+          .firstWhere((f) => f.venta.venta.compradorNombre == 'DIAZ, LUCIA');
+      expect(fila.abajo, contains('talonario 3001-3002, 9001-9002'));
+      final textos = {for (final p in palabrasDelPdf(await HistorialEntradasPdf.armar(d))) p.texto};
+      expect(textos, containsAll(['abajo', '9001-9002']));
+    });
+
+    // Lo que no entra en un segundo renglón ocupa dos, y no se pierde nada.
+    test('un segundo renglón largo ocupa dos, sin perder palabras', () async {
+      final v = await vender(
+        'CON UN NOMBRE BASTANTE LARGO, MARIA JOSEFINA',
+        [anticipadas(1), lugar(2)],
+        familia: 'f3',
+        numeros: '4001, 9101-9102',
+      );
+      await n.entradas.anular(
+        v,
+        motivo: 'la familia pidio la devolucion porque pago dos veces, se hizo el reintegro',
+        devueltas: false,
+        quien: 'Jefe',
+      );
+      final d = datos(
+        await n.historial(),
+        familias: {'f3': 'OTRO NOMBRE TAMBIEN LARGO, JUAN CARLOS m.40-41'},
+      );
+      final fila = HistorialEntradasPdf.filas(d).firstWhere((f) => f.venta.venta.id == v.id);
+      expect(fila.abajo!.length, greaterThan(140), reason: 'no entra en un renglón');
+      expect(fila.renglonesAbajo, greaterThanOrEqualTo(2));
+      final textos = {for (final p in palabrasDelPdf(await HistorialEntradasPdf.armar(d))) p.texto};
+      for (final palabra in ['JOSEFINA', 'm.40-41', '9101-9102', 'ANULADA', 'reintegro', 'NO']) {
+        expect(textos, contains(palabra), reason: 'falta "$palabra"');
+      }
+    });
+
+    test('lo que no entra en ENTRADAS ni en VEND. va entero abajo', () async {
+      final v = await n.entradas.vender(
+        caja: await n.entradas.abrirCaja(
+          eventoId: _fiesta,
+          operadorId: 'flor',
+          operadorNombre: 'Florencia Belén',
+        ),
+        contratoAlumnoId: 'f9',
+        compradorNombre: 'PRUEBA, ANA',
+        renglones: [
+          RenglonEntradas.suelta(nombre: 'Entrada anticipada', precioLista: 8000, cantidad: 2),
+          lugar(8),
+          RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 3),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 86000,
+        quien: 'Florencia Belén',
+      );
+      final fila = HistorialEntradasPdf.filas(datos(await n.historial()))
+          .firstWhere((f) => f.venta.venta.id == v.id);
+      expect(fila.entradas, '13 en total');
+      expect(fila.abajo, contains('2 anticip. + 8 lugar + 3 entradas'));
+      expect(fila.abajo, contains('vendió Florencia Belén'));
+    });
+
+    test('un nombre que no entra arriba va entero abajo', () async {
+      const largo = 'GONZALEZ FERNANDEZ DE LA FUENTE, MARIA DE LOS ANGELES';
+      await vender(largo, [anticipadas(1)]);
+      final d = datos(await n.historial());
+      final fila = HistorialEntradasPdf.filas(d)
+          .firstWhere((f) => f.venta.venta.compradorNombre == largo);
+      expect(fila.abajo, largo);
+      expect(fila.renglonesAbajo, 1);
+    });
+
+    // Las medidas del papel son fijas (así se sabe qué va en cada hoja), y se
+    // miden acá con las letras de la app: Outfit tiene los números de distinto
+    // ancho, y con la columna angosta el "0004" salía "000" (la muestra del
+    // 15-nov). El PDF con Outfit no se puede leer palabra por palabra, así que
+    // se mide con la letra misma.
+    test('con las letras de la app, lo de cada columna entra entero', () async {
+      final f = (await PdfService.fuentesOutfit())!;
+      final contexto = pw.Context(document: PdfDocument());
+      final regular = f.$1.getFont(contexto);
+      final negrita = f.$2.getFont(contexto);
+      double ancho(PdfFont letra, String texto, double tam) =>
+          letra.stringMetrics(texto).advanceWidth * tam;
+      const relleno = 5.0; // 2,5 a cada lado de la celda
+      const v = HistorialEntradasPdf.letraVenta;
+      const a = HistorialEntradasPdf.anchos;
+
+      for (final c in '0123456789'.split('')) {
+        expect(ancho(regular, c * 4, v), lessThanOrEqualTo(a.numero - relleno),
+            reason: 'el N° ${c * 4}');
+      }
+      for (final (titulo, columna) in [
+        ('N°', a.numero),
+        ('CUÁNDO', a.cuando),
+        ('ENTRADAS', a.entradas),
+        ('TALONARIO', a.talonario),
+        ('TOTAL', a.total),
+        ('PAGÓ', a.pago),
+        ('VEND.', a.vendio),
+        ('VERIF', a.verif),
+      ]) {
+        expect(ancho(negrita, titulo, 7.2), lessThanOrEqualTo(columna - relleno),
+            reason: 'el título $titulo');
+      }
+      // CUÁNDO: el día, el mes, la hora y los minutos más anchos que existen
+      // (los ceros y los ochos son las cifras más anchas; revisión del 15-nov).
+      // Sin kerning, el ancho es la suma de las partes.
+      double elMasAncho(Iterable<int> numeros) => numeros
+          .map((x) => ancho(regular, x.toString().padLeft(2, '0'), v))
+          .reduce((a, b) => a > b ? a : b);
+      final cuando = elMasAncho([for (var i = 1; i <= 31; i++) i]) +
+          ancho(regular, '/', v) +
+          elMasAncho([for (var i = 1; i <= 12; i++) i]) +
+          ancho(regular, ' ', v) +
+          elMasAncho([for (var i = 0; i <= 23; i++) i]) +
+          ancho(regular, ':', v) +
+          elMasAncho([for (var i = 0; i <= 59; i++) i]);
+      expect(cuando, lessThanOrEqualTo(a.cuando - relleno), reason: 'el CUÁNDO más ancho');
+      // ENTRADAS: todo lo que va en la columna (hasta letrasEntradas letras), de
+      // 1 a 16 lugares y de 0 a 16 sueltas, entradas o anticipadas.
+      for (var l = 1; l <= 16; l++) {
+        for (var s = 0; s <= 16; s++) {
+          for (final suelta in ['entradas', 'anticip.']) {
+            final texto = s == 0
+                ? '$l lugar 50 %'
+                : '$l lugar + $s ${s == 1 && suelta == 'entradas' ? 'entrada' : suelta}';
+            if (texto.length > HistorialEntradasPdf.letrasEntradas) continue;
+            expect(ancho(regular, texto, v), lessThanOrEqualTo(a.entradas - relleno),
+                reason: texto);
+          }
+        }
+      }
+      expect(ancho(regular, '128 en total', v), lessThanOrEqualTo(a.entradas - relleno));
+      final talonario = '8888-8888, 88'.substring(0, HistorialEntradasPdf.letrasTalonario);
+      expect(ancho(regular, talonario, v), lessThanOrEqualTo(a.talonario - relleno),
+          reason: 'el talonario más largo que va en su columna');
+      expect(ancho(negrita, r'$ 1.000.000', v), lessThanOrEqualTo(a.total - relleno));
+      expect(ancho(regular, 'Efectivo', v), lessThanOrEqualTo(a.pago - relleno));
+      // VEND.: el nombre más largo que va en la columna (más, va entero abajo).
+      for (final quien in ['Maximiliano', 'Juan Carlos', 'Valentina']) {
+        expect(quien.length, lessThanOrEqualTo(HistorialEntradasPdf.letrasVendio));
+        expect(ancho(regular, quien, v), lessThanOrEqualTo(a.vendio - relleno), reason: quien);
+      }
+
+      // El comprador más largo que va entero arriba, en negrita: un nombre con
+      // muchas M, las letras más anchas.
+      final nombre = 'MONTENEGRO DOMINGUEZ, MARIA MERCEDES'
+          .substring(0, HistorialEntradasPdf.letrasComprador);
+      expect(ancho(negrita, nombre, v),
+          lessThanOrEqualTo(HistorialEntradasPdf.anchoComprador - relleno), reason: nombre);
+      // Y el comprador con su familia, lo más largo que va arriba.
+      const comprador = 'MENDOZA, MARIA';
+      final familia = 'MONTENEGRO, EMMA m.12-13'
+          .substring(0, HistorialEntradasPdf.letrasArriba - 8 - comprador.length);
+      expect(
+        ancho(negrita, comprador, v) + ancho(regular, ' · fam. $familia', v),
+        lessThanOrEqualTo(HistorialEntradasPdf.anchoComprador - relleno),
+        reason: '$comprador · fam. $familia',
+      );
+
+      // Lo más largo que va en un solo renglón de abajo (letra de 7), con
+      // mayúsculas, que son las más anchas.
+      const abajo = 'MONTENEGRO DOMINGUEZ DE LA FUENTE, MARIA MERCEDES · fam. MAMANI '
+          'MONTENEGRO, MAXIMO MARTIN m.12-13 · talonario 3001-3004, 9001-9004 · efectivo';
+      expect(
+        ancho(regular, abajo.substring(0, HistorialEntradasPdf.letrasAbajo), 7.0),
+        lessThanOrEqualTo(HistorialEntradasPdf.anchoAbajo),
+      );
+
+      // Los signos que usa el papel están en la letra (si no, no se dibujan).
+      for (final signo in '—·°ÁÉÍÓÚÑ\$%'.runes) {
+        expect(regular.isRuneSupported(signo), isTrue, reason: String.fromCharCode(signo));
+      }
+    });
+
+    // Los totales van después de la última venta si entran; si no, en una hoja
+    // más. Nunca se salen por abajo, haya las ventas que haya.
+    test('los totales nunca se salen de la hoja', () async {
+      final hoja = HistorialEntradasPdf.hoja;
+      for (var i = 0; i < 70; i++) {
+        await vender('COMPRADOR NUMERO$i', [anticipadas(1)]);
+        if (i < 40) continue;
+        final d = datos(await n.historial());
+        final bytes = await HistorialEntradasPdf.armar(d);
+        expect(paginasDelPdf(bytes), HistorialEntradasPdf.hojas(d));
+        final palabras = palabrasDelPdf(bytes);
+        for (final p in palabras) {
+          expect(p.y, greaterThanOrEqualTo(hoja.marginBottom - 0.5),
+              reason: 'con ${i + 5} ventas, "${p.texto}" se sale por abajo');
+        }
+        // Una hoja que no entra no se dibuja entera: lo que sobra no aparece.
+        for (final rotulo in ['cobrado', 'verificado']) {
+          expect(palabras.where((p) => p.texto == rotulo).length, 1,
+              reason: 'con ${i + 5} ventas, "$rotulo" tiene que estar una vez');
+        }
+      }
+    });
+
+    // Revisión del 15-nov: con muchos números repetidos los totales no entraban
+    // ni en una hoja sola, y lo que sobra de una hoja no se dibuja.
+    test('con muchos números repetidos, los totales siguen en otra hoja y no se pierde ninguno',
+        () async {
+      for (var i = 0; i < 60; i++) {
+        await vender('PRIMERO$i', [anticipadas(1)], numeros: '${7000 + i}');
+        await vender('SEGUNDO$i', [anticipadas(1)], numeros: '${7000 + i}');
+      }
+      final d = datos(await n.historial());
+      final repetidos = d.historial.repetidos.length;
+      expect(repetidos, greaterThanOrEqualTo(60));
+      final paginas = HistorialEntradasPdf.paginar(d);
+      expect(paginas.where((p) => p.conTotales).length, greaterThan(1),
+          reason: 'los totales siguen en otra hoja');
+      final bytes = await HistorialEntradasPdf.armar(d);
+      expect(paginasDelPdf(bytes), paginas.length);
+      final palabras = palabrasDelPdf(bytes);
+      final hoja = HistorialEntradasPdf.hoja;
+      for (final p in palabras) {
+        expect(p.y, greaterThanOrEqualTo(hoja.marginBottom - 0.5),
+            reason: '"${p.texto}" se sale por abajo');
+      }
+      expect(palabras.where((p) => p.texto == 'revisar.').length, repetidos,
+          reason: 'cada número repetido, una vez');
+      expect(palabras.where((p) => p.texto == 'cobrado').length, 1);
+      expect(
+        palabras.where((p) => p.texto == 'Hoja').length,
+        paginas.length,
+        reason: 'el pie de cada hoja',
+      );
     });
 
     test('1.000 entradas: unas 8 hojas, ninguna venta afuera ni repetida, nada se sale de la hoja',

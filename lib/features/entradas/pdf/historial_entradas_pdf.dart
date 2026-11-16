@@ -71,18 +71,41 @@ class FilaDelHistorial {
   /// cómo se pagó un mixto, el recargo, el descuento a mano o la anulación.
   final String? abajo;
 
-  /// Cuántos renglones ocupa [abajo] (0, 1 o 2).
+  /// Cuántos renglones ocupa [abajo] (0 si no hay nada que explicar).
   final int renglonesAbajo;
+
+  /// Lo que va en la columna ENTRADAS: "8 lugar + 2 entradas", o "12 en
+  /// total" si no entra (y entonces el detalle va en [abajo]).
+  final String entradas;
+
+  /// Lo que va en la columna VEND.: quién vendió. Si no entra, va cortado y el
+  /// nombre entero en [abajo].
+  final String vendio;
 
   const FilaDelHistorial({
     required this.venta,
     this.familia,
     this.abajo,
     this.renglonesAbajo = 0,
+    required this.entradas,
+    required this.vendio,
   });
 
   double get alto =>
       HistorialEntradasPdf.altoVenta + renglonesAbajo * HistorialEntradasPdf.altoAbajo;
+}
+
+/// Una hoja del papel: sus ventas y, en las últimas, qué renglones de los
+/// totales lleva (de [desdeTotal] a [hastaTotal], sin incluirlo). Con muchos
+/// números repetidos los totales no entran en una sola hoja y siguen en otra.
+class HojaDelHistorial {
+  final List<FilaDelHistorial> filas;
+  final int desdeTotal;
+  final int hastaTotal;
+
+  const HojaDelHistorial(this.filas, {this.desdeTotal = 0, this.hastaTotal = 0});
+
+  bool get conTotales => hastaTotal > desdeTotal;
 }
 
 /// El historial de ventas de entradas de una fiesta, en A4 parada (la forma C
@@ -90,7 +113,7 @@ class FilaDelHistorial {
 /// compró y su familia, qué entradas, el talonario, el total, cómo pagó,
 /// quién vendió y la tilde de "Pago verificado"; **y un segundo renglón solo
 /// cuando hay algo que explicar** (un mixto, un recargo, un descuento a mano,
-/// una anulación). Los totales van al final, en la última hoja.
+/// una anulación). Los totales van al final, después de la última venta.
 ///
 /// **Las hojas se arman acá, con medidas fijas** (cada renglón mide lo mismo
 /// y un texto que no entra se corta en su renglón): así se sabe de antemano
@@ -117,30 +140,75 @@ class HistorialEntradasPdf {
   static const _altoRenglonTotal = 12.5;
   static const _seguridad = 8.0;
 
-  static const _letraVenta = 7.8;
+  static const letraVenta = 7.8;
   static const _letraAbajo = 7.0;
 
-  /// El ancho de cada columna, menos el del comprador (lo que queda).
-  static const _anchos = (
-    numero: 24.0,
-    cuando: 46.0,
-    entradas: 80.0,
+  /// El ancho de cada columna, menos el del comprador (lo que queda). **Medido
+  /// con las letras de la app (Outfit)**, que tiene los números de distinto
+  /// ancho: con 24 el "0004" salía "000" (la muestra del 15-nov). Un test mide
+  /// cada columna con la letra de verdad.
+  ///
+  /// Revisión del 15-nov: ENTRADAS hasta "10 lugar + 10 entradas", CUÁNDO con
+  /// los ceros (las cifras más anchas), TOTAL hasta $ 1.000.000 y VEND. hasta
+  /// "Maximiliano". Lo que no entra no se corta: va entero en el segundo renglón.
+  static const anchos = (
+    numero: 27.0,
+    cuando: 52.0,
+    entradas: 82.0,
     talonario: 58.0,
-    total: 48.0,
-    pago: 38.0,
-    vendio: 36.0,
-    verif: 24.0,
+    total: 50.0,
+    pago: 35.0,
+    vendio: 48.0,
+    verif: 26.0,
   );
 
   /// Hasta cuántas letras entran el comprador y su familia en un renglón (con
   /// un poco de margen); más largo, la familia baja al segundo renglón.
-  static const _letrasArriba = 44;
+  static const letrasArriba = 35;
 
-  /// Hasta cuántas letras entran en un segundo renglón; más, ocupa dos.
-  static const _letrasAbajo = 118;
+  /// Hasta cuántas letras entra el comprador solo, en negrita; más largo, se
+  /// corta arriba y va entero en el segundo renglón.
+  static const letrasComprador = 31;
+
+  /// Hasta cuántas letras entra ENTRADAS; más, la columna dice cuántas en total
+  /// y el detalle va abajo.
+  static const letrasEntradas = 22;
+
+  /// Hasta cuántas letras entra VEND.; más, el nombre entero va abajo.
+  static const letrasVendio = 11;
+
+  /// Hasta cuántas letras entran en un solo renglón de abajo (medido con
+  /// mayúsculas, que son las más anchas).
+  static const letrasAbajo = 118;
+
+  /// Cuántas letras se cuentan por renglón cuando son varios: menos que en
+  /// uno solo, porque el texto baja de renglón entre palabras y cada renglón
+  /// puede quedar con un hueco al final.
+  static const _letrasPorRenglonAbajo = 100;
+
+  /// Un tope, por si un motivo de anulación fuera eterno: el resto se corta.
+  static const _renglonesAbajoComoMucho = 6;
 
   /// Hasta cuántas letras entra el talonario en su columna; más, va abajo.
-  static const _letrasTalonario = 13;
+  static const letrasTalonario = 13;
+
+  /// El ancho del segundo renglón: empieza debajo del comprador.
+  static double get anchoAbajo =>
+      hoja.width - hoja.marginLeft - hoja.marginRight - anchos.numero - anchos.cuando - 2.5;
+
+  /// El ancho del comprador: lo que dejan las demás columnas.
+  static double get anchoComprador =>
+      hoja.width -
+      hoja.marginLeft -
+      hoja.marginRight -
+      (anchos.numero +
+          anchos.cuando +
+          anchos.entradas +
+          anchos.talonario +
+          anchos.total +
+          anchos.pago +
+          anchos.vendio +
+          anchos.verif);
 
   static double get _alto => hoja.height - hoja.marginTop - hoja.marginBottom;
 
@@ -241,67 +309,132 @@ class HistorialEntradasPdf {
       final venta = v.venta;
       final id = venta.contratoAlumnoId;
       final fam = id == null ? null : d.familias[id];
-      final arriba = fam == null
+      final nombreLargo = venta.compradorNombre.length > letrasComprador;
+      final arriba = fam == null || nombreLargo
           ? null
-          : (venta.compradorNombre.length + fam.length + 8 <= _letrasArriba ? fam : null);
+          : (venta.compradorNombre.length + fam.length + 8 <= letrasArriba ? fam : null);
       final tal = talonario(venta);
+      final corto = entradasCorto(venta);
+      final entradasLargo = corto.length > letrasEntradas;
+      final cuantas = venta.renglones.fold<int>(0, (s, r) => s + r.cantidad);
+      final vendio = v.vendio;
+      final vendioLargo = vendio.length > letrasVendio;
       final abajo = [
+        if (nombreLargo) venta.compradorNombre,
         if (fam != null && arriba == null) 'fam. $fam',
-        if (tal.length > _letrasTalonario) 'talonario $tal',
+        if (entradasLargo) corto,
+        if (tal.length > letrasTalonario) 'talonario $tal',
+        if (vendioLargo) 'vendió $vendio',
         ...detalleAbajo(v),
       ];
       final texto = abajo.join(' · ');
       out.add(FilaDelHistorial(
         venta: v,
         familia: arriba,
+        entradas: entradasLargo ? '$cuantas en total' : corto,
+        vendio: vendio,
         abajo: texto.isEmpty ? null : texto,
-        renglonesAbajo: texto.isEmpty ? 0 : (texto.length > _letrasAbajo ? 2 : 1),
+        renglonesAbajo: texto.isEmpty
+            ? 0
+            : texto.length <= letrasAbajo
+                ? 1
+                : ((texto.length + _letrasPorRenglonAbajo - 1) ~/ _letrasPorRenglonAbajo)
+                    .clamp(2, _renglonesAbajoComoMucho),
       ));
     }
     return out;
   }
 
-  /// Los renglones de los totales del final (cuántos, para medirlos).
-  static int _renglonesDeTotales(DatosDelHistorial d) {
+  /// Lo que separa los totales de la última venta: aire, una línea y aire.
+  static const _altoSeparador = 6 + 0.8 + 7;
+
+  /// El alto de cada renglón de los totales, en el orden en que se dibujan
+  /// (`renglonesDeTotales` en [armar]): el primero lleva el separador, y cada
+  /// número repetido ocupa dos.
+  static List<double> _altosDeLosTotales(DatosDelHistorial d) {
     final t = d.historial.totales;
-    return 1 +
-        (d.conPlata
-            ? 3 + (t.recargos > 0 ? 1 : 0) + (t.descuentos > 0 ? 1 : 0)
-            : 0) +
-        1 +
-        (t.anuladas > 0 ? 1 : 0) +
-        1 +
-        d.historial.repetidos.length * 2;
+    return [
+      _altoSeparador + _altoRenglonTotal,
+      if (d.conPlata) ...[
+        _altoRenglonTotal,
+        _altoRenglonTotal,
+        if (t.recargos > 0) _altoRenglonTotal,
+        if (t.descuentos > 0) _altoRenglonTotal,
+        _altoRenglonTotal,
+      ],
+      _altoRenglonTotal,
+      if (t.anuladas > 0) _altoRenglonTotal,
+      _altoRenglonTotal,
+      for (final _ in d.historial.repetidos) _altoRenglonTotal * 2,
+    ];
   }
 
-  /// Qué ventas van en cada hoja. **La última hoja lleva los totales**; si no
-  /// entran después de la última venta, van solos en una hoja más.
-  static List<List<FilaDelHistorial>> paginar(DatosDelHistorial d) {
+  /// Qué va en cada hoja. **Los totales van después de la última venta**; lo que
+  /// no entra sigue en la hoja siguiente (revisión del 15-nov: con muchos números
+  /// repetidos no entraban ni en una hoja sola, y lo que sobra de una hoja no se
+  /// dibuja: desaparecía sin aviso).
+  static List<HojaDelHistorial> paginar(DatosDelHistorial d) {
     final todas = filas(d);
+    final altos = _altosDeLosTotales(d);
     final disponible = _alto - _altoPie - _seguridad;
-    final hojas = <List<FilaDelHistorial>>[];
+    final hojas = <HojaDelHistorial>[];
     var actual = <FilaDelHistorial>[];
     var usado = _altoEncabezado + _altoCabezaDeTabla;
     for (final f in todas) {
       if (actual.isNotEmpty && usado + f.alto > disponible) {
-        hojas.add(actual);
+        hojas.add(HojaDelHistorial(actual));
         actual = [];
         usado = _altoEncabezadoCorto + _altoCabezaDeTabla;
       }
       actual.add(f);
       usado += f.alto;
     }
-    final totales = 14 + _renglonesDeTotales(d) * _altoRenglonTotal;
-    if (actual.isNotEmpty && usado + totales > disponible) {
-      hojas.add(actual);
+    // Si entran juntos en una hoja, van juntos: a la hoja siguiente si acá no
+    // entran. Solo se parten si no entran ni en una hoja sola.
+    final todosLosTotales = altos.fold<double>(0, (s, a) => s + a);
+    if (actual.isNotEmpty &&
+        usado + todosLosTotales > disponible &&
+        _altoEncabezadoCorto + todosLosTotales <= disponible) {
+      hojas.add(HojaDelHistorial(actual));
       actual = [];
+      usado = _altoEncabezadoCorto;
     }
-    hojas.add(actual);
+    var desde = 0;
+    for (var i = 0; i < altos.length; i++) {
+      final hayAlgo = actual.isNotEmpty || i > desde;
+      if (hayAlgo && usado + altos[i] > disponible) {
+        hojas.add(HojaDelHistorial(actual, desdeTotal: desde, hastaTotal: i));
+        actual = [];
+        desde = i;
+        usado = _altoEncabezadoCorto;
+      }
+      usado += altos[i];
+    }
+    hojas.add(HojaDelHistorial(actual, desdeTotal: desde, hastaTotal: altos.length));
     return hojas;
   }
 
   /// Cuántas hojas tiene el historial entero.
   static int hojas(DatosDelHistorial d) => paginar(d).length;
+
+  /// Lo que dicen las hojas [desde] a [hasta] (desde 1): si cambia, una tanda
+  /// ya impresa ya no es la de ahora (revisión del 15-nov: una venta anulada o
+  /// verificada después, o las hojas corridas, y la pila de papeles quedaba
+  /// vieja con la tanda marcada "impresa").
+  static String firmaDeLasHojas(DatosDelHistorial d, int desde, int hasta) {
+    final paginas = paginar(d);
+    final b = StringBuffer();
+    for (var i = desde; i <= hasta && i <= paginas.length; i++) {
+      final h = paginas[i - 1];
+      b.write('[$i]');
+      for (final f in h.filas) {
+        final v = f.venta;
+        b.write('${v.venta.id}|${v.anulada}|${v.verificada}|${f.familia}|${f.abajo};');
+      }
+      if (h.conTotales) b.write('T${h.desdeTotal}-${h.hastaTotal}');
+    }
+    return b.toString();
+  }
 
   /// La casilla de "Pago verificado": dibujada, no escrita (la letra de la app
   /// no trae el signo de la tilde).
@@ -346,7 +479,7 @@ class HistorialEntradasPdf {
     final chico = pw.TextStyle(fontSize: 8, color: gris);
     const normal = pw.TextStyle(fontSize: 8.5);
     final fuerte = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
-    const venta = pw.TextStyle(fontSize: _letraVenta);
+    const venta = pw.TextStyle(fontSize: letraVenta);
     final ventaFuerte = venta.copyWith(fontWeight: pw.FontWeight.bold);
     final cabeza = pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold, color: gris);
 
@@ -378,7 +511,7 @@ class HistorialEntradasPdf {
           : pw.SizedBox(width: ancho, child: adentro);
     }
 
-    final a = _anchos;
+    final a = anchos;
     pw.Widget cabezaDeTabla() => pw.Container(
           height: _altoCabezaDeTabla,
           alignment: pw.Alignment.bottomLeft,
@@ -396,7 +529,7 @@ class HistorialEntradasPdf {
               celda(a.total, 'TOTAL', estilo: cabeza, derecha: true),
               celda(a.pago, 'PAGÓ', estilo: cabeza),
               celda(a.vendio, 'VEND.', estilo: cabeza),
-              celda(a.verif, 'VERIF.', estilo: cabeza),
+              celda(a.verif, 'VERIF', estilo: cabeza),
             ],
           ),
         );
@@ -448,16 +581,16 @@ class HistorialEntradasPdf {
                   celda(a.numero, x.numero.toString().padLeft(4, '0'), tachada: tachada),
                   celda(a.cuando, cuandoEnLaTabla(x.createdAt), tachada: tachada),
                   comprador,
-                  celda(a.entradas, entradasCorto(x), tachada: tachada),
+                  celda(a.entradas, f.entradas, tachada: tachada),
                   celda(
                     a.talonario,
-                    tal.isEmpty ? '—' : (tal.length > _letrasTalonario ? 'abajo' : tal),
+                    tal.isEmpty ? '—' : (tal.length > letrasTalonario ? 'abajo' : tal),
                     tachada: tachada,
                   ),
                   celda(a.total, pesos(x.cobrado),
                       estilo: ventaFuerte, derecha: true, tachada: tachada),
                   celda(a.pago, _medio(x), tachada: tachada),
-                  celda(a.vendio, v.vendio, tachada: tachada),
+                  celda(a.vendio, f.vendio, tachada: tachada),
                   pw.SizedBox(
                     width: a.verif,
                     child: pw.Padding(
@@ -512,15 +645,21 @@ class HistorialEntradasPdf {
           ),
         );
 
-    List<pw.Widget> totales() => [
-          pw.SizedBox(height: 6),
-          pw.Container(height: 0.8, color: linea),
-          pw.SizedBox(height: 7),
-          renglonTotal(
-            'Entradas vendidas: ${t.entradas} (${t.sueltas} sueltas y ${t.deLugar} '
-            'de lugares adicionales${t.otras > 0 ? ', ${t.otras} otras' : ''})',
-            d.conPlata ? pesos(t.vendido) : '',
-            grande: true,
+    // Uno por cada alto de [_altosDeLosTotales], en el mismo orden.
+    final renglonesDeTotales = <pw.Widget>[
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.SizedBox(height: 6),
+              pw.Container(height: 0.8, color: linea),
+              pw.SizedBox(height: 7),
+              renglonTotal(
+                'Entradas vendidas: ${t.entradas} (${t.sueltas} sueltas y ${t.deLugar} '
+                'de lugares adicionales${t.otras > 0 ? ', ${t.otras} otras' : ''})',
+                d.conPlata ? pesos(t.vendido) : '',
+                grande: true,
+              ),
+            ],
           ),
           if (d.conPlata) ...[
             renglonTotal('Efectivo', pesos(t.efectivo)),
@@ -539,6 +678,7 @@ class HistorialEntradasPdf {
               child: pw.Text(r.texto, maxLines: 2, style: fuerte),
             ),
         ];
+    assert(renglonesDeTotales.length == _altosDeLosTotales(d).length);
 
     pw.Widget encabezado() => pw.SizedBox(
           height: _altoEncabezado,
@@ -594,14 +734,18 @@ class HistorialEntradasPdf {
           ),
         );
 
-    pw.Widget pie(int numero) => pw.SizedBox(
+    pw.Widget pie(int numero, {required bool conTotales}) => pw.SizedBox(
           height: _altoPie,
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  numero < total ? 'Sigue en la hoja ${numero + 1} · los totales van en la última' : '',
+                  numero >= total
+                      ? ''
+                      : conTotales
+                          ? 'Los totales siguen en la hoja ${numero + 1}'
+                          : 'Sigue en la hoja ${numero + 1} · los totales van al final',
                   style: chico,
                 ),
               ),
@@ -611,8 +755,8 @@ class HistorialEntradasPdf {
         );
 
     for (var i = desde; i <= hasta; i++) {
-      final filasDeLaHoja = paginas[i - 1];
-      final ultima = i == total;
+      final pagina = paginas[i - 1];
+      final filasDeLaHoja = pagina.filas;
       doc.addPage(
         pw.Page(
           pageFormat: hoja,
@@ -626,9 +770,10 @@ class HistorialEntradasPdf {
                 cabezaDeTabla(),
                 for (final f in filasDeLaHoja) renglon(f),
               ],
-              if (ultima) ...totales(),
+              if (pagina.conTotales)
+                ...renglonesDeTotales.sublist(pagina.desdeTotal, pagina.hastaTotal),
               pw.Spacer(),
-              pie(i),
+              pie(i, conTotales: pagina.conTotales),
             ],
           ),
         ),

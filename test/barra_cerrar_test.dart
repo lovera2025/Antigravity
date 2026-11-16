@@ -326,6 +326,23 @@ void main() {
     expect(find.byType(BarraHomeScreen), findsOneWidget);
   });
 
+  // Revisión del 15-nov: la caja de una fiesta que ya pasó, cerrada, la dejaba en
+  // la lista con "Tu caja sigue abierta"; tocarla ofrecía abrir otra caja.
+  testWidgets('la caja de una fiesta que ya pasó: marcada, y cerrada se va de la lista',
+      (tester) async {
+    prueba.eventos
+      ..clear()
+      ..add(fiestaDePrueba(fiesta.id, 'PUERTO VIEJO', DateTime.now().subtract(const Duration(days: 3))));
+    await abrir(tester);
+    expect(porClave('barra_caja_abierta_${fiesta.id}'), findsOneWidget);
+    await irACerrar(tester);
+    await contarYCerrar(tester, '27000');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(BarraHomeScreen), findsOneWidget);
+    expect(porClave('barra_fiesta_${fiesta.id}'), findsNothing, reason: 'cerrada, la fiesta se va');
+  });
+
   testWidgets('antes de cerrar, volver atrás vuelve a VENDER con la caja abierta', (tester) async {
     await abrir(tester);
     await irACerrar(tester);

@@ -24,7 +24,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// final de la 6.9.0): con la tele abierta desde la tarde para otra fiesta, la
 /// config de la fiesta de la noche la guardaba la principal después, y la tele,
 /// sin internet, la buscaba en su copia vieja y salía con la de fábrica. Si la
-/// principal no contesta, se lee la copia de esta ventana, como antes.
+/// principal no contesta, se lee lo que esta ventana guardó o su copia, como antes.
+///
+/// **Lo que esta ventana guardó y le llegó a la principal no le gana a la
+/// principal** (revisión del 15-nov): la tele en otra fiesta no se entera de que
+/// el jefe cambió la de la noche, y sin internet salía con lo que ella había
+/// guardado a la tarde. Solo lo que no le llegó ([_sinEntregar]) se lee de acá
+/// primero: la principal no lo tiene.
 class PreferenciasDeLaVentana {
   PreferenciasDeLaVentana._();
 
@@ -46,6 +52,10 @@ class PreferenciasDeLaVentana {
   /// copia del archivo.
   static final _propias = <String, String?>{};
 
+  /// Las de [_propias] que todavía no le llegaron a la principal (o no le
+  /// llegaron nunca): esas las tiene solo esta ventana.
+  static final _sinEntregar = <String>{};
+
   /// En la ventana del tótem: guardar es pedírselo a la principal con [enviar].
   static void usarElPuente(
     Future<void> Function(String clave, String? valor) enviar, {
@@ -64,10 +74,11 @@ class PreferenciasDeLaVentana {
     _porElPuente = null;
     _leerPorElPuente = null;
     _propias.clear();
+    _sinEntregar.clear();
   }
 
   static Future<String?> leer(String clave) async {
-    if (_propias.containsKey(clave)) return _propias[clave];
+    if (_sinEntregar.contains(clave)) return _propias[clave];
     final preguntar = _leerPorElPuente;
     if (preguntar != null && esDelTotem(clave)) {
       try {
@@ -77,6 +88,7 @@ class PreferenciasDeLaVentana {
         debugPrint('La ventana del tótem no pudo preguntar $clave: $e');
       }
     }
+    if (_propias.containsKey(clave)) return _propias[clave];
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(clave);
   }
@@ -103,8 +115,13 @@ class PreferenciasDeLaVentana {
       return;
     }
     _propias[clave] = valor;
+    _sinEntregar.add(clave);
     try {
       await enviar(clave, valor);
+      // Otro guardado de la misma clave pudo salir mientras tanto: ese decide.
+      if (_propias[clave] == valor) {
+        _sinEntregar.remove(clave);
+      }
     } catch (e) {
       // No se escribe desde acá: mejor perder una preferencia que pisar el
       // archivo de la principal. Esta ventana se la acuerda mientras viva.

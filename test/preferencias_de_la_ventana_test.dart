@@ -135,6 +135,46 @@ void main() {
       expect(await TotemOrientationStore.load(_evento), TotemOrientation.vertical);
     });
 
+    // Revisión del 15-nov: la tele guardó la config de B a la tarde; después
+    // pasó a A y el jefe cambió B en la principal. Al volver a B sin internet,
+    // la tele salía con lo suyo de la tarde.
+    test('lo que guardó y le llegó a la principal no le gana a algo más nuevo de la principal',
+        () async {
+      final principal = <String, String?>{};
+      PreferenciasDeLaVentana.usarElPuente(
+        (clave, valor) async => principal[clave] = valor,
+        leer: (clave) async => (contesto: true, valor: principal[clave]),
+      );
+      await PreferenciasDeLaVentana.guardar(_claveGiro, 'vertical');
+      expect(principal[_claveGiro], 'vertical');
+      principal[_claveGiro] = 'horizontal'; // lo cambió la principal después
+      expect(await PreferenciasDeLaVentana.leer(_claveGiro), 'horizontal');
+    });
+
+    test('lo que no le llegó a la principal se lee de acá, aunque la principal tenga otra cosa',
+        () async {
+      PreferenciasDeLaVentana.usarElPuente(
+        (_, _) async => throw Exception('la ventana principal no contestó'),
+        leer: (_) async => (contesto: true, valor: 'horizontal'),
+      );
+      await PreferenciasDeLaVentana.guardar(_claveGiro, 'vertical');
+      expect(await PreferenciasDeLaVentana.leer(_claveGiro), 'vertical');
+    });
+
+    test('si la principal no contesta la pregunta, lee lo que guardó antes que su copia',
+        () async {
+      SharedPreferences.setMockInitialValues({_claveGiro: 'horizontal'});
+      final principal = <String, String?>{};
+      var contesta = true;
+      PreferenciasDeLaVentana.usarElPuente(
+        (clave, valor) async => principal[clave] = valor,
+        leer: (clave) async => (contesto: contesta, valor: principal[clave]),
+      );
+      await PreferenciasDeLaVentana.guardar(_claveGiro, 'vertical');
+      contesta = false;
+      expect(await PreferenciasDeLaVentana.leer(_claveGiro), 'vertical');
+    });
+
     test('si la principal no contesta, no escribe igual: se lo acuerda ella',
         () async {
       PreferenciasDeLaVentana.usarElPuente(

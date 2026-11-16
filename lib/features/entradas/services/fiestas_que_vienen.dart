@@ -15,16 +15,12 @@ List<Evento> fiestasQueVienen(
   DateTime hoy, {
   Set<String> conCajaAbierta = const {},
 }) {
-  final desde = primerDiaDeLasFiestasQueVienen(hoy);
   bool sigue(Evento e) {
-    final f = e.fechaEvento;
     if (e.modalidad != 'masivo') return false;
     if (conCajaAbierta.contains(e.id)) return true;
-    return e.estado != EstadoEvento.finalizado &&
-        e.estado != EstadoEvento.cancelado &&
-        !DateTime(f.year, f.month, f.day).isBefore(desde);
+    return !laFiestaYaPaso(e, hoy);
   }
 
-  return eventos.where(sigue).toList()
-    ..sort((a, b) => a.fechaEvento.compareTo(b.fechaEvento));
+  // Las que ya pasaron (por una caja abierta) van al final, marcadas.
+  return enElOrdenDeLasFiestas(eventos.where(sigue), hoy);
 }

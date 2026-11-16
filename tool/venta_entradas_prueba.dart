@@ -20,7 +20,9 @@
 // La noche arranca así: PUERTO VIEJO con precio (la entrada $ 10.000, la anticipada
 // $ 8.000 hasta el 28-nov, los lugares al 50 %); Carla todavía sin caja; la caja de Maxi
 // (otra tablet) ya cerrada, con $ 500 de menos; PÉREZ, JUAN con 8 lugares al 50 % y
-// ninguna comprada; GÓMEZ, ANA ya retiró las suyas (1001 a 1007).
+// ninguna comprada; GÓMEZ, ANA ya retiró las suyas (1001 a 1007). Con
+// `--dart-define=ventas=muchas`, la caja de Maxi trae 700 ventas más (para ver el
+// cartel Todo junto · Por hojas de IMPRIMIR HISTORIAL).
 //
 // Lo que no es como en la app:
 // - las entregas sin cargo se comparten al instante entre los dos lados (con o sin
@@ -577,6 +579,10 @@ Future<LadosDeLaVenta> armarLados({
   );
 }
 
+/// `--dart-define=ventas=muchas`: la caja de Maxi con 700 ventas más, para que el
+/// historial pase las 10 hojas y IMPRIMIR HISTORIAL pregunte cómo imprimir.
+const _conMuchasVentas = String.fromEnvironment('ventas') == 'muchas';
+
 /// El precio de PUERTO VIEJO y la caja de Maxi (otra tablet), ya cerrada: en las dos
 /// bases, como si ya hubiera subido y bajado. Devuelve la caja de Maxi.
 Future<CajaEntradas> _armarLaNoche({
@@ -625,6 +631,21 @@ Future<CajaEntradas> _armarLaNoche({
     numeros: '3004',
     quien: 'Maxi',
   );
+  if (_conMuchasVentas) {
+    // Para ver el cartel de IMPRIMIR HISTORIAL (Todo junto · Por hojas): pasa las
+    // 10 hojas. Nombres inventados.
+    for (var i = 0; i < 700; i++) {
+      await maxi.vender(
+        caja: caja,
+        compradorNombre: 'COMPRADOR DE PRUEBA ${i + 1}',
+        renglones: [anticipadas(1)],
+        medio: MedioBarra.efectivo,
+        efectivo: 8000,
+        numeros: '${4001 + i}',
+        quien: 'Maxi',
+      );
+    }
+  }
   await maxi.anular(sosa, motivo: 'se cargó dos veces', devueltas: true, quien: 'Jefe');
   await maxi.verificar(ruiz, verificado: true, quien: 'Jefe');
   // Contó $ 500 menos de lo que tenía que haber.

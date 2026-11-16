@@ -143,10 +143,20 @@ class _ImprimirPorHojasState extends State<_ImprimirPorHojas> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    const Text('De la hoja'),
-                    _NumeroDeHoja(clave: 'hojas_desde', controller: _desde, alCambiar: () => setState(() => _error = null)),
-                    const Text('a la'),
-                    _NumeroDeHoja(clave: 'hojas_hasta', controller: _hasta, alCambiar: () => setState(() => _error = null)),
+                    // "De la hoja X a la Y" va junto: en el celular el botón baja,
+                    // los números no se separan.
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('De la hoja'),
+                        const SizedBox(width: 8),
+                        _NumeroDeHoja(clave: 'hojas_desde', controller: _desde, alCambiar: () => setState(() => _error = null)),
+                        const SizedBox(width: 8),
+                        const Text('a la'),
+                        const SizedBox(width: 8),
+                        _NumeroDeHoja(clave: 'hojas_hasta', controller: _hasta, alCambiar: () => setState(() => _error = null)),
+                      ],
+                    ),
                     OutlinedButton(
                       key: const Key('hojas_imprimir_rango'),
                       onPressed: _imprimirElRango,
@@ -232,15 +242,24 @@ class _NumeroDeHoja extends StatelessWidget {
   const _NumeroDeHoja({required this.clave, required this.controller, required this.alCambiar});
 
   @override
+  // Con el relleno del tema de la app, la cajita cortaba el "10" (la muestra
+  // del 15-nov): va con poco relleno a los costados.
   Widget build(BuildContext context) => SizedBox(
         width: 64,
         child: TextField(
           key: Key(clave),
           controller: controller,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(4),
+          ],
           textAlign: TextAlign.center,
-          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          ),
           onChanged: (_) => alCambiar(),
         ),
       );

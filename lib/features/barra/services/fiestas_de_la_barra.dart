@@ -11,23 +11,19 @@ import '../../common/utils/dia_de_la_fiesta.dart';
 ///
 /// **Y una fiesta que ya pasó sigue mientras la cajera tenga su caja abierta ahí, en
 /// este equipo** ([conCajaAbierta]; revisión final de la 6.9.0): si no, una caja que
-/// no se cerró antes del mediodía quedaba abierta para siempre.
+/// no se cerró antes del mediodía quedaba abierta para siempre. **Esa va al final**
+/// ([enElOrdenDeLasFiestas]) y la pantalla la marca.
 List<Evento> fiestasParaLaBarra(
   Iterable<Evento> eventos,
   Set<String> conPrecio,
   DateTime hoy, {
   Set<String> conCajaAbierta = const {},
 }) {
-  final desde = primerDiaDeLasFiestasQueVienen(hoy);
   bool sirve(Evento e) {
-    final f = e.fechaEvento;
     if (!conPrecio.contains(e.id)) return false;
     if (conCajaAbierta.contains(e.id)) return true;
-    return e.estado != EstadoEvento.finalizado &&
-        e.estado != EstadoEvento.cancelado &&
-        !DateTime(f.year, f.month, f.day).isBefore(desde);
+    return !laFiestaYaPaso(e, hoy);
   }
 
-  return eventos.where(sirve).toList()
-    ..sort((a, b) => a.fechaEvento.compareTo(b.fechaEvento));
+  return enElOrdenDeLasFiestas(eventos.where(sirve), hoy);
 }

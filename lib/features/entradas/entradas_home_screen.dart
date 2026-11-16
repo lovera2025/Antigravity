@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/evento.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/utils/cortes_pantalla.dart';
+import '../common/utils/dia_de_la_fiesta.dart';
 import '../common/widgets/operational_sync_coordinator.dart';
 import '../eventos/repositories/eventos_repository.dart';
 import '../eventos/retiro_entradas_screen.dart';
@@ -41,7 +42,7 @@ final fiestasQueVienenProvider = FutureProvider<List<Evento>>((ref) async {
 });
 
 /// Si [e] ya pasó (solo sigue en la lista por una caja abierta).
-bool _yaPaso(Evento e) => fiestasQueVienen([e], DateTime.now()).isEmpty;
+bool _yaPaso(Evento e) => laFiestaYaPaso(e, DateTime.now());
 
 /// La pantalla de quien entró a Entradas: elegir la fiesta y entregar. No hay
 /// camino a cobrar ni a editar un alumno (`test/modo_entradas_cerrado_test.dart`).
@@ -131,7 +132,7 @@ class EntradasHomeScreen extends ConsumerWidget {
                                 const SizedBox(width: 6),
                                 FilledButton(
                                   key: Key('vender_${e.id}'),
-                                  onPressed: () => _vender(context, e),
+                                  onPressed: () => _vender(context, ref, e),
                                   child: const Text('VENDER'),
                                 ),
                               ],
@@ -192,18 +193,21 @@ class EntradasHomeScreen extends ConsumerWidget {
     return '${dos(f.day)}/${dos(f.month)}/${f.year}';
   }
 
-  /// VENDER: la caja de entradas de esa fiesta.
-  void _vender(BuildContext context, Evento evento) {
+  /// VENDER: la caja de entradas de esa fiesta. **Al volver se relee la lista**
+  /// (revisión del 15-nov): cerrada la caja de una fiesta que ya pasó, la fiesta se
+  /// va; si no, seguía con "Tu caja sigue abierta" y VENDER ofrecía abrir otra.
+  Future<void> _vender(BuildContext context, WidgetRef ref, Evento evento) async {
     final vender = onVenderFiesta;
     if (vender != null) {
       vender(context, evento);
       return;
     }
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => VenderEntradasScreen(evento: evento),
       ),
     );
+    if (context.mounted) ref.invalidate(fiestasQueVienenProvider);
   }
 
   /// La entrega en modo mostrador: sin cobrar ni editar al alumno; la familia que

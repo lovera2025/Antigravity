@@ -273,6 +273,34 @@ void main() {
       expect(lineaMora['concepto'], contains('(parcial)'));
     });
 
+    // Revisión del 15-nov: con un perdón en la ficha, la reconstrucción no sabe
+    // qué se perdonó y contaba mora de más; el reimpreso decía "a medias" una
+    // mora pagada entera. Con un perdón, la línea sale como se guardó.
+    test('con un perdón en la ficha, la mora de UNA cuota sale como se guardó', () {
+      final conPerdon = c.copyWith(moraTrackedAjuste: -5000);
+      final cuota = _pago('2026-09-10T11:00:00', 'Cuota Base (4/9)', 35000);
+      final mora = _pago('2026-09-10T11:00:01', 'Interés mora cuota 4 (vto Jul 2026)', 5000);
+      final pagos = [...antes(), cuota, mora];
+      final cobro = ReciboDeUnCobro.armar(
+        contrato: conPerdon,
+        lote: ReciboDeUnCobro.lineasDelCobro(pagos, mora),
+        historial: pagos,
+      );
+      final lineaMora = cobro.conceptos.firstWhere((l) => l['esMora'] == true);
+      expect(lineaMora['concepto'], isNot(contains('(parcial)')));
+      expect(lineaMora['montoPleno'], isNull);
+      // Sin el perdón, la misma línea sí se confirma parcial (la cuenta da más).
+      final sinPerdon = ReciboDeUnCobro.armar(
+        contrato: c,
+        lote: ReciboDeUnCobro.lineasDelCobro(pagos, mora),
+        historial: pagos,
+      );
+      expect(
+        sinPerdon.conceptos.firstWhere((l) => l['esMora'] == true)['concepto'],
+        contains('(parcial)'),
+      );
+    });
+
     test('la mora de UNA cuota cobrada entera: reimpresa, debía lo que pagó', () {
       final cuota = _pago('2026-09-10T11:00:00', 'Cuota Base (4/9)', 35000);
       // Más de lo que daba la cuenta: no le quedó nada.

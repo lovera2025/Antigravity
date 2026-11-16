@@ -1453,6 +1453,10 @@ class ConceptoPagoDisplay {
         cuotasDeCalendarioEnConcepto(concepto).length != 1) {
       return;
     }
+    // Con un perdón en la ficha, la reconstrucción no sabe qué se perdonó ni
+    // cuándo, y contaría mora de más: la línea sale como se guardó (revisión
+    // del 15-nov; con un perdón el papel muestra solo lo pagado).
+    if (MoraTrackedRecovery.tienePerdon(contrato: contrato, pagos: historial)) return;
     final resta = _moraQueQuedoElDia(contrato, pago, historial)[n];
     if (resta == null || resta <= 0.01) return;
     final m = (line['monto'] as num?)?.toDouble() ?? 0;

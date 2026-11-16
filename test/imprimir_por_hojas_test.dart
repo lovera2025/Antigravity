@@ -100,6 +100,17 @@ void main() {
       expect(elegidas, (desde: 15, hasta: 18, tanda: false));
     });
 
+    // La cajita del número de hoja es angosta: solo cifras, y hasta 4.
+    testWidgets('el número de hoja: solo cifras, hasta 4', (tester) async {
+      await abrir(tester);
+      await tester.enterText(find.byKey(const Key('hojas_hasta')), '12a345');
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byKey(const Key('hojas_hasta'))).controller!.text,
+        '1234',
+      );
+    });
+
     testWidgets('Todo junto imprime las 23', (tester) async {
       await abrir(tester);
       await tester.tap(find.byKey(const Key('hojas_todo')));
@@ -119,13 +130,15 @@ void main() {
   });
 
   group('VENTAS', () {
+    late EntradasEnMemoria entradas;
+
     Future<List<DatosDelHistorial>> montar(WidgetTester tester, {required int ventas}) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = const Size(1200, 1300);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final e = EntregaEnMemoria();
-      final entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
       final historiales = <DatosDelHistorial>[];
       final c = ProviderContainer(overrides: [
         ...e.reemplazos(jefe: true),
@@ -193,6 +206,40 @@ void main() {
       await tester.tap(find.byKey(const Key('hojas_volver')));
       await tester.pumpAndSettle();
       expect(historiales, hasLength(1), reason: 'VOLVER no imprime');
+    });
+
+    // Revisión del 15-nov: una tanda impresa seguía marcada aunque sus hojas
+    // cambiaran (una venta anulada después): la pila de papel quedaba vieja.
+    testWidgets('si cambian sus hojas, la tanda deja de estar "impresa"', (tester) async {
+      await montar(tester, ventas: 600);
+      await tester.tap(find.byKey(const Key('ventas_imprimir')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('hojas_tanda_1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ventas_imprimir')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('hojas_tanda_11')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ventas_imprimir')));
+      await tester.pumpAndSettle();
+      Finder impresa(int desde) => find.descendant(
+            of: find.byKey(Key('hojas_tanda_$desde')),
+            matching: find.text('impresa'),
+          );
+      expect(impresa(1), findsOneWidget);
+      expect(impresa(11), findsOneWidget);
+      await tester.tap(find.byKey(const Key('hojas_volver')));
+      await tester.pumpAndSettle();
+
+      // Se tilda "Pago verificado" en la última venta (la más nueva: arriba en
+      // la pantalla, en la última hoja del papel).
+      final ultima = entradas.listaVentas.last;
+      await tester.tap(find.byKey(Key('verificar_${ultima.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ventas_imprimir')));
+      await tester.pumpAndSettle();
+      expect(impresa(1), findsOneWidget, reason: 'sus hojas no cambiaron');
+      expect(impresa(11), findsNothing, reason: 'su última hoja cambió: hay que volver a imprimirla');
     });
   });
 }

@@ -59,8 +59,12 @@ class _VentasDeEntradasScreenState
   bool _ocupado = false;
 
   /// Las tandas del historial que ya se imprimieron en esta pantalla (por su
-  /// primera hoja), para marcarlas en el cartel.
-  final _tandasImpresas = <int>{};
+  /// primera hoja), con lo que decían esas hojas al imprimirlas
+  /// ([HistorialEntradasPdf.firmaDeLasHojas]). **Una tanda está "impresa" solo
+  /// si sus hojas siguen diciendo lo mismo** (revisión del 15-nov): una venta
+  /// anulada o verificada después, otro filtro, o las hojas corridas, y la pila
+  /// de papeles ya no es la de ahora.
+  final _tandasImpresas = <int, String>{};
   StreamSubscription<Set<String>>? _cambiosSub;
 
   static const _tablasQueMiro = {
@@ -249,13 +253,25 @@ class _VentasDeEntradasScreenState
         context,
         hojas: hojas,
         ventas: h.ventas.length,
-        impresas: _tandasImpresas,
+        impresas: {
+          for (final t in _tandasImpresas.entries)
+            if (HistorialEntradasPdf.firmaDeLasHojas(
+                  datos,
+                  t.key,
+                  (t.key + kHojasPorTanda - 1).clamp(1, hojas),
+                ) ==
+                t.value)
+              t.key,
+        },
       );
       if (elegidas == null || !mounted) return;
       if (elegidas.desde != 1 || elegidas.hasta != hojas) {
         datos = datos.soloLasHojas(elegidas.desde, elegidas.hasta);
       }
-      if (elegidas.tanda) _tandasImpresas.add(elegidas.desde);
+      if (elegidas.tanda) {
+        _tandasImpresas[elegidas.desde] =
+            HistorialEntradasPdf.firmaDeLasHojas(datos, elegidas.desde, elegidas.hasta);
+      }
     }
     if (!mounted) return;
     try {

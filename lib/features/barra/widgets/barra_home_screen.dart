@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
+import '../../common/utils/dia_de_la_fiesta.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../central/central_barra_provider.dart';
 import '../datos/barra_repositorio.dart';
@@ -71,6 +72,9 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => VenderScreen(fiesta: fiesta, caja: caja!),
         ));
+        // Cerrada la caja de una fiesta que ya pasó, la fiesta se va de la lista
+        // (revisión del 15-nov).
+        if (mounted) ref.invalidate(fiestasDeLaBarraProvider);
       }
     } catch (_) {
       if (mounted) {
@@ -173,7 +177,20 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                   EventoPresentacion.tituloPrincipal(e),
                                   style: const TextStyle(fontWeight: FontWeight.w800),
                                 ),
-                                subtitle: Text(_fecha(e.fechaEvento)),
+                                // Una fiesta que ya pasó sigue solo por la caja
+                                // abierta de la cajera: va al final y marcada
+                                // (revisión del 15-nov), como en Entradas.
+                                subtitle: laFiestaYaPaso(e, DateTime.now())
+                                    ? Text(
+                                        '${_fecha(e.fechaEvento)} · Tu caja de barra sigue '
+                                        'abierta: cerrala desde VENDER',
+                                        key: Key('barra_caja_abierta_${e.id}'),
+                                        style: TextStyle(
+                                          color: Theme.of(context).colorScheme.error,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      )
+                                    : Text(_fecha(e.fechaEvento)),
                                 // Tocar la fiesta es VENDER (su caja); la encargada
                                 // tiene además LAS CAJAS.
                                 trailing: app.esEncargadaDeBarra
