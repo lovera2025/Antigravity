@@ -565,9 +565,11 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
   la 79 y desde la 78, el comparador de la mora sin sumas movidas, la foto "antes de 6.9.0" sin nada sospechoso, el SQL
   con su OK). **No tildar "Vende entradas" ni cargar precios hasta que todas las PCs y las tablets tengan la 6.9.0.**
 
-**La 6.9.1: "Primero las familias de una sola mesa" en el cartel del SORTEO — PROGRAMADA, SIN PUBLICAR** (16-nov;
-`docs/CONTEXTO_v6.9.1_2026-11-16.md`, que empieza con "Para retomar en otro chat": ahí está **lo que falta, en
-orden**). Pedido del jefe: las familias con una sola mesa en el contrato adelante y las
+**La 6.9.1: "Primero las familias de una sola mesa" en el cartel del SORTEO — PUBLICADA el 16-nov a la tarde, con
+el usuario** (foto de la mora "antes de 6.9.1" sin nada sospechoso, sin SQL, tag `v6.9.1`, release con el Setup y el
+APK, y la web; `docs/CONTEXTO_v6.9.1_2026-11-16.md`, que empieza con "Para retomar en otro chat": ahí está **cómo se
+publicó y lo que falta, en orden**). **Falta que la instale (primero la PC que sortea) y la foto "después de
+6.9.1".** Pedido del jefe: las familias con una sola mesa en el contrato adelante y las
 que tienen adicional detrás; se combina con "Con su familia · Al final" y con Cumplimiento debido (cada grupo por
 cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumplimiento no se tocaron.
 - **De lo que elige el cartel a lo que se sortea hay un solo camino: `SorteoDelCartel`** (`eventos/services/

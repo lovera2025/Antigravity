@@ -1,7 +1,27 @@
 # CONTEXTO — la 6.9.1: "Primero las familias de una sola mesa" en el cartel del SORTEO
 
-**Estado (16-nov-2026, a la noche): PROGRAMADA y probada en el sandbox, con el salón justo resuelto. Falta publicar
-con el usuario.** El usuario eligió publicar el tilde solo, primero, como **versión 6.9.1**. La decisión del salón
+**Estado (16-nov-2026, a la tarde): PUBLICADA, con el usuario ("Publica").** Falta que la instale (primero la PC
+que sortea) y la foto de la mora "después de 6.9.1" (ver "Cómo se publicó", abajo).
+
+### Cómo se publicó (16-nov, de 16:49 a 17:05)
+
+- **Foto de la mora "antes de 6.9.1"** (`a996dbb1…`, 642 alumnos, por el conector). Comparada con la de "antes de
+  6.9.0" (`7982f870…`) lista **un alumno**: la mora pendiente subió de $54.400 a $110.400 el 16-nov a las 10:14, en
+  un cobro (`mora_cambios`: cambiaron `cuotas_pagadas` y `saldo_deudor`, de $200.000 a $0) que pagó las cuotas 5 a
+  9 sin la mora: la de esas cuotas quedó pendiente. Ninguna mora revivida, ningún perdón ni eximición que se fue.
+- **Sin SQL.** Versión `6.9.1+76` (`pubspec.yaml` y el `.iss`).
+- **El instalador, por pasos** (`build/armado_691/`, con el script de la 6.9.0 cambiado de versión): la clave de
+  firma, la página del celular de cero (151 archivos, con sus tres archivos), **288 renglones en el registro de
+  `ISCC`, la misma lista que la 6.9.0**, y el APK con `apksigner` ("CN=Junior Eventos"). `Setup Junior Eventos
+  v6.9.1.exe` (41.352.232 bytes) y `Junior Eventos v6.9.1.apk` (54.155.616 bytes, arm64).
+- **Antes de subir, los 3 commits se compararon con los 642 nombres de la copia de la base**: ninguno.
+- **Tag `v6.9.1`** en `295daa9`. **Release** "Junior Eventos 6.9.1" con `Setup.Junior.Eventos.v6.9.1.exe` y
+  `Junior.Eventos.v6.9.1.apk`, marcado como el último. Las novedades dicen **"Nuevas capacidades en el modo jefe,
+  en el sorteo"** (sin nombrar el cumplimiento: las ve cualquiera).
+- **Web** en Vercel, producción: `arguello-events-jw8o6nvfn`; `version.json` da 6.9.1/76. La anterior, para volver
+  atrás desde Vercel: `arguello-events-boc7zfuf4` (la 6.9.0).
+- **La base de esta PC ya estaba en la 80** (la de la 6.9.0) antes de publicar: la 6.9.0 se abrió acá. En qué otras
+  PCs está, lo dice el usuario. El usuario eligió publicar el tilde solo, primero, como **versión 6.9.1**. La decisión del salón
 justo la tomó en el segundo chat del 16-nov, sobre un dibujo (ver "El salón justo: una detrás de la otra", abajo).
 La mesa adicional "a confirmar" (la Parte B) quedó guardada aparte, sin terminar.
 
@@ -157,11 +177,14 @@ del commit.
 2. ~~Versión 6.9.1~~: `pubspec.yaml` → `6.9.1+76`; `installer/junior_eventos_setup.iss` → `MyAppVersion "6.9.1"`.
 3. ~~La suite entera~~ (5.182 pruebas, ninguna falla) y ~~el commit~~ (solo el tilde y el salón justo: la Parte B
    sigue en el stash).
-4. **Publicar con él**, como la 6.9.0 (su "Cómo se publicó"), preguntando cada paso: la foto de la mora "antes de
-   6.9.1" (`supabase/mora_fotos.sql`, por el conector), **sin SQL**, el instalador **por pasos** (el script de la
-   6.9.0 está copiado en el scratchpad de la sesión: la clave de firma, la página del celular de cero con sus tres
-   archivos, `ISCC` y su lista de archivos, el APK con `apksigner`), comparar los commits con los nombres de la copia
-   antes de subir, el tag `v6.9.1`, el release con el Setup y el APK y las novedades, y la web en Vercel.
+4. ~~Publicar con él~~ (16-nov, ver "Cómo se publicó").
+5. **Que instale, primero la PC que sortea**, y avise en cuáles (también las tablets). Las que tienen la 6.5.1 o la
+   6.6.x saltan directo a la 6.9.1 (la base de la 78 o la 79 a la 80, probado con la 6.9.0).
+6. **La foto de la mora "después de 6.9.1"** y la comparación con `a996dbb1…`.
+7. Lo de la 6.9.0 sigue valiendo: no tildar "Vende entradas" ni cargar precios, ni crear links del delegado, hasta
+   que todas las PCs y las tablets tengan la versión.
+8. Con la versión instalada: el primer sorteo de verdad con el tilde (si el salón está justo, mirar que la familia
+   una detrás de la otra sea la que dice el cartel).
 
 ### La Parte B: la mesa adicional "a confirmar" (sin terminar)
 
