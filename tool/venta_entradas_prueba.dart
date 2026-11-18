@@ -70,6 +70,7 @@ import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 
@@ -523,6 +524,8 @@ Future<LadosDeLaVenta> armarLados({
         supabaseProvider.overrideWithValue(entrega.supabase),
         contratosRepositoryProvider.overrideWithValue(entrega.contratos),
         entradasRetiroRepositoryProvider.overrideWithValue(entrega.entregas),
+        // El registro de sorteos: de ahí sale a qué lugares les va el descuento.
+        sorteosMesasRepositoryProvider.overrideWithValue(entrega.sorteos),
         syncEngineProvider.overrideWithValue(lado.motor),
         subidaInmediataProvider.overrideWithValue(
           SubidaQueAvisa(lado.motor, (tabla) => nube.entregaSubio(lado, tabla)),

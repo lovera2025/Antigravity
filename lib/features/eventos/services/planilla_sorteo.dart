@@ -5,9 +5,11 @@ import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../plano/services/divisiones.dart';
+import 'lugares_al_sorteo.dart';
 import 'mesas_extra_utils.dart';
 import 'pago_para_sorteo.dart';
 import 'reparto_de_sillas.dart';
+import 'retiro_entradas.dart';
 import 'salon_mesas.dart';
 import 'sorteo_mesas_motor.dart';
 
@@ -56,10 +58,24 @@ class FilaPlanillaSorteo {
   /// todavía no tiene mesa.
   final String? ocupacionPrincipal;
 
-  /// Las entradas generales de la mesa principal: sus lugares (8 más las
-  /// sillas extra que van ahí) menos los que tienen cena. Negativo si no
-  /// entran. `null` si todavía no tiene mesa.
+  /// Las entradas generales de la mesa principal: las que completan sus 8
+  /// lugares sin cargo, después de los que tienen cena (`EntradasDeAlumno`,
+  /// la misma cuenta de la entrega y la venta). **Las sillas extra no cuentan
+  /// acá**: sus entradas se compran aparte ([entradasSillas]). Negativo si la
+  /// familia no entra en todos sus lugares. `null` si todavía no tiene mesa.
   final int? generalesPrincipal;
+
+  /// Las generales sin cargo de la familia, tenga o no mesa todavía: para los
+  /// totales.
+  final int entradasGenerales;
+
+  /// Las entradas de sus mesas adicionales: se compran aparte, con el
+  /// descuento de PRECIOS las de lo que tenía al sorteo y sin descuento las de
+  /// lo que agregó después.
+  final LugaresAparte entradasAdicional;
+
+  /// Lo mismo, de sus sillas extra.
+  final LugaresAparte entradasSillas;
 
   /// Las mesas extra: "13", "13-14", "13 · 40 (separada)", "138 (pasto)",
   /// "1 sin asignar", o "-".
@@ -98,6 +114,10 @@ class FilaPlanillaSorteo {
     required this.mesaPrincipal,
     required this.ocupacionPrincipal,
     required this.generalesPrincipal,
+    this.entradasGenerales = 0,
+    this.entradasAdicional =
+        const LugaresAparte(conDescuento: 0, sinDescuento: 0),
+    this.entradasSillas = const LugaresAparte(conDescuento: 0, sinDescuento: 0),
     required this.adicional,
     this.principalEnPasto = false,
     this.mesasEnPasto = 0,
@@ -131,6 +151,15 @@ class ResumenDivision {
 
   final int sillasExtra;
   final int conCena;
+
+  /// Las generales sin cargo: las que completan la mesa principal de cada uno.
+  final int generales;
+
+  /// Las de las mesas adicionales y las sillas extra, que se compran aparte:
+  /// con el descuento de PRECIOS, y sin descuento las de lo agregado después
+  /// del sorteo.
+  final int conDescuento;
+  final int sinDescuento;
   final int repartosPendientes;
   final int sinMesa;
 
@@ -142,6 +171,9 @@ class ResumenDivision {
     this.bloque,
     required this.sillasExtra,
     required this.conCena,
+    this.generales = 0,
+    this.conDescuento = 0,
+    this.sinDescuento = 0,
     required this.repartosPendientes,
     required this.sinMesa,
   });
@@ -155,6 +187,12 @@ class ResumenPlanillaSorteo {
   final int sillasExtra;
   final int sillasSinPagar;
   final int conCena;
+
+  /// Las generales sin cargo de toda la fiesta, y las que se compran aparte
+  /// (con el descuento de PRECIOS y sin descuento).
+  final int generales;
+  final int conDescuento;
+  final int sinDescuento;
   final int sinMesa;
   final int repartosPendientes;
   final List<ResumenDivision> divisiones;
@@ -181,6 +219,9 @@ class ResumenPlanillaSorteo {
     required this.sillasExtra,
     required this.sillasSinPagar,
     required this.conCena,
+    this.generales = 0,
+    this.conDescuento = 0,
+    this.sinDescuento = 0,
     required this.sinMesa,
     required this.repartosPendientes,
     required this.divisiones,
@@ -268,6 +309,9 @@ class PlanillaSorteo {
     SillasReparto? repartoElegido,
     Set<int> pasto = const {},
     DistanciaLejos? lejos,
+
+    /// Lo que cada familia tenía al sorteo: el descuento es solo para eso.
+    FotoDeLosLugares? foto,
   }) {
     final tramos = SalonMesas.tramos(a);
     final crudo = a.numeroMesa?.trim() ?? '';
@@ -326,11 +370,19 @@ class PlanillaSorteo {
         : reparto
             .where((e) => e.$1 == principal)
             .fold<int>(0, (s, e) => s + e.$2);
+    // La misma cuenta de la entrega y la venta (regla del 4-nov): en la mesa
+    // principal van los que tienen cena y las generales que completan sus 8
+    // lugares. Hasta el 17-nov acá se sumaban las sillas extra como generales
+    // ("1 con cena · 9 generales") y las entradas de la adicional no figuraban.
+    final entradas = RetiroEntradas.entradasDe(a, foto: foto);
     String? ocupacionPrincipal;
     int? generales;
     if (principal != null) {
-      final lugares = SalonMesas.sillasPorMesa + sillasPrincipal;
-      generales = lugares - conCena;
+      // No entran contando todos sus lugares, no solo la principal: con dos
+      // mesas, 10 con cena entran.
+      generales = entradas.entran
+          ? entradas.generales
+          : entradas.lugares - conCena;
       ocupacionPrincipal = generales >= 0
           ? '$conCena con cena · $generales '
               '${generales == 1 ? 'general' : 'generales'}'
@@ -384,6 +436,9 @@ class PlanillaSorteo {
       mesaPrincipal: mesaPrincipal,
       ocupacionPrincipal: ocupacionPrincipal,
       generalesPrincipal: generales,
+      entradasGenerales: entradas.generales,
+      entradasAdicional: entradas.deMesas,
+      entradasSillas: entradas.deSillas,
       adicional: adicional,
       principalEnPasto: principal != null && pasto.contains(principal),
       mesasEnPasto: tramos.expand((t) => t).where(pasto.contains).length,
@@ -415,6 +470,7 @@ class PlanillaSorteo {
     Map<String, SillasReparto> repartos = const {},
     Set<int> pasto = const {},
     Map<String, DistanciaLejos> lejos = const {},
+    FotoDeLosLugares? foto,
   }) {
     final grupos = <String, List<ContratoAlumno>>{};
     for (final a in activos(alumnos)) {
@@ -437,6 +493,7 @@ class PlanillaSorteo {
                 repartoElegido: repartos[a.id],
                 pasto: pasto,
                 lejos: lejos[a.id],
+                foto: foto,
               ),
             )
             .toList(),
@@ -454,6 +511,7 @@ class PlanillaSorteo {
     Map<String, SillasReparto> repartos = const {},
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
+    FotoDeLosLugares? foto,
   }) {
     final lista = activos(alumnos);
     final porDiv = porDivision(
@@ -462,7 +520,24 @@ class PlanillaSorteo {
       notas: notas,
       repartos: repartos,
       pasto: pasto,
+      foto: foto,
     );
+    int generales(Iterable<FilaPlanillaSorteo> filas) =>
+        filas.fold<int>(0, (s, f) => s + f.entradasGenerales);
+    int conDescuento(Iterable<FilaPlanillaSorteo> filas) => filas.fold<int>(
+          0,
+          (s, f) =>
+              s +
+              f.entradasAdicional.conDescuento +
+              f.entradasSillas.conDescuento,
+        );
+    int sinDescuento(Iterable<FilaPlanillaSorteo> filas) => filas.fold<int>(
+          0,
+          (s, f) =>
+              s +
+              f.entradasAdicional.sinDescuento +
+              f.entradasSillas.sinDescuento,
+        );
     final porId = {for (final a in lista) a.id: a};
     // Los bloques se guardan por la clave de la división ("5A"); la planilla
     // la muestra como está escrita ("5° A").
@@ -489,6 +564,9 @@ class PlanillaSorteo {
           sillasExtra:
               cuentas.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a)),
           conCena: filas.fold<int>(0, (s, f) => s + f.conCena),
+          generales: generales(filas),
+          conDescuento: conDescuento(filas),
+          sinDescuento: sinDescuento(filas),
           repartosPendientes:
               filas.where((f) => f.reparto == RepartoSillas.pendiente).length,
           sinMesa: filas.where((f) => f.sinMesa).length,
@@ -519,6 +597,9 @@ class PlanillaSorteo {
               .where((a) => !(pagos[a.id]?.pagoSillas ?? false))
               .fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a)),
       conCena: todas.fold<int>(0, (s, f) => s + f.conCena),
+      generales: generales(todas),
+      conDescuento: conDescuento(todas),
+      sinDescuento: sinDescuento(todas),
       sinMesa: todas.where((f) => f.sinMesa).length,
       repartosPendientes:
           todas.where((f) => f.reparto == RepartoSillas.pendiente).length,

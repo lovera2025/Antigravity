@@ -341,8 +341,10 @@ void main() {
       // Tres sillas extra: dos en la principal y una en la adicional.
       expect(textos, containsAll(['Mesa 8: 10 sillas', 'Mesa 9: 9 sillas']));
       // Y cómo se ocupa la principal, igual que en la planilla del sorteo.
-      // La egresada y sus 3 acompañantes cenan; la mesa tiene 10 lugares.
-      expect(textos, contains('En la principal: 4 con cena · 6 generales'));
+      // La egresada y sus 3 acompañantes cenan; las generales son las 4 que
+      // completan las 8 sin cargo de la mesa. Las entradas de las sillas extra
+      // se compran aparte: no son generales (17-nov-2026; antes decía 6).
+      expect(textos, contains('En la principal: 4 con cena · 4 generales'));
       expect(_vista(tester).resaltadas, {8, 9});
       // Corre el pulso de lo resaltado: se suelta antes de terminar.
       await tester.tap(find.byKey(const Key('soltar')));

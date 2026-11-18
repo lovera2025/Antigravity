@@ -13,12 +13,14 @@ import 'package:arguello_events/features/common/providers/user_role_provider.dar
 import 'package:arguello_events/features/common/utils/subir_ya.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/evento.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'barra_en_memoria.dart' show fiestaDePrueba;
 import 'operadores_en_memoria.dart';
@@ -107,6 +109,17 @@ class EntregasEnMemoria extends EntradasRetiroRepository {
   Future<EntradasRetiro?> traerDeLaNube(String contratoAlumnoId) async => null;
 }
 
+/// El registro de sorteos, en memoria: vacío salvo lo que la prueba le ponga.
+/// De acá sale lo que cada familia tenía al sorteo (`fotoDeLosLugaresProvider`):
+/// **sin este reemplazo, la entrega y VENDER irían a leer la base de la PC.**
+class SorteosEnMemoria extends SorteosMesasRepository {
+  final registros = <SorteoMesasRegistro>[];
+
+  @override
+  Future<List<SorteoMesasRegistro>> delEvento(String eventoId) async =>
+      [for (final r in registros) if (r.eventoId == eventoId) r];
+}
+
 /// Todo lo que se guarda "sube" al instante.
 class SubidaDePrueba extends SubidaInmediata {
   SubidaDePrueba(super.motor);
@@ -159,6 +172,10 @@ class EntregaEnMemoria {
   final supabase = SupabaseClient('http://localhost:1', 'clave-de-prueba')..auth.stopAutoRefresh();
   late final contratos = ContratosDeLaEntrega(supabase);
   late final entregas = EntregasEnMemoria(supabase);
+
+  /// El registro de sorteos de la fiesta: vacío (sin sorteo anotado, todo lo
+  /// que se compra aparte va con descuento) salvo lo que la prueba agregue.
+  final sorteos = SorteosEnMemoria();
   final motor = MotorDePrueba();
   final operadores = OperadoresEnPrueba();
 
@@ -198,6 +215,7 @@ class EntregaEnMemoria {
         supabaseProvider.overrideWithValue(supabase),
         contratosRepositoryProvider.overrideWithValue(contratos),
         entradasRetiroRepositoryProvider.overrideWithValue(entregas),
+        sorteosMesasRepositoryProvider.overrideWithValue(sorteos),
         syncEngineProvider.overrideWithValue(motor),
         subidaInmediataProvider.overrideWithValue(SubidaDePrueba(motor)),
         userRoleProvider.overrideWith(

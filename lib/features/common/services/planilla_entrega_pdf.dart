@@ -7,6 +7,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
 import '../../../models/evento.dart';
+import '../../eventos/services/lugares_al_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/retiro_entradas.dart';
 import 'planilla_tema.dart';
@@ -81,6 +82,12 @@ class PlanillaEntregaPdf {
     pw.Font? regular,
     pw.Font? negrita,
     DateTime? generada,
+
+    /// Lo que cada familia tenía al sorteo: el descuento es solo para eso.
+    FotoDeLosLugares? foto,
+
+    /// El descuento de los lugares adicionales que el jefe puso en PRECIOS.
+    double descuentoPct = 50,
   }) async {
     final tema = PlanillaTema(blancoYNegro: blancoYNegro);
     final theme = regular != null && negrita != null
@@ -91,10 +98,17 @@ class PlanillaEntregaPdf {
     final cuando = generada ?? ArTime.nowAr();
     final textoGenerada = 'Generada el ${_dos(cuando.day)}/${_dos(cuando.month)}/'
         '${cuando.year} · ${_dos(cuando.hour)}:${_dos(cuando.minute)}';
-    const leyenda = <(PdfColor?, String)>[
+    final al = alPorcientoQuePaga(descuentoPct);
+    final tituloAl = '${al[0].toUpperCase()}${al.substring(1)}';
+    final haySinDescuento = PlanillaSorteo.activos(alumnos).any(
+      (a) => RetiroEntradas.entradasDe(a, foto: foto).sinDescuento > 0,
+    );
+    final leyenda = <(PdfColor?, String)>[
       (null, 'VIP: con cena, sin número'),
       (null, 'Generales: con número del talonario'),
-      (null, 'Al 50 %: de la mesa adicional y las sillas extra, se compran aparte'),
+      (null, '$tituloAl: de la mesa adicional y las sillas extra, se compran aparte'),
+      if (haySinDescuento)
+        (null, '(+N): agregadas después del sorteo, sin descuento'),
       (null, 'Menores de 10: no llevan entrada'),
     ];
 
@@ -122,12 +136,16 @@ class PlanillaEntregaPdf {
                 retiro: retiros[a.id],
                 deuda: deudas[a.id] ??
                     const DeudaAlumno(saldoFicha: 0, saldoPagos: 0, mora: 0),
+                foto: foto,
               ),
           ];
           final entradas =
               filas.fold<int>(0, (s, f) => s + f.vip + f.generales);
           final vip = filas.fold<int>(0, (s, f) => s + f.vip);
-          final alCincuenta = filas.fold<int>(0, (s, f) => s + f.alCincuenta);
+          final conDescuento =
+              filas.fold<int>(0, (s, f) => s + f.conDescuento);
+          final sinDescuento =
+              filas.fold<int>(0, (s, f) => s + f.sinDescuento);
           final retiraron = filas.where((f) => f.entregado).length;
           return (
             nombre: d,
@@ -138,11 +156,12 @@ class PlanillaEntregaPdf {
                   generada: textoGenerada,
                   control: '${filas.length} egresados · $entradas sin cargo '
                       '($vip VIP y ${entradas - vip} generales)'
-                      '${alCincuenta > 0 ? ' · $alCincuenta al 50 %, aparte' : ''}'
+                      '${conDescuento > 0 ? ' · $conDescuento $al, aparte' : ''}'
+                      '${sinDescuento > 0 ? ' · $sinDescuento sin descuento' : ''}'
                       '${retiraron > 0 ? ' · ya retiraron $retiraron' : ''}'
                       ' · Quien retira escribe su nombre y apellido: no se firma.',
                 ),
-            contenido: (alto) => [_tabla(tema, filas, alto)],
+            contenido: (alto) => [_tabla(tema, filas, alto, tituloAl)],
           );
         }(),
     ];
@@ -219,6 +238,7 @@ class PlanillaEntregaPdf {
     PlanillaTema t,
     List<FilaPlanillaEntrega> filas,
     double alto,
+    String tituloAl,
   ) {
     return pw.Table(
       border: pw.TableBorder(
@@ -238,7 +258,9 @@ class PlanillaEntregaPdf {
           children: [
             for (var i = 0; i < columnas.length; i++)
               t.celdaTitulo(
-                columnas[i],
+                // La columna del descuento se llama como lo puso el jefe en
+                // PRECIOS ("Al 50 %").
+                i == 4 ? tituloAl : columnas[i],
                 align: i >= 2 && i <= 4 ? pw.TextAlign.center : pw.TextAlign.left,
               ),
           ],
@@ -287,7 +309,17 @@ class PlanillaEntregaPdf {
         celda(f.mesa, centro: true),
         celda('${f.vip}', centro: true),
         celda('${f.generales}', centro: true),
-        celda(f.alCincuenta == 0 ? '-' : '${f.alCincuenta}', centro: true),
+        // "8", "8 (+8)" o "(+8)": entre paréntesis, las de lo que agregó
+        // después del sorteo, que no llevan el descuento.
+        celda(
+          f.conDescuento == 0 && f.sinDescuento == 0
+              ? '-'
+              : [
+                  if (f.conDescuento > 0) '${f.conDescuento}',
+                  if (f.sinDescuento > 0) '(+${f.sinDescuento})',
+                ].join(' '),
+          centro: true,
+        ),
         f.noEntregar != null
             ? celda(f.noEntregar!, negrita: true, color: t.rojo)
             : celda(f.delAl),

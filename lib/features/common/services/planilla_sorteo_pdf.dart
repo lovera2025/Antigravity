@@ -10,9 +10,11 @@ import '../../../models/evento.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../eventos/services/lugares_al_sorteo.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
+import '../../eventos/services/retiro_entradas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import 'planilla_tema.dart';
 
@@ -134,6 +136,13 @@ class PlanillaSorteoPdf {
     pw.Font? regular,
     pw.Font? negrita,
     DateTime? generada,
+
+    /// Lo que cada familia tenía al sorteo: las entradas de eso van con
+    /// descuento; las de lo agregado después, sin (`LugaresAlSorteo`).
+    FotoDeLosLugares? foto,
+
+    /// El descuento de los lugares adicionales que el jefe puso en PRECIOS.
+    double descuentoPct = 50,
   }) async {
     final tema = PlanillaTema(blancoYNegro: blancoYNegro);
     final formato = _formatoDe(vertical);
@@ -147,14 +156,7 @@ class PlanillaSorteoPdf {
     final textoGenerada = 'Generada el ${_dos(cuando.day)}/${_dos(cuando.month)}/'
         '${cuando.year} · ${_dos(cuando.hour)}:${_dos(cuando.minute)}';
     final textoVersion = interna ? 'Versión interna' : 'Para repartir';
-    final leyenda = <(PdfColor?, String)>[
-      if (!blancoYNegro) ...[
-        (tema.verdeMesa, 'Mesa principal'),
-        (tema.rojoSinMesa, 'Sin mesa'),
-      ],
-      (null, 'Sillas: P en la principal, A en la adicional'),
-      if (pasto.isNotEmpty) (null, 'Pasto: hay que avisarle a la familia'),
-    ];
+    final al = alPorcientoQuePaga(descuentoPct);
 
     final resumen = PlanillaSorteo.resumen(
       alumnos,
@@ -163,7 +165,27 @@ class PlanillaSorteoPdf {
       repartos: repartos,
       pasto: pasto,
       bloques: bloques,
+      foto: foto,
     );
+    // Cada ítem corto: es una fila sin tope de ancho, y uno largo se saldría
+    // de la hoja parada.
+    final leyenda = <(PdfColor?, String)>[
+      if (!blancoYNegro) ...[
+        (tema.verdeMesa, 'Mesa principal'),
+        (tema.rojoSinMesa, 'Sin mesa'),
+      ],
+      (null, 'Con cena y generales: las 8 sin cargo de la mesa principal'),
+      (null, 'Sillas: P en la principal, A en la adicional'),
+      if (resumen.conDescuento > 0)
+        (
+          null,
+          '${al[0].toUpperCase()}${al.substring(1)}: las de la mesa adicional '
+              'y las sillas extra, se compran aparte',
+        ),
+      if (resumen.sinDescuento > 0)
+        (null, 'Sin descuento: de lo agregado después del sorteo'),
+      if (pasto.isNotEmpty) (null, 'Pasto: hay que avisarle a la familia'),
+    ];
     final divisiones = PlanillaSorteo.porDivision(
       alumnos,
       pagos: pagos,
@@ -173,6 +195,7 @@ class PlanillaSorteoPdf {
       // La que se reparte no dice que a una familia la separaron a propósito
       // ("· lejos · en la zona elegida"): solo los números (12-nov-2026).
       lejos: interna ? lejos : const {},
+      foto: foto,
     );
 
     final secciones = soloUltimos
@@ -187,7 +210,8 @@ class PlanillaSorteoPdf {
                     extra: lineaSorteo,
                     control: '${resumen.egresados} egresados · '
                         '${resumen.mesas} mesas · ${resumen.sillasExtra} '
-                        'sillas extra · ${resumen.conCena} con cena',
+                        'sillas extra · ${resumen.conCena} con cena'
+                        '${_entradasDelControl(generales: resumen.generales, conDescuento: resumen.conDescuento, sinDescuento: resumen.sinDescuento, al: al)}',
                   ),
               contenido: () => [
                     for (final (i, entrada) in divisiones.entries.indexed) ...[
@@ -208,6 +232,7 @@ class PlanillaSorteoPdf {
                         entrada.value,
                         version,
                         vertical: vertical,
+                        al: al,
                       ),
                     ],
                   ],
@@ -224,7 +249,7 @@ class PlanillaSorteoPdf {
                     extra: lineaSorteo,
                   ),
               contenido: () =>
-                  _resumen(tema, resumen, interna, vertical: vertical),
+                  _resumen(tema, resumen, interna, vertical: vertical, al: al),
             ),
             for (final entrada in divisiones.entries)
               (
@@ -238,6 +263,7 @@ class PlanillaSorteoPdf {
                       control: _control(
                         resumen.divisiones
                             .firstWhere((d) => d.division == entrada.key),
+                        al,
                       ),
                     ),
                 contenido: () => [
@@ -246,6 +272,7 @@ class PlanillaSorteoPdf {
                     entrada.value,
                     version,
                     vertical: vertical,
+                    al: al,
                   ),
                 ],
               ),
@@ -303,11 +330,36 @@ class PlanillaSorteoPdf {
 
   /// La línea de totales de una división. Los números van solo si son pocos
   /// tramos.
-  static String _control(ResumenDivision r) {
+  static String _control(ResumenDivision r, String al) {
     final n = _tramos(r.numeros);
     return '${r.egresados} egresados · ${r.mesas} mesas'
         '${n > 0 && n <= 4 ? ' (${r.numeros})' : ''}'
-        ' · ${r.sillasExtra} sillas extra · ${r.conCena} con cena';
+        ' · ${r.sillasExtra} sillas extra · ${r.conCena} con cena'
+        '${_entradasDelControl(generales: r.generales, conDescuento: r.conDescuento, sinDescuento: r.sinDescuento, al: al)}';
+  }
+
+  /// Las entradas en la línea de totales: " · 106 generales · 48 al 50 %", y
+  /// " · 8 sin descuento" si alguna familia agregó lugares después del sorteo.
+  static String _entradasDelControl({
+    required int generales,
+    required int conDescuento,
+    required int sinDescuento,
+    required String al,
+  }) =>
+      ' · $generales ${generales == 1 ? 'general' : 'generales'}'
+      '${conDescuento > 0 ? ' · $conDescuento $al' : ''}'
+      '${sinDescuento > 0 ? ' · $sinDescuento sin descuento' : ''}';
+
+  /// Debajo del número de la adicional o de las sillas, en chico: las entradas
+  /// de esos lugares, que se compran aparte. "8 al 50 %" las de lo que la
+  /// familia tenía al sorteo; "8 sin descuento" las de lo que agregó después.
+  static List<pw.Widget> _aparte(PlanillaTema t, LugaresAparte l, String al) {
+    final estilo = t.estilo(size: 7.5, color: t.textoSuave);
+    return [
+      if (l.conDescuento > 0) pw.Text('${l.conDescuento} $al', style: estilo),
+      if (l.sinDescuento > 0)
+        pw.Text('${l.sinDescuento} sin descuento', style: estilo),
+    ];
   }
 
   // ── Resumen del salón ──────────────────────────────────────────────────
@@ -333,6 +385,7 @@ class PlanillaSorteoPdf {
     ResumenPlanillaSorteo r,
     bool interna, {
     bool vertical = false,
+    String al = 'al 50 %',
   }) {
     final tarjetas = <pw.Widget>[
       t.tarjeta('Egresados', '${r.egresados}'),
@@ -351,6 +404,18 @@ class PlanillaSorteoPdf {
       // Ningún papel del sorteo dice "sin pagar" (12-nov-2026).
       t.tarjeta('Sillas extra', '${r.sillasExtra - r.sillasSinPagar}'),
       t.tarjeta('Con cena', '${r.conCena}', detalle: 'egresados y acompañantes'),
+      // Las entradas, con la cuenta de la entrega: las generales completan las
+      // 8 sin cargo de cada mesa principal; las de las adicionales y las sillas
+      // se compran aparte.
+      t.tarjeta('Generales', '${r.generales}', detalle: 'sin cargo, con número'),
+      if (r.conDescuento > 0 || r.sinDescuento > 0)
+        t.tarjeta(
+          '${al[0].toUpperCase()}${al.substring(1)}',
+          '${r.conDescuento}',
+          detalle: r.sinDescuento > 0
+              ? 'aparte · ${r.sinDescuento} sin descuento'
+              : 'se compran aparte',
+        ),
       t.tarjeta('Sin mesa', '${r.sinMesa}'),
       t.tarjeta(
         'Sillas a confirmar',
@@ -371,9 +436,14 @@ class PlanillaSorteoPdf {
     // Con bloques, la tabla de divisiones lleva una columna más.
     final conBloque = r.hayBloques;
 
-    // Parada no entran las ocho en un renglón: van en dos, de a cuatro (el
-    // lugar que sobra en el segundo queda vacío, así todas miden lo mismo).
-    const porRenglon = 4;
+    // Parada no entran todas en un renglón: van de a cuatro (el lugar que
+    // sobra en el último queda vacío, así todas miden lo mismo). Acostada
+    // entran hasta ocho; con más, en dos renglones parejos.
+    final porRenglon = vertical
+        ? 4
+        : tarjetas.length <= 8
+            ? tarjetas.length
+            : (tarjetas.length / 2).ceil();
     pw.Widget renglon(List<pw.Widget> lista, {int huecos = 0}) => pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -387,16 +457,13 @@ class PlanillaSorteoPdf {
     final enDosColumnas = !vertical;
 
     return [
-      if (!vertical)
-        renglon(tarjetas)
-      else
-        for (var i = 0; i < tarjetas.length; i += porRenglon) ...[
-          if (i > 0) pw.SizedBox(height: 6),
-          renglon(
-            tarjetas.sublist(i, min(i + porRenglon, tarjetas.length)),
-            huecos: max(0, i + porRenglon - tarjetas.length),
-          ),
-        ],
+      for (var i = 0; i < tarjetas.length; i += porRenglon) ...[
+        if (i > 0) pw.SizedBox(height: 6),
+        renglon(
+          tarjetas.sublist(i, min(i + porRenglon, tarjetas.length)),
+          huecos: max(0, i + porRenglon - tarjetas.length),
+        ),
+      ],
       pw.SizedBox(height: 14),
       pw.Text('Divisiones', style: t.estilo(size: 11, negrita: true)),
       pw.SizedBox(height: 5),
@@ -643,6 +710,7 @@ class PlanillaSorteoPdf {
     List<FilaPlanillaSorteo> filas,
     VersionPlanillaSorteo version, {
     bool vertical = false,
+    String al = 'al 50 %',
   }) {
     final anchos = vertical ? _anchosVertical(version) : _anchos(version);
     final titulos = vertical ? columnasVertical(version) : columnas(version);
@@ -669,8 +737,8 @@ class PlanillaSorteoPdf {
         ),
         for (var i = 0; i < filas.length; i++)
           vertical
-              ? _filaVertical(t, filas[i], i, interna)
-              : _fila(t, filas[i], i, interna),
+              ? _filaVertical(t, filas[i], i, interna, al)
+              : _fila(t, filas[i], i, interna, al),
       ],
     );
   }
@@ -739,6 +807,7 @@ class PlanillaSorteoPdf {
     FilaPlanillaSorteo f,
     int indice,
     bool interna,
+    String al,
   ) {
     final fondo = f.sinMesa
         ? t.rojoSinMesa
@@ -795,6 +864,7 @@ class PlanillaSorteoPdf {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(f.adicional, style: t.estilo()),
+              ..._aparte(t, f.entradasAdicional, al),
               if (f.alertaMesas != null)
                 pw.Text(
                   f.alertaMesas!,
@@ -808,10 +878,16 @@ class PlanillaSorteoPdf {
           ),
         ),
         celda(
-          pw.Text(
-            f.sillas,
-            textAlign: pw.TextAlign.center,
-            style: t.estilo(negrita: f.sillas != '-'),
+          pw.Column(
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              pw.Text(
+                f.sillas,
+                textAlign: pw.TextAlign.center,
+                style: t.estilo(negrita: f.sillas != '-'),
+              ),
+              ..._aparte(t, f.entradasSillas, al),
+            ],
           ),
           alineacion: pw.Alignment.topCenter,
         ),
@@ -836,6 +912,7 @@ class PlanillaSorteoPdf {
     FilaPlanillaSorteo f,
     int indice,
     bool interna,
+    String al,
   ) {
     final fondo = f.sinMesa
         ? t.rojoSinMesa
@@ -888,6 +965,7 @@ class PlanillaSorteoPdf {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(f.adicional, style: t.estilo()),
+              ..._aparte(t, f.entradasAdicional, al),
               if (f.alertaMesas != null)
                 pw.Text(
                   f.alertaMesas!,
@@ -905,6 +983,7 @@ class PlanillaSorteoPdf {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(f.sillas, style: t.estilo(negrita: f.sillas != '-')),
+              ..._aparte(t, f.entradasSillas, al),
               switch (f.reparto) {
                 RepartoSillas.noAplica => pw.SizedBox(),
                 RepartoSillas.pendiente =>

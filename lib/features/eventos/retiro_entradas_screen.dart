@@ -29,6 +29,8 @@ import '../entradas/widgets/vender_entradas_screen.dart';
 import '../entradas/widgets/ventas_de_entradas_screen.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
+import 'repositories/sorteos_mesas_repository.dart';
+import 'services/lugares_al_sorteo.dart';
 import 'services/permisos_de_entrega.dart';
 import 'services/planilla_sorteo.dart';
 import 'services/retiro_entradas.dart';
@@ -98,6 +100,11 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   List<AnulacionEntradas> _anulaciones = [];
   Map<String, int> _compradas = {};
   bool _ventaAndando = false;
+
+  /// Lo que cada familia tenía al sorteo: el descuento es solo para eso
+  /// (17-nov-2026). Y el descuento que el jefe puso en PRECIOS (viene en 50).
+  FotoDeLosLugares _foto = FotoDeLosLugares.sinSorteo;
+  double _descuentoPct = ConfigEntradas.kDescuentoDeLosLugares;
   bool _porDivision = false;
   bool _ocultarMontos = false;
   bool _ocupado = false;
@@ -126,7 +133,12 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     'entradas_config',
     'entradas_ventas',
     'entradas_anulaciones',
+    // El sorteo anota qué tenía cada familia: cambia qué va con descuento.
+    'sorteos_mesas',
   };
+
+  /// "al 50 %": lo que se paga con el descuento de PRECIOS.
+  String get _alPorciento => alPorcientoQuePaga(_descuentoPct);
 
   @override
   void initState() {
@@ -194,6 +206,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           ),
       };
       final venta = await _leerLaVenta();
+      final foto = await ref.read(fotoDeLosLugaresProvider)(widget.evento.id);
       if (!mounted) return;
       setState(() {
         _alumnos = alumnos;
@@ -204,6 +217,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         _anulaciones = venta.anulaciones;
         _compradas = compradasPorFamilia(venta.ventas, venta.anulaciones);
         _ventaAndando = venta.andando;
+        _descuentoPct = venta.descuentoPct;
+        _foto = foto;
         _cargando = false;
         _errorCarga = null;
       });
@@ -219,11 +234,20 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
 
   /// Lo vendido de la fiesta. **La entrega no depende de la venta**: si no se
   /// puede leer, sigue como antes de la 6.9.0 (sin lo vendido a la vista).
-  Future<({List<VentaEntradas> ventas, List<AnulacionEntradas> anulaciones, bool andando})>
-      _leerLaVenta() async {
-    if (!ref.read(entradasEnEsteEquipoProvider)) {
-      return (ventas: <VentaEntradas>[], anulaciones: <AnulacionEntradas>[], andando: false);
-    }
+  Future<
+      ({
+        List<VentaEntradas> ventas,
+        List<AnulacionEntradas> anulaciones,
+        bool andando,
+        double descuentoPct,
+      })> _leerLaVenta() async {
+    const nada = (
+      ventas: <VentaEntradas>[],
+      anulaciones: <AnulacionEntradas>[],
+      andando: false,
+      descuentoPct: ConfigEntradas.kDescuentoDeLosLugares,
+    );
+    if (!ref.read(entradasEnEsteEquipoProvider)) return nada;
     try {
       final entradas = ref.read(entradasDeLaFiestaProvider);
       final id = widget.evento.id;
@@ -232,9 +256,10 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         ventas: await entradas.ventas(id),
         anulaciones: await entradas.anulaciones(id),
         andando: config?.tienePrecio ?? false,
+        descuentoPct: config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares,
       );
     } catch (_) {
-      return (ventas: <VentaEntradas>[], anulaciones: <AnulacionEntradas>[], andando: false);
+      return nada;
     }
   }
 
@@ -281,7 +306,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     final r = _retiros[a.id];
     if (r != null && r.entregado) {
       final cambio =
-          RetiroEntradas.cambioLaCuenta(r, RetiroEntradas.entradasDe(a));
+          RetiroEntradas.cambioLaCuenta(r, RetiroEntradas.entradasDe(a, foto: _foto));
       return cambio
           ? (
               texto: 'Retiró · cambió la cuenta',
@@ -348,7 +373,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       accion = await mostrarEntregaEntradasDialog(
         context: context,
         alumno: a,
-        entradas: RetiroEntradas.entradasDe(a),
+        entradas: RetiroEntradas.entradasDe(a, foto: _foto),
         deuda: deuda,
         bloqueo: bloqueo,
         permisos: _permisos,
@@ -360,6 +385,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                 compradas: _compradas[a.id] ?? 0,
                 puedeVender: ref.read(puedeVenderEntradasProvider) &&
                     ref.read(entradasEnEsteEquipoProvider),
+                descuentoPct: _descuentoPct,
               )
             : null,
       );
@@ -522,7 +548,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         );
         return;
       }
-      final entradas = RetiroEntradas.entradasDe(a);
+      final entradas = RetiroEntradas.entradasDe(a, foto: _foto);
       final bloqueo = RetiroEntradas.bloqueo(a, deuda);
       final errorTramos = RetiroEntradas.errorTramos(
         tramos: datos.tramos,
@@ -687,6 +713,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         retiros: _retiros,
         deudas: _deudas,
         blancoYNegro: blancoYNegro,
+        foto: _foto,
+        descuentoPct: _descuentoPct,
       );
     } catch (e) {
       if (!mounted) return;
@@ -956,7 +984,12 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   }
 
   Widget _cuerpo() {
-    final resumen = RetiroEntradas.resumen(_alumnos, _retiros, _deudas);
+    final resumen =
+        RetiroEntradas.resumen(_alumnos, _retiros, _deudas, foto: _foto);
+    final al = '${_alPorciento[0].toUpperCase()}${_alPorciento.substring(1)}';
+    final sinDescuento = resumen.sinDescuento > 0
+        ? ' · ${resumen.sinDescuento} sin descuento'
+        : '';
     return Column(
       children: [
         if (widget.enElMostrador) _arribaDelMostrador(),
@@ -976,11 +1009,16 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                 '${resumen.entradasEntregadas} de ${resumen.entradasTotales}',
               ),
               // Las de las mesas adicionales y las sillas extra: no se entregan
-              // acá, se compran aparte al 50 %.
+              // acá, se compran aparte con el descuento de PRECIOS (lo que la
+              // familia agregó después del sorteo, sin descuento).
               // Con la venta de entradas andando, cuántas ya se vendieron.
               _ventaAndando
-                  ? _tarjeta('Al 50 %', '${_vendidasAlCincuenta()} vendidas de ${resumen.alCincuenta}')
-                  : _tarjeta('Al 50 %, aparte', '${resumen.alCincuenta}'),
+                  ? _tarjeta(
+                      al,
+                      '${_vendidasAlCincuenta()} vendidas de '
+                          '${resumen.conDescuento}$sinDescuento',
+                    )
+                  : _tarjeta('$al, aparte', '${resumen.conDescuento}$sinDescuento'),
             ],
           ),
         ),
@@ -1029,7 +1067,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     for (final a in _alumnos) {
       final compradas = _compradas[a.id] ?? 0;
       if (compradas == 0) continue;
-      final corresponden = RetiroEntradas.entradasDe(a).alCincuenta;
+      final corresponden = RetiroEntradas.entradasDe(a, foto: _foto).conDescuento;
       total += compradas < corresponden ? compradas : corresponden;
     }
     return total;
@@ -1159,7 +1197,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   }
 
   Widget _fila(ContratoAlumno a, {bool compacta = false}) {
-    final e = RetiroEntradas.entradasDe(a);
+    final e = RetiroEntradas.entradasDe(a, foto: _foto);
     final r = _retiros[a.id];
     final estado = _estado(a);
     final division = a.cursoDivision?.trim() ?? '';
@@ -1185,8 +1223,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                     '${!compacta && division.isNotEmpty ? '$division · ' : ''}'
                     'mesa $mesa · ${e.sinCargo} sin cargo '
                     '(${e.vip} VIP + ${e.generales} generales)'
-                    '${e.alCincuenta > 0 ? ' · ${e.alCincuenta} al 50 %' : ''}'
-                    '${e.alCincuenta > 0 && _ventaAndando && (_compradas[a.id] ?? 0) > 0 ? ' (compró ${_compradas[a.id]})' : ''}',
+                    '${e.conDescuento > 0 ? ' · ${e.conDescuento} $_alPorciento' : ''}'
+                    '${e.conDescuento > 0 && _ventaAndando && (_compradas[a.id] ?? 0) > 0 ? ' (compró ${_compradas[a.id]})' : ''}'
+                    '${e.sinDescuento > 0 ? ' · ${e.sinDescuento} sin descuento' : ''}',
                     style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
                   ),
                   if (r != null && r.entregado && !compacta)

@@ -77,6 +77,20 @@ class SorteoMesasRegistro {
   /// para saber cómo se hizo: quién va en cada grupo sale de los alumnos.
   final bool unaMesaPrimero;
 
+  /// Lo que cada familia tenía cargado en su cuenta cuando se sorteó (17-nov-2026):
+  /// alumno → "mesas,sillas" (`LugaresCargados.texto`), solo de quien tenía mesa
+  /// adicional o sillas extra. Las entradas de esos lugares van con descuento; lo
+  /// que la familia agregue después paga la entrada entera (`LugaresAlSorteo`).
+  ///
+  /// Que esté —aunque vacío— es lo que dice que el sorteo anotó los lugares:
+  /// quien no figura tenía solo la mesa del contrato. `null` en un sorteo
+  /// anterior a esta regla, hasta que el jefe acepta la lista de PRECIOS.
+  final Map<String, String>? lugares;
+
+  /// De cuándo son los [lugares], si no son del momento de este renglón: una
+  /// restauración copia los del sorteo que restaura.
+  final DateTime? lugaresEl;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -94,6 +108,8 @@ class SorteoMesasRegistro {
     this.automatico = false,
     this.reacomodo = false,
     this.unaMesaPrimero = false,
+    this.lugares,
+    this.lugaresEl,
     this.hechoPor,
     required this.createdAt,
   });
@@ -110,8 +126,30 @@ class SorteoMesasRegistro {
   static const claveAutomatico = '_auto';
   static const claveReacomodo = '_reacomodo';
   static const claveUnaMesaPrimero = '_una_primero';
+  static const claveLugares = '_lugares';
+  static const claveLugaresEl = '_lugares_el';
 
   int get alumnos => resultado.length;
+
+  /// El texto de `resultado` con los [lugares] agregados y **todo lo demás como
+  /// estaba**, también una clave que esta versión no conoce. Es lo único que se
+  /// le agrega a un renglón ya escrito: nada de lo que dice del sorteo cambia.
+  /// `null` si el texto no se puede leer.
+  static String? resultadoConLugares(
+    Object? crudo,
+    Map<String, String> lugares,
+  ) {
+    try {
+      final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
+      if (decodificado is! Map) return null;
+      return jsonEncode({
+        for (final e in decodificado.entries) e.key.toString(): e.value,
+        claveLugares: lugares,
+      });
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Deshizo solo a los últimos sorteados, no a toda la escuela.
   bool get esDeshacerDeUltimos =>
@@ -133,6 +171,8 @@ class SorteoMesasRegistro {
     Map<String, String>? zonas;
     Map<String, String>? nuevas;
     Map<String, String>? alFinal;
+    Map<String, String>? lugares;
+    DateTime? lugaresEl;
     var automatico = false;
     var reacomodo = false;
     var unaMesaPrimero = false;
@@ -159,6 +199,10 @@ class SorteoMesasRegistro {
             reacomodo = e.value == true || e.value == 1 || e.value == '1';
           } else if (clave == claveUnaMesaPrimero) {
             unaMesaPrimero = e.value == true || e.value == 1 || e.value == '1';
+          } else if (clave == claveLugares) {
+            lugares = _mapa(e.value);
+          } else if (clave == claveLugaresEl) {
+            lugaresEl = DateTime.tryParse(e.value?.toString() ?? '');
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -183,6 +227,8 @@ class SorteoMesasRegistro {
       automatico: automatico,
       reacomodo: reacomodo,
       unaMesaPrimero: unaMesaPrimero,
+      lugares: lugares,
+      lugaresEl: lugaresEl,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -208,6 +254,9 @@ class SorteoMesasRegistro {
         if (automatico) claveAutomatico: 1,
         if (reacomodo) claveReacomodo: 1,
         if (unaMesaPrimero) claveUnaMesaPrimero: 1,
+        claveLugares: ?lugares,
+        if (lugaresEl != null)
+          claveLugaresEl: lugaresEl!.toUtc().toIso8601String(),
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

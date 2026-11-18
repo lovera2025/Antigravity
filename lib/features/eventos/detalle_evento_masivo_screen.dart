@@ -49,6 +49,7 @@ import 'services/cobro_mora_resolver.dart';
 import 'services/despues_de_guardar_cobro.dart';
 import 'services/filtro_mesas_sillas.dart';
 import 'services/filtro_mora_masivos.dart';
+import 'services/lugares_al_sorteo.dart';
 import 'services/mora_congelada.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
@@ -90,6 +91,8 @@ import 'widgets/congelar_mora_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
 import 'retiro_entradas_screen.dart';
 import '../delegado/delegado_providers.dart';
+import '../entradas/datos/config_entradas.dart' show ConfigEntradas;
+import '../entradas/providers/entradas_providers.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 
 /// Evita dispose de controllers mientras el route del diálogo aún se desmonta.
@@ -3641,12 +3644,30 @@ class _DetalleEventoMasivoScreenState
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
         vertical: opciones.vertical,
+        // Las entradas que se compran aparte: con descuento las de lo que la
+        // familia tenía al sorteo, sin descuento las de lo que agregó después.
+        foto: LugaresAlSorteo.vigente(registros),
+        descuentoPct: await _descuentoDeLosLugares(),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo generar la planilla: $e')),
       );
+    }
+  }
+
+  /// El descuento de las entradas de los lugares adicionales que el jefe puso
+  /// en PRECIOS de esta fiesta. Viene en 50; sin precio cargado, o donde no
+  /// hay base (la web), también.
+  Future<double> _descuentoDeLosLugares() async {
+    try {
+      if (!ref.read(entradasEnEsteEquipoProvider)) return ConfigEntradas.kDescuentoDeLosLugares;
+      final config =
+          await ref.read(entradasDeLaFiestaProvider).config(widget.evento.id);
+      return config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares;
+    } catch (_) {
+      return ConfigEntradas.kDescuentoDeLosLugares;
     }
   }
 
@@ -3943,6 +3964,7 @@ class _DetalleEventoMasivoScreenState
           numeros,
           antes: UltimosSorteados.antesDe(alumnos, numeros),
           lejos: _lejosParaElRegistro(config, numeros),
+          lugares: LugaresAlSorteo.sacar(alumnos),
         ),
       );
       // La puerta sigue al sorteo. Antes de subir, para que viaje junto.
@@ -4094,6 +4116,7 @@ class _DetalleEventoMasivoScreenState
       // para que deshacer solo este sorteo las devuelva a donde estaban.
       reacomodo: orden != null && orden.cambian > 0,
       unaMesaPrimero: config.unaMesaPrimero,
+      lugares: LugaresAlSorteo.sacar(alumnos),
       nuevas: nuevas == null
           ? null
           : {
@@ -4600,11 +4623,19 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? alFinal,
     bool reacomodo = false,
     bool unaMesaPrimero = false,
+
+    /// Lo que cada familia tenía cargado en ese momento (`LugaresAlSorteo`):
+    /// las entradas de eso van con descuento; las de lo que agregue después,
+    /// no. [lugaresEl], solo al restaurar: de cuándo son.
+    Map<String, String>? lugares,
+    DateTime? lugaresEl,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
         eventoId: widget.evento.id,
         tipo: tipo,
+        lugares: lugares,
+        lugaresEl: lugaresEl,
         resultado: numeros,
         antes: antes,
         quedan: quedan,
@@ -4718,12 +4749,19 @@ class _DetalleEventoMasivoScreenState
       // ellos, los que llegan tarde ya no irían al bloque de su división.
       final planoHoy = (await _leerPlano(eventoId, nube: _hayConexion)).plano;
       final bloques = RespaldoSorteo.bloquesARestaurar(respaldo, planoHoy);
+      // Restaurar no es sortear de nuevo: si con esto la fiesta vuelve a tener
+      // sorteo, lo que cada familia tenía cargado sigue siendo lo de aquel día.
+      final deAquelSorteo = LugaresAlSorteo.paraRestaurar(
+        await ref.read(sorteosMesasRepositoryProvider).delEvento(eventoId),
+      );
       await repo.asignarNumerosMesa(
         plan.aRestaurar,
         registro: _registroSorteo(
           TipoRegistroSorteo.restaurar,
           plan.aRestaurar,
           antes: UltimosSorteados.antesDe(alumnos, plan.aRestaurar),
+          lugares: deAquelSorteo?.lugares,
+          lugaresEl: deAquelSorteo?.del,
         ),
         plano: bloques == null
             ? null

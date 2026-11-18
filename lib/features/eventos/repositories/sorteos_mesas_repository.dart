@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../models/sorteo_mesas_registro.dart';
+import '../services/lugares_al_sorteo.dart';
 
 /// Registro de sorteos — SQLite + cola → Supabase. Solo se agregan renglones.
 class SorteosMesasRepository {
@@ -40,3 +42,22 @@ class SorteosMesasRepository {
 final sorteosMesasRepositoryProvider = Provider<SorteosMesasRepository>(
   (ref) => SorteosMesasRepository(),
 );
+
+/// Lo que cada familia tenía cargado al sorteo de una fiesta
+/// ([LugaresAlSorteo.vigente]), para quien solo lo lee: la entrega, la venta de
+/// entradas y los papeles. Sale del registro de esta PC, así que anda sin
+/// internet. **Si no se puede leer, todo va con descuento, como antes de la
+/// regla**: una lectura que falla no le cobra la entrada entera a nadie. En la
+/// web no hay base.
+final fotoDeLosLugaresProvider =
+    Provider<Future<FotoDeLosLugares> Function(String eventoId)>((ref) {
+  if (kIsWeb) return (_) async => FotoDeLosLugares.sinSorteo;
+  final repo = ref.read(sorteosMesasRepositoryProvider);
+  return (eventoId) async {
+    try {
+      return LugaresAlSorteo.vigente(await repo.delEvento(eventoId));
+    } catch (_) {
+      return FotoDeLosLugares.sinSorteo;
+    }
+  };
+});

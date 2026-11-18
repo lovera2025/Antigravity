@@ -81,7 +81,14 @@ class VentaAlCincuenta {
   /// Si quien atiende tiene "Vende entradas" (o el modo jefe) en este equipo.
   final bool puedeVender;
 
-  const VentaAlCincuenta({required this.compradas, required this.puedeVender});
+  /// El descuento de los lugares adicionales que el jefe puso en PRECIOS.
+  final double descuentoPct;
+
+  const VentaAlCincuenta({
+    required this.compradas,
+    required this.puedeVender,
+    this.descuentoPct = 50,
+  });
 }
 
 /// El diálogo del mostrador para un egresado: lo que se le entrega, a quién y
@@ -602,27 +609,47 @@ class _EntregaDialogState extends State<_EntregaDialog> {
   /// Las entradas de la mesa adicional y las sillas extra: no van sin cargo, se
   /// compran aparte al 50 %. Con la venta de entradas andando (6.9.0), debajo
   /// cuántas ya compró y VENDERLE ESAS ENTRADAS, o quién se las vende.
+  ///
+  /// **El descuento es solo para lo que ya tenía al sorteo** (17-nov-2026): lo
+  /// que agregó después paga la entrada entera, y se dice acá mismo.
   List<Widget> _alCincuenta() {
     final a = widget.alumno;
     final e = widget.entradas;
-    if (e.alCincuenta <= 0) return const [];
+    if (e.aComprar <= 0) return const [];
     final venta = widget.venta;
-    final quedan = venta == null ? 0 : max(0, e.alCincuenta - venta.compradas);
+    final con = e.conDescuento;
+    final sin = e.sinDescuento;
+    final quedan = venta == null ? 0 : max(0, con - venta.compradas);
     final gris = TextStyle(fontSize: 12.5, color: Colors.grey.shade700);
+    final al = alPorcientoQuePaga(venta?.descuentoPct ?? 50);
+    final todas = e.aComprar;
+    final String texto;
+    if (sin == 0) {
+      texto = '${todas == 1 ? 'La entrada' : 'Las $todas entradas'} '
+          'de ${_deDonde(a)} no ${todas == 1 ? 'va' : 'van'} sin cargo: '
+          '${todas == 1 ? 'se compra' : 'se compran'} aparte, $al.';
+    } else if (con == 0) {
+      texto = '${todas == 1 ? 'La entrada' : 'Las $todas entradas'} '
+          'de ${_deDonde(a)} no ${todas == 1 ? 'va' : 'van'} sin cargo. Lo agregó '
+          'después del sorteo: ${todas == 1 ? 'paga' : 'pagan'} la entrada entera.';
+    } else {
+      texto = 'Las $todas entradas de ${_deDonde(a)} no van sin cargo: $con '
+          '${con == 1 ? 'se compra' : 'se compran'} aparte, $al, y $sin, de lo que '
+          'agregó después del sorteo, ${sin == 1 ? 'paga' : 'pagan'} la entrada '
+          'entera.';
+    }
     return [
       const SizedBox(height: 8),
       Text(
         key: const Key('entrega_al_cincuenta'),
-        '${e.alCincuenta == 1 ? 'La entrada' : 'Las ${e.alCincuenta} entradas'} '
-        'de ${_deDonde(a)} no ${e.alCincuenta == 1 ? 'va' : 'van'} sin cargo: '
-        '${e.alCincuenta == 1 ? 'se compra' : 'se compran'} aparte, al 50 %.',
+        texto,
         style: TextStyle(
           fontSize: 12.5,
           color: Colors.orange.shade800,
           fontWeight: FontWeight.w600,
         ),
       ),
-      if (venta != null) ...[
+      if (venta != null && con > 0) ...[
         const SizedBox(height: 4),
         Wrap(
           spacing: 10,

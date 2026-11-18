@@ -18,6 +18,8 @@ import '../../common/utils/solo_jefe.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/entradas_retiro_repository.dart';
+import '../../eventos/repositories/sorteos_mesas_repository.dart';
+import '../../eventos/services/lugares_al_sorteo.dart';
 import '../../eventos/services/retiro_entradas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../cuentas/linea_de_subida.dart';
@@ -75,6 +77,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   List<AnulacionEntradas> _anulaciones = [];
   int _sinSubir = 0;
 
+  /// Lo que cada familia tenía al sorteo: el descuento es solo para eso. Solo
+  /// se lee (`fotoDeLosLugaresProvider`): la venta no escribe el registro.
+  FotoDeLosLugares _foto = FotoDeLosLugares.sinSorteo;
+
   // Lo que se está por vender.
   late bool _aUnaFamilia = true;
   late String? _familiaId = widget.familiaId;
@@ -110,6 +116,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     'entradas_anulaciones',
     'entradas_retiro',
     'contratos_alumnos',
+    // El sorteo (o el jefe, al aceptar la lista de PRECIOS) anota qué tenía
+    // cada familia: cambia a quién le va el descuento.
+    'sorteos_mesas',
   };
 
   @override
@@ -204,12 +213,14 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         operadorId: _quienVende.id,
       );
       final sinSubir = await entradas.ventasSinSubir();
+      final foto = await ref.read(fotoDeLosLugaresProvider)(id);
       if (!mounted) return;
       setState(() {
         // La última venta anulada ya no es "guardada": se va su aviso verde.
         if (_ultima != null && anulaciones.any((a) => a.ventaId == _ultima!.id)) {
           _ultima = null;
         }
+        _foto = foto;
         _config = config;
         _alumnos = alumnos;
         _todos = todos;
@@ -291,7 +302,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         a,
         ventas: _ventas,
         anulaciones: _anulaciones,
+        foto: _foto,
       );
+
+  /// "al 50 %": lo que se paga con el descuento que el jefe puso en PRECIOS.
+  String get _alPorciento =>
+      alPorcientoQuePaga(_config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares);
 
   /// Los números que ya tienen dueño: lo entregado sin cargo y lo vendido.
   Map<String, List<TramoTalonario>> get _ocupados => NumerosDeEntradas.ocupados(
@@ -810,11 +826,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   String _resumenDe(ContratoAlumno a, int compro) {
     final division = (a.cursoDivision ?? '').trim();
     final mesa = SalonMesas.textoMesasPuerta(a) ?? 'sin mesa';
-    final leCorresponden = RetiroEntradas.entradasDe(a).alCincuenta;
+    final e = RetiroEntradas.entradasDe(a, foto: _foto);
     return [
       if (division.isNotEmpty) division,
       'mesa $mesa',
-      if (leCorresponden > 0) '$leCorresponden al 50 % (compró $compro)',
+      if (e.conDescuento > 0) '${e.conDescuento} $_alPorciento (compró $compro)',
+      if (e.sinDescuento > 0) '${e.sinDescuento} sin descuento',
     ].join(' · ');
   }
 
@@ -854,8 +871,11 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                   const SizedBox(height: 2),
                   Text(
                     lugares.leCorresponden == 0
-                        ? 'No tiene mesa adicional ni sillas extra: sus entradas '
-                            'van al precio de hoy.'
+                        ? lugares.sinDescuento > 0
+                            ? 'Sus lugares adicionales los agregó después del '
+                                'sorteo: no llevan el descuento.'
+                            : 'No tiene mesa adicional ni sillas extra: sus '
+                                'entradas van al precio de hoy.'
                         : lugares.quedan == 0
                             ? 'Ya compró todas las de sus lugares adicionales '
                                 '(${lugares.compradas}).'
@@ -866,6 +886,18 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                                 '${lugares.compradas}).',
                     key: const Key('vender_le_quedan'),
                   ),
+                  if (lugares.sinDescuento > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Agregó ${lugares.sinDescuento} '
+                        '${lugares.sinDescuento == 1 ? 'lugar' : 'lugares'} después '
+                        'del sorteo: ${lugares.sinDescuento == 1 ? 'esa entrada va' : 'esas entradas van'} '
+                        'al precio de hoy, sin el descuento.',
+                        key: const Key('vender_sin_descuento'),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   if (deuda != null && !deuda.pagoTodo)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),

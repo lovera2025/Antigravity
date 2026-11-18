@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/services/planilla_sorteo_pdf.dart';
 import 'package:arguello_events/features/common/services/planilla_tema.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
@@ -191,7 +192,84 @@ void main() {
         _alumno('a', mesas: [12], sillas: 2, acompanantes: ['MAMÁ', 'PAPÁ']),
       );
       expect(f.conCena, 3);
-      expect(f.ocupacionPrincipal, '3 con cena · 7 generales');
+      // Las generales completan las 8 de la mesa principal. Las 2 sillas extra
+      // no son generales: sus entradas se compran aparte (hasta el 17-nov acá
+      // salía "3 con cena · 7 generales", y con un solo egresado, "9 generales").
+      expect(f.ocupacionPrincipal, '3 con cena · 5 generales');
+      expect(f.generalesPrincipal, 5);
+      expect(f.entradasSillas.conDescuento, 2);
+      expect(f.entradasSillas.sinDescuento, 0);
+      expect(f.entradasAdicional.total, 0);
+    });
+
+    test('el caso que confundía: 1 con cena, una adicional y 2 sillas', () {
+      final f = PlanillaSorteo.fila(
+        _alumno('a', mesas: [58, 150], extras: 1, sillas: 2),
+      );
+      expect(f.ocupacionPrincipal, '1 con cena · 7 generales');
+      // Las 8 de la mesa adicional y las 2 de las sillas, aparte.
+      expect(f.entradasAdicional.conDescuento, 8);
+      expect(f.entradasSillas.conDescuento, 2);
+    });
+
+    test('con dos mesas, 10 con cena entran: no falta ningún lugar', () {
+      // Antes comparaba contra la principal sola y decía "(!) faltan 2".
+      final f = PlanillaSorteo.fila(
+        _alumno('a', mesas: [3, 4], extras: 1, acompanantes: List.filled(9, 'X')),
+      );
+      expect(f.ocupacionPrincipal, '10 con cena · 0 generales');
+      // Los dos que no entran en la principal ocupan la adicional sin pagar la
+      // entrada: de sus 8, quedan 6 para comprar.
+      expect(f.entradasAdicional.conDescuento, 6);
+    });
+
+    test('lo que agregó después del sorteo va sin descuento', () {
+      // Al sorteo tenía una adicional y una silla; después sumó otra mesa y
+      // otra silla.
+      final foto = FotoDeLosLugares.anotada(
+        const {'a': LugaresCargados(2, 1)},
+      );
+      final f = PlanillaSorteo.fila(
+        _alumno('a', mesas: [12, 13, 90], extras: 2, sillas: 2),
+        foto: foto,
+      );
+      expect(f.ocupacionPrincipal, '1 con cena · 7 generales');
+      expect(f.entradasAdicional.conDescuento, 8);
+      expect(f.entradasAdicional.sinDescuento, 8);
+      expect(f.entradasSillas.conDescuento, 1);
+      expect(f.entradasSillas.sinDescuento, 1);
+    });
+
+    test('quien no figura en lo anotado al sorteo tenía solo la mesa del contrato',
+        () {
+      final f = PlanillaSorteo.fila(
+        _alumno('nuevo', mesas: [12, 13], extras: 1, sillas: 1),
+        foto: FotoDeLosLugares.anotada(const {}),
+      );
+      expect(f.entradasAdicional.conDescuento, 0);
+      expect(f.entradasAdicional.sinDescuento, 8);
+      expect(f.entradasSillas.sinDescuento, 1);
+    });
+
+    test('los totales: generales, con descuento y sin descuento', () {
+      final alumnos = [
+        _alumno('a', mesas: [1], acompanantes: ['MAMÁ']),
+        _alumno('b', nombre: 'B', mesas: [2, 3], extras: 1, sillas: 2),
+        _alumno('c', nombre: 'C', curso: '5° B', mesas: [4, 5], extras: 1),
+      ];
+      final r = PlanillaSorteo.resumen(
+        alumnos,
+        foto: FotoDeLosLugares.anotada(const {'b': LugaresCargados(2, 2)}),
+      );
+      // a: 6 generales · b: 7 · c: 7.
+      expect(r.generales, 20);
+      // b tenía todo al sorteo (8 + 2); c agregó su adicional después (8).
+      expect(r.conDescuento, 10);
+      expect(r.sinDescuento, 8);
+      final quintoA = r.divisiones.firstWhere((d) => d.division == '5° A');
+      expect(quintoA.generales, 13);
+      expect(quintoA.conDescuento, 10);
+      expect(quintoA.sinDescuento, 0);
     });
 
     test('una sola general va en singular', () {
@@ -242,8 +320,12 @@ void main() {
       final f = PlanillaSorteo.fila(a, repartoElegido: _elegido(a, principal: 1));
       expect(f.sillas, '1P · 2A');
       expect(f.reparto, RepartoSillas.confirmado);
-      // Con 1 silla en la principal: 9 lugares, 1 con cena, 8 generales.
-      expect(f.ocupacionPrincipal, '1 con cena · 8 generales');
+      // El reparto de las sillas no cambia las generales: son las 7 que
+      // completan la mesa principal. Las 8 de la adicional y las 3 de las
+      // sillas se compran aparte.
+      expect(f.ocupacionPrincipal, '1 con cena · 7 generales');
+      expect(f.entradasAdicional.conDescuento, 8);
+      expect(f.entradasSillas.conDescuento, 3);
     });
 
     test('si eligió para otra cuenta, vuelve a pendiente y al reparto de siempre',
@@ -522,6 +604,80 @@ void main() {
           expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
         }
       }
+    });
+
+    test(
+        'las entradas que se compran aparte salen escritas, en las cuatro hojas: '
+        'con descuento y, de lo agregado después del sorteo, sin descuento',
+        () async {
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      final alumnos = [
+        // Tenía la adicional y 2 sillas al sorteo.
+        _alumno('a', nombre: 'SOSA, MARÍA', mesas: [58, 150], extras: 1, sillas: 2),
+        // Agregó su adicional después.
+        _alumno('b', nombre: 'LÓPEZ, IVÁN', mesas: [7, 151], extras: 1),
+        _alumno('c', nombre: 'MEDINA, SOFÍA', mesas: [5]),
+      ];
+      final foto = FotoDeLosLugares.anotada(const {'a': LugaresCargados(2, 2)});
+      for (final version in VersionPlanillaSorteo.values) {
+        for (final vertical in [false, true]) {
+          final bytes = await PlanillaSorteoPdf.construir(
+            evento: evento,
+            alumnos: alumnos,
+            version: version,
+            vertical: vertical,
+            foto: foto,
+            descuentoPct: 50,
+            generada: DateTime(2026, 11, 17, 21, 41),
+          );
+          final palabras = [for (final p in palabrasDelPdf(bytes)) p.texto];
+          final hoja = '$version${vertical ? ' parada' : ' acostada'}';
+          // "1 con cena · 7 generales", nunca 9: las sillas no son generales.
+          expect(palabras, contains('generales'), reason: hoja);
+          expect(palabras, isNot(contains('9')), reason: hoja);
+          // "8 al 50 %" debajo de la adicional y "2 al 50 %" debajo de las
+          // sillas.
+          expect(palabras.where((p) => p == '50').length, greaterThanOrEqualTo(2),
+              reason: hoja);
+          // "8 sin descuento", de la adicional agregada después.
+          expect(palabras, contains('descuento'), reason: hoja);
+          // El total de la división: "... · 21 generales · 10 al 50 % · 8 sin
+          // descuento".
+          expect(palabras, contains('21'), reason: hoja);
+        }
+      }
+    });
+
+    test('sin nada anotado al sorteo, ningún papel dice "sin descuento"', () async {
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      final bytes = await PlanillaSorteoPdf.construir(
+        evento: evento,
+        alumnos: [
+          _alumno('a', nombre: 'SOSA, MARÍA', mesas: [58, 150], extras: 1, sillas: 2),
+        ],
+        version: VersionPlanillaSorteo.paraRepartir,
+        vertical: true,
+        generada: DateTime(2026, 11, 17, 21, 41),
+      );
+      final palabras = [for (final p in palabrasDelPdf(bytes)) p.texto];
+      expect(palabras, isNot(contains('descuento')));
+      expect(palabras, contains('50'));
     });
 
     test('un bloque en dos tramos ("121-130 y 151") sale escrito entero', () async {

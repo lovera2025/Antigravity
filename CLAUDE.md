@@ -589,6 +589,28 @@ cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumpl
 - La mesa adicional "a confirmar" (Recepción discreta; COBRAR y ANULAR en el PLANO, solo en modo jefe) quedó **sin
   terminar en `git stash`** (`stash@{0}`), con el detalle en el mismo CONTEXTO.
 
+**La 6.10.0, EN CURSO desde el 17-nov, sin publicar** (plan aprobado ese día, cuatro partes;
+`docs/CONTEXTO_v6.10.0_2026-11-17.md`, que empieza con "Para retomar en otro chat": ahí está **lo hecho y lo que
+falta, en orden**; el plan, `C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`). `pubspec.yaml` sigue en
+`6.9.1+76`.
+- **Parte 1, programada: la planilla del sorteo usa la cuenta de la entrega** (`RetiroEntradas.entradasDe`). En la
+  mesa principal, los con cena y las generales que completan sus 8; aparte, "8 al 50 %" debajo de la adicional y "2
+  al 50 %" debajo de las sillas. Antes sumaba las sillas como generales ("1 con cena · 9 generales").
+- **Parte 2, a medias: el descuento es solo para lo que la familia tenía al sorteo** (regla del usuario, 17-nov). La
+  mesa adicional y las sillas extra **cargadas al sorteo, pagadas o no**, van con el descuento de PRECIOS y se
+  compran cuando quiera; **lo agregado después paga la entrada entera** y se vende como entrada común.
+  - `EntradasDeAlumno` ya no tiene `alCincuenta`: `conDescuento`, `sinDescuento`, `aComprar`, `deMesas`, `deSillas`.
+  - Cada sorteo del jefe anota `_lugares` en su renglón (`LugaresAlSorteo`, `eventos/services/lugares_al_sorteo.dart`);
+    **el sorteo de la fiesta es el primer renglón del jefe en pie**. Lo lee `fotoDeLosLugaresProvider`: si no se
+    puede leer, todo va con descuento.
+  - **Falta** la lista de PRECIOS para las fiestas ya sorteadas (`LugaresAlSorteo.enDuda`, por las huellas; el jefe
+    acepta), guardarla, `sorteos_mesas` en `tablasDeLaPuerta`, las pruebas del servicio y el simulacro.
+  - **Una prueba que monte la entrega o VENDER reemplaza `sorteosMesasRepositoryProvider`**
+    (`EntregaEnMemoria.reemplazos`): sin eso la pantalla va a leer la base y, en `flutter test`, se queda esperando.
+- **Parte 3, sin empezar: el link del delegado** (todos corrigen todo, Enviar no bloquea, cierra solo la fecha
+  límite, se reabre las veces que quiera, quién cargó a quién y cuándo, ventana propia). **La maqueta va primero.**
+- **Parte 4, sin empezar: terminar "a confirmar"** (`git stash pop`).
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y

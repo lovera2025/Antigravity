@@ -4,6 +4,7 @@ import '../../../core/utils/uuid_utils.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
 import 'cobro_abono_acumulado.dart';
+import 'lugares_al_sorteo.dart';
 import 'mesas_extra_utils.dart';
 import 'mora_cuota_calculator.dart';
 import 'salon_mesas.dart';
@@ -14,32 +15,115 @@ import 'salon_mesas.dart';
 /// 4-nov-2026). La mesa adicional y las sillas extra pagan el lugar, no la
 /// entrada: cada entrada de esos lugares se compra aparte, al 50 % de su valor.
 /// En la oficina se entregan solo las sin cargo ([vip] y [generales]).
+///
+/// **El descuento es para lo que la familia tenía al sorteo** (regla del
+/// usuario, 17-nov-2026): la mesa adicional y las sillas extra que ya estaban
+/// cargadas cuando se sorteó van con el descuento de PRECIOS, y se compran
+/// cuando quiera; lo que agregó después paga la entrada entera
+/// ([conDescuento] y [sinDescuento]). Sin nada anotado ([alSorteo] en null),
+/// todo va con descuento.
 class EntradasDeAlumno {
-  /// Lugares: 8 por mesa más las sillas extra que figuran en la cuenta.
-  final int lugares;
+  /// Las mesas de su cuenta: la del contrato y las adicionales.
+  final int mesas;
+
+  /// Las sillas extra que figuran en la cuenta.
+  final int sillas;
 
   /// Egresado y acompañantes: tienen cena. Se entregan sin número.
   final int vip;
 
-  const EntradasDeAlumno({required this.lugares, required this.vip});
+  /// Lo que tenía cargado cuando se sorteó (`FotoDeLosLugares.de`), o null.
+  final LugaresCargados? alSorteo;
+
+  const EntradasDeAlumno({
+    required this.mesas,
+    required this.sillas,
+    required this.vip,
+    this.alSorteo,
+  });
 
   /// Los lugares de la mesa del contrato: los únicos con la entrada sin cargo.
   static const lugaresSinCargo = SalonMesas.sillasPorMesa;
 
+  /// Lugares: 8 por mesa más las sillas extra que figuran en la cuenta.
+  int get lugares => SalonMesas.sillasPorMesa * mesas + sillas;
+
   int get _deLaMesaDelContrato => min(lugares, lugaresSinCargo);
 
-  /// Las sin cargo que no son VIP: con número del talonario.
+  /// Las sin cargo que no son VIP: con número del talonario. Son las que
+  /// completan la mesa del contrato; las sillas extra nunca cuentan acá.
   int get generales => max(0, _deLaMesaDelContrato - vip);
 
   /// Lo que se lleva sin cargo en la oficina: VIP y generales.
   int get sinCargo => vip + generales;
 
-  /// Los lugares de la mesa adicional y de las sillas extra: su entrada se
-  /// compra aparte, al 50 %. Los VIP que no entran en la mesa del contrato
-  /// ocupan primero esos lugares: su cena ya está en la cuenta.
-  int get alCincuenta => max(0, lugares - max(_deLaMesaDelContrato, vip));
-
   bool get entran => vip <= lugares;
+
+  /// Lo que se compra aparte, por dónde está el lugar y con qué precio. Los VIP
+  /// que no entran en la mesa del contrato ocupan esos lugares sin pagar la
+  /// entrada (su cena ya está en la cuenta), en este orden: las mesas que
+  /// tenía al sorteo, sus sillas, y recién después lo que agregó. Así agregar
+  /// un lugar nunca le sube lo que va con descuento.
+  ({LugaresAparte mesas, LugaresAparte sillas}) get _aparte {
+    final adicionales = max(0, mesas - 1);
+    final foto = alSorteo;
+    final mesasDeAntes =
+        foto == null ? adicionales : min(adicionales, max(0, foto.mesas - 1));
+    final sillasDeAntes = foto == null ? sillas : min(sillas, max(0, foto.sillas));
+    var vipDeMas = max(0, vip - lugaresSinCargo);
+    int libres(int lugares) {
+      final ocupan = min(vipDeMas, lugares);
+      vipDeMas -= ocupan;
+      return lugares - ocupan;
+    }
+
+    final mesasCon = libres(SalonMesas.sillasPorMesa * mesasDeAntes);
+    final sillasCon = libres(sillasDeAntes);
+    final mesasSin =
+        libres(SalonMesas.sillasPorMesa * (adicionales - mesasDeAntes));
+    final sillasSin = libres(sillas - sillasDeAntes);
+    return (
+      mesas: LugaresAparte(conDescuento: mesasCon, sinDescuento: mesasSin),
+      sillas: LugaresAparte(conDescuento: sillasCon, sinDescuento: sillasSin),
+    );
+  }
+
+  /// Las entradas de las mesas adicionales.
+  LugaresAparte get deMesas => _aparte.mesas;
+
+  /// Las entradas de las sillas extra.
+  LugaresAparte get deSillas => _aparte.sillas;
+
+  /// Las que compra con el descuento de PRECIOS: las de la mesa adicional y
+  /// las sillas extra que ya tenía al sorteo.
+  int get conDescuento => deMesas.conDescuento + deSillas.conDescuento;
+
+  /// Las de lo que agregó después del sorteo: pagan la entrada entera.
+  int get sinDescuento => deMesas.sinDescuento + deSillas.sinDescuento;
+
+  /// Todas las que se compran aparte: [conDescuento] más [sinDescuento].
+  int get aComprar => conDescuento + sinDescuento;
+}
+
+/// "al 50 %": lo que se paga del valor de la entrada con el descuento que el
+/// jefe puso en PRECIOS para los lugares adicionales (viene en 50). Un solo
+/// texto para la entrega, la venta y los papeles.
+String alPorcientoQuePaga(double descuentoPct) {
+  final paga = 100 - descuentoPct;
+  final texto = paga == paga.roundToDouble()
+      ? paga.round().toString()
+      : paga.toStringAsFixed(1).replaceAll('.', ',');
+  return 'al $texto %';
+}
+
+/// Las entradas que se compran aparte, por el precio que pagan.
+class LugaresAparte {
+  final int conDescuento;
+  final int sinDescuento;
+
+  const LugaresAparte({required this.conDescuento, required this.sinDescuento});
+
+  int get total => conDescuento + sinDescuento;
 }
 
 /// Lo que debe un egresado, con la misma cuenta que la pantalla de cobro.
@@ -106,8 +190,12 @@ class FilaPlanillaEntrega {
   final int vip;
   final int generales;
 
-  /// Las de la mesa adicional y las sillas extra: se compran aparte, al 50 %.
-  final int alCincuenta;
+  /// Las de la mesa adicional y las sillas extra que ya tenía al sorteo: se
+  /// compran aparte, con el descuento de PRECIOS.
+  final int conDescuento;
+
+  /// Las de lo que agregó después del sorteo: pagan la entrada entera.
+  final int sinDescuento;
 
   /// Los números del talonario si ya se entregó; vacío si no.
   final String delAl;
@@ -129,7 +217,8 @@ class FilaPlanillaEntrega {
     required this.mesa,
     required this.vip,
     required this.generales,
-    required this.alCincuenta,
+    required this.conDescuento,
+    this.sinDescuento = 0,
     required this.delAl,
     required this.menores,
     required this.parentesco,
@@ -150,8 +239,12 @@ class ResumenRetiro {
   /// Las sin cargo de todos: las de la mesa del contrato.
   final int entradasTotales;
 
-  /// Las de las mesas adicionales y las sillas extra: se compran al 50 %.
-  final int alCincuenta;
+  /// Las de las mesas adicionales y las sillas extra que las familias ya
+  /// tenían al sorteo: se compran con el descuento de PRECIOS.
+  final int conDescuento;
+
+  /// Las de lo agregado después del sorteo: pagan la entrada entera.
+  final int sinDescuento;
 
   const ResumenRetiro({
     required this.alumnos,
@@ -159,7 +252,8 @@ class ResumenRetiro {
     required this.conDeuda,
     required this.entradasEntregadas,
     required this.entradasTotales,
-    required this.alCincuenta,
+    required this.conDescuento,
+    this.sinDescuento = 0,
   });
 
   int get faltan => alumnos - retiraron;
@@ -178,9 +272,16 @@ class RetiroEntradas {
   /// así que se deja pasar hasta un peso.
   static const double diferenciaMaxima = 1.0;
 
-  static EntradasDeAlumno entradasDe(ContratoAlumno a) {
+  /// [foto]: lo que cada familia tenía al sorteo (`LugaresAlSorteo.vigente`).
+  /// Sin ella, todo lo que se compra aparte va con descuento.
+  static EntradasDeAlumno entradasDe(ContratoAlumno a, {FotoDeLosLugares? foto}) {
     final o = SalonMesas.ocupacion(a);
-    return EntradasDeAlumno(lugares: o.asientos, vip: o.personas);
+    return EntradasDeAlumno(
+      mesas: o.mesas,
+      sillas: o.sillasExtra,
+      vip: o.personas,
+      alSorteo: foto?.de(a.id),
+    );
   }
 
   static DeudaAlumno deudaDe(
@@ -414,8 +515,9 @@ class RetiroEntradas {
     ContratoAlumno a, {
     EntradasRetiro? retiro,
     required DeudaAlumno deuda,
+    FotoDeLosLugares? foto,
   }) {
-    final e = entradasDe(a);
+    final e = entradasDe(a, foto: foto);
     final entregado = retiro?.entregado ?? false;
     return FilaPlanillaEntrega(
       alumnoId: a.id,
@@ -423,7 +525,8 @@ class RetiroEntradas {
       mesa: SalonMesas.textoMesasPuerta(a) ?? '-',
       vip: entregado ? retiro!.vip : e.vip,
       generales: entregado ? retiro!.generales : e.generales,
-      alCincuenta: e.alCincuenta,
+      conDescuento: e.conDescuento,
+      sinDescuento: e.sinDescuento,
       delAl: entregado ? TramoTalonario.legible(retiro!.tramos) : '',
       menores: entregado ? '${retiro!.menores10}' : '',
       parentesco: entregado ? retiro!.parentesco?.etiqueta ?? '' : '',
@@ -435,15 +538,17 @@ class RetiroEntradas {
   static ResumenRetiro resumen(
     Iterable<ContratoAlumno> alumnos,
     Map<String, EntradasRetiro> retiros,
-    Map<String, DeudaAlumno> deudas,
-  ) {
+    Map<String, DeudaAlumno> deudas, {
+    FotoDeLosLugares? foto,
+  }) {
     var total = 0, retiraron = 0, conDeuda = 0, entregadas = 0, totales = 0;
-    var alCincuenta = 0;
+    var conDescuento = 0, sinDescuento = 0;
     for (final a in alumnos) {
       total++;
-      final e = entradasDe(a);
+      final e = entradasDe(a, foto: foto);
       totales += e.sinCargo;
-      alCincuenta += e.alCincuenta;
+      conDescuento += e.conDescuento;
+      sinDescuento += e.sinDescuento;
       final r = retiros[a.id];
       if (r != null && r.entregado) {
         retiraron++;
@@ -459,7 +564,8 @@ class RetiroEntradas {
       conDeuda: conDeuda,
       entradasEntregadas: entregadas,
       entradasTotales: totales,
-      alCincuenta: alCincuenta,
+      conDescuento: conDescuento,
+      sinDescuento: sinDescuento,
     );
   }
 }

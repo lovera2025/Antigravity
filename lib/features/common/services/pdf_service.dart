@@ -32,6 +32,7 @@ import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
 import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/concepto_pago_display.dart';
+import '../../eventos/services/lugares_al_sorteo.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
@@ -4423,9 +4424,13 @@ class PdfService {
     bool blancoYNegro = false,
     bool vertical = false,
     DateTime? generada,
+    FotoDeLosLugares? foto,
+    double descuentoPct = 50,
   }) async {
     final fuentes = await _fuentesOutfit();
     return PlanillaSorteoPdf.construir(
+      foto: foto,
+      descuentoPct: descuentoPct,
       vertical: vertical,
       evento: evento,
       alumnos: alumnos,
@@ -4455,6 +4460,8 @@ class PdfService {
     required Map<String, DeudaAlumno> deudas,
     bool blancoYNegro = false,
     DateTime? generada,
+    FotoDeLosLugares? foto,
+    double descuentoPct = 50,
   }) async {
     final fuentes = await _fuentesOutfit();
     return PlanillaEntregaPdf.construir(
@@ -4466,6 +4473,8 @@ class PdfService {
       regular: fuentes?.$1,
       negrita: fuentes?.$2,
       generada: generada,
+      foto: foto,
+      descuentoPct: descuentoPct,
     );
   }
 
@@ -4475,6 +4484,10 @@ class PdfService {
     required Map<String, EntradasRetiro> retiros,
     required Map<String, DeudaAlumno> deudas,
     bool blancoYNegro = false,
+
+    /// Lo que cada familia tenía al sorteo, y el descuento de PRECIOS.
+    FotoDeLosLugares? foto,
+    double descuentoPct = 50,
   }) async {
     final bytes = await construirPlanillaEntregaPdf(
       evento,
@@ -4482,6 +4495,8 @@ class PdfService {
       retiros: retiros,
       deudas: deudas,
       blancoYNegro: blancoYNegro,
+      foto: foto,
+      descuentoPct: descuentoPct,
     );
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
       RegExp(r'[^a-zA-Z0-9_\-\.]'),
@@ -4514,10 +4529,17 @@ class PdfService {
 
     /// La hoja parada en vez de acostada (`PlanillaSorteoPdf`).
     bool vertical = false,
+
+    /// Lo que cada familia tenía al sorteo, y el descuento de PRECIOS: las
+    /// entradas que se compran aparte, con y sin descuento.
+    FotoDeLosLugares? foto,
+    double descuentoPct = 50,
   }) async {
     final bytes = await construirPlanillaSorteoPdf(
       evento,
       alumnos,
+      foto: foto,
+      descuentoPct: descuentoPct,
       pagos: pagos,
       notas: notas,
       repartos: repartos,
