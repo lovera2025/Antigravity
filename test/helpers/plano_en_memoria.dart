@@ -94,15 +94,58 @@ class ContratosDelPlano extends ContratosRepository {
   final asignaciones = <Map<String, String?>>[];
   final movimientos = <MovimientoMesas>[];
 
-  /// Lo que se guardó de cada contrato con [actualizar] (el contrato entero).
+  /// Lo que se guardó de cada contrato con [actualizarContrato] (el contrato
+  /// entero, como quedó), y lo que se mandó cada vez.
   final actualizados = <ContratoAlumno>[];
+  final mandado = <Map<String, dynamic>>[];
+
+  /// Los contratos a los que se les rehízo la cuenta y las mesas adicionales
+  /// (lo que hace Editar alumno después de guardar la ficha).
+  final recalculados = <String>[];
+  final reconciliados = <String>[];
+
+  /// Guardar la ficha falla (para probar que se dice).
+  bool fallaAlActualizar = false;
+
+  /// Cuántas familias tienen en la nube otra mesa que todavía no bajó. Null:
+  /// no se pudo consultar (sin conexión).
+  int? deOtraPc = 0;
+
+  @override
+  Future<ContratoAlumno?> getContratoById(String id) async =>
+      alumnos.where((a) => a.id == id).firstOrNull;
+
+  @override
+  Future<void> actualizarContrato(
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
+    if (fallaAlActualizar) throw Exception('no se pudo guardar la ficha');
+    mandado.add(updates);
+    alumnos = [
+      for (final a in alumnos)
+        a.id == id ? ContratoAlumno.fromJson({...a.toJson(), ...updates}) : a,
+    ];
+    actualizados.add(alumnos.firstWhere((a) => a.id == id));
+  }
+
+  @override
+  Future<void> recalcularProgresoContrato(
+    String contratoId, {
+    bool revisarNube = true,
+  }) async =>
+      recalculados.add(contratoId);
+
+  @override
+  Future<void> reconciliarMesasEstadoContrato(String contratoId) async =>
+      reconciliados.add(contratoId);
 
   @override
   Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
       List.of(alumnos);
 
   @override
-  Future<int?> mesasDeOtraPcSinBajar(String eventoId) async => 0;
+  Future<int?> mesasDeOtraPcSinBajar(String eventoId) async => deOtraPc;
 
   @override
   Future<List<Map<String, dynamic>>> getPagosForContratoIds(
@@ -176,8 +219,22 @@ class ConexionDePrueba extends ConnectivityService {
 class _Motor implements SyncEngine {
   final bajo = StreamController<Set<String>>.broadcast();
 
+  /// Si se puede bajar de la nube, y lo que la bajada deja en la base de
+  /// esta PC (un pago que hizo recién la otra).
+  bool hayNube = true;
+  void Function()? alBajar;
+  int bajadas = 0;
+
   @override
   Stream<Set<String>> get cambiosBajadosStream => bajo.stream;
+
+  @override
+  Future<bool> bajarParaLosLugares() async {
+    if (!hayNube) return false;
+    bajadas++;
+    alBajar?.call();
+    return true;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -239,8 +296,28 @@ class MundoDelPlano {
   final puerta = _Puerta();
 
   /// Lo que devolvió la pantalla del plano al cerrarse (por ejemplo, a quién
-  /// cobrarle).
+  /// cobrarle), y si ya se cerró.
   Object? alCerrar;
+  bool cerrada = false;
+
+  /// Bajó algo de la otra PC: ya está en la base de esta.
+  void bajo(Set<String> tablas) => _motor.bajo.add(tablas);
+
+  /// Sin internet: ni la nube contesta ni se puede bajar nada.
+  void sinInternet() {
+    conexion.estado = AppConnectivity.offline;
+    planos.sinRed = true;
+    contratos.deOtraPc = null;
+    _motor.hayNube = false;
+  }
+
+  /// La nube contesta por las mesas y el plano, pero bajar lo último falla.
+  void sinBajada() => _motor.hayNube = false;
+
+  /// Lo que deja en la base de esta PC la bajada de antes de guardar.
+  set alBajar(void Function() f) => _motor.alBajar = f;
+
+  int get bajadas => _motor.bajadas;
 }
 
 /// Deja pasar lo que la pantalla tiene pendiente: lecturas, guardados, y un
@@ -292,6 +369,7 @@ Future<MundoDelPlano> montarPlanoDeLaFiesta(
         ),
       ],
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(fontFamily: FuentesPlano.linea, useMaterial3: true),
         home: Navigator(
           // Una pantalla debajo: la del plano se puede cerrar y devolver algo.
@@ -301,7 +379,10 @@ Future<MundoDelPlano> montarPlanoDeLaFiesta(
             ),
             MaterialPageRoute<Object?>(
               builder: (_) => PlanoEventoScreen(evento: evento),
-            )..popped.then((v) => mundo.alCerrar = v),
+            )..popped.then((v) {
+                mundo.alCerrar = v;
+                mundo.cerrada = true;
+              }),
           ],
         ),
       ),

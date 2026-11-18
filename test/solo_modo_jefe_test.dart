@@ -774,4 +774,104 @@ void main() {
       isEmpty,
     );
   });
+
+  test('la mesa adicional "a confirmar" (6.9.2): cobrarla y anularla se hace '
+      'solo en el PLANO y en modo jefe, y la ficha se edita por un solo camino',
+      () {
+    Set<String> archivosCon(String texto) => {
+          for (final f in Directory('lib').listSync(recursive: true))
+            if (f is File &&
+                f.path.endsWith('.dart') &&
+                f.readAsStringSync().contains(texto))
+              f.path.replaceAll('\\', '/'),
+        };
+    const cuerpoDelPlano = 'lib/features/plano/widgets/plano_evento_cuerpo.dart';
+    const edicion = 'lib/features/eventos/services/edicion_de_alumno.dart';
+    const ficha = 'lib/features/eventos/widgets/modal_alumno_premium.dart';
+    final plano = leer(pantallaPlano);
+
+    String funcionDe(String nombre) {
+      final i = plano.indexOf('  Future<void> $nombre(');
+      expect(i, greaterThan(0), reason: nombre);
+      return plano.substring(i, plano.indexOf('\n  }\n', i));
+    }
+
+    // Las dos preguntan por el modo jefe antes de hacer nada.
+    for (final nombre in ['_cobrarAConfirmar', '_anularAConfirmar']) {
+      final cuerpo = funcionDe(nombre);
+      final llave = cuerpo.indexOf('_frenaSinModoJefe()');
+      expect(llave, greaterThan(0), reason: nombre);
+      expect(llave, lessThan(cuerpo.indexOf('await ')), reason: nombre);
+    }
+    // Y el cuerpo del plano las recibe solo en modo jefe (`acciones: esJefe`).
+    expect(plano, contains('onCobrarAConfirmar: _cobrarAConfirmar,'));
+    expect(plano, contains('onAnularAConfirmar: _anularAConfirmar,'));
+    expect(archivosCon('onAnularAConfirmar'), {pantallaPlano, cuerpoDelPlano});
+    expect(archivosCon('onCobrarAConfirmar'), {pantallaPlano, cuerpoDelPlano});
+
+    // COBRAR no guarda nada: cierra el plano y la fiesta abre el cobro de
+    // siempre.
+    final cobrar = funcionDe('_cobrarAConfirmar');
+    expect(cobrar, contains('navegador.pop(CobrarDesdeElPlano(alumnoId))'));
+    for (final guarda in ['_cambiarMesas(', 'guardarEdicionDeAlumno(', 'Repository']) {
+      expect(cobrar, isNot(contains(guarda)), reason: guarda);
+    }
+    final fiesta = leer(pantallaFiesta);
+    final abrir = fiesta.substring(
+      fiesta.indexOf('  Future<void> _abrirPlano('),
+      fiesta.indexOf('  Future<void> _cargarPagosExtras('),
+    );
+    expect(abrir, contains('alCerrar is! CobrarDesdeElPlano'));
+    expect(abrir, contains('await _mostrarModalPagoAlumno(aQuien);'));
+    expect(archivosCon('CobrarDesdeElPlano'), {pantallaFiesta, pantallaPlano});
+
+    // ANULAR: la mesa, por el guardado de mesas de siempre (con su llave, su
+    // renglón y la puerta al día); solo con internet y con lo último bajado.
+    final anular = funcionDe('_anularAConfirmar');
+    expect(anular, contains('await _cambiarMesas('));
+    expect(anular, contains('CambiosDeMesa.soltarUna('));
+    expect(anular, contains('motivoFijo: CambiosDeMesa.motivoAnulada,'));
+    expect(anular, contains('sinInternetNoSeHace: sinInternet,'));
+    expect(
+      anular,
+      contains('if (!await motor.bajarParaLosLugares()) return sinInternet;'),
+    );
+    // Con algo pagado no se anula, y si después no se va a poder bajar del
+    // contrato, la mesa no se suelta.
+    expect(anular, contains('if (!x.sePuedeAnular) {'));
+    expect(anular, contains('final baja = BajaDeAdicional.de(a);'));
+    expect(archivosCon('CambiosDeMesa.soltarUna('), {pantallaPlano});
+    expect(archivosCon('BajaDeAdicional.de('), {pantallaPlano});
+
+    // El contrato se baja por el camino de Editar alumno, que es uno solo.
+    expect(archivosCon('guardarEdicionDeAlumno('), {
+      edicion,
+      ficha,
+      pantallaPlano,
+    });
+    expect('guardarEdicionDeAlumno('.allMatches(plano).length, 1);
+    expect(anular, contains('await guardarEdicionDeAlumno('));
+    expect('guardarEdicionDeAlumno('.allMatches(leer(ficha)).length, 1);
+    final servicio = leer(edicion);
+    final guardar = servicio.substring(
+      servicio.indexOf('Future<void> guardarEdicionDeAlumno('),
+      servicio.indexOf('class BajaDeAdicional'),
+    );
+    expect(guardar, contains('datosEdicionAlumno('));
+    expect(guardar, contains('repo.recalcularProgresoContrato(antes.id)'));
+    expect(guardar, contains('repo.reconciliarMesasEstadoContrato(antes.id)'));
+    // La ventana de Editar alumno ya no arma la ficha por su cuenta.
+    expect(leer(ficha), isNot(contains('repo.actualizarContrato(')));
+    // La pantalla del plano no escribe la ficha por ningún otro lado.
+    expect(plano, isNot(contains('actualizarContrato(')));
+
+    // En la puerta nadie cobra ni anula.
+    for (final f in Directory('lib/features/recepcion').listSync(recursive: true)) {
+      if (f is! File || !f.path.endsWith('.dart')) continue;
+      final fuente = f.readAsStringSync();
+      for (final no in ['AConfirmar(alumnoId', 'BajaDeAdicional', 'soltarUna(']) {
+        expect(fuente, isNot(contains(no)), reason: '${f.path}: $no');
+      }
+    }
+  });
 }

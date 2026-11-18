@@ -541,9 +541,12 @@ class _DetalleEventoMasivoScreenState
 
   /// El plano del salón. Con [alumnoId], abre con esa familia resaltada; con
   /// [imprimir], abre preguntando cómo se imprime (PLANILLAS → Plano impreso).
+  ///
+  /// Si el plano se cierra por COBRAR de una mesa adicional "a confirmar"
+  /// (6.9.2), devuelve a quién cobrarle y acá se abre **el cobro de siempre**.
   Future<void> _abrirPlano({String? alumnoId, bool imprimir = false}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    final alCerrar = await Navigator.of(context).push(
+      MaterialPageRoute<Object?>(
         builder: (_) => PlanoEventoScreen(
           evento: widget.evento,
           resaltarAlumnoId: alumnoId,
@@ -551,7 +554,12 @@ class _DetalleEventoMasivoScreenState
         ),
       ),
     );
-    if (mounted) await _cargarSiHayPlano();
+    if (!mounted) return;
+    await _cargarSiHayPlano();
+    if (!mounted || alCerrar is! CobrarDesdeElPlano) return;
+    final aQuien =
+        _alumnos.where((a) => a.id == alCerrar.alumnoId).firstOrNull;
+    if (aQuien != null) await _mostrarModalPagoAlumno(aQuien);
   }
 
   /// Lo cargado y lo pagado de mesas y sillas de cada alumno, y los avisos del

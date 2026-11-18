@@ -111,9 +111,28 @@ class CambioDeMesas {
   bool _tieneVarias(String id) =>
       MesasExtraUtils.numerosMesaDesdeTexto(antes[id]).length > 1;
 
+  /// Las mesas que una familia **dejó, sin tomar ninguna** (se le anuló una
+  /// adicional, 6.9.2), en orden. Null si tomó alguna o no dejó ninguna.
+  static List<int>? mesasQueDejo(String? antes, String? despues) {
+    final a = MesasExtraUtils.numerosMesaDesdeTexto(antes);
+    final d = MesasExtraUtils.numerosMesaDesdeTexto(despues);
+    if (d.difference(a).isNotEmpty) return null;
+    final dejo = a.difference(d).toList()..sort();
+    return dejo.isEmpty ? null : dejo;
+  }
+
   /// Lo que se dice cuando el cambio ya quedó guardado.
   String textoHecho(String Function(String alumnoId) apellidoDe) {
     final ids = despues.keys.toList();
+    // Dejar una mesa viaja como un "mover" (sin tipo nuevo), pero no pasó a
+    // ningún lado.
+    if (tipo == TipoMovimientoMesas.mover && ids.length == 1) {
+      final dejo = mesasQueDejo(antes[ids.first], despues[ids.first]);
+      if (dejo != null) {
+        return '${apellidoDe(ids.first)} dejó '
+            '${CambiosDeMesa.textoMesas(dejo)}.';
+      }
+    }
     switch (tipo) {
       case TipoMovimientoMesas.intercambio:
         // Cambiaron una sola mesa, y alguna de las dos conserva otras: se
@@ -898,6 +917,78 @@ class CambiosDeMesa {
     );
   }
 
+  /// El motivo que queda escrito cuando se anula una mesa adicional "a
+  /// confirmar" (6.9.2). No dice nada de plata: el Historial lo ve cualquiera.
+  static const motivoAnulada = 'Mesa adicional anulada';
+
+  /// Una familia **deja una de sus mesas** ([mesa]), que queda vacía; las
+  /// otras siguen donde están. Es para anular una mesa adicional "a confirmar"
+  /// (6.9.2): bajarla del contrato va aparte, por el camino de Editar alumno.
+  ///
+  /// **Sin tipo de movimiento nuevo**: es un "mover" con una mesa menos, así
+  /// una versión anterior lo lee y lo aplica igual (para ella, un tipo que no
+  /// conoce también es "mover").
+  static CambioDeMesas soltarUna({
+    required ConfigPlano config,
+    required List<ContratoAlumno> alumnos,
+    required String alumnoId,
+    required int mesa,
+    Set<String> yaRetiraron = const {},
+  }) {
+    const tipo = TipoMovimientoMesas.mover;
+    final a = _alumno(alumnos, alumnoId);
+    if (a == null || a.esBajaTemporal) {
+      return const CambioDeMesas.noSePuede(
+        tipo,
+        'Esa familia ya no está en la fiesta.',
+      );
+    }
+    final viejas = numerosDe(a);
+    if (!viejas.contains(mesa)) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        '${apellido(a)} ya no tiene la mesa $mesa.',
+      );
+    }
+    if (viejas.length < 2) {
+      return CambioDeMesas.noSePuede(
+        tipo,
+        '${apellido(a)} tiene una sola mesa: no se le saca desde acá.',
+      );
+    }
+    final nuevas = [
+      for (final n in viejas)
+        if (n != mesa) n,
+    ];
+    final nombre = apellido(a);
+    // Si era una fijada de esa familia, se va con la mesa: si quedara, el
+    // sorteo se la volvería a dar.
+    final eraFijada = config.fijadas[mesa]?.alumnoId == a.id;
+    return CambioDeMesas._(
+      tipo: tipo,
+      antes: {a.id: MesasExtraUtils.formatearAsignacionMesas(viejas)},
+      despues: {a.id: MesasExtraUtils.formatearAsignacionMesas(nuevas)},
+      avisos: [
+        'La mesa $mesa queda vacía: se le puede dar a otra familia.',
+        'Esa mesa adicional se baja del contrato de $nombre.',
+        if (yaRetiraron.contains(a.id))
+          '$nombre ya retiró sus entradas: hay que avisarle y reimprimir la '
+              'planilla de entrega.',
+        if (SalonMesas.sillasExtra(a) > 0)
+          'Las sillas extra de $nombre quedan en '
+              '${nuevas.length == 1 ? 'la mesa que conserva' : 'las mesas que conserva'}: '
+              'mirá cómo queda el reparto.',
+      ],
+      hayQueAvisarALaFamilia: yaRetiraron.contains(a.id),
+      config: eraFijada
+          ? config.copyWith(fijadas: {
+              for (final e in config.fijadas.entries)
+                if (e.key != mesa) e.key: e.value,
+            })
+          : null,
+    );
+  }
+
   /// Dos familias cambian **una mesa por otra**: la [mesa] de una por
   /// [otraMesa], que es de otra familia. Cada una conserva las demás, así que
   /// no hace falta que tengan la misma cantidad.
@@ -1047,6 +1138,20 @@ class CambiosDeMesa {
           tipo,
           'Las mesas de ${apellido(a)} cambiaron después de este cambio: ya '
           'no se puede deshacer.',
+        );
+      }
+    }
+    // Deshacer no le devuelve a una familia una mesa que ya no tiene en su
+    // contrato: la adicional que se anuló (6.9.2) se bajó de su cuenta, y con
+    // la mesa de vuelta quedaría sentada en una que no contrató.
+    for (final e in movimiento.antes.entries) {
+      final a = _alumno(alumnos, e.key)!;
+      final vuelve = _numerosDeTexto(e.value).length;
+      if (vuelve > numerosDe(a).length && vuelve > SalonMesas.mesas(a)) {
+        return CambioDeMesas.noSePuede(
+          tipo,
+          '${apellido(a)} ya no tiene esa mesa en su contrato. Para '
+          'devolvérsela, agregale la mesa en Editar alumno.',
         );
       }
     }

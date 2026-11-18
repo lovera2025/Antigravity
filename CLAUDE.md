@@ -586,8 +586,7 @@ cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumpl
   control final del sorteo (`validar`), el dibujo y el papel (`FamiliasEnElPlano`: cápsula, no aro punteado) y
   el aviso de Mover. **El motor y `tramosPegados` no cambiaron.** En un plano ya sorteado no cambia ninguna mesa:
   solo se dibuja con cápsula una familia que ya tenía una mesa justo detrás de la otra.
-- La mesa adicional "a confirmar" (Recepción discreta; COBRAR y ANULAR en el PLANO, solo en modo jefe) quedó **sin
-  terminar en `git stash`** (`stash@{0}`), con el detalle en el mismo CONTEXTO.
+- La mesa adicional "a confirmar" quedó afuera de la 6.9.1: se terminó en la 6.9.2 (su Parte 4, abajo).
 
 **La 6.9.2, EN CURSO desde el 17-nov, sin publicar** (se llamaba 6.10.0: el usuario le puso 6.9.2 el 18-nov; plan
 aprobado el 17-nov, cuatro partes; `docs/CONTEXTO_v6.9.2_2026-11-17.md`, que empieza con "Para retomar en otro chat":
@@ -656,7 +655,34 @@ ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.clau
   - **Lo que contesta la nube lo lee el programa en una prueba** (`test/nube_del_delegado_se_lee_test.dart`, con
     `test/datos/nube_del_delegado.json`, que saca `node muestras.mjs` del SQL de verdad). **Si cambia el SQL del
     link: `node muestras.mjs` y después esa prueba** (si no, `pruebas.mjs` falla en M1).
-- **Parte 4, sin empezar: terminar "a confirmar"** (`git stash pop`).
+- **Parte 4, programada y probada (18-nov): la mesa adicional "a confirmar"** (pedido del jefe, 16-nov). La
+  adicional que no está paga entera se ve **"a confirmar"**: sin ninguna palabra de plata, porque la familia puede
+  estar mirando. Sin SQL ni migración.
+  - **Sale de los pagos, nunca de los campos del contrato**: `AdicionalesDeLaFamilia`
+    (`eventos/services/adicional_a_confirmar.dart`; lo de las mesas se reparte de la primera adicional a la última).
+    **Sin los pagos (null) no se marca ninguna.** Los lee `pagosPorContrato`, para la puerta y para el PLANO.
+  - **En la puerta** (Recepción, el celular y el tótem): la línea apagada "Mesa adicional 15 · a confirmar", al
+    tocarla "Esta mesa la confirma el jefe", no se le suman sillas y el tótem enciende solo las mesas pagas. **La
+    recepcionista no cobra ni anula.**
+  - **En el PLANO** la mesa va punteada, apagada y con un relojito (`PintorPlano._aConfirmar`; **el papel no la
+    distingue**). En la tarjeta de su familia: "Mesa adicional N · a confirmar" y, **solo en modo jefe**, "A pagar"
+    con **COBRAR** y **ANULAR**; sin modo jefe los dos se ven apagados con el motivo y sin el monto.
+  - **COBRAR no guarda nada**: el plano se cierra y devuelve `CobrarDesdeElPlano`, y la fiesta abre **el cobro de
+    siempre** (`_abrirPlano` → `_mostrarModalPagoAlumno`). Cuando el pago entra o baja de la otra PC, la mesa vuelve
+    sola a la normalidad (el plano relee con `pagos_contrato_alumno`).
+  - **ANULAR, solo con $0 pagado y con internet** (`_anularAConfirmar`). Dos pasos, en este orden: la familia deja
+    esa mesa (`CambiosDeMesa.soltarUna`, por `_cambiarMesas`: su renglón, la puerta al día; **sin tipo de movimiento
+    nuevo**, es un "mover" con una mesa menos, motivo "Mesa adicional anulada") y después la adicional se baja del
+    contrato (`BajaDeAdicional`). Antes de guardar baja las fichas y los pagos (`bajarParaLosLugares`) y vuelve a
+    mirar que siga sin pagos. Si lo segundo falla, lo dice en rojo y la mesa ya quedó vacía. No ofrece DESHACER, y
+    **deshacer no devuelve una mesa que ya no está en el contrato**.
+  - **La ficha de un alumno se edita por un solo camino: `guardarEdicionDeAlumno`**
+    (`eventos/services/edicion_de_alumno.dart`, donde también viven `datosEdicionAlumno` y `camposMoraDelAlumno`). Lo
+    usan Editar alumno y ANULAR; `test/solo_modo_jefe_test.dart` falla si aparece otro.
+  - Los guardados del salón del plano siguen siendo `_guardar`, `_cambiarConfig` y `_cambiarMesas`.
+  - Para mirarlo: `tool/plano_prueba.dart` (con "Familias con mesa", PEREZ y SOSA la tienen a confirmar; el ícono de
+    la izquierda apaga el modo jefe) y las capturas de `tool/a_confirmar_muestra_test.dart`.
+  - **Un equipo con la 6.9.1 o anterior no la conoce**: ve esa mesa como una más y el tótem la enciende.
 - **En esta PC no hay con qué pasar un PDF a imagen** (ni `pdftoppm` ni un paquete de Python), y un PDF armado con las
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
   dicen se comprueba en los tests con la letra de fábrica.

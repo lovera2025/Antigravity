@@ -13,6 +13,7 @@ import '../../../core/services/sync_engine.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../../eventos/repositories/sillas_reparto_repository.dart';
+import '../../eventos/services/pagos_por_contrato.dart';
 import '../../barra/providers/barra_del_jefe_provider.dart';
 import '../services/vales_anulados.dart';
 import '../repositories/invitados_repository.dart';
@@ -125,11 +126,7 @@ Future<AlumnosDeLaPuerta> leerAlumnosDeLaPuerta(
   // Los pagos no frenan la puerta: si no se pueden leer, sin "a confirmar".
   Map<String, List<Map<String, dynamic>>>? pagos;
   try {
-    pagos = {for (final id in ids) id: <Map<String, dynamic>>[]};
-    for (final p in await contratos.getPagosForContratoIds(ids)) {
-      final id = p['contrato_alumno_id'];
-      if (id is String) pagos[id]?.add(p);
-    }
+    pagos = await pagosPorContrato(contratos, ids);
   } catch (e) {
     debugPrint('Recepción: no se pudieron leer los pagos: $e');
     pagos = null;

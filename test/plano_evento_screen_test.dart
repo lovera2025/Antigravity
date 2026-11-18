@@ -1894,9 +1894,19 @@ void main() {
     testWidgets('si baja algo que no es del salón, no recarga', (tester) async {
       final mundo = await _abrir(tester);
       final antes = mundo.contratos.lecturas;
-      mundo.motor.bajo.add({'pagos_contrato_alumno', 'egresos'});
+      mundo.motor.bajo.add({'egresos', 'barra_ventas'});
       await _asentar(tester);
       expect(mundo.contratos.lecturas, antes);
+    });
+
+    testWidgets('si baja un pago, se relee: la mesa adicional "a confirmar" '
+        'deja de estarlo (6.9.2)', (tester) async {
+      final mundo = await _abrir(tester);
+      final antes = mundo.contratos.lecturas;
+      mundo.motor.bajo.add({'pagos_contrato_alumno'});
+      await _asentar(tester);
+      expect(mundo.contratos.lecturas, antes + 1);
+      expect(mundo.planos.guardados, isEmpty);
     });
 
     testWidgets('si baja mientras se guarda, se relee al terminar',

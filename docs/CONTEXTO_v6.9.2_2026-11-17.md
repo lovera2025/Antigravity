@@ -2,10 +2,10 @@
 
 **Estado (18-nov-2026): EN CURSO, sin publicar.** Se llamaba 6.10.0: **el usuario le puso 6.9.2 el 18-nov** (la
 versión va a ser `6.9.2+77`). Plan aprobado por el usuario el 17-nov
-(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Programadas y probadas las
-Partes 1, 2 y 3** (la 3, el link del delegado, el 18-nov; guardada en git, falta correr la suite entera); la 4, sin
-empezar. Nada instalado, **ningún SQL corrido** (hay uno nuevo del link esperando), `pubspec.yaml` sigue en
-`6.9.1+76`. **Plan: 3 de 4 partes.**
+(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Las cuatro están programadas y
+probadas** (la 4, la mesa adicional "a confirmar", se terminó el 18-nov a la tarde). Nada instalado, **ningún SQL
+corrido** (hay uno nuevo del link esperando), `pubspec.yaml` sigue en `6.9.1+76`. **Plan: 4 de 4 partes; falta que el
+usuario mire las capturas y publicar con él.**
 
 ## Para retomar en otro chat
 
@@ -21,22 +21,11 @@ empezar. Nada instalado, **ningún SQL corrido** (hay uno nuevo del link esperan
   **Cerrada el 18-nov en un segundo chat**: la suite entera, las roturas a propósito (del SQL y de las pantallas)
   y el recorrido en el navegador otra vez. Las roturas encontraron cuatro cosas, ya arregladas: está todo en
   "El cierre de la Parte 3", abajo. **Falta solo que el usuario mire las capturas.**
-- **Parte 4 ("a confirmar"): EN CURSO** (el usuario dio el OK el 18-nov; se cortó por el límite de uso). El
-  `git stash` ya se recuperó y está guardado en la rama. **Hecho y probado:** Recepción, el celular y el tótem
-  (`test/mesa_a_confirmar_en_la_puerta_test.dart`, 16 pruebas; el doble `ContratosEnMemoria` ahora da los pagos, antes
-  iba a la base y la puerta se quedaba esperando); el servicio pasó a
-  `lib/features/eventos/services/adicional_a_confirmar.dart`; `InfoMesa.aConfirmar`, `EstadoPlano.desde(aConfirmar:)`,
-  `PlanoDeLaFiesta.desde(pagos:)` con `aConfirmar` (mesa → de quién y cuánto falta); el dibujo punteado y apagado
-  con un relojito (`PintorPlano._aConfirmar`; el papel no la distingue); y el plano de la recepcionista
-  (`PlanoDeLaLlegada.para(aConfirmar:)`, `SalonEntero`), que no la enciende. **Falta, en orden:** (1) pruebas del
-  dibujo y de `PlanoDeLaFiesta` con pagos; (2) `PlanoEventoScreen._cargar` lee los pagos y se los pasa al plano y
-  al cuerpo (`PlanoEventoCuerpo` necesita `pagos` para `_planoVisto`); (3) en la tarjeta de la familia elegida,
-  "Mesa adicional N · a confirmar · A pagar: $X" con COBRAR y ANULAR (apagados sin modo jefe, con el motivo);
-  (4) COBRAR: el plano devuelve a quién cobrarle y la fiesta abre el cobro de siempre; (5) ANULAR, solo con $0
-  pagado y **con internet**: primero soltar la mesa por `_cambiarMesas` (un `soltarUna` en `CambiosDeMesa`, sin
-  tipo de movimiento nuevo) y después bajar la adicional por el camino de Editar alumno, sacado de `_submit` a un
-  servicio; si lo segundo falla, decirlo; (6) recorrido con el mouse en `tool/plano_prueba.dart`, capturas, suite
-  entera y roturas.
+- **Parte 4 (la mesa adicional "a confirmar"): programada y probada entera el 18-nov** (tercer chat del día). El
+  usuario había dado el OK esa mañana. Está todo en "Lo programado el 18-nov (la Parte 4)", abajo: lo que ve la
+  recepcionista, el dibujo, y **COBRAR y ANULAR en el PLANO, solo en modo jefe**. Con sus pruebas, las roturas a
+  propósito, el recorrido con el mouse, las capturas y un simulacro sobre una copia de la base. **Se le mandaron
+  las seis capturas (`AConfirmar_1` a `_6`); falta que las mire.**
 - **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
   y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
   nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el
@@ -265,17 +254,109 @@ cómo recargar), así que es una defensa sin prueba propia.
 
 **Las reglas del SQL: 77 de 77** (`node pruebas.mjs`).
 
+### Lo programado el 18-nov (la Parte 4: la mesa adicional "a confirmar")
+
+**Lo que decidió el usuario** (16-nov, sin cambios): la adicional que no está paga entera se ve **"a confirmar"**,
+apagada y discreta, sin "debe" ni "sin pagar" (la familia puede estar mirando la pantalla). La recepcionista no cobra
+ni anula. **COBRAR y ANULAR, solo en el PLANO y en modo jefe.** Con algo pagado, esa noche no se anula; con $0, ANULAR
+baja la adicional del contrato y deja la mesa libre. Su derecho al descuento de las entradas no cambia.
+
+**La regla** — `AdicionalesDeLaFamilia` (`lib/features/eventos/services/adicional_a_confirmar.dart`). **Sale de los
+pagos, nunca de los campos del contrato**: lo de las mesas (`grossHistoricoClaseCobro`) se reparte de la primera
+adicional a la última (`MesasExtraUtils.repartirPagadoFifo`), y la que no queda cubierta entera está "a confirmar".
+Su mesa es la que le sigue a la principal en `SalonMesas.tramos`. **Sin los pagos (null) no se marca ninguna.** Los
+pagos los lee `pagosPorContrato` (`eventos/services/pagos_por_contrato.dart`), para la puerta y para el PLANO.
+
+**En la puerta** (primer commit del día, `f4f72f9`): la línea apagada "Mesa adicional 15 · a confirmar" con un
+relojito, al tocarla "Esta mesa la confirma el jefe.", SUMAR SILLA no la ofrece, la familia figura con la mesa paga
+y el tótem enciende solo las pagas (`PuertaDelEvento.masivo(pagos:)`, `GrupoPuerta.mesasAConfirmar`,
+`SillasDeUnaMesa.aConfirmar`, `decidirSilla`, la ficha del tótem). `test/mesa_a_confirmar_en_la_puerta_test.dart`.
+
+**En el PLANO**
+- **El dibujo**: la mesa va **apagada como una vacía, con el borde punteado y un relojito** (`InfoMesa.aConfirmar`,
+  `PintorPlano._aConfirmar`). **El papel no la distingue.** En la leyenda, "A confirmar: N mesas adicionales": cada
+  toque lleva a la siguiente.
+- **La pantalla lee los pagos** (`PlanoEventoScreen._cargar`, de la base de esta PC) y se relee cuando baja
+  `pagos_contrato_alumno`: cuando la familia paga, **la mesa vuelve sola a la normalidad**. Una baja temporal, una
+  mesa en conflicto o una que no está en el armado no se marcan.
+- **La tarjeta de la familia** (`_aConfirmarEnLaTarjeta`): "Mesa adicional N · a confirmar" en vez de sus sillas.
+  **Solo en modo jefe** dice "A pagar: $X" y prende **COBRAR** y **ANULAR**; con algo pagado, ANULAR queda apagado
+  con "Tiene $X pagado: esta noche no se anula. Decidilo en la oficina." **Sin modo jefe los dos se ven apagados,
+  con "Solo en modo jefe" y sin el monto.**
+- **COBRAR no guarda nada** (`_cobrarAConfirmar`): el plano se cierra y devuelve `CobrarDesdeElPlano(alumnoId)`;
+  `_abrirPlano`, en la fiesta, abre **el cobro de siempre** (`_mostrarModalPagoAlumno`, sin tocarlo).
+- **ANULAR** (`_anularAConfirmar`), dos pasos en este orden:
+  1. **La familia deja esa mesa** — `CambiosDeMesa.soltarUna`, por `_cambiarMesas`: la llave del modo jefe, el
+     cartel ("GARCÍA: 8, 9 → 8", sin pedir motivo), el renglón en `mesas_movimientos` y la puerta al día. **Sin tipo
+     de movimiento nuevo**: es un "mover" con una mesa menos y el motivo "Mesa adicional anulada"; una versión
+     anterior lo lee y lo aplica igual. Si esa mesa era una fijada suya, la fijada se va con ella.
+  2. **La adicional se baja del contrato** — `BajaDeAdicional.de` (la cuenta que hace Editar alumno al bajarle la
+     cantidad de mesas: baja la última) y `guardarEdicionDeAlumno`.
+  - **Solo con internet**: sin poder mirar la nube no pregunta "¿seguir igual?", frena. Antes de guardar baja las
+    fichas y los pagos (`SyncEngine.bajarParaLosLugares`) y **vuelve a mirar que esa mesa siga sin pagos**: si
+    entró uno mientras se confirmaba, no anula.
+  - Si después no se va a poder bajar del contrato (pagos anotados en esa mesa, o sillas extra que ya no
+    entrarían), **no suelta la mesa**: lo dice antes de preguntar.
+  - Si el paso 2 falla, la mesa ya quedó vacía y lo dice en rojo ("…bajala en Editar alumno").
+  - No ofrece DESHACER, y **`CambiosDeMesa.deshacer` no le devuelve a una familia una mesa que ya no tiene en su
+    contrato** (si la adicional sigue en el contrato, sí). El Historial dice "GARCÍA dejó la 9".
+- **`_cambiarMesas` ganó tres parámetros** (`sinInternetNoSeHace`, `antesDeLeer`, `despues`); los guardados del
+  salón siguen siendo `_guardar`, `_cambiarConfig` y `_cambiarMesas`.
+
+**La ficha de un alumno se edita por un solo camino** — `guardarEdicionDeAlumno`
+(`lib/features/eventos/services/edicion_de_alumno.dart`): la ficha (`datosEdicionAlumno`), la cuenta rehecha desde
+los pagos y las mesas adicionales al día. Lo usan **Editar alumno** (`_submit`, que antes hacía esos tres pasos a
+mano) y ANULAR. `datosEdicionAlumno`, `camposMoraDelAlumno` y `edicionCambiaLaPuerta` se mudaron a ese archivo; la
+ventana de Editar alumno los sigue exportando.
+
+**Pruebas hechas**
+- `test/mesa_a_confirmar_en_el_plano_test.dart` (nuevo, 47): el plano con los pagos, el dibujo (el relleno, mirando
+  los puntos de la imagen; el borde, contando las rayas que dibuja el pintor), `soltarUna`, deshacer, el Historial,
+  `BajaDeAdicional`, la tarjeta y **la pantalla entera montada en memoria** (`test/helpers/plano_en_memoria.dart`):
+  COBRAR devuelve a quién; ANULAR deja la mesa vacía y baja el contrato; sin internet no anula; si entró un pago
+  mientras se confirmaba, tampoco; si el contrato no se puede bajar, lo dice; sin modo jefe, nada.
+- `test/solo_modo_jefe_test.dart`: una prueba nueva lee los fuentes (las dos llaves, que COBRAR no guarde, que la
+  ficha se edite por un solo camino, que en la puerta nadie cobre ni anule). `test/plano_evento_screen_test.dart`:
+  un pago que baja relee el plano. `test/plano_prueba_test.dart`: la ventana de prueba.
+- **Roturas a propósito** (`tool/romper_una_regla.sh`): 40 reglas rotas, **39 detectadas**. La que no: quitar
+  `armado.existe(n)` al armar el mapa del plano no cambia nada, porque el `removeWhere` de después ya saca la mesa
+  que no está en el armado (una defensa repetida).
+- **El recorrido con el mouse**: `tool/plano_prueba.dart` compilado como la web y abierto en el navegador de la
+  app. Con "Familias con mesa", PEREZ tiene la adicional sin pagar y SOSA con una parte: ANULAR la de PEREZ (el
+  cartel, la mesa vacía, lo que se dice), la de SOSA apagada con su porqué, COBRAR (vuelve sola a la normalidad) y
+  el ícono de la izquierda para ver la pantalla sin modo jefe. Salió bien. **La grilla y el cobro de verdad no se
+  abren en esa ventana**: que la fiesta abra el cobro al volver del plano lo vigila una prueba que lee el fuente.
+- **Las capturas** — `tool/a_confirmar_muestra_test.dart` (nuevo) saca seis con las pantallas de verdad en
+  memoria: `build/capturas_6.9.2/AConfirmar_1` a `_6` (fuera de git).
+- **El simulacro** — `tool/simulacro_a_confirmar_test.dart` (nuevo), el 18-nov sobre una copia del día (la base
+  real quedó con el mismo SHA-256): en las **5 fiestas masivas sorteadas hay 52 adicionales "a confirmar"** (29 sin
+  nada pagado, 23 con una parte; ninguna sin mesa), **0 familias donde la ficha y los pagos no dicen lo mismo**, y 3
+  que ANULAR no dejaría bajar porque tienen 4 sillas extra (lo dice antes de preguntar). La lista, con nombres:
+  `build/muestras_6.9.2/simulacro_a_confirmar.txt`, fuera de git.
+
+**Lo que hay que saber de la Parte 4**
+- **Esas 52 mesas se van a ver "a confirmar" apenas se instale**, en la puerta y en el plano, y **el tótem no las
+  va a encender** hasta que estén pagas enteras. Es lo que pidió; conviene decírselo con el número antes de
+  publicar.
+- "A confirmar" no mira la fecha: se ve desde el sorteo, no solo la noche de la fiesta.
+- **Un equipo con la 6.9.1 o anterior no lo conoce**: muestra esa mesa como una más y su tótem la enciende.
+- La adicional "a confirmar" **sin mesa** (no salió en el sorteo) se ve en Recepción ("Mesa adicional · a
+  confirmar"); en el PLANO no hay nada que tocar: se cobra desde la grilla, como siempre.
+- Si la familia compró entradas con descuento para esa adicional y después se anula, las entradas siguen vendidas:
+  la venta no se toca desde el plano.
+
 ### Lo que falta, en orden
 
-1. **De la Parte 3, solo que el usuario mire las capturas** (`build/capturas_6.9.2/`). No frena.
-2. **Parte 4 — "a confirmar"**: primero el plan corto y su OK. Después `git stash pop` (`stash@{0}`); lo que
-   falta está en "La Parte B" de `docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la
-   tenía cargada).
-3. **Después**: la versión `6.9.2+77` (`pubspec.yaml` y el `.iss`) y publicar con él: foto de la mora, **el SQL del
-   link con su OK en el momento** (comprobado con `md5(prosrc)` y una prueba en un bloque `do` que se deshace solo,
-   como el 13-nov), instalador por pasos, release y web. **Al publicar, repetir el simulacro de los lugares sobre una
-   copia nueva** y decirle: "no vender entradas desde un equipo sin esta versión".
-4. **Queda del usuario** (no frena): mirar las muestras de la planilla y `simulacro_lugares_al_sorteo.txt`.
+1. **Que el usuario mire las capturas** (`build/capturas_6.9.2/`: las del link y las seis de "a confirmar") y las
+   muestras de la planilla. No frena, pero quiere verlas antes de publicar.
+2. **La versión `6.9.2+77`** (`pubspec.yaml` y el `.iss`) **y publicar con él**: foto de la mora, **el SQL del link
+   con su OK en el momento** (comprobado con `md5(prosrc)` y una prueba en un bloque `do` que se deshace solo, como
+   el 13-nov), instalador por pasos, release y web.
+3. **Al publicar, sobre una copia nueva de la base**: repetir el simulacro de los lugares
+   (`tool/simulacro_lugares_al_sorteo_test.dart`) y el de "a confirmar" (`tool/simulacro_a_confirmar_test.dart`), y
+   decirle dos cosas: "no vender entradas desde un equipo sin esta versión" y cuántas mesas van a salir "a
+   confirmar".
+4. **Queda del usuario** (no frena): `simulacro_lugares_al_sorteo.txt` (la lista que va a aceptar en PRECIOS).
 
 **El orden del SQL del link al publicar:** se corre antes de publicar la web y de instalar. La web vieja sigue
 andando con el SQL nuevo; la ventana y la página nuevas **no** andan con el SQL viejo (piden funciones que no
@@ -314,7 +395,8 @@ existen).
 
 `bash tool/suite_por_tandas.sh`, el 18-nov **después de la Parte 2**: **5.322 pruebas, ninguna falla** (305
 archivos). El 17-nov a la noche eran 5.189 en 301. **Después de la Parte 3 y de su cierre (18-nov, segundo
-chat): 5.357 pruebas, ninguna falla** (306 archivos), y las reglas del sandbox, 77 de 77.
+chat): 5.357 pruebas, ninguna falla** (306 archivos), y las reglas del sandbox, 77 de 77. **Después de la
+Parte 4 (18-nov, tercer chat): 5.439 pruebas, ninguna falla; las roturas a propósito de la Parte 4, 39 de 40 detectadas.**
 
 `flutter analyze` sobre `lib`, `test` y `tool`: nada en los archivos tocados el 18-nov. Lo que queda es de antes:
 avisos en `detalle_evento_masivo_screen.dart` y `dry_run_cobro_simulator.dart`, y tres errores en

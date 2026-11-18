@@ -22,8 +22,13 @@ import '../eventos/repositories/contratos_repository.dart';
 import '../eventos/repositories/entradas_retiro_repository.dart';
 import '../eventos/repositories/sillas_reparto_repository.dart';
 import '../eventos/repositories/sorteos_mesas_repository.dart';
+import '../eventos/services/adicional_a_confirmar.dart';
+import '../eventos/services/edicion_de_alumno.dart';
+import '../eventos/services/pagos_por_contrato.dart';
 import '../eventos/services/registro_sorteo.dart';
 import '../eventos/services/salon_mesas.dart';
+import '../mi_empresa/providers/finanzas_provider.dart'
+    show contratosMutationTickProvider;
 import '../recepcion/services/puerta_al_dia.dart';
 import 'estilos/estilo_plano.dart';
 import 'modelo/armado_salon.dart';
@@ -50,6 +55,15 @@ import 'widgets/plano_evento_cuerpo.dart';
 import 'widgets/reserva_de_mesa_dialog.dart';
 import 'widgets/ver_el_orden_dialog.dart';
 
+/// Lo que el plano le devuelve a la fiesta al cerrarse por COBRAR de una mesa
+/// adicional "a confirmar" (6.9.2): a quién cobrarle. El cobro lo abre la
+/// fiesta, y es el de siempre.
+class CobrarDesdeElPlano {
+  final String alumnoId;
+
+  const CobrarDesdeElPlano(this.alumnoId);
+}
+
 /// El plano del salón de una fiesta: el armado con sus medidas, las familias
 /// en sus mesas y lo que hay que revisar.
 ///
@@ -59,12 +73,20 @@ import 'widgets/ver_el_orden_dialog.dart';
 /// IMPRIMIR arma el plano en papel con lo mismo que se ve: no lee ni guarda
 /// nada.
 ///
+/// Lee también los pagos de las familias, de la base de esta PC: de ahí sale
+/// qué mesa adicional está "a confirmar" (6.9.2). En modo jefe se la cobra
+/// (el plano se cierra y devuelve [CobrarDesdeElPlano]) o se la anula.
+///
 /// Escribe tres cosas, y antes de escribir relee de la nube:
 /// - `planos_evento`: el armado, el estilo, las mesas fijas y las libres;
 /// - el número de mesa de las familias que se cambian o se mueven, igual que
 ///   el sorteo (`ContratosRepository.asignarNumerosMesa`);
 /// - un renglón en `mesas_movimientos` por cada cambio, con su motivo, en la
 ///   misma transacción que los números.
+///
+/// Y una cuarta, solo al ANULAR una adicional "a confirmar": la baja de esa
+/// mesa del contrato, por el mismo camino que Editar alumno
+/// (`guardarEdicionDeAlumno`), después de soltar su número.
 class PlanoEventoScreen extends ConsumerStatefulWidget {
   final Evento evento;
 
@@ -92,6 +114,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   String? _errorCarga;
   List<ContratoAlumno> _alumnos = [];
   Map<String, SillasReparto> _repartos = {};
+
+  /// Los pagos de cada familia, de la base de esta PC. Null si no se pudieron
+  /// leer: entonces ninguna mesa se marca "a confirmar".
+  Map<String, List<Map<String, dynamic>>>? _pagos;
   PlanoEvento? _plano;
 
   /// Los predios con nombre (6.1.0), sin los borrados: para Estilo y armado y
@@ -130,6 +156,9 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     'sorteos_mesas',
     'entradas_retiro',
     'predios',
+    // Un cobro que bajó de la otra PC: la mesa adicional que estaba "a
+    // confirmar" deja de estarlo.
+    'pagos_contrato_alumno',
   };
 
   @override
@@ -221,6 +250,16 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       final repartos = await ref
           .read(sillasRepartoRepositoryProvider)
           .obtenerPorContratoIds(ids);
+      // Los pagos no frenan el plano: si no se pueden leer, sin "a confirmar".
+      Map<String, List<Map<String, dynamic>>>? pagos;
+      try {
+        pagos = await pagosPorContrato(
+          ref.read(contratosRepositoryProvider),
+          ids,
+        );
+      } catch (e) {
+        debugPrint('⚠️ Plano: no se pudieron leer los pagos ($e)');
+      }
       final retiros = await ref
           .read(entradasRetiroRepositoryProvider)
           .obtenerPorContratoIds(ids);
@@ -241,11 +280,13 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               config: plano.config,
               alumnos: alumnos,
               repartos: repartos,
+              pagos: pagos,
             );
       if (!mounted) return;
       setState(() {
         _alumnos = alumnos;
         _repartos = repartos;
+        _pagos = pagos;
         _registros = registros;
         _movimientos = movimientos;
         _yaRetiraron = {
@@ -1110,6 +1151,19 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     required String titulo,
     String? motivoFijo,
     String textoConfirmar = 'CONFIRMAR',
+
+    /// Sin poder mirar la nube no se pregunta "¿seguir igual?": se frena, y
+    /// se dice esto.
+    String? sinInternetNoSeHace,
+
+    /// Corre después de confirmar y antes de releer las familias: baja de la
+    /// nube lo que el cambio necesita mirar. Devuelve por qué no se puede
+    /// seguir, o null.
+    Future<String?> Function()? antesDeLeer,
+
+    /// Corre con las mesas ya guardadas y antes de subir: lo que el cambio
+    /// arrastra fuera del salón. Devuelve lo que hay que decir, y si falló.
+    Future<({String texto, bool fallo})> Function()? despues,
   }) async {
     final plano = _plano;
     if (!mounted || _ocupado || plano == null || plano.armadoONull == null) {
@@ -1148,6 +1202,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         await _avisar('Todavía no', _textoOtraPc(distintos));
         return;
       }
+      if (distintos == null && sinInternetNoSeHace != null) {
+        await _avisar('Sin conexión', sinInternetNoSeHace);
+        return;
+      }
       if (distintos == null &&
           !await _preguntar(
             'Sin conexión',
@@ -1159,6 +1217,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       }
       final lectura = await _leerPlano(nube: distintos != null);
       // Había conexión para las mesas pero el plano no se pudo leer.
+      if (!lectura.deLaNube && sinInternetNoSeHace != null) {
+        await _avisar('Sin conexión', sinInternetNoSeHace);
+        return;
+      }
       if (distintos != null &&
           !lectura.deLaNube &&
           !await _seguirSinLaNube()) {
@@ -1171,6 +1233,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           'El plano de la fiesta ya no se puede leer. Tocá Actualizar y probá '
               'de nuevo.',
         );
+        return;
+      }
+      final noSigue = await antesDeLeer?.call();
+      if (noSigue != null) {
+        await _avisar('No se puede', noSigue);
         return;
       }
       final alumnos = await contratos.getByEvento(eventoId);
@@ -1212,6 +1279,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       // La puerta sigue al salón: Recepción y el tótem pasan a decir la mesa
       // nueva. Antes de subir, para que viaje junto.
       final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
+      // Antes de subir, para que viaje todo junto.
+      final luego = await despues?.call();
       await _cargar();
       final subio = await subida.subir(
             tabla: 'mesas_movimientos',
@@ -1222,16 +1291,21 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
             'contratos_alumnos': cambio.despues.keys,
             if (planoNuevo != null) 'planos_evento': [planoNuevo.id],
           });
+      // Lo que arrastró fuera del salón no vuelve con DESHACER: no se ofrece.
+      final conDeshacer =
+          cambio.tipo != TipoMovimientoMesas.deshacer && luego == null;
       _decir(
         '${cambio.textoHecho((id) => _apellidoDe(id, alumnos))}'
+        '${luego == null ? '' : ' ${luego.texto}'}'
         '${puerta.fallo ? ' ${puerta.renglon}.' : ''}'
         '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
-        accion: cambio.tipo == TipoMovimientoMesas.deshacer ? null : 'DESHACER',
-        onAccion: cambio.tipo == TipoMovimientoMesas.deshacer
-            ? null
-            : () {
+        accion: conDeshacer ? 'DESHACER' : null,
+        onAccion: conDeshacer
+            ? () {
                 if (mounted) _deshacer(renglon);
-              },
+              }
+            : null,
+        error: luego != null && luego.fallo ? luego.texto : null,
       );
     } catch (e) {
       _decir(
@@ -1323,6 +1397,118 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         motivoFijo: movimiento.motivo,
         textoConfirmar: 'DESHACER',
       );
+
+  // ── La mesa adicional "a confirmar" (6.9.2) ─────────────────────────────
+
+  /// COBRAR: el plano se cierra y le dice a la fiesta a quién cobrarle. El
+  /// cobro es el de siempre, y lo abre ella.
+  Future<void> _cobrarAConfirmar(String alumnoId) async {
+    if (!mounted || _ocupado || _frenaSinModoJefe()) return;
+    final navegador = Navigator.of(context);
+    if (_pendiente.sinGuardar != null && !await _salirSinGuardar()) return;
+    if (mounted) navegador.pop(CobrarDesdeElPlano(alumnoId));
+  }
+
+  /// ANULAR una adicional sin nada pagado: la familia deja esa mesa, que
+  /// queda vacía, y la adicional se baja de su contrato.
+  ///
+  /// Son dos pasos, en este orden: primero la mesa, por [_cambiarMesas] (con
+  /// su renglón en el Historial); después el contrato, por el camino de Editar
+  /// alumno. Si lo segundo falla, la mesa ya quedó vacía y se dice qué falta.
+  ///
+  /// **Solo con internet**: antes de guardar se bajan las fichas y los pagos,
+  /// y se vuelve a mirar que esa mesa siga sin pagos. Sin poder mirarlo, no se
+  /// anula.
+  Future<void> _anularAConfirmar(String alumnoId, int mesa) async {
+    if (!mounted || _ocupado || _frenaSinModoJefe()) return;
+    const sinInternet =
+        'Para anular una mesa hace falta internet: antes hay que mirar en '
+        'la nube que nadie la haya pagado recién. Probá de nuevo cuando '
+        'vuelva.';
+    final contratos = ref.read(contratosRepositoryProvider);
+    final motor = ref.read(syncEngineProvider);
+    final lista = ref.read(contratosMutationTickProvider.notifier);
+    // Los pagos de esa familia: al mostrar, los que se ven; al guardar, los
+    // recién bajados.
+    var pagos = _pagos?[alumnoId];
+    await _cambiarMesas(
+      (plano, alumnos, _) {
+        final cambio = CambiosDeMesa.soltarUna(
+          config: plano.config,
+          alumnos: alumnos,
+          alumnoId: alumnoId,
+          mesa: mesa,
+          yaRetiraron: _yaRetiraron,
+        );
+        if (!cambio.sePuede) return cambio;
+        final a = alumnos.firstWhere((a) => a.id == alumnoId);
+        final x = AdicionalesDeLaFamilia.aConfirmar(a, pagos)
+            .where((x) => x.mesa == mesa)
+            .firstOrNull;
+        if (x == null) {
+          return CambioDeMesas.noSePuede(
+            cambio.tipo,
+            'La mesa $mesa ya no está a confirmar.',
+          );
+        }
+        if (!x.sePuedeAnular) {
+          return CambioDeMesas.noSePuede(
+            cambio.tipo,
+            textoNoSeAnula(x),
+          );
+        }
+        // Si después no se va a poder bajar del contrato, la mesa no se
+        // suelta.
+        final baja = BajaDeAdicional.de(a);
+        return baja.sePuede
+            ? cambio
+            : CambioDeMesas.noSePuede(cambio.tipo, baja.problema!);
+      },
+      titulo: 'Anular la mesa $mesa de ${_apellidoDe(alumnoId)}',
+      motivoFijo: CambiosDeMesa.motivoAnulada,
+      textoConfirmar: 'ANULAR',
+      sinInternetNoSeHace: sinInternet,
+      antesDeLeer: () async {
+        if (!await motor.bajarParaLosLugares()) return sinInternet;
+        pagos = (await pagosPorContrato(contratos, [alumnoId]))[alumnoId] ??
+            const [];
+        return null;
+      },
+      despues: () async {
+        try {
+          final fresco = await contratos.getContratoById(alumnoId);
+          final baja = fresco == null ? null : BajaDeAdicional.de(fresco);
+          final editado = baja?.editado;
+          if (fresco == null || editado == null) {
+            return (
+              texto: 'Pero la mesa adicional sigue en su contrato: bajala '
+                  'en Editar alumno.',
+              fallo: true,
+            );
+          }
+          await guardarEdicionDeAlumno(
+            contratos,
+            antes: fresco,
+            editado: editado,
+            // La mesa ya la soltó el plano: acá no se escribe ninguna.
+            numeroMesaEscrito: fresco.numeroMesa ?? '',
+          );
+          lista.bump();
+          return (
+            texto: 'La mesa adicional se bajó de su contrato.',
+            fallo: false,
+          );
+        } catch (e) {
+          debugPrint('⚠️ Plano: no se pudo bajar la adicional ($e)');
+          return (
+            texto: 'Pero no se pudo bajar la mesa adicional de su contrato: '
+                'bajala en Editar alumno.',
+            fallo: true,
+          );
+        }
+      },
+    );
+  }
 
   /// El plano en papel, con lo que la pantalla muestra en este momento. Lleva
   /// arriba quién sorteó y cuándo, como la planilla del sorteo.
@@ -1463,6 +1649,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               onGuardarColoresYTextos: _guardarColoresYTextos,
               onGuardarArmado: _guardarSalon,
               onGuardarComoPredio: _guardarComoPredio,
+              onCobrarAConfirmar: _cobrarAConfirmar,
+              onAnularAConfirmar: _anularAConfirmar,
             )
           : null,
       onImprimir: _imprimir,

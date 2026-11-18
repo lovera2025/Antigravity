@@ -11,6 +11,7 @@ import '../../common/utils/currency_input_formatter.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../../models/mesa_extra_item.dart';
 import '../repositories/contratos_repository.dart';
+import '../services/edicion_de_alumno.dart';
 import '../services/mesas_extra_utils.dart';
 import '../services/salon_mesas.dart';
 import '../../../core/utils/uuid_utils.dart';
@@ -21,92 +22,8 @@ import '../../plano/services/mesa_nueva_sola.dart';
 import '../../plano/services/mesa_nueva_sola_de_la_app.dart';
 import '../../recepcion/services/puerta_al_dia.dart';
 
-/// Lo que se guarda al editar un alumno.
-///
-/// El número de mesa viaja **solo si alguien lo cambió a mano**. Si se mandara
-/// siempre, una PC que todavía no bajó el sorteo pisaría los números con lo que
-/// tenía (vacío o viejo) al editar cualquier otra cosa del alumno. Vaciarlo a
-/// propósito lo libera (`null`).
-///
-/// **Los acompañantes y la música, igual** (6.0.0). Se cargan de a cientos
-/// desde el Excel del delegado (`planilla_delegado.dart`): una PC que todavía
-/// no bajó esa carga los mandaría vacíos al editar un teléfono, y los borraría
-/// en la nube y en las demás. Vaciar la música a propósito la borra (`null`).
-///
-/// **La mora, igual** (6.1.0): una PC que todavía no bajó un perdón o un arreglo
-/// de la nube volvía a subir su mora vieja al editar cualquier cosa. Así, el
-/// 16-oct, editar a TOÑANEZ, AGUSTINA desde la PC del jefe habría devuelto a la
-/// nube los $166.200 cargados a mano que ya se habían puesto en 0.
-Map<String, dynamic> datosEdicionAlumno({
-  required ContratoAlumno antes,
-  required ContratoAlumno editado,
-  required String numeroMesaEscrito,
-}) {
-  final datos = editado.toJson()
-    ..remove('numero_mesa')
-    ..remove('nombres_acompanantes')
-    ..remove('cantidad_acompanantes')
-    ..remove('musica_elegida');
-  final moraAntes = antes.toJson();
-  for (final campo in camposMoraDelAlumno) {
-    final ahora = datos.remove(campo);
-    if (ahora != moraAntes[campo]) datos[campo] = ahora;
-  }
-  final mesaAntes = antes.numeroMesa?.trim() ?? '';
-  final mesaAhora = numeroMesaEscrito.trim();
-  if (mesaAhora != mesaAntes) {
-    datos['numero_mesa'] = mesaAhora.isEmpty ? null : mesaAhora;
-  }
-  if (!_mismosAcompanantes(antes, editado)) {
-    datos['nombres_acompanantes'] = editado.nombresAcompanantes;
-    datos['cantidad_acompanantes'] = editado.nombresAcompanantes.length;
-  }
-  final musicaAntes = antes.musicaElegida?.trim() ?? '';
-  final musicaAhora = editado.musicaElegida?.trim() ?? '';
-  if (musicaAhora != musicaAntes) {
-    datos['musica_elegida'] = musicaAhora.isEmpty ? null : musicaAhora;
-  }
-  return datos;
-}
-
-/// Las columnas de la mora del alumno: Editar alumno las manda solo si
-/// cambiaron (ver [datosEdicionAlumno]).
-const camposMoraDelAlumno = [
-  'mora_pendiente_tracked',
-  'mora_cobrada_offset',
-  'mora_fecha_referencia',
-  'mora_exenta_hasta',
-  'mora_exencion_reinicia',
-  'mora_tracked_ajuste',
-];
-
-/// Si los dos tienen los mismos acompañantes con nombre, en el mismo orden.
-bool _mismosAcompanantes(ContratoAlumno antes, ContratoAlumno editado) {
-  List<String> limpios(List<String> nombres) => [
-        for (final n in nombres)
-          if (n.trim().isNotEmpty) n.trim(),
-      ];
-  final a = limpios(antes.nombresAcompanantes);
-  final b = limpios(editado.nombresAcompanantes);
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
-/// Si lo que se editó de un alumno cambia lo que dice la lista de la puerta:
-/// su nombre, su mesa o sus acompañantes. Lo demás (el teléfono, una silla, el
-/// plan de cuotas) no llega a Recepción ni al tótem.
-bool edicionCambiaLaPuerta({
-  required ContratoAlumno antes,
-  required ContratoAlumno editado,
-  required String numeroMesaEscrito,
-}) {
-  return antes.nombreAlumno.trim() != editado.nombreAlumno.trim() ||
-      (antes.numeroMesa?.trim() ?? '') != numeroMesaEscrito.trim() ||
-      !_mismosAcompanantes(antes, editado);
-}
+export '../services/edicion_de_alumno.dart'
+    show camposMoraDelAlumno, datosEdicionAlumno, edicionCambiaLaPuerta;
 
 /// El número de mesa que se toma al guardar un alumno, según quién guarda.
 ///
@@ -654,16 +571,14 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           sillasExtraCuotas: sillasExtraCuotas,
         );
 
-        await repo.actualizarContrato(
-          al.id,
-          datosEdicionAlumno(
-            antes: al,
-            editado: alumnoEditado,
-            numeroMesaEscrito: numeroMesa,
-          ),
+        // La ficha, la cuenta rehecha y las mesas adicionales al día: el
+        // mismo camino por el que el PLANO baja una adicional que se anuló.
+        await guardarEdicionDeAlumno(
+          repo,
+          antes: al,
+          editado: alumnoEditado,
+          numeroMesaEscrito: numeroMesa,
         );
-        await repo.recalcularProgresoContrato(al.id);
-        await repo.reconciliarMesasEstadoContrato(al.id);
         // Con la fiesta sorteada, Recepción y el tótem lo siguen: su nombre,
         // su mesa y sus acompañantes son lo que dice la puerta.
         if (edicionCambiaLaPuerta(

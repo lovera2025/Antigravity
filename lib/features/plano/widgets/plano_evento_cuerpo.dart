@@ -5,7 +5,9 @@ import '../../../models/plano_evento.dart';
 import '../../../models/predio.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../common/utils/solo_jefe.dart';
+import '../../barra/cuentas/pesos.dart';
 import '../../common/utils/texto_busqueda.dart';
+import '../../eventos/services/adicional_a_confirmar.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../dibujo/pintor_acomodo.dart';
@@ -105,6 +107,12 @@ class AccionesPlano {
   final void Function(ArmadoSalon base, ArmadoSalon actual)?
       onGuardarComoPredio;
 
+  /// La mesa adicional "a confirmar" (6.9.2), en la tarjeta de su familia:
+  /// COBRAR (a quién) y ANULAR (a quién, y cuál mesa). Con alguno en null, ese
+  /// botón queda apagado.
+  final void Function(String alumnoId)? onCobrarAConfirmar;
+  final void Function(String alumnoId, int mesa)? onAnularAConfirmar;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -121,6 +129,8 @@ class AccionesPlano {
     this.onGuardarColoresYTextos,
     this.onGuardarArmado,
     this.onGuardarComoPredio,
+    this.onCobrarAConfirmar,
+    this.onAnularAConfirmar,
   });
 }
 
@@ -326,6 +336,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   /// Las familias con adicional se marcan en el plano. Prendido de entrada.
   bool _marcarFamilias = true;
+
+  /// A cuál de las mesas "a confirmar" lleva el próximo toque en la leyenda.
+  int _aConfirmarVista = 0;
 
   /// Cuándo se reacomodó por última vez con la barra: como mucho cada 50 ms.
   DateTime? _ultimaBarra;
@@ -2379,12 +2392,17 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             ),
         ] else
           for (final n in ocupante.numeros)
-            Text(
-              'Mesa $n: '
-              '${SalonMesas.sillasPorMesa + (ocupante.sillasExtraPorMesa[n] ?? 0)} sillas'
-              '${_plano.armado.existe(n) ? '' : ' (no está en este armado)'}',
-              key: Key('sillas_mesa_$n'),
-            ),
+            // La adicional "a confirmar" (6.9.2) no dice sus sillas: dice
+            // que falta confirmarla, y al jefe le deja cobrarla o anularla.
+            if (_plano.aConfirmar[n] case final x? when x.alumnoId == alumno.id)
+              _aConfirmarEnLaTarjeta(alumno.id, n, x.adicional)
+            else
+              Text(
+                'Mesa $n: '
+                '${SalonMesas.sillasPorMesa + (ocupante.sillasExtraPorMesa[n] ?? 0)} sillas'
+                '${_plano.armado.existe(n) ? '' : ' (no está en este armado)'}',
+                key: Key('sillas_mesa_$n'),
+              ),
         // Lo mismo que dice la planilla del sorteo de su mesa principal.
         if (ocupante != null)
           if (PlanillaSorteo.fila(
@@ -2468,6 +2486,100 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     ];
   }
 
+  /// Una mesa adicional "a confirmar", en la tarjeta de su familia (6.9.2).
+  ///
+  /// Para cualquiera dice solo eso, sin una palabra de plata. **En modo jefe**
+  /// dice cuánto falta y deja cobrarla (con el cobro de siempre) o anularla;
+  /// con algo pagado, esa noche no se anula. Sin modo jefe los dos botones se
+  /// ven apagados, con el motivo: si no estuvieran, nadie sabría a quién
+  /// pedírselo.
+  Widget _aConfirmarEnLaTarjeta(
+    String alumnoId,
+    int mesa,
+    AdicionalAConfirmar x,
+  ) {
+    final acciones = widget.acciones;
+    final cobrar = acciones?.onCobrarAConfirmar;
+    final anular = acciones?.onAnularAConfirmar;
+    final libre = !widget.ocupado && _esperando == null;
+    final gris = Colors.grey.shade700;
+    final motivo = widget.soloJefe
+        ? kSoloEnModoJefe
+        : x.sePuedeAnular
+            ? null
+            : textoNoSeAnula(x);
+    Widget boton(String clave, String texto, IconData icono, VoidCallback? f) =>
+        OutlinedButton.icon(
+          key: Key(clave),
+          onPressed: libre ? f : null,
+          icon: Icon(icono, size: 16),
+          label: Text(texto),
+          style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+          ),
+        );
+    return Container(
+      key: Key('a_confirmar_$mesa'),
+      margin: const EdgeInsets.only(top: 4, right: 8),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule, size: 16, color: gris),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Mesa adicional $mesa · a confirmar',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          if (!widget.soloJefe)
+            Text(
+              'A pagar: ${pesos(x.aPagar)}',
+              key: Key('a_pagar_$mesa'),
+            ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              boton(
+                'cobrar_a_confirmar_$mesa',
+                'COBRAR',
+                Icons.payments_outlined,
+                cobrar == null ? null : () => cobrar(alumnoId),
+              ),
+              boton(
+                'anular_a_confirmar_$mesa',
+                'ANULAR',
+                Icons.block,
+                anular == null || !x.sePuedeAnular
+                    ? null
+                    : () => anular(alumnoId, mesa),
+              ),
+            ],
+          ),
+          if (motivo != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              motivo,
+              key: Key('motivo_a_confirmar_$mesa'),
+              style: TextStyle(fontSize: 12, color: gris),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   List<Widget> _leyenda(BuildContext context) {
     final estado = _plano.estado;
     if (estado.divisiones.isEmpty && !estado.haySinDivision) return const [];
@@ -2532,6 +2644,45 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             texto: 'Separadas: aro punteado y la otra mesa',
           ),
       ],
+      // Las adicionales "a confirmar" (6.9.2): qué quiere decir el relojito, y
+      // cuántas hay. Cada toque lleva a la siguiente.
+      if (_plano.aConfirmar.isNotEmpty)
+        InkWell(
+          key: const Key('leyenda_a_confirmar'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            final mesas = _plano.aConfirmar.keys.toList()..sort();
+            // Esperando un toque en el plano, solo lleva la vista.
+            _irA(
+              mesas[_aConfirmarVista++ % mesas.length],
+              elegir: _esperando == null,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  child: Icon(
+                    Icons.schedule,
+                    size: 15,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _plano.aConfirmar.length == 1
+                        ? 'A confirmar: 1 mesa adicional'
+                        : 'A confirmar: ${_plano.aConfirmar.length} mesas '
+                            'adicionales',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       const SizedBox(height: 12),
     ];
   }

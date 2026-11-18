@@ -139,7 +139,18 @@ class HistorialSorteo {
           ),
         TipoMovimientoMesas.mover => (
             TipoRenglonHistorial.mover,
-            '${ids.map(nombre).join(', ')} pasó a otras mesas',
+            // Dejar una mesa (se anuló una adicional, 6.9.2) viaja como un
+            // "mover", pero la familia no pasó a ningún lado.
+            switch (ids.length == 1
+                ? CambioDeMesas.mesasQueDejo(
+                    m.antes[ids.first],
+                    m.despues[ids.first],
+                  )
+                : null) {
+              final dejo? => '${nombre(ids.first)} dejó '
+                  '${CambiosDeMesa.textoMesas(dejo)}',
+              null => '${ids.map(nombre).join(', ')} pasó a otras mesas',
+            },
           ),
         TipoMovimientoMesas.deshacer => (
             TipoRenglonHistorial.deshacer,

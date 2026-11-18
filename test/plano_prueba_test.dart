@@ -141,6 +141,100 @@ void main() {
           'que en este tamaño de ventana también aparecen al acercar',
     );
   });
+
+  group('la mesa adicional "a confirmar" (6.9.2)', () {
+    Future<void> sentar(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1500, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(const MaterialApp(home: PruebaDelPlano()));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('prueba_sentados')));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    Future<void> elegir(WidgetTester tester, String id, String apellido) async {
+      await tester.enterText(find.byKey(const Key('buscar')), apellido);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(Key('resultado_$id')));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    bool aConfirmar(WidgetTester tester, int mesa) => tester
+        .widget<VistaPlano>(find.byType(VistaPlano))
+        .estado
+        .info(mesa)
+        .aConfirmar;
+
+    bool prendido(WidgetTester tester, String clave) =>
+        tester.widget<OutlinedButton>(find.byKey(Key(clave))).onPressed != null;
+
+    testWidgets('PEREZ (sin nada pagado) y SOSA (con una parte) la tienen '
+        'punteada; las demás, no', (tester) async {
+      await sentar(tester);
+      expect(aConfirmar(tester, 6), isTrue);
+      expect(aConfirmar(tester, 11), isTrue);
+      expect(aConfirmar(tester, 2), isFalse);
+      expect(aConfirmar(tester, 5), isFalse);
+    });
+
+    testWidgets('ANULAR la de PEREZ: deja la 6 y la adicional sale de su '
+        'contrato', (tester) async {
+      await sentar(tester);
+      await elegir(tester, 'dos', 'PEREZ');
+      expect(find.text('Mesa adicional 6 · a confirmar'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('anular_a_confirmar_6')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Anular la mesa 6 de PEREZ'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirmar')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('PEREZ dejó la 6. La mesa adicional se bajó de su contrato.'),
+        findsOneWidget,
+      );
+      expect(aConfirmar(tester, 6), isFalse);
+      expect(find.text('Mesa adicional 6 · a confirmar'), findsNothing);
+      expect(find.byKey(const Key('sillas_mesa_5')), findsOneWidget);
+      expect(find.byKey(const Key('sillas_mesa_6')), findsNothing);
+    });
+
+    testWidgets('sin internet no se anula', (tester) async {
+      await sentar(tester);
+      await tester.tap(find.byKey(const Key('prueba_internet')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await elegir(tester, 'dos', 'PEREZ');
+      await tester.tap(find.byKey(const Key('anular_a_confirmar_6')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byKey(const Key('confirmar')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('hace falta internet'), findsOneWidget);
+      expect(aConfirmar(tester, 6), isTrue);
+    });
+
+    testWidgets('la de SOSA tiene algo pagado: no se anula, y al cobrarla '
+        'vuelve sola a la normalidad', (tester) async {
+      await sentar(tester);
+      await elegir(tester, 'otra', 'SOSA');
+      expect(prendido(tester, 'anular_a_confirmar_11'), isFalse);
+      expect(find.textContaining('esta noche no se anula'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('cobrar_a_confirmar_11')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(aConfirmar(tester, 11), isFalse);
+      expect(find.byKey(const Key('sillas_mesa_11')), findsOneWidget);
+    });
+
+    testWidgets('sin modo jefe se ve "a confirmar" y nada más', (tester) async {
+      await sentar(tester);
+      await tester.tap(find.byKey(const Key('prueba_jefe')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await elegir(tester, 'dos', 'PEREZ');
+      expect(find.text('Mesa adicional 6 · a confirmar'), findsOneWidget);
+      expect(find.byKey(const Key('a_pagar_6')), findsNothing);
+      expect(prendido(tester, 'cobrar_a_confirmar_6'), isFalse);
+      expect(prendido(tester, 'anular_a_confirmar_6'), isFalse);
+    });
+  });
 }
 
 /// Un lienzo que no dibuja nada y cuenta los textos que le piden.

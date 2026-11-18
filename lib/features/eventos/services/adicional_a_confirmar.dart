@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../../../models/contrato_alumno.dart';
+import '../../barra/cuentas/pesos.dart';
 import 'cobro_abono_acumulado.dart';
 import 'mesas_extra_utils.dart';
 import 'salon_mesas.dart';
@@ -40,6 +41,13 @@ class AdicionalAConfirmar {
   /// después, en la oficina, si devuelve o deja a cuenta.
   bool get sePuedeAnular => pagado <= 0.01;
 }
+
+/// Por qué una adicional con algo pagado no se anula esa noche. Lo dicen la
+/// tarjeta del PLANO, debajo de ANULAR apagado, y el aviso si se llega igual.
+/// Lleva plata: es solo para el jefe.
+String textoNoSeAnula(AdicionalAConfirmar x) =>
+    'Tiene ${pesos(x.pagado)} pagado: esta noche no se anula. Decidilo en la '
+    'oficina.';
 
 /// Las mesas adicionales "a confirmar" de una familia. Sin pantalla ni base.
 ///

@@ -13,6 +13,13 @@
 //
 // 6.5.0: "Dejar libre" pregunta **No se usa · Es para alguien** y una mesa libre tiene
 // "Para quién es", con la misma cuenta que la pantalla de la app (la mesa de los profes).
+//
+// 6.9.2: la mesa adicional "a confirmar". Con familias sentadas, PEREZ tiene su
+// adicional sin nada pagado y SOSA con una parte: se ven punteadas, y en su tarjeta
+// están COBRAR y ANULAR con las mismas cuentas de la app (`CambiosDeMesa.soltarUna`,
+// `BajaDeAdicional`). COBRAR acá anota el pago en esta ventana (en la app cierra el
+// plano y abre el cobro de siempre). "Modo jefe" apagado muestra lo que ve cualquiera.
+//
 // Para recorrerla en el navegador de la app (IMPRIMIR ahí no deja el PDF):
 //   flutter build web -t tool/plano_prueba.dart --no-web-resources-cdn --output build/plano_prueba_web
 //   python -I -m http.server 8795 --directory build/plano_prueba_web
@@ -23,6 +30,8 @@ import 'package:flutter/material.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/eventos/services/adicional_a_confirmar.dart';
+import 'package:arguello_events/features/eventos/services/edicion_de_alumno.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_del_cartel.dart';
@@ -77,7 +86,9 @@ ContratoAlumno _familia(
       nombreAlumno: nombre,
       cantidadAcompanantes: 3,
       montoTotalPactado: 300000,
-      saldoDeudor: 0,
+      // Lo de la adicional, como si todavía la debiera: con saldo 0 no se la
+      // podría bajar del contrato (6.9.2).
+      saldoDeudor: 70000.0 * extras,
       mesaExtraPrecio: 70000.0 * extras,
       mesaExtraCantidad: extras,
       numeroMesa:
@@ -188,6 +199,18 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
   bool _conInternet = true;
   AvisoDelPlano? _aviso;
 
+  /// Lo que la sesión puede: apagado, la pantalla muestra lo que ve cualquiera.
+  bool _esJefe = true;
+
+  /// La mesa adicional "a confirmar" (6.9.2): cuánto lleva pagado de su adicional
+  /// cada familia que no la pagó entera. Las demás la tienen paga.
+  static const _sinPagarAlEmpezar = {'dos': 0.0, 'otra': 30000.0};
+  Map<String, double> _pagadoDeLaAdicional = {..._sinPagarAlEmpezar};
+
+  /// Las familias a las que se les anuló una adicional: ya no la tienen en su
+  /// contrato.
+  final _anuladas = <String>{};
+
   /// Cuántas familias llegaron después del sorteo (6.5.1). La primera es una que
   /// ya tenía mesa y compró una adicional; las demás son familias nuevas.
   int _llegaron = 0;
@@ -200,6 +223,14 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
 
   List<ContratoAlumno> get _alumnos => [
         for (final a in alumnosDePrueba(asignaciones: _asignaciones))
+          if (_anuladas.contains(a.id))
+            _familia(
+              a.id,
+              a.nombreAlumno,
+              extras: a.mesaExtraCantidad - 1,
+              mesas: _asignaciones?[a.id],
+            )
+          else
           a.id == 's1' && _llegaron >= 1
               ? _familia(
                   's1',
@@ -301,11 +332,110 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     });
   }
 
+  /// Los pagos de cada familia: los de [pagosDePrueba], sin lo que no pagó de su
+  /// mesa adicional quien la tiene "a confirmar".
+  Map<String, List<Map<String, dynamic>>> get _pagos => {
+        for (final e in pagosDePrueba().entries)
+          e.key: [
+            for (final p in e.value)
+              if (p['concepto'] != 'Mesa extra (1/1)' ||
+                  !_pagadoDeLaAdicional.containsKey(e.key))
+                p
+              else if (_pagadoDeLaAdicional[e.key]! > 0)
+                {
+                  ...p,
+                  'monto': _pagadoDeLaAdicional[e.key],
+                  'monto_gross': _pagadoDeLaAdicional[e.key],
+                },
+          ],
+      };
+
   PlanoDeLaFiesta get _plano => PlanoDeLaFiesta.desde(
         armado: _armado,
         config: _config,
         alumnos: _alumnos,
+        pagos: _pagos,
       );
+
+  /// COBRAR: en la app el plano se cierra y la fiesta abre el cobro de siempre.
+  /// Acá se anota el pago en esta ventana, para ver que la mesa vuelve sola a la
+  /// normalidad.
+  void _cobrarAConfirmar(String alumnoId) {
+    final a = _alumnos.firstWhere((a) => a.id == alumnoId);
+    setState(() {
+      _pagadoDeLaAdicional = {..._pagadoDeLaAdicional}..remove(alumnoId);
+      _aviso = AvisoDelPlano(
+        'En la app, acá el plano se cierra y se abre el cobro de siempre para '
+        '${CambiosDeMesa.apellido(a)}. En esta ventana quedó anotado el pago.',
+      );
+    });
+  }
+
+  /// ANULAR, con las cuentas de la app: la familia deja esa mesa
+  /// (`CambiosDeMesa.soltarUna`) y la adicional se baja de su contrato
+  /// (`BajaDeAdicional`). Solo con internet.
+  Future<void> _anularAConfirmar(String alumnoId, int mesa) async {
+    final alumnos = _alumnos;
+    final a = alumnos.firstWhere((a) => a.id == alumnoId);
+    final apellido = CambiosDeMesa.apellido(a);
+    var cambio = CambiosDeMesa.soltarUna(
+      config: _config,
+      alumnos: alumnos,
+      alumnoId: alumnoId,
+      mesa: mesa,
+    );
+    if (cambio.sePuede) {
+      final x = AdicionalesDeLaFamilia.aConfirmar(a, _pagos[alumnoId])
+          .where((x) => x.mesa == mesa)
+          .firstOrNull;
+      final problema = x == null
+          ? 'La mesa $mesa ya no está a confirmar.'
+          : !x.sePuedeAnular
+              ? textoNoSeAnula(x)
+              : BajaDeAdicional.de(a).problema;
+      if (problema != null) {
+        cambio = CambioDeMesas.noSePuede(cambio.tipo, problema);
+      }
+    }
+    if (!cambio.sePuede) {
+      setState(() => _aviso = AvisoDelPlano(cambio.problema!, esError: true));
+      return;
+    }
+    final ok = await confirmarCambioDeMesa(
+      context: context,
+      titulo: 'Anular la mesa $mesa de $apellido',
+      renglones: cambio.renglones((_) => apellido),
+      avisos: cambio.avisos,
+      pedirMotivo: false,
+      textoConfirmar: 'ANULAR',
+    );
+    if (ok == null || !mounted) return;
+    if (!_conInternet) {
+      setState(
+        () => _aviso = const AvisoDelPlano(
+          'Sin conexión: para anular una mesa hace falta internet. Antes hay '
+          'que mirar en la nube que nadie la haya pagado recién.',
+          esError: true,
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _asignaciones = {
+        ...?_asignaciones,
+        for (final e in cambio.despues.entries)
+          e.key: MesasExtraUtils.numerosMesaDesdeTexto(e.value).toList()..sort(),
+      };
+      final config = cambio.config;
+      if (config != null) _config = config;
+      _anuladas.add(alumnoId);
+      _pagadoDeLaAdicional = {..._pagadoDeLaAdicional}..remove(alumnoId);
+      _aviso = AvisoDelPlano(
+        '${cambio.textoHecho((_) => apellido)} La mesa adicional se bajó de su '
+        'contrato.',
+      );
+    });
+  }
 
   /// Lo mismo que hace la pantalla de la app al tocar GUARDAR EL SALÓN, sobre lo
   /// que hay en esta ventana.
@@ -655,6 +785,19 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     final sinMesa = _asignaciones == null;
     return Scaffold(
       appBar: AppBar(
+        // El modo jefe va a la izquierda: a la derecha ya no entra nada más.
+        leading: IconButton(
+          key: const Key('prueba_jefe'),
+          tooltip: _esJefe
+              ? 'En modo jefe (tocá para ver lo que ve cualquiera)'
+              : 'Sin modo jefe (tocá para entrar en modo jefe)',
+          onPressed: () => setState(() => _esJefe = !_esJefe),
+          icon: Icon(
+            _esJefe
+                ? Icons.admin_panel_settings
+                : Icons.admin_panel_settings_outlined,
+          ),
+        ),
         // Corto: arriba van siete botones y tienen que entrar.
         title: const Text('Prueba'),
         actions: [
@@ -693,6 +836,8 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
                 : () => setState(() {
                       _asignaciones = null;
                       _llegaron = 0;
+                      _anuladas.clear();
+                      _pagadoDeLaAdicional = {..._sinPagarAlEmpezar};
                       _aviso = const AvisoDelPlano(
                         'Sorteo deshecho: nadie tiene mesa.',
                       );
@@ -711,6 +856,8 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             onChanged: (v) => setState(() {
               _asignaciones = v ? sentadasEnFila() : null;
               _llegaron = 0;
+              _anuladas.clear();
+              _pagadoDeLaAdicional = {..._sinPagarAlEmpezar};
               _aviso = null;
             }),
           ),
@@ -727,6 +874,8 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
               _config = ConfigPlano.vacia;
               _asignaciones = null;
               _llegaron = 0;
+              _anuladas.clear();
+              _pagadoDeLaAdicional = {..._sinPagarAlEmpezar};
               _aviso = null;
             }),
             child: const Text('MEZCLADO'),
@@ -742,6 +891,8 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
               _config = ConfigPlano.vacia;
               _asignaciones = null;
               _llegaron = 0;
+              _anuladas.clear();
+              _pagadoDeLaAdicional = {..._sinPagarAlEmpezar};
               _aviso = AvisoDelPlano('Fiesta $_fiesta: nueva, sin sortear.');
             }),
             child: const Text('OTRA'),
@@ -757,7 +908,12 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
         alumnos: _alumnos,
         aviso: _aviso,
         onImprimir: _imprimir,
-        acciones: AccionesPlano(
+        soloJefe: !_esJefe,
+        acciones: !_esJefe
+            ? null
+            : AccionesPlano(
+          onCobrarAConfirmar: _cobrarAConfirmar,
+          onAnularAConfirmar: _anularAConfirmar,
           onFijarEnMesa: (_) {},
           onFijar: (_, _) {},
           onQuitarFijadas: (_) {},
