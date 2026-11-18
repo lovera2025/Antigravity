@@ -19,9 +19,11 @@ import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
+import 'helpers/revision_en_memoria.dart';
 
 const _perez = EntregaEnMemoria.idPerez;
 const _gomez = EntregaEnMemoria.idGomez;
@@ -43,6 +45,7 @@ Future<_Montada> _montar(
   bool vende = false,
   EntradasEnMemoria? entradas,
   void Function(EntregaEnMemoria)? preparar,
+  RevisionEnMemoria Function(EntregaEnMemoria)? revision,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1300, 1000);
@@ -55,6 +58,7 @@ Future<_Montada> _montar(
   final c = ProviderContainer(overrides: [
     ...e.reemplazos(jefe: mostrador ? null : jefe),
     ...(entradas ?? EntradasEnMemoria()).reemplazos,
+    if (revision != null) revision(e).reemplazo,
   ]);
   addTearDown(c.dispose);
   final cobrosDeLaOficina = <String>[];
@@ -128,6 +132,145 @@ void main() {
       await _montar(tester, entradas: EntradasEnMemoria());
       expect(find.byKey(const Key('entradas_precios')), findsNothing);
       expect(find.byKey(const Key('entradas_vender')), findsNothing);
+    });
+  });
+
+  // 17-nov-2026: el descuento de los lugares es para lo que la familia tenía
+  // cargado al sorteo. En una fiesta sorteada antes de esa regla, el jefe
+  // acepta la lista en PRECIOS; hasta entonces ENTRADAS se lo recuerda.
+  group('los lugares agregados después del sorteo', () {
+    // 12/11/2026 21:40 en Argentina.
+    final sorteoEl = DateTime.utc(2026, 11, 13, 0, 40);
+
+    /// PÉREZ tenía la mesa 12 en el sorteo; la 13 se la dio sola el programa
+    /// dos días después, sin ningún pago de mesa: vino después.
+    void sorteadaSinAnotar(EntregaEnMemoria e, {Map<String, String>? lugares}) {
+      e.sorteos.registros.addAll([
+        SorteoMesasRegistro(
+          id: 'sorteo',
+          eventoId: idFiestaEntrega,
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: const {_perez: '12', EntregaEnMemoria.idLopez: '14', _gomez: '15'},
+          antes: const {},
+          lugares: lugares,
+          hechoPor: 'Jefe',
+          createdAt: sorteoEl,
+        ),
+        SorteoMesasRegistro(
+          id: 'auto',
+          eventoId: idFiestaEntrega,
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: const {_perez: '12, 13'},
+          antes: const {_perez: '12'},
+          automatico: true,
+          createdAt: sorteoEl.add(const Duration(days: 2)),
+        ),
+      ]);
+    }
+
+    RevisionEnMemoria revision(EntregaEnMemoria e) => RevisionEnMemoria(
+          alumnosDeLaFiesta: e.contratos.alumnos,
+          registrosDeLaFiesta: e.sorteos.registros,
+        );
+
+    final recordatorio = find.byKey(const Key('entradas_falta_revisar_lugares'));
+
+    testWidgets('en modo jefe, la fiesta sorteada sin la lista aceptada lo '
+        'recuerda arriba', (tester) async {
+      await _montar(tester, mostrador: false, jefe: true, preparar: sorteadaSinAnotar);
+      expect(recordatorio, findsOneWidget);
+      expect(find.textContaining('todos van con descuento'), findsOneWidget);
+    });
+
+    testWidgets('sin modo jefe no se ve', (tester) async {
+      await _montar(tester, mostrador: false, preparar: sorteadaSinAnotar);
+      expect(recordatorio, findsNothing);
+    });
+
+    testWidgets('en el mostrador no se ve', (tester) async {
+      await _montar(tester, preparar: sorteadaSinAnotar);
+      expect(recordatorio, findsNothing);
+    });
+
+    testWidgets('sin sorteo, o con los lugares ya anotados, no hay nada que '
+        'recordar', (tester) async {
+      await _montar(tester, mostrador: false, jefe: true);
+      expect(recordatorio, findsNothing);
+      await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: (e) => sorteadaSinAnotar(e, lugares: const {}),
+      );
+      expect(recordatorio, findsNothing);
+    });
+
+    testWidgets('de punta a punta: ABRIR PRECIOS, REVISAR LA LISTA, ACEPTAR; '
+        'PRECIOS dice qué sorteo rige, el recordatorio se va y lo de PÉREZ '
+        'pasa a "sin descuento"', (tester) async {
+      late RevisionEnMemoria m;
+      final montada = await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: sorteadaSinAnotar,
+        revision: (e) => m = revision(e),
+      );
+      // Antes de aceptar, todo va con descuento.
+      expect(find.textContaining('sin descuento'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('entradas_revisar_lugares')));
+      await _pasar(tester);
+      expect(find.text('Precios de las entradas'), findsOneWidget);
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('precio_revisar_lugares')));
+      await _pasar(tester);
+      expect(find.text('Lugares agregados después del sorteo'), findsOneWidget);
+      expect(find.text('PÉREZ, JUAN · 1 mesa adicional (8 entradas)'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('revision_aceptar')));
+      await _pasar(tester);
+      expect(find.text('Lugares agregados después del sorteo'), findsNothing);
+      expect(m.guardados.single.registroId, 'sorteo');
+      expect(m.guardados.single.lugares, isEmpty);
+      expect(montada.e.sorteos.registros.first.lugares, isNotNull);
+
+      // PRECIOS sigue abierto y ya dice qué rige.
+      expect(find.text('Precios de las entradas'), findsOneWidget);
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsNothing);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('precio_lugares_anotados'))).data,
+        contains('al sorteo del 12/11/2026 21:40 hs'),
+      );
+
+      await tester.tap(find.byKey(const Key('precios_cancelar')));
+      await _pasar(tester);
+      expect(recordatorio, findsNothing);
+      expect(find.textContaining('8 sin descuento'), findsWidgets);
+    });
+
+    testWidgets('cancelar la lista deja todo como estaba', (tester) async {
+      late RevisionEnMemoria m;
+      await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: sorteadaSinAnotar,
+        revision: (e) => m = revision(e),
+      );
+      await tester.tap(find.byKey(const Key('entradas_precios')));
+      await _pasar(tester);
+      await tester.tap(find.byKey(const Key('precio_revisar_lugares')));
+      await _pasar(tester);
+      await tester.tap(find.byKey(const Key('revision_cancelar')));
+      await _pasar(tester);
+      expect(m.guardados, isEmpty);
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('precios_cancelar')));
+      await _pasar(tester);
+      expect(recordatorio, findsOneWidget);
+      expect(find.textContaining('sin descuento'), findsNothing);
     });
   });
 

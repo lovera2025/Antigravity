@@ -2966,7 +2966,40 @@ class SyncEngine {
     'entradas_anulaciones',
     'entradas_verificaciones',
     'entradas_retiro',
+    // El registro de sorteos (17-nov-2026): de ahí sale qué tenía cada familia
+    // al sorteo, que decide qué entradas van con descuento y cuáles enteras.
+    // Sin esto la tablet que vende sin internet le daría el descuento a todo.
+    'sorteos_mesas',
   ];
+
+  /// Lo que tiene que estar al día para aceptar la lista de PRECIOS de una
+  /// fiesta sorteada antes de la regla del descuento (`RevisionDeLugares`): los
+  /// alumnos, sus pagos, el reparto de sus sillas y el registro de sorteos.
+  static const tablasDeLosLugares = [
+    'contratos_alumnos',
+    'pagos_contrato_alumno',
+    'sillas_reparto',
+    'sorteos_mesas',
+  ];
+
+  /// Baja ya las [tablasDeLosLugares]. Devuelve si bajaron **todas**: con una
+  /// sola que falte, la lista no se acepta. Lo pide el jefe una vez por fiesta,
+  /// al apretar ACEPTAR; no corre en reposo. Como [bajarParaLaPuerta]: no
+  /// espera al motor ni cambia su estado.
+  Future<bool> bajarParaLosLugares() async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return false;
+    try {
+      final db = await LocalDatabase.instance;
+      final bien = await Future.wait([
+        for (final tabla in tablasDeLosLugares)
+          _pullTable(db, tabla, 'updated_at'),
+      ]);
+      return bien.every((b) => b);
+    } catch (e) {
+      debugPrint('⚠️ No bajó lo que hace falta para revisar los lugares: $e');
+      return false;
+    }
+  }
 
   /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"
   /// (sección 5 de la 6.0.0). Devuelve si bajaron todas.

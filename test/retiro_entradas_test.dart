@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/services/planilla_entrega_pdf.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/cliente.dart';
@@ -140,6 +141,132 @@ void main() {
       expect(e.entran, isFalse);
       expect(e.generales, 0);
       expect(e.conDescuento, 0);
+    });
+  });
+
+  // Regla del usuario (17-nov-2026): el descuento es para la mesa adicional y
+  // las sillas extra que la familia tenía cargadas al sorteo. Lo que agrega
+  // después paga la entrada entera.
+  group('con descuento y sin descuento', () {
+    EntradasDeAlumno e(int mesas, int sillas, int vip, [LugaresCargados? alSorteo]) =>
+        EntradasDeAlumno(mesas: mesas, sillas: sillas, vip: vip, alSorteo: alSorteo);
+
+    test('sin nada anotado todo va con descuento, como antes de la regla', () {
+      for (var mesas = 1; mesas <= 4; mesas++) {
+        for (var sillas = 0; sillas <= 8; sillas++) {
+          for (var vip = 1; vip <= 20; vip++) {
+            final x = e(mesas, sillas, vip);
+            expect(x.sinDescuento, 0, reason: '$mesas mesas, $sillas sillas, $vip VIP');
+          }
+        }
+      }
+    });
+
+    test('lo que se compra aparte se parte entero entre con y sin descuento', () {
+      for (var mesas = 1; mesas <= 4; mesas++) {
+        for (var sillas = 0; sillas <= 8; sillas++) {
+          for (var vip = 1; vip <= 20; vip++) {
+            for (var mAl = 1; mAl <= 4; mAl++) {
+              for (var sAl = 0; sAl <= 8; sAl += 2) {
+                final x = e(mesas, sillas, vip, LugaresCargados(mAl, sAl));
+                final caso = '$mesas mesas, $sillas sillas, $vip VIP; al sorteo $mAl,$sAl';
+                // Los lugares de más, menos los VIP que no entran en la mesa
+                // del contrato: esos no pagan entrada.
+                final aparte = x.lugares - EntradasDeAlumno.lugaresSinCargo;
+                final vipDeMas =
+                    vip > EntradasDeAlumno.lugaresSinCargo ? vip - EntradasDeAlumno.lugaresSinCargo : 0;
+                final esperado = aparte - vipDeMas < 0 ? 0 : aparte - vipDeMas;
+                expect(x.aComprar, esperado, reason: caso);
+                expect(x.conDescuento + x.sinDescuento, x.aComprar, reason: caso);
+                expect(x.deMesas.total + x.deSillas.total, x.aComprar, reason: caso);
+                expect(x.conDescuento, greaterThanOrEqualTo(0), reason: caso);
+                expect(x.sinDescuento, greaterThanOrEqualTo(0), reason: caso);
+                // Lo sin cargo no depende de cuándo se cargó cada cosa.
+                expect(x.generales, e(mesas, sillas, vip).generales, reason: caso);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    test('agregar un lugar después del sorteo nunca sube lo que va con descuento', () {
+      for (var mAl = 1; mAl <= 3; mAl++) {
+        for (var sAl = 0; sAl <= 4; sAl++) {
+          for (var vip = 1; vip <= 20; vip++) {
+            final foto = LugaresCargados(mAl, sAl);
+            final alSorteo = e(mAl, sAl, vip, foto).conDescuento;
+            for (var masMesas = 0; masMesas <= 2; masMesas++) {
+              for (var masSillas = 0; masSillas <= 4; masSillas++) {
+                final hoy = e(mAl + masMesas, sAl + masSillas, vip, foto);
+                expect(
+                  hoy.conDescuento,
+                  alSorteo,
+                  reason: 'al sorteo $mAl,$sAl con $vip VIP; '
+                      'agregó $masMesas mesas y $masSillas sillas',
+                );
+              }
+            }
+          }
+        }
+      }
+    });
+
+    test('tenía una adicional y agregó otra: 8 con descuento y 8 enteras', () {
+      final x = e(3, 0, 1, const LugaresCargados(2, 0));
+      expect(x.deMesas.conDescuento, 8);
+      expect(x.deMesas.sinDescuento, 8);
+      expect(x.deSillas.total, 0);
+    });
+
+    test('tenía solo su mesa y agregó 2 sillas: las dos enteras', () {
+      final x = e(1, 2, 3, LugaresCargados.soloElContrato);
+      expect(x.conDescuento, 0);
+      expect(x.deSillas.sinDescuento, 2);
+      expect(x.generales, 5);
+    });
+
+    test('tenía 2 sillas y agregó una mesa: 2 con descuento y 8 enteras', () {
+      final x = e(2, 2, 1, const LugaresCargados(1, 2));
+      expect(x.deSillas.conDescuento, 2);
+      expect(x.deMesas.sinDescuento, 8);
+      expect(x.sinDescuento, 8);
+    });
+
+    test('10 con cena en dos mesas del sorteo, y una tercera después: los 2 de '
+        'más ocupan la adicional que ya tenía', () {
+      final x = e(3, 0, 10, const LugaresCargados(2, 0));
+      expect(x.deMesas.conDescuento, 6);
+      expect(x.deMesas.sinDescuento, 8);
+    });
+
+    test('más con cena que todo lo que tenía al sorteo: recién ahí ocupan lo agregado', () {
+      // 8 de la del contrato, 8 de la adicional del sorteo y 2 más: van a la
+      // mesa que agregó después, sin pagar entrada.
+      final x = e(3, 0, 18, const LugaresCargados(2, 0));
+      expect(x.conDescuento, 0);
+      expect(x.sinDescuento, 6);
+    });
+
+    test('sacó después un lugar que tenía al sorteo: cuenta lo que tiene hoy', () {
+      final x = e(1, 1, 1, const LugaresCargados(2, 2));
+      expect(x.conDescuento, 1);
+      expect(x.sinDescuento, 0);
+    });
+
+    test('entradasDe lee lo anotado al sortear', () {
+      final a = _alumno(id: 'x', extras: 2, sillas: 2, mesas: [12, 13, 14]);
+      final foto = FotoDeLosLugares.anotada({'x': const LugaresCargados(2, 0)});
+      final x = RetiroEntradas.entradasDe(a, foto: foto);
+      expect(x.conDescuento, 8);
+      expect(x.sinDescuento, 10);
+      // Otro alumno de la misma fiesta, que no figura: tenía solo su mesa.
+      final otro = RetiroEntradas.entradasDe(
+        _alumno(id: 'y', extras: 1, mesas: [20, 21]),
+        foto: foto,
+      );
+      expect(otro.conDescuento, 0);
+      expect(otro.sinDescuento, 8);
     });
   });
 

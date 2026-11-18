@@ -1,18 +1,23 @@
-# CONTEXTO — la 6.10.0: la planilla del sorteo, el descuento según el sorteo, el link del delegado y "a confirmar"
+# CONTEXTO — la 6.9.2: la planilla del sorteo, el descuento según el sorteo, el link del delegado y "a confirmar"
 
-**Estado (17-nov-2026, a la noche): EN CURSO, sin publicar.** Plan aprobado por el usuario ese día
-(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Programadas a medias las Partes 1
-y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `pubspec.yaml` sigue en `6.9.1+76`.
+**Estado (18-nov-2026): EN CURSO, sin publicar.** Se llamaba 6.10.0: **el usuario le puso 6.9.2 el 18-nov** (la
+versión va a ser `6.9.2+77`). Plan aprobado por el usuario el 17-nov
+(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Programadas y probadas las
+Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `pubspec.yaml` sigue en `6.9.1+76`.
 
 ## Para retomar en otro chat
 
 ### Dónde quedó
 
-- **Parte 1 (la planilla del sorteo): programada y con sus pruebas.** Falta sacar las muestras en PDF y mostrárselas.
-- **Parte 2 (el descuento solo para lo que la familia tenía al sorteo): programado el núcleo** (lo que se anota al
-  sortear, la cuenta partida, la entrega, VENDER y los dos papeles). **Falta** la lista para revisar en PRECIOS (las
-  fiestas ya sorteadas), guardar lo aceptado, `tablasDeLaPuerta`, las pruebas propias del servicio y el simulacro.
-- **Parte 3 (el link del delegado) y Parte 4 ("a confirmar"): sin empezar.**
+- **Parte 1 (la planilla del sorteo): programada, con sus pruebas y las muestras en PDF.**
+- **Parte 2 (el descuento solo para lo que la familia tenía al sorteo): programada y probada entera** (18-nov): lo que
+  se anota al sortear, la cuenta partida, la entrega, VENDER, los papeles, **la lista de PRECIOS para las fiestas ya
+  sorteadas, el guardado de lo aceptado, la puesta al día de la tablet y el simulacro sobre una copia de la base**.
+- **Parte 3 (el link del delegado) y Parte 4 ("a confirmar"): sin empezar.** Sigue la maqueta del link.
+- **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
+  y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
+  nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el
+  18-nov; falta su mirada** (sobre todo la lista del simulacro: es la que va a aceptar en PRECIOS).
 - La suite entera, al cortar: ver "Cómo quedó la suite", abajo.
 
 ### Qué pidió el usuario (17-nov) y qué decidió
@@ -90,32 +95,46 @@ y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `pubspec.y
 - `test/helpers/entrega_en_memoria.dart`: `SorteosEnMemoria` y su reemplazo; también en
   `tool/venta_entradas_prueba.dart`.
 
+### Lo programado el 18-nov (la Parte 2, lo que quedaba)
+
+- **Las pruebas del servicio** — `test/lugares_al_sorteo_test.dart` (71): `LugaresCargados`, `sacar`, `vigente` (sin
+  sorteo, sin anotar, anotados, la pila con un automático, deshacer todo y los últimos, restaurar), `paraRestaurar`,
+  la ida y vuelta de las dos claves, **la convivencia** (con y sin `_lugares` dan lo mismo `sorteosEnPie`,
+  `esperado`, `resumir`, `lineaParaPlanilla`, `UltimosSorteados.de` y `MesaNuevaSola.ultimoDelJefe`), `enDuda` caso
+  por caso y `alAceptar`. Y en `test/retiro_entradas_test.dart`, el grupo "con descuento y sin descuento" (la
+  partición sobre una grilla de casos; agregar después nunca sube lo que va con descuento; VIP de más).
+- **El guardado** — `SorteosMesasRepository.completarLugaresEn` / `completarLugares`: reescribe el texto crudo del
+  renglón con `resultadoConLugares` y encola la fila entera como `insert`. No toca un deshacer ni un texto que no se
+  lee. `test/sorteos_mesas_completar_lugares_test.dart` (8, sobre una base en memoria).
+- **La lista** — `eventos/services/revision_de_lugares.dart` (`RevisionDeLugares`, `ListaDeLugares`,
+  `PuertosDeLaRevision`, puro), su adaptador `eventos/repositories/revision_de_lugares_de_la_app.dart`
+  (`revisionDeLugaresProvider`) y la ventana `eventos/widgets/lugares_al_sorteo_dialog.dart`
+  (`mostrarRevisionDeLugares`). **Aceptar pide internet y relee todo** (`SyncEngine.bajarParaLosLugares`: alumnos,
+  pagos, repartos y registro; con una tabla que no baje, no se guarda). Si la lista cambió mientras se miraba
+  (`firma`), muestra la nueva y conserva lo ya decidido; si otra PC ya la aceptó, lo dice y no pisa nada.
+  `test/revision_de_lugares_test.dart` (17) y `test/lugares_al_sorteo_dialog_test.dart` (13).
+- **PRECIOS** (`precios_de_entradas_dialog.dart`): recibe `lugares` (la foto) y `revisarLugares` de quien lo abre, y
+  dice qué rige: sin sorteo, "Vale para lo que cada familia tenga cargado el día del sorteo"; con los lugares
+  anotados, "…al sorteo del 12/11/2026 21:40 hs"; sorteada sin revisar, el aviso en rojo y **REVISAR LA LISTA**.
+  **La lista no vive en `lib/features/entradas/`**: lee alumnos y pagos (`venta_entradas_no_toca_test`).
+- **ENTRADAS** (`retiro_entradas_screen.dart`): `_revisarLugares` (con su llave) y el recordatorio amarillo arriba,
+  solo en modo jefe, en la oficina y mientras la fiesta esté sorteada sin la lista aceptada.
+- **`sorteos_mesas` en `tablasDeLaPuerta`.**
+- **Las llaves** — `test/solo_modo_jefe_test.dart` (dos pruebas nuevas: un solo camino hasta `completarLugares`, la
+  segunda llave en la ventana, y el registro con una sola edición) y `test/venta_entradas_no_toca_test.dart`.
+- **Roturas a propósito** (`tool/romper_una_regla.sh`): 23 reglas rotas, las 23 detectadas.
+- **El simulacro** — `tool/simulacro_lugares_al_sorteo_test.dart`, el 18-nov sobre una copia del día (la base real
+  quedó con el mismo SHA-256): 10 fiestas masivas, **5 sorteadas sin revisar**; en total **6 lugares tildados**
+  (todos "el programa se la dio sola, sin ningún pago de mesa hasta ese momento") y **8 para revisar**. Sin aceptar
+  nada, las entradas de todos dan igual que hoy; aceptando como viene, solo cambian las familias tildadas; y guardar
+  lo aceptado sobre otra copia agrega los lugares a 5 renglones **sin cambiar ninguna otra tabla, renglón ni columna**.
+- **Las muestras** — `tool/planilla_sorteo_muestra_test.dart` y `tool/planilla_entrega_muestra_test.dart` llevan dos
+  familias que agregaron después (y la línea del sorteo como sale desde la 6.6.2, sin "· Jefe · 1 cambio");
+  `tool/lugares_al_sorteo_muestra_test.dart` (nuevo) saca las seis capturas de las pantallas nuevas.
+
 ### Lo que falta, en orden
 
-**Parte 2, lo que queda**
-1. `test/lugares_al_sorteo_test.dart` (nuevo): `LugaresCargados`; `sacar`; `vigente` (sin sorteo, sin anotar,
-   anotados, pila `[auto, sorteo]`, deshacer todo, deshacer últimos); `paraRestaurar`; ida y vuelta de las dos
-   claves y `resultadoConLugares` con una clave desconocida; **convivencia** (con y sin `_lugares` dan lo mismo
-   `sorteosEnPie`, `esperado`, `resumir`, `lineaParaPlanilla`, `UltimosSorteados.de`, `MesaNuevaSola.ultimoDelJefe`);
-   y `enDuda` / `alAceptar` caso por caso. Más un grupo en `retiro_entradas_test` con la partición
-   (`conDescuento + sinDescuento == aComprar`; agregar después nunca sube `conDescuento`; VIP > 8).
-2. `SorteosMesasRepository.completarLugares(...)`: actualiza la fila de esta PC con `resultadoConLugares` (sobre el
-   texto crudo) y encola la fila entera. La nube tiene política `for all` y el disparador de `updated_at`
-   (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql`), y la subida de un `insert` es un `upsert`.
-3. **PRECIOS** (`entradas/widgets/precios_de_entradas_dialog.dart`, solo modo jefe): con los lugares anotados, la
-   línea "El descuento vale para lo cargado al sorteo del dd/mm"; en una fiesta **sorteada sin anotar**, la lista de
-   `enDuda` con su porqué (tildados "paga entera" los que tienen huella de después; sin tildar los "para revisar") y
-   **ACEPTAR**, con internet y releyendo alumnos y registro antes de guardar. Hasta que acepte, la fiesta sigue como
-   hoy. Un recordatorio en ENTRADAS, en modo jefe, mientras falte.
-4. `sync_engine.dart`: `sorteos_mesas` en `tablasDeLaPuerta` (la tablet que vende sin internet la necesita).
-5. `test/solo_modo_jefe_test.dart` (el guardado nuevo, solo donde corresponde) y
-   `test/venta_entradas_no_toca_test.dart` (la venta no escribe el registro).
-6. **Simulacro sobre una copia de la base** (`tool/simulacro_lugares_al_sorteo_test.dart`, con
-   `tool/copiar_base_solo_lectura.py`; la app instalada cerrada, se le pide a él): por cada fiesta ya sorteada, a
-   quién propone "agregó después" y por qué. La lista va a `build/` (con nombres, fuera de git) y **la ve antes de
-   publicar**. Sin nada aceptado, las cuentas de todos tienen que dar igual que hoy.
-7. Las muestras: `tool/planilla_sorteo_muestra_test.dart` (con una familia que agregó después),
-   `tool/planilla_entrega_muestra_test.dart` y `tool/venta_entradas_muestra_test.dart`. **Mandarle los PDF.**
+**Antes de seguir:** que el usuario mire las muestras y la lista del simulacro (ver "Dónde quedó").
 
 **Parte 3 — el link del delegado** (todo el detalle, con las funciones una por una, en el plan)
 1. **La maqueta primero** (`docs/maqueta_link_delegado_2026-11-17.html`): el panel nuevo en dos direcciones y la
@@ -132,8 +151,9 @@ y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `pubspec.y
 **Parte 4 — "a confirmar"**: `git stash pop` (`stash@{0}`), y lo que falta está en "La Parte B" de
 `docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la tenía cargada).
 
-**Después**: la suite entera, la versión `6.10.0+77` (`pubspec.yaml` y el `.iss`), CLAUDE.md, y publicar con él (foto
-de la mora, el SQL del link con su OK en el momento, instalador por pasos, release y web).
+**Después**: la suite entera, la versión `6.9.2+77` (`pubspec.yaml` y el `.iss`), CLAUDE.md, y publicar con él (foto
+de la mora, el SQL del link con su OK en el momento, instalador por pasos, release y web). **Al publicar, repetir el
+simulacro de los lugares sobre una copia nueva** y decirle: "no vender entradas desde un equipo sin esta versión".
 
 ### Lo que hay que saber antes de tocar
 
@@ -146,8 +166,14 @@ de la mora, el SQL del link con su OK en el momento, instalador por pasos, relea
 - **Aceptar la lista de una fiesta ya sorteada le agrega `_lugares` al renglón del sorteo que ya existe.** Es la
   única excepción a "solo se agregan renglones", y el usuario la aprobó con el plan: un renglón aparte rompería
   "deshacer solo los últimos" (la pila haría `removeLast` de ese renglón), el HISTORIAL ("Sorteo: 0 familias") y la
-  línea de los papeles. Nada de lo que el renglón dice del sorteo cambia. **Hay que escribirlo en CLAUDE.md, con su
-  test**, cuando esté programado.
+  línea de los papeles. Nada de lo que el renglón dice del sorteo cambia. Está en CLAUDE.md, con su test
+  (`solo_modo_jefe_test`: "el registro de sorteos: solo se agregan renglones…").
+- **Una vez aceptada, la lista queda fija**: `RevisionDeLugares.leer` da null con los lugares anotados y no hay
+  pantalla para corregirla. Si el jefe se equivoca, hoy se arregla a mano (el renglón acepta que se le reemplace
+  `_lugares`). No se pidió una pantalla para eso.
+- **En esta PC no hay con qué pasar un PDF a imagen**, y las muestras se arman con las letras de la app, que
+  `palabrasDelPdf` no lee: los PDF se le mandan para que los mire él. Lo que dicen los papeles lo comprueba
+  `test/planilla_sorteo_test.dart` con la letra de fábrica.
 - **`mora_cambios` no sirve de huella**: el trigger anota solo cuando cambia un campo de la mora, no cuando se
   agrega una mesa.
 - **Lo que una huella no puede decir**: una adicional que recibió su número después del sorteo pudo estar cargada
@@ -160,13 +186,15 @@ de la mora, el SQL del link con su OK en el momento, instalador por pasos, relea
 
 ### Cómo quedó la suite
 
-`bash tool/suite_por_tandas.sh`, el 17-nov a la noche: **5.189 pruebas, ninguna falla** (301 archivos). La única que
-falló en la primera pasada fue `test/plano_evento_cuerpo_test.dart` ("En la principal: 4 con cena · 6 generales"):
-el panel del PLANO usa la misma cuenta que la planilla y ahora dice "4 generales". **Queda para mirar:** ese panel
-no dice las entradas que se compran aparte (las de las sillas y la adicional); si hace falta, se le suma un renglón.
+`bash tool/suite_por_tandas.sh`, el 18-nov: **5.322 pruebas, ninguna falla** (305 archivos). El 17-nov a la noche
+eran 5.189 en 301.
 
-`flutter analyze` sobre `lib`, `test` y `tool`: sin errores nuevos (los tres que marca son de
-`tool/_tmp_espindola_audit.dart`, de antes).
+`flutter analyze` sobre `lib`, `test` y `tool`: ningún error, y nada en los archivos tocados el 18-nov (los avisos que
+quedan son de antes: `detalle_evento_masivo_screen.dart`, `dry_run_cobro_simulator.dart`, dos `tool/_tmp_*`).
+
+**Queda para mirar** (del 17-nov): el panel del PLANO usa la misma cuenta que la planilla ("4 con cena · 4
+generales") y no dice las entradas que se compran aparte (las de las sillas y la adicional); si hace falta, se le
+suma un renglón.
 
 ### Lo que no se va a poder probar acá
 

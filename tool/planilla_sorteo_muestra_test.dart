@@ -33,10 +33,12 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/reparto_de_sillas.dart';
+import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/features/eventos/services/salon_mesas.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/services/divisiones.dart';
@@ -209,6 +211,24 @@ void main() {
       );
     }
 
+    // Lo que cada familia tenía cargado al sorteo (17-nov-2026): todo lo de
+    // hoy, salvo dos que agregaron después. "a9" agregó su mesa adicional y
+    // "a7" sus dos sillas: esas entradas salen "sin descuento".
+    final foto = FotoDeLosLugares.anotada(
+      {
+        for (final a in sorteados)
+          if (LugaresCargados.de(a).tieneAdicionales)
+            a.id: switch (a.id) {
+              'a9' => LugaresCargados(1, SalonMesas.sillasExtra(a)),
+              'a7' => LugaresCargados(SalonMesas.mesas(a), 0),
+              _ => LugaresCargados.de(a),
+            },
+      },
+      sorteoEl: DateTime.utc(2026, 11, 13, 0, 40),
+    );
+    expect(RetiroEntradas.entradasDe(sorteados[9], foto: foto).sinDescuento, 8);
+    expect(RetiroEntradas.entradasDe(sorteados[7], foto: foto).sinDescuento, 2);
+
     final evento = Evento(
       id: 'muestra',
       clienteId: 'c',
@@ -229,8 +249,8 @@ void main() {
           repartos: repartos,
           pasto: armado.pasto,
           bloques: sorteo.bloques,
-          lineaSorteo:
-              'Sorteo del 12/11/2026 21:40 hs · Jefe · 1 cambio a mano después',
+          lineaSorteo: 'Sorteo del 12/11/2026 21:40 hs',
+          foto: foto,
           version: version,
           blancoYNegro: bn,
           generada: DateTime(2026, 11, 12, 21, 30),
@@ -254,8 +274,8 @@ void main() {
         repartos: repartos,
         pasto: armado.pasto,
         bloques: sorteo.bloques,
-        lineaSorteo:
-            'Sorteo del 12/11/2026 21:40 hs · Jefe · 1 cambio a mano después',
+        lineaSorteo: 'Sorteo del 12/11/2026 21:40 hs',
+        foto: foto,
         version: version,
         vertical: true,
         generada: DateTime(2026, 11, 12, 21, 30),
@@ -277,8 +297,8 @@ void main() {
     // "Sortear a los que faltan": después del primer sorteo se le dio mesa a
     // cinco familias más. Salen la planilla solo de ellas (una hoja corrida) y
     // la de toda la escuela, que arriba nombra los dos sorteos.
-    const dosSorteos = 'Sorteo del 12/11/2026 21:40 hs · Jefe · 110 familias\n'
-        'Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias';
+    const dosSorteos = 'Sorteo del 12/11/2026 21:40 hs · 110 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · 5 familias';
     final ultimos = [
       for (final a in sorteados)
         if (const {'a7', 'a9', 'a45', 'a60', 'a90'}.contains(a.id)) a,
@@ -316,6 +336,7 @@ void main() {
         pasto: armado.pasto,
         bloques: sorteo.bloques,
         lineaSorteo: dosSorteos,
+        foto: foto,
         soloUltimos: solo,
         version: version,
         blancoYNegro: bn,

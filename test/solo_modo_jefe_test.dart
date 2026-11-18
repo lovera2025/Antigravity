@@ -651,4 +651,100 @@ void main() {
           reason: '$funcion abre la pantalla antes de la llave');
     }
   });
+
+  // 17-nov-2026: aceptar la lista de PRECIOS de una fiesta ya sorteada le
+  // agrega `_lugares` al renglón del sorteo. **Es lo único que toca un renglón
+  // ya escrito del registro**, y desde ahí decide qué entradas van con
+  // descuento en todas las PCs: lo hace solo el jefe, por un solo camino.
+  test('los lugares al sorteo de una fiesta ya sorteada los acepta solo el jefe, '
+      'por un solo camino', () {
+    const repo = 'lib/features/eventos/repositories/sorteos_mesas_repository.dart';
+    const adaptador =
+        'lib/features/eventos/repositories/revision_de_lugares_de_la_app.dart';
+    const ventana = 'lib/features/eventos/widgets/lugares_al_sorteo_dialog.dart';
+    const entradas = 'lib/features/eventos/retiro_entradas_screen.dart';
+
+    Set<String> quienesNombran(String texto) => {
+          for (final f in Directory('lib').listSync(recursive: true))
+            if (f is File &&
+                f.path.endsWith('.dart') &&
+                f.readAsStringSync().contains(texto))
+              f.path.replaceAll('\\', '/'),
+        };
+
+    // El guardado: el repositorio lo define y solo el adaptador lo llama.
+    expect(quienesNombran('completarLugares'), {repo, adaptador});
+    // El adaptador lo usa solo la ventana de la lista.
+    expect(quienesNombran('revisionDeLugaresProvider'), {adaptador, ventana});
+    // Y la ventana se abre solo desde ENTRADAS de la fiesta.
+    expect(quienesNombran('mostrarRevisionDeLugares('), {ventana, entradas});
+
+    // La ventana: la segunda llave, antes de pedirle nada a la revisión.
+    final v = leer(ventana);
+    final llave = v.indexOf('bool _frenaSinModoJefe() {');
+    expect(llave, greaterThanOrEqualTo(0));
+    final cuerpoLlave = v.substring(llave, v.indexOf('\n  }', llave));
+    expect(cuerpoLlave, contains('if (ref.read(esRolJefeProvider)) return false;'));
+    expect(cuerpoLlave, contains('return true;'));
+    final aceptar = v.indexOf('Future<void> _aceptar() async {');
+    expect(aceptar, greaterThanOrEqualTo(0));
+    final cuerpoAceptar = v.substring(aceptar, v.indexOf('\n  }', aceptar));
+    final frena = cuerpoAceptar.indexOf('if (_frenaSinModoJefe()) return;');
+    expect(frena, greaterThanOrEqualTo(0));
+    expect(cuerpoAceptar.indexOf('.aceptar('), greaterThan(frena));
+    expect(
+      RegExp(r'\.aceptar\(').allMatches(v).length,
+      1,
+      reason: 'un solo lugar acepta, y es detrás de la llave',
+    );
+
+    // ENTRADAS: la abre con su llave, antes de la ventana.
+    final e = leer(entradas);
+    final abre = e.indexOf('Future<FotoDeLosLugares?> _revisarLugares(');
+    expect(abre, greaterThanOrEqualTo(0));
+    final cuerpoAbre = e.substring(abre, e.indexOf('\n  }', abre));
+    final llaveAbre =
+        cuerpoAbre.indexOf('if (!ref.read(esRolJefeProvider)) return null;');
+    expect(llaveAbre, greaterThanOrEqualTo(0));
+    expect(cuerpoAbre.indexOf('mostrarRevisionDeLugares('), greaterThan(llaveAbre));
+  });
+
+  test('el registro de sorteos: solo se agregan renglones, y lo único que se le '
+      'suma a uno ya escrito son los lugares', () {
+    final repo =
+        leer('lib/features/eventos/repositories/sorteos_mesas_repository.dart');
+    expect(RegExp(r'\.(delete|rawDelete|rawUpdate)\(').hasMatch(repo), isFalse);
+    final ediciones = RegExp(r'\.update\(').allMatches(repo).toList();
+    expect(ediciones, hasLength(1));
+    final desde = repo.indexOf('static Future<bool> completarLugaresEn(');
+    final hasta = repo.indexOf('\n  }\n', desde);
+    expect(ediciones.single.start, inInclusiveRange(desde, hasta));
+    final cuerpo = repo.substring(desde, hasta);
+    // Reescribe el texto crudo con la clave agregada: no pasa por el modelo,
+    // que perdería una clave que esta versión no conozca.
+    expect(cuerpo, contains('SorteoMesasRegistro.resultadoConLugares('));
+    expect(cuerpo, isNot(contains('.toMap()')));
+    // Solo cambia el texto y la fecha de la fila.
+    expect(cuerpo, contains("{'resultado': fila['resultado'], 'updated_at': fila['updated_at']}"));
+    // Y sube.
+    expect(cuerpo, contains('SyncQueue.enqueue('));
+
+    // Fuera del repositorio nadie escribe la tabla a mano.
+    final aMano = RegExp("(insert|update|delete)\\(\\s*'sorteos_mesas'");
+    final quienes = {
+      for (final f in Directory('lib').listSync(recursive: true))
+        if (f is File &&
+            f.path.endsWith('.dart') &&
+            aMano.hasMatch(f.readAsStringSync()))
+          f.path.replaceAll('\\', '/'),
+    };
+    expect(
+      quienes.difference({
+        'lib/features/eventos/repositories/sorteos_mesas_repository.dart',
+        // El motor, al bajar de la nube.
+        'lib/core/services/sync_engine.dart',
+      }),
+      isEmpty,
+    );
+  });
 }

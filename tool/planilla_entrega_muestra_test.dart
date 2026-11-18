@@ -18,6 +18,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/cliente.dart';
@@ -117,6 +118,24 @@ void main() {
       siguiente += e.generales;
     }
 
+    // Lo que cada familia tenía cargado al sorteo (17-nov-2026): todo lo de
+    // hoy, salvo dos que agregaron después. "a6" agregó su mesa adicional y
+    // "a8" sus dos sillas: esas entradas salen entre paréntesis, sin descuento.
+    final foto = FotoDeLosLugares.anotada(
+      {
+        for (final a in alumnos)
+          if (LugaresCargados.de(a).tieneAdicionales)
+            a.id: switch (a.id) {
+              'a6' => const LugaresCargados(1, 0),
+              'a8' => const LugaresCargados(1, 0),
+              _ => LugaresCargados.de(a),
+            },
+      },
+      sorteoEl: DateTime.utc(2026, 11, 13, 0, 40),
+    );
+    expect(RetiroEntradas.entradasDe(alumnos[6], foto: foto).sinDescuento, 8);
+    expect(RetiroEntradas.entradasDe(alumnos[8], foto: foto).sinDescuento, 2);
+
     final evento = Evento(
       id: 'muestra',
       clienteId: 'c',
@@ -134,6 +153,7 @@ void main() {
         retiros: retiros,
         deudas: deudas,
         blancoYNegro: bn,
+        foto: foto,
         generada: DateTime(2026, 11, 12, 21, 30),
       );
       final nombre = 'Planilla_Entrega_MUESTRA${bn ? '_BN' : ''}.pdf';

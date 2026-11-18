@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/ar_time.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/solo_jefe.dart';
+import '../../eventos/services/lugares_al_sorteo.dart';
 import '../cuentas/precio_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
 import '../providers/entradas_providers.dart';
@@ -15,11 +17,19 @@ import '../providers/entradas_providers.dart';
 /// **Solo en modo jefe**, con doble llave: quien lo abre ya preguntó, y
 /// `_guardar` vuelve sin escribir si `esRolJefeProvider` da falso
 /// (`test/solo_modo_jefe_test.dart`). [quien] es quién queda anotado.
+///
+/// [lugares]: lo que cada familia tenía al sorteo, para decir a qué le toca el
+/// descuento (17-nov-2026). En una fiesta sorteada antes de esa regla,
+/// [revisarLugares] abre la lista para aceptar y devuelve cómo quedó (null si
+/// no cambió nada). La lista no vive acá: lee los alumnos y sus pagos, que la
+/// venta de entradas no toca.
 Future<ConfigEntradas?> mostrarPreciosDeEntradas(
   BuildContext context, {
   required String eventoId,
   required String fiesta,
   required String quien,
+  FotoDeLosLugares? lugares,
+  RevisarLugares? revisarLugares,
 }) =>
     showDialog<ConfigEntradas>(
       context: context,
@@ -28,19 +38,31 @@ Future<ConfigEntradas?> mostrarPreciosDeEntradas(
         eventoId: eventoId,
         fiesta: fiesta,
         quien: quien,
+        lugares: lugares,
+        revisarLugares: revisarLugares,
       ),
     );
+
+/// Abre la lista de los lugares agregados después del sorteo. Devuelve lo que
+/// rige después, o null si no cambió nada.
+typedef RevisarLugares = Future<FotoDeLosLugares?> Function(
+  BuildContext context,
+);
 
 class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
   final String eventoId;
   final String fiesta;
   final String quien;
+  final FotoDeLosLugares? lugares;
+  final RevisarLugares? revisarLugares;
 
   const PreciosDeEntradasDialog({
     super.key,
     required this.eventoId,
     required this.fiesta,
     required this.quien,
+    this.lugares,
+    this.revisarLugares,
   });
 
   @override
@@ -63,9 +85,13 @@ class _PreciosDeEntradasDialogState
   bool _guardando = false;
   String? _problema;
 
+  /// Lo que cada familia tenía al sorteo: cambia si acá se acepta la lista.
+  FotoDeLosLugares? _lugaresAlSorteo;
+
   @override
   void initState() {
     super.initState();
+    _lugaresAlSorteo = widget.lugares;
     _cargar();
   }
 
@@ -227,6 +253,61 @@ class _PreciosDeEntradasDialogState
     });
   }
 
+  Future<void> _revisarLugares() async {
+    final revisar = widget.revisarLugares;
+    if (revisar == null) return;
+    final nueva = await revisar(context);
+    if (nueva != null && mounted) setState(() => _lugaresAlSorteo = nueva);
+  }
+
+  /// A qué le toca el descuento de los lugares en esta fiesta.
+  Widget? _notaDeLosLugares(TextStyle ayuda) {
+    final foto = _lugaresAlSorteo;
+    if (foto == null) return null;
+    switch (foto.estado) {
+      case EstadoDeLosLugares.sinSorteo:
+        return Text(
+          'Vale para lo que cada familia tenga cargado el día del sorteo. Lo '
+          'que agregue después paga la entrada entera.',
+          key: const Key('precio_lugares_sin_sorteo'),
+          style: ayuda,
+        );
+      case EstadoDeLosLugares.anotados:
+        final del = foto.del ?? foto.sorteoEl;
+        return Text(
+          'Vale para lo que cada familia tenía cargado al sorteo'
+          '${del == null ? '' : ' del ${ArTime.formatFechaHora(del)}'}. Lo '
+          'que agregó después paga la entrada entera.',
+          key: const Key('precio_lugares_anotados'),
+          style: ayuda,
+        );
+      case EstadoDeLosLugares.sinAnotar:
+        final color = Theme.of(context).colorScheme.error;
+        return Column(
+          key: const Key('precio_lugares_sin_revisar'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Esta fiesta se sorteó antes de la regla "lo que se agrega '
+              'después del sorteo paga la entrada entera". Hasta que aceptes '
+              'la lista, todo va con descuento.',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            if (widget.revisarLugares != null)
+              TextButton(
+                key: const Key('precio_revisar_lugares'),
+                onPressed: _guardando ? null : _revisarLugares,
+                child: const Text('REVISAR LA LISTA'),
+              ),
+          ],
+        );
+    }
+  }
+
   Widget _plata(String clave, TextEditingController c, String rotulo) =>
       TextField(
         key: Key(clave),
@@ -256,6 +337,7 @@ class _PreciosDeEntradasDialogState
     final ayuda = TextStyle(fontSize: 12, color: gris);
     final sinPrecio = (_pesos(_valor.text) ?? 0) <= 0;
     final cadaUna = _cadaUna;
+    final notaDeLosLugares = _notaDeLosLugares(ayuda);
 
     return AlertDialog(
       title: Column(
@@ -368,6 +450,11 @@ class _PreciosDeEntradasDialogState
                         style: ayuda,
                       ),
                     ),
+                    if (notaDeLosLugares != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: notaDeLosLugares,
+                      ),
                     const SizedBox(height: 14),
                     SizedBox(
                       width: 250,

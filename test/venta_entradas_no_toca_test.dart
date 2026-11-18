@@ -41,6 +41,15 @@ void main() {
     'asignarNumerosMesa': 'no toca las mesas',
     'sillas_puerta': 'la silla de la noche se paga en la barra',
     'planos_evento': 'no toca el plano',
+    // 17-nov-2026: la venta **lee** qué tenía cada familia al sorteo
+    // (`fotoDeLosLugaresProvider`), pero no escribe el registro: la lista de
+    // una fiesta ya sorteada la acepta el jefe, en su ventana.
+    'completarLugares': 'no escribe el registro de sorteos',
+    'revisionDeLugaresProvider': 'la lista de los lugares no es de la venta',
+    'mostrarRevisionDeLugares': 'la lista de los lugares no es de la venta',
+    'SorteosMesasRepository.registrarEn': 'no agrega renglones al registro de sorteos',
+    "insert('sorteos_mesas'": 'no escribe el registro de sorteos',
+    "update('sorteos_mesas'": 'no escribe el registro de sorteos',
   };
 
   List<File> archivos() => [

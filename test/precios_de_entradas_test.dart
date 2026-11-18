@@ -10,6 +10,8 @@ import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/cuentas/precio_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/widgets/precios_de_entradas_dialog.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 
@@ -28,7 +30,12 @@ void main() {
     cerrado = false;
   });
 
-  Future<void> abrir(WidgetTester tester, {bool jefe = true}) async {
+  Future<void> abrir(
+    WidgetTester tester, {
+    bool jefe = true,
+    FotoDeLosLugares? lugares,
+    RevisarLugares? revisarLugares,
+  }) async {
     tester.view.physicalSize = const Size(900, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -48,6 +55,8 @@ void main() {
                     eventoId: _fiesta,
                     fiesta: 'PUERTO VIEJO',
                     quien: 'Jefe',
+                    lugares: lugares,
+                    revisarLugares: revisarLugares,
                   );
                   cerrado = true;
                 },
@@ -279,5 +288,96 @@ void main() {
     await guardar(tester);
     expect(cerrado, isTrue);
     expect(entradas.configs[_fiesta]!.valorEntrada, 10000);
+  });
+
+  // 17-nov-2026: el descuento de los lugares es para lo que la familia tenía
+  // cargado al sorteo. PRECIOS dice qué rige en esa fiesta.
+  group('a qué le toca el descuento de los lugares', () {
+    // 12/11/2026 21:40 en Argentina.
+    final sorteoEl = DateTime.utc(2026, 11, 13, 0, 40);
+    SorteoMesasRegistro sorteo({Map<String, String>? lugares}) =>
+        SorteoMesasRegistro(
+          id: 's',
+          eventoId: _fiesta,
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: const {'a': '12'},
+          lugares: lugares,
+          createdAt: sorteoEl,
+        );
+    final sinAnotar = LugaresAlSorteo.vigente([sorteo()]);
+    final anotados = LugaresAlSorteo.vigente([sorteo(lugares: const {})]);
+
+    testWidgets('sin el dato no dice nada (quien lo abre de otro lado)',
+        (tester) async {
+      await abrir(tester);
+      expect(find.byKey(const Key('precio_lugares_sin_sorteo')), findsNothing);
+      expect(find.byKey(const Key('precio_lugares_anotados')), findsNothing);
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsNothing);
+    });
+
+    testWidgets('una fiesta sin sortear: vale para lo cargado el día del sorteo',
+        (tester) async {
+      await abrir(tester, lugares: FotoDeLosLugares.sinSorteo);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('precio_lugares_sin_sorteo'))).data,
+        contains('el día del sorteo'),
+      );
+      expect(find.byKey(const Key('precio_revisar_lugares')), findsNothing);
+    });
+
+    testWidgets('con los lugares anotados dice de qué sorteo, con día y hora',
+        (tester) async {
+      await abrir(tester, lugares: anotados);
+      final texto = tester
+          .widget<Text>(find.byKey(const Key('precio_lugares_anotados')))
+          .data!;
+      expect(texto, contains('al sorteo del 12/11/2026 21:40 hs'));
+      expect(texto, contains('paga la entrada entera'));
+      expect(find.byKey(const Key('precio_revisar_lugares')), findsNothing);
+    });
+
+    testWidgets('sorteada antes de la regla: avisa que todo va con descuento y '
+        'ofrece REVISAR LA LISTA', (tester) async {
+      var abiertas = 0;
+      await abrir(
+        tester,
+        lugares: sinAnotar,
+        revisarLugares: (_) async {
+          abiertas++;
+          return null;
+        },
+      );
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsOneWidget);
+      expect(find.textContaining('todo va con descuento'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('precio_revisar_lugares')));
+      await tester.pumpAndSettle();
+      expect(abiertas, 1);
+      // No cambió nada: sigue avisando.
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsOneWidget);
+      expect(cerrado, isFalse);
+    });
+
+    testWidgets('aceptada la lista, PRECIOS pasa a decir qué sorteo rige, sin '
+        'cerrarse ni perder lo escrito', (tester) async {
+      await abrir(
+        tester,
+        lugares: sinAnotar,
+        revisarLugares: (_) async => anotados,
+      );
+      await poner(tester, 'precio_valor', '12000');
+      await tester.tap(find.byKey(const Key('precio_revisar_lugares')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsNothing);
+      expect(find.byKey(const Key('precio_lugares_anotados')), findsOneWidget);
+      expect(escrito(tester, 'precio_valor'), '12000');
+      expect(cerrado, isFalse);
+    });
+
+    testWidgets('sin quien abra la lista, avisa pero no pone el botón',
+        (tester) async {
+      await abrir(tester, lugares: sinAnotar);
+      expect(find.byKey(const Key('precio_lugares_sin_revisar')), findsOneWidget);
+      expect(find.byKey(const Key('precio_revisar_lugares')), findsNothing);
+    });
   });
 }

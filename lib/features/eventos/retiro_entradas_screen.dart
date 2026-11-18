@@ -36,6 +36,7 @@ import 'services/planilla_sorteo.dart';
 import 'services/retiro_entradas.dart';
 import 'services/salon_mesas.dart';
 import 'widgets/entrega_entradas_dialog.dart';
+import 'widgets/lugares_al_sorteo_dialog.dart';
 
 /// La sección "Retiro de entradas" de una institución: quién ya retiró, quién
 /// falta y quién no puede retirar todavía, y el diálogo del mostrador para
@@ -806,6 +807,66 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       eventoId: widget.evento.id,
       fiesta: nombreDeLaFiesta(widget.evento),
       quien: quienOpera(ref),
+      lugares: _foto,
+      revisarLugares: _revisarLugares,
+    );
+  }
+
+  /// La lista de una fiesta sorteada antes de la regla del descuento: qué se
+  /// agregó después del sorteo, para que el jefe la acepte. Devuelve lo que
+  /// rige después, o null si no cambió nada.
+  Future<FotoDeLosLugares?> _revisarLugares(BuildContext contexto) async {
+    // Doble llave: a PRECIOS ya se entró en modo jefe.
+    if (!ref.read(esRolJefeProvider)) return null;
+    final cambio = await mostrarRevisionDeLugares(
+      contexto,
+      eventoId: widget.evento.id,
+      fiesta: nombreDeLaFiesta(widget.evento),
+    );
+    if (!cambio) return null;
+    final foto = await ref.read(fotoDeLosLugaresProvider)(widget.evento.id);
+    if (mounted) setState(() => _foto = foto);
+    return foto;
+  }
+
+  /// Mientras la fiesta esté sorteada sin la lista aceptada, el jefe lo ve acá:
+  /// hasta entonces todo va con descuento. Solo en modo jefe y en la oficina.
+  Widget? _recordatorioDeLosLugares() {
+    if (widget.enElMostrador ||
+        _foto.estado != EstadoDeLosLugares.sinAnotar ||
+        !ref.watch(esRolJefeProvider) ||
+        !ref.watch(entradasEnEsteEquipoProvider)) {
+      return null;
+    }
+    final color = Colors.amber.shade900;
+    return Container(
+      key: const Key('entradas_falta_revisar_lugares'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        border: Border.all(color: Colors.amber.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Falta revisar qué lugares se agregaron después del sorteo. '
+              'Hasta que aceptes la lista, todos van con descuento.',
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            key: const Key('entradas_revisar_lugares'),
+            onPressed: _abrirPrecios,
+            child: const Text('ABRIR PRECIOS'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -993,6 +1054,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     return Column(
       children: [
         if (widget.enElMostrador) _arribaDelMostrador(),
+        ?_recordatorioDeLosLugares(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(

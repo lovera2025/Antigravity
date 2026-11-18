@@ -589,27 +589,51 @@ cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumpl
 - La mesa adicional "a confirmar" (Recepción discreta; COBRAR y ANULAR en el PLANO, solo en modo jefe) quedó **sin
   terminar en `git stash`** (`stash@{0}`), con el detalle en el mismo CONTEXTO.
 
-**La 6.10.0, EN CURSO desde el 17-nov, sin publicar** (plan aprobado ese día, cuatro partes;
-`docs/CONTEXTO_v6.10.0_2026-11-17.md`, que empieza con "Para retomar en otro chat": ahí está **lo hecho y lo que
-falta, en orden**; el plan, `C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`). `pubspec.yaml` sigue en
-`6.9.1+76`.
+**La 6.9.2, EN CURSO desde el 17-nov, sin publicar** (se llamaba 6.10.0: el usuario le puso 6.9.2 el 18-nov; plan
+aprobado el 17-nov, cuatro partes; `docs/CONTEXTO_v6.9.2_2026-11-17.md`, que empieza con "Para retomar en otro chat":
+ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`).
+`pubspec.yaml` sigue en `6.9.1+76`; la versión va a ser `6.9.2+77`.
 - **Parte 1, programada: la planilla del sorteo usa la cuenta de la entrega** (`RetiroEntradas.entradasDe`). En la
   mesa principal, los con cena y las generales que completan sus 8; aparte, "8 al 50 %" debajo de la adicional y "2
   al 50 %" debajo de las sillas. Antes sumaba las sillas como generales ("1 con cena · 9 generales").
-- **Parte 2, a medias: el descuento es solo para lo que la familia tenía al sorteo** (regla del usuario, 17-nov). La
-  mesa adicional y las sillas extra **cargadas al sorteo, pagadas o no**, van con el descuento de PRECIOS y se
-  compran cuando quiera; **lo agregado después paga la entrada entera** y se vende como entrada común.
+- **Parte 2, programada y probada (18-nov): el descuento es solo para lo que la familia tenía al sorteo** (regla del
+  usuario, 17-nov). La mesa adicional y las sillas extra **cargadas al sorteo, pagadas o no**, van con el descuento de
+  PRECIOS y se compran cuando quiera; **lo agregado después paga la entrada entera** y se vende como entrada común.
   - `EntradasDeAlumno` ya no tiene `alCincuenta`: `conDescuento`, `sinDescuento`, `aComprar`, `deMesas`, `deSillas`.
   - Cada sorteo del jefe anota `_lugares` en su renglón (`LugaresAlSorteo`, `eventos/services/lugares_al_sorteo.dart`);
     **el sorteo de la fiesta es el primer renglón del jefe en pie**. Lo lee `fotoDeLosLugaresProvider`: si no se
     puede leer, todo va con descuento.
-  - **Falta** la lista de PRECIOS para las fiestas ya sorteadas (`LugaresAlSorteo.enDuda`, por las huellas; el jefe
-    acepta), guardarla, `sorteos_mesas` en `tablasDeLaPuerta`, las pruebas del servicio y el simulacro.
+  - **Las fiestas ya sorteadas: el jefe acepta una lista** (ENTRADAS → PRECIOS → REVISAR LA LISTA,
+    `eventos/widgets/lugares_al_sorteo_dialog.dart`). El programa propone por las huellas (`LugaresAlSorteo.enDuda`):
+    viene **tildado "paga entera" solo lo que tiene huella de que vino después** (el alumno cargado después del
+    sorteo, o la mesa que el programa dio sola sin ningún pago de mesa hasta ahí); lo demás queda **"para revisar",
+    sin tildar** (no se le cobra entera a nadie por una duda). Hasta que acepte, todo va con descuento, y ENTRADAS se
+    lo recuerda en modo jefe.
+  - **Aceptar le agrega `_lugares` al renglón del sorteo que ya existe: es la única excepción a "solo se agregan
+    renglones"**, aprobada por el usuario con el plan (un renglón aparte rompería "deshacer solo los últimos", el
+    HISTORIAL y la línea de los papeles). Un solo camino: `RevisionDeLugares` (`eventos/services/revision_de_lugares.dart`)
+    → `SorteosMesasRepository.completarLugares`, que reescribe **el texto crudo** con la clave agregada
+    (`resultadoConLugares`: no pierde una clave que la versión no conozca) y sube la fila como `insert` (en la nube,
+    `upsert`). **Pide internet y relee todo antes de guardar** (`SyncEngine.bajarParaLosLugares`); si la lista cambió
+    mientras se miraba, muestra la nueva. Solo en modo jefe, y la venta de entradas no puede llamarlo
+    (`test/solo_modo_jefe_test.dart`, `test/venta_entradas_no_toca_test.dart`).
+  - **La lista no vive en `lib/features/entradas/`**: lee alumnos y pagos, que la venta no toca. PRECIOS recibe la
+    foto y un `revisarLugares` de quien lo abre.
+  - `sorteos_mesas` está en `tablasDeLaPuerta`: la tablet que vende sin internet necesita el registro.
   - **Una prueba que monte la entrega o VENDER reemplaza `sorteosMesasRepositoryProvider`**
     (`EntregaEnMemoria.reemplazos`): sin eso la pantalla va a leer la base y, en `flutter test`, se queda esperando.
+    Para la lista, `RevisionEnMemoria` (`test/helpers/revision_en_memoria.dart`).
+  - Simulacro sobre una copia de la base (`tool/simulacro_lugares_al_sorteo_test.dart`, 18-nov): 5 fiestas sorteadas
+    sin revisar, 6 lugares tildados y 8 para revisar; sin aceptar nada, las cuentas de todos dan igual que hoy; y
+    guardar lo aceptado no cambia ninguna otra tabla, renglón ni columna. **La lista lleva nombres: va a `build/`.**
+  - **Un equipo con la 6.9.x no conoce la regla y vende todo con descuento:** al publicar, no vender entradas desde un
+    equipo sin esta versión.
 - **Parte 3, sin empezar: el link del delegado** (todos corrigen todo, Enviar no bloquea, cierra solo la fecha
   límite, se reabre las veces que quiera, quién cargó a quién y cuándo, ventana propia). **La maqueta va primero.**
 - **Parte 4, sin empezar: terminar "a confirmar"** (`git stash pop`).
+- **En esta PC no hay con qué pasar un PDF a imagen** (ni `pdftoppm` ni un paquete de Python), y un PDF armado con las
+  letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
+  dicen se comprueba en los tests con la letra de fábrica.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -802,6 +826,8 @@ El detalle de cada parte, con sus decisiones, está en `docs/CONTEXTO_FASE3_PLAN
   **La fila sube entera**, así que antes de sortear, deshacer o restaurar se lee el plano de la nube
   (`leerPlanoParaSortear`): con el de esta PC se pisaba lo que la otra acababa de cambiar.
 - `sorteos_mesas` y `mesas_movimientos`: **solo se agregan renglones**. Deshacer es otro renglón, nunca un borrado.
+  **La única excepción** (6.9.2): aceptar la lista de PRECIOS de una fiesta ya sorteada le agrega `_lugares` al
+  renglón de su sorteo (`completarLugares`; ver "La 6.9.2"). Nada de lo que el renglón dice del sorteo cambia.
 - **No agregar un valor a `sorteos_mesas.tipo`:** el SQL de la nube lo limita a `sorteo`, `deshacer` y `restaurar`.
   Lo nuevo del registro viaja adentro del texto `resultado`, con claves que empiezan con guion bajo (`_antes`,
   `_quedan`); una clave así que la versión no conoce se ignora.
@@ -1065,7 +1091,7 @@ Están diseñados y aprobados con maquetas: son los seis pendientes de "Tótem y
 oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
 - **Solo la mesa del contrato trae sus 8 entradas sin cargo** (6.3.1, regla del usuario del 4-nov). La mesa adicional y las sillas
   extra pagan el lugar, no la entrada: esas se compran aparte, **al 50 %** de su valor, y no se entregan en el retiro
-  (`EntradasDeAlumno.alCincuenta`). El precio de la entrada no va fijo: lo pone el jefe en PRECIOS. Cobrarlas es la venta de
+  (`EntradasDeAlumno.conDescuento`; desde la 6.9.2, lo agregado después del sorteo va en `sinDescuento`). El precio de la entrada no va fijo: lo pone el jefe en PRECIOS. Cobrarlas es la venta de
   entradas de la 6.9.0 (`lib/features/entradas/`, ver "La 6.9.0"). Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
 
 **Los que se sientan en una mesa reservada** (los profes; 6.5.0, sin publicar; etapa 9 del CONTEXTO de la 6.5.0) **aparecen en Recepción
