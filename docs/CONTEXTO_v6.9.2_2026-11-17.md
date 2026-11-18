@@ -1,11 +1,53 @@
 # CONTEXTO — la 6.9.2: la planilla del sorteo, el descuento según el sorteo, el link del delegado y "a confirmar"
 
-**Estado (18-nov-2026): EN CURSO, sin publicar.** Se llamaba 6.10.0: **el usuario le puso 6.9.2 el 18-nov** (la
-versión va a ser `6.9.2+77`). Plan aprobado por el usuario el 17-nov
-(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Las cuatro están programadas y
-probadas** (la 4, la mesa adicional "a confirmar", se terminó el 18-nov a la tarde). Nada instalado, **ningún SQL
-corrido** (hay uno nuevo del link esperando), `pubspec.yaml` sigue en `6.9.1+76`. **Plan: 4 de 4 partes; falta que el
-usuario mire las capturas y publicar con él.**
+**Estado (18-nov-2026, 14 hs): PUBLICADA, con el usuario ("Publiquemos").** Falta que la instale (primero la PC
+que sortea) y avise, y la foto de la mora "después de 6.9.2" (ver "Cómo se publicó" y "Lo que falta, en orden").
+Se llamaba 6.10.0: el usuario le puso 6.9.2 el 18-nov. Plan aprobado el 17-nov
+(`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes, las cuatro hechas.
+
+### Cómo se publicó (18-nov, de 13:35 a 13:55)
+
+- **Antes de publicar preguntó por el link** (si pueden entrar las veces que quieran y corregir desde cualquier
+  celular, y si la alerta se repite): se le contestó que sí, que la alerta es una por institución y que cada
+  delegado figura una sola vez con cuántos alumnos envió (no cuenta las modificaciones). No miró las capturas.
+- **Los dos simulacros, repetidos sobre una copia nueva de la base** (la real quedó con el mismo SHA-256; 5.412
+  pagos, el último del 17-nov): "a confirmar", 52 adicionales en las 5 fiestas sorteadas (29 sin nada pagado) y
+  ninguna donde la ficha y los pagos no coincidan; los lugares, 6 tildados y 8 para revisar.
+- **Foto de la mora "antes de 6.9.2"** (`467b33e9…`, 642 alumnos, por el conector). Comparada con la de "antes de
+  6.9.1" (`a996dbb1…`) lista **dos alumnos**, los dos por un cobro del 17-nov que pagó cuotas sin toda su mora
+  (`mora_cambios`: cambiaron `cuotas_pagadas` y `saldo_deudor` en la misma escritura; uno se anuló y se volvió a
+  cobrar). Ninguna mora revivida, ningún perdón ni eximición que se fue.
+- **El SQL del link, corrido** con su OK en el momento (`20261118120000_link_delegado_reabrir.sql`), por el
+  conector en cuatro partes, en orden. **El link estaba en uso: 7 links abiertos, 21 celulares y 169 cargas.**
+  Antes y después: 642 alumnos, 31 eventos, 5.421 pagos, 7 links, 21 celulares, 169 cargas. Después: 94 cargas
+  quedaron como enviadas (las de los celulares que ya habían enviado), el historial arrancó con 169 filas y las
+  funciones pasaron de 17 a 22. **Las 13 funciones del archivo coinciden con las de la nube por `md5(prosrc)`**
+  (`huellas`: el cuerpo entre los dos `$$`, con saltos LF). Ninguna fiesta quedó con un aviso nuevo.
+- **Probado en la nube de verdad** con un bloque `do` que termina en `raise exception` (no deja ni una fila): 28
+  comprobaciones, las 28 bien. Crear un link, entrar, **la misma persona desde otro celular con el cupo lleno y
+  con acento**, otra persona no entra, guardar, enviar dos veces, corregir lo enviado desde el otro celular, el
+  tope de 2, un anónimo no lee el historial ni lo de adentro, el aviso con la persona una sola vez, la lista y el
+  historial, traer, cerrar y reabrir, corregir lo aceptado, sacar a la persona en todos sus celulares, y **la
+  ficha del alumno sin cambios**.
+- **Versión `6.9.2+77`** (`pubspec.yaml` y el `.iss`).
+- **El instalador, por pasos** (`build/armado_692/`, con sus registros): la clave de firma, la página del celular
+  de cero (151 archivos, con sus tres archivos), **la misma lista de archivos que la 6.9.1 en el registro de
+  `ISCC`** (287 renglones "Compressing", 146 de la página), y el APK con `apksigner` ("CN=Junior Eventos").
+  `Setup Junior Eventos v6.9.2.exe` (41.404.220 bytes) y `Junior Eventos v6.9.2.apk` (54.352.224 bytes, arm64).
+- **Antes de subir, lo agregado desde `v6.9.1` se comparó con los 642 nombres de la copia de la base**: 8
+  coincidencias. Una era el nombre de una alumna en un comentario que se mudó de archivo (ya estaba en el
+  repositorio): se sacó. Las otras, un nombre inventado en las pruebas del link que coincidía con una alumna real
+  (sin ningún dato de ella): se cambió y se rehicieron las muestras (`node muestras.mjs`, 77 de 77). Ese nombre
+  inventado sigue en dos commits anteriores, ya subidos. Después, ninguna.
+- **Tag `v6.9.2`** en `ee6d593`. **Release** "Junior Eventos 6.9.2" con `Setup.Junior.Eventos.v6.9.2.exe` y
+  `Junior.Eventos.v6.9.2.apk`, marcado como el último. Las novedades dicen **"Link de los delegados mejorado, y
+  nuevas capacidades en el modo jefe"** (las eligió Claude, con el criterio de siempre: las ve cualquiera, no
+  nombran la plata; si quiere otras, se cambian en el release).
+- **Web** en Vercel, producción: `arguello-events-mjr990dkp`; `version.json` da 6.9.2/77. La página del delegado
+  publicada contesta contra la nube ("Este link no es válido" con una clave inventada). La anterior, para volver
+  atrás desde Vercel: `arguello-events-jw8o6nvfn` (la 6.9.1).
+- **El orden fue: el SQL, el release y la web.** Entre el SQL y la web pasaron unos 15 minutos con la página
+  vieja sobre el SQL nuevo; nadie cargó nada en ese rato (las cargas siguieron en 169).
 
 ## Para retomar en otro chat
 
@@ -347,20 +389,25 @@ ventana de Editar alumno los sigue exportando.
 
 ### Lo que falta, en orden
 
-1. **Que el usuario mire las capturas** (`build/capturas_6.9.2/`: las del link y las seis de "a confirmar") y las
-   muestras de la planilla. No frena, pero quiere verlas antes de publicar.
-2. **La versión `6.9.2+77`** (`pubspec.yaml` y el `.iss`) **y publicar con él**: foto de la mora, **el SQL del link
-   con su OK en el momento** (comprobado con `md5(prosrc)` y una prueba en un bloque `do` que se deshace solo, como
-   el 13-nov), instalador por pasos, release y web.
-3. **Al publicar, sobre una copia nueva de la base**: repetir el simulacro de los lugares
-   (`tool/simulacro_lugares_al_sorteo_test.dart`) y el de "a confirmar" (`tool/simulacro_a_confirmar_test.dart`), y
-   decirle dos cosas: "no vender entradas desde un equipo sin esta versión" y cuántas mesas van a salir "a
-   confirmar".
-4. **Queda del usuario** (no frena): `simulacro_lugares_al_sorteo.txt` (la lista que va a aceptar en PRECIOS).
-
-**El orden del SQL del link al publicar:** se corre antes de publicar la web y de instalar. La web vieja sigue
-andando con el SQL nuevo; la ventana y la página nuevas **no** andan con el SQL viejo (piden funciones que no
-existen).
+1. **Que instale, primero la PC que sortea**, y avise en cuáles (también las tablets: se enteran en la pantalla del
+   PIN). La base de las PCs no cambia de versión (sigue en la 80).
+2. **La foto de la mora "después de 6.9.2"** y la comparación con `467b33e9…`. Cubre también la 6.9.0 y la 6.9.1
+   si alguna PC viene de antes.
+3. **Hasta que todos los equipos tengan la 6.9.2:**
+   - **no vender entradas desde un equipo sin esta versión** (vende todo con descuento);
+   - **el link de los delegados se maneja desde una PC con la 6.9.2** (PLANILLAS → "Link para los delegados"). Una
+     PC anterior sigue pudiendo traer lo cargado desde "Acompañantes y música", pero no ve el historial ni reabre
+     con la regla nueva;
+   - una PC anterior no conoce "a confirmar": muestra esa mesa como una más y su tótem la enciende.
+4. **En ENTRADAS → PRECIOS, aceptar la lista de cada fiesta ya sorteada** (5 fiestas; `REVISAR LA LISTA`). Hasta
+   que acepte, todo va con descuento y ENTRADAS se lo recuerda en modo jefe.
+5. **Decirle cuántas mesas salen "a confirmar"** apenas instale (52 al 18-nov) y que el tótem no las enciende
+   hasta que estén pagas. Se le dijo antes de publicar.
+6. Con la versión instalada, lo que no se pudo probar acá: **un celular de verdad abriendo el link desde WhatsApp**
+   (los delegados que ya entraron tienen que tocar su nombre la primera vez desde otro celular), la venta con la
+   regla nueva en una tablet sin internet, y COBRAR desde el PLANO con el cobro de verdad.
+7. **Queda del usuario** (no frena): mirar las capturas (`build/capturas_6.9.2/`) y las muestras
+   (`build/muestras_6.9.2/`).
 
 ### Lo que hay que saber antes de tocar
 

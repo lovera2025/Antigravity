@@ -588,10 +588,15 @@ cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumpl
   solo se dibuja con cápsula una familia que ya tenía una mesa justo detrás de la otra.
 - La mesa adicional "a confirmar" quedó afuera de la 6.9.1: se terminó en la 6.9.2 (su Parte 4, abajo).
 
-**La 6.9.2, EN CURSO desde el 17-nov, sin publicar** (se llamaba 6.10.0: el usuario le puso 6.9.2 el 18-nov; plan
-aprobado el 17-nov, cuatro partes; `docs/CONTEXTO_v6.9.2_2026-11-17.md`, que empieza con "Para retomar en otro chat":
-ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`).
-`pubspec.yaml` sigue en `6.9.1+76`; la versión va a ser `6.9.2+77`.
+**La 6.9.2: la planilla del sorteo, el descuento según el sorteo, el link del delegado de nuevo y la mesa adicional
+"a confirmar" — PUBLICADA el 18-nov a las 14 hs, con el usuario** (se llamaba 6.10.0: él le puso 6.9.2 el 18-nov;
+`docs/CONTEXTO_v6.9.2_2026-11-17.md`, que empieza con "Cómo se publicó" y "Para retomar en otro chat": ahí está **lo
+que falta, en orden**). Versión `6.9.2+77`, tag `v6.9.2`, release con el Setup y el APK, y la web. Las novedades dicen
+"Link de los delegados mejorado, y nuevas capacidades en el modo jefe". **Un SQL en la nube, solo de agregar, corrido
+el 18-nov** (el del link) y probado en la nube de verdad; sin migración en las PCs (la base sigue en la 80). Foto de
+la mora "antes de 6.9.2" sin nada sospechoso. **Falta que instale (primero la PC que sortea) y avise, y la foto
+"después de 6.9.2".** Hasta que todos los equipos la tengan: **no vender entradas desde uno sin esta versión, y el
+link de los delegados se maneja desde una PC con la 6.9.2.**
 - **Parte 1, programada: la planilla del sorteo usa la cuenta de la entrega** (`RetiroEntradas.entradasDe`). En la
   mesa principal, los con cena y las generales que completan sus 8; aparte, "8 al 50 %" debajo de la adicional y "2
   al 50 %" debajo de las sillas. Antes sumaba las sillas como generales ("1 con cena · 9 generales").
@@ -629,12 +634,13 @@ ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.clau
     equipo sin esta versión.
 - **Parte 3, programada, probada y cerrada (18-nov): el link del delegado, de nuevo** (el usuario vio la maqueta
   y dijo "hacé la mejor que a vos te parezca": se hizo la forma B, todo en una hoja). La suite entera y las roturas
-  a propósito, hechas ("El cierre de la Parte 3" del CONTEXTO). **Falta solo que mire las capturas.**
-  - **Un SQL nuevo en la nube, solo de agregar, SIN CORRER:**
+  a propósito, hechas ("El cierre de la Parte 3" del CONTEXTO).
+  - **Un SQL nuevo en la nube, solo de agregar, corrido el 18-nov** (el link estaba en uso: 7 links, 169
+    cargas; quedaron como estaban):
     `supabase/migrations/20261118120000_link_delegado_reabrir.sql` (la columna `cargas_delegado.enviado_at`, la tabla
     `cambios_delegado` y funciones: de 17 a 22). **Ninguna función cambia de firma**; lo de más va en funciones
     nuevas (`delegado_alumnos_estado`, `delegado_historial`). La web vieja anda con el SQL nuevo; **la ventana y la
-    página nuevas no andan con el SQL viejo**: se corre antes de publicar la web y de instalar.
+    página nuevas no andan con el SQL viejo**.
   - **El delegado es la persona, no el celular** (`delegado_llave(nombre)`): el mismo nombre entra desde otro
     celular aunque el cupo esté lleno, y el cupo cuenta personas.
   - **Todos corrigen todo** (con un cartel antes de tocar lo de otro o lo del programa), **Enviar no cierra** (se
