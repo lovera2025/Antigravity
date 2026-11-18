@@ -49,6 +49,7 @@ void main() {
                 alumnosConMora: conMora,
                 onEntradas: () => pedidos.add('entradas'),
                 onAcompanantesYMusica: () => pedidos.add('delegado'),
+                onLinkDeLosDelegados: () => pedidos.add('link'),
               ),
             ),
           ),
@@ -154,7 +155,7 @@ void main() {
     await tester.tap(find.byKey(const Key('fiesta_planillas')));
     await tester.pumpAndSettle();
     expect(
-      find.text('Excel o link para los delegados'),
+      find.text('El Excel que completa el delegado'),
       findsOneWidget,
     );
     // Va después de las planillas para imprimir.
@@ -165,6 +166,25 @@ void main() {
     await tester.tap(find.text('Acompañantes y música'));
     await tester.pumpAndSettle();
     expect(pedidos, ['delegado']);
+  });
+
+  // 6.9.2: el link de los delegados tiene su renglón y su ventana.
+  testWidgets('PLANILLAS trae "Link para los delegados", debajo del Excel, y '
+      'abre su ventana', (tester) async {
+    final pedidos = await mostrar(tester);
+    await tester.tap(find.byKey(const Key('fiesta_planillas')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Lo cargan desde el celular; vos aceptás'),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('Link para los delegados')).dy,
+      greaterThan(tester.getTopLeft(find.text('Acompañantes y música')).dy),
+    );
+    await tester.tap(find.text('Link para los delegados'));
+    await tester.pumpAndSettle();
+    expect(pedidos, ['link']);
   });
 
   testWidgets('lo que no se puede queda apagado y dice por qué',
@@ -219,18 +239,18 @@ void main() {
       expect(find.text('Historial de las mesas'), findsOneWidget);
     });
 
-    testWidgets('Acompañantes y música queda apagado y dice por qué',
-        (tester) async {
+    testWidgets('Acompañantes y música y el link quedan apagados y dicen por '
+        'qué', (tester) async {
       final pedidos = await mostrar(tester, esJefe: false);
       await tester.tap(find.byKey(const Key('fiesta_planillas')));
       await tester.pumpAndSettle();
-      // El motivo reemplaza al detalle de siempre, y es el único del menú.
-      expect(find.text('Solo en modo jefe'), findsOneWidget);
-      expect(
-        find.text('Excel o link para los delegados'),
-        findsNothing,
-      );
+      // El motivo reemplaza al detalle de siempre: en el Excel y en el link.
+      expect(find.text('Solo en modo jefe'), findsNWidgets(2));
+      expect(find.text('El Excel que completa el delegado'), findsNothing);
+      expect(find.text('Lo cargan desde el celular; vos aceptás'), findsNothing);
       await tester.tap(find.text('Acompañantes y música'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Link para los delegados'), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(pedidos, isEmpty);
       // El menú sigue abierto: tocar algo apagado no hace nada.

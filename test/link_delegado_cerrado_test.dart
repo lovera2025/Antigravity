@@ -1,7 +1,9 @@
 // El link del delegado, cerrado (6.8.0). Quien abre el link no tiene usuario:
 // **no lee ni escribe ninguna tabla**, va por las funciones de
-// `supabase/migrations/20261113120000_link_delegado.sql`. Las reglas de esas
-// funciones se prueban contra el mismo archivo, en un Postgres de prueba
+// `supabase/migrations/20261113120000_link_delegado.sql` y, desde la 6.9.2,
+// `20261118120000_link_delegado_reabrir.sql` (todos corrigen todo, Enviar no
+// cierra, el historial). Las reglas de esas funciones se prueban contra los
+// mismos archivos, en un Postgres de prueba
 // (`tool/delegado_sandbox/pruebas.mjs`); acá se cuida que el programa y el SQL
 // digan lo mismo, y que nada vuelva a abrirse sin que un test lo note.
 import 'dart:io';
@@ -51,11 +53,24 @@ Map<String, Set<String>> _funciones(String sql) => {
     };
 
 void main() {
-  final sql = _leer('supabase/migrations/20261113120000_link_delegado.sql');
+  final sql1 = _leer('supabase/migrations/20261113120000_link_delegado.sql');
+  final sql2 =
+      _leer('supabase/migrations/20261118120000_link_delegado_reabrir.sql');
+  // Los dos archivos, en el orden en que se corren.
+  final sql = '$sql1\n$sql2';
   final codigo = _sinComentarios(sql);
+  final codigo2 = _sinComentarios(sql2);
   final pagina = _leer('lib/features/delegado/datos/nube_del_delegado.dart');
   final programa = _leer('lib/features/delegado/datos/link_del_delegado.dart');
   final funciones = _funciones(sql);
+
+  /// El cuerpo de cada definición de [f] (si la segunda parte la reescribe, las
+  /// dos): desde su `function` hasta el final.
+  List<String> definiciones(String f) => [
+        for (final m
+            in 'create or replace function public.$f('.allMatches(codigo))
+          codigo.substring(m.start, codigo.indexOf(r'$$;', m.start)),
+      ];
 
   const delDelegado = {
     'delegado_lista',
@@ -69,6 +84,9 @@ void main() {
     'delegado_link_cambiar',
     'delegado_cargas',
     'delegado_pendientes',
+    // 6.9.2: la lista ALUMNOS de la ventana y el historial.
+    'delegado_alumnos_estado',
+    'delegado_historial',
   };
 
   group('el SQL y lo que llama el programa', () {
@@ -112,13 +130,53 @@ void main() {
     test('los motivos que la página sabe decir existen en el SQL', () {
       final laPagina =
           _leer('lib/features/delegado/pagina/pagina_del_delegado.dart');
+      // Con las reglas de hoy: los de la segunda parte.
       for (final motivo in [
-        'vacio', 'tope', 'largo', 'formato', 'alumno', 'ya_cargado', 'otro',
-        'nombre', 'entrar', 'apagado', 'sacado',
+        'vacio', 'tope', 'largo', 'formato', 'alumno',
+        'nombre', 'entrar', 'apagado', 'sacado', 'nada',
       ]) {
-        expect(codigo, contains("'motivo', '$motivo'"), reason: motivo);
+        expect(codigo2, contains("'motivo', '$motivo'"), reason: motivo);
         expect(laPagina, contains("'$motivo'"), reason: motivo);
       }
+    });
+
+    test('todos corrigen todo: guardar ya no frena por quien envió, por lo de '
+        'otro ni por lo que está en el programa', () {
+      final guardar = definiciones('delegado_guardar').last;
+      for (final traba in ['entregado', 'otro', 'ya_cargado']) {
+        expect(guardar, isNot(contains("'motivo', '$traba'")), reason: traba);
+      }
+      // Las que quedan: la fecha, el link cerrado y quien fue sacado.
+      for (final traba in ['vencido', 'apagado', 'sacado']) {
+        expect(guardar, contains("'motivo', '$traba'"), reason: traba);
+      }
+      // Y la página tampoco las espera.
+      final laPagina =
+          _leer('lib/features/delegado/pagina/pagina_del_delegado.dart');
+      expect(laPagina, isNot(contains("'ya_cargado'")));
+      expect(laPagina, isNot(contains("'otro'")));
+    });
+
+    test('la segunda parte no cambia la firma ni lo que devuelve ninguna '
+        'función que ya existía', () {
+      // Las PCs con la versión anterior las siguen llamando igual.
+      final firma = RegExp(
+        r'create or replace function public\.(\w+)\(([^)]*)\)\s*returns\s+(table\s*\([^)]*\)|\w+)',
+      );
+      Map<String, String> firmas(String texto) => {
+            for (final m in firma.allMatches(texto))
+              m.group(1)!: '${m.group(2)!.replaceAll(RegExp(r'\s+'), ' ').trim()} '
+                  '-> ${m.group(3)!.replaceAll(RegExp(r'\s+'), ' ')}',
+          };
+      final antes = firmas(sql1);
+      final ahora = firmas(sql2);
+      final repetidas = ahora.keys.toSet().intersection(antes.keys.toSet());
+      expect(repetidas, isNotEmpty);
+      for (final f in repetidas) {
+        expect(ahora[f], antes[f], reason: f);
+      }
+      // Y no le da nada nuevo a quien no tiene usuario.
+      expect(codigo2, isNot(contains('to anon')));
     });
   });
 
@@ -147,9 +205,14 @@ void main() {
       }
     });
 
-    test('las tres tablas están cerradas: con RLS, sin políticas y sin '
+    test('las cuatro tablas están cerradas: con RLS, sin políticas y sin '
         'permisos para nadie', () {
-      for (final t in ['links_delegado', 'celulares_delegado', 'cargas_delegado']) {
+      for (final t in [
+        'links_delegado',
+        'celulares_delegado',
+        'cargas_delegado',
+        'cambios_delegado',
+      ]) {
         expect(codigo, contains('alter table public.$t'), reason: t);
         expect(
           RegExp('alter table public\\.$t\\s+enable row level security')
@@ -171,13 +234,14 @@ void main() {
 
     test('lo del jefe pide usuario, y un anónimo no lo puede ejecutar', () {
       for (final f in delJefe) {
-        final desde = codigo.indexOf('function public.$f(');
-        final hasta = codigo.indexOf(r'$$;', desde);
-        expect(
-          codigo.substring(desde, hasta),
-          contains("auth.role() is distinct from 'authenticated'"),
-          reason: f,
-        );
+        expect(definiciones(f), isNotEmpty, reason: f);
+        for (final cuerpo in definiciones(f)) {
+          expect(
+            cuerpo,
+            contains("auth.role() is distinct from 'authenticated'"),
+            reason: f,
+          );
+        }
         expect(
           RegExp('revoke all on function public\\.$f\\([^)]*\\)\\s+from public, anon;')
               .hasMatch(codigo),
@@ -206,10 +270,11 @@ void main() {
 
     test('las funciones van como security definer y con search_path', () {
       for (final f in {...delDelegado, ...delJefe}) {
-        final desde = codigo.indexOf('function public.$f(');
-        final cuerpo = codigo.substring(desde, codigo.indexOf(r'as $$', desde));
-        expect(cuerpo, contains('security definer'), reason: f);
-        expect(cuerpo, contains('set search_path = public'), reason: f);
+        for (final entera in definiciones(f)) {
+          final cuerpo = entera.substring(0, entera.indexOf(r'as $$'));
+          expect(cuerpo, contains('security definer'), reason: f);
+          expect(cuerpo, contains('set search_path = public'), reason: f);
+        }
       }
     });
   });
@@ -237,7 +302,12 @@ void main() {
 
     test('cada tabla y cada función lleva su ROLLBACK arriba, y el archivo '
         'termina con la verificación', () {
-      for (final t in ['links_delegado', 'celulares_delegado', 'cargas_delegado']) {
+      for (final t in [
+        'links_delegado',
+        'celulares_delegado',
+        'cargas_delegado',
+        'cambios_delegado',
+      ]) {
         expect(sql, contains('drop table if exists public.$t;'), reason: t);
       }
       for (final f in funciones.keys) {
@@ -247,8 +317,22 @@ void main() {
           reason: f,
         );
       }
-      expect(sql, contains('── 6. Verificación'));
-      expect(sql, contains('ANTES y DESPUÉS'));
+      for (final archivo in [sql1, sql2]) {
+        expect(archivo, contains('── 6. Verificación'));
+        expect(archivo, contains('ANTES y DESPUÉS'));
+      }
+      // En la segunda parte, cada función que se reescribe dice a qué vuelve, y
+      // la columna nueva tiene su vuelta atrás.
+      expect(
+        'ROLLBACK: (vuelve la del archivo 20261113120000_link_delegado.sql)'
+            .allMatches(sql2)
+            .length,
+        _funciones(sql2).keys.toSet().intersection(_funciones(sql1).keys.toSet()).length,
+      );
+      expect(
+        sql2,
+        contains('-- ROLLBACK: alter table public.cargas_delegado drop column if exists enviado_at;'),
+      );
     });
 
     test('el link tiene su ruta en la web y ninguna otra la pisa', () {

@@ -1,6 +1,10 @@
 // Una nube de mentira para el link del delegado: hace lo que hacen las
 // funciones del SQL, lo justo para probar las pantallas. **Las reglas de
 // verdad se prueban contra el SQL** (`tool/delegado_sandbox/pruebas.mjs`).
+//
+// Desde la 6.9.2 (`20261118120000_link_delegado_reabrir.sql`): el delegado es
+// la persona (su nombre), todos corrigen todo, Enviar no cierra y queda el
+// historial.
 import 'dart:convert';
 
 import 'package:arguello_events/features/delegado/datos/link_del_delegado.dart';
@@ -28,23 +32,40 @@ class _Celular {
   final String id;
   final String sesion;
   final String nombre;
-  bool entregado = false;
+  final String entro;
+
+  /// Cuándo fue el último envío de esta persona. Null: no envió.
+  String? envio;
   bool sacado = false;
-  _Celular(this.id, this.sesion, this.nombre);
+  _Celular(this.id, this.sesion, this.nombre, this.entro);
 }
 
 class _Carga {
   String? celularId;
   List<String> acompanantes;
   String musica;
+  String cuando;
   bool traido = false;
-  _Carga(this.celularId, this.acompanantes, this.musica);
+  bool enviado = false;
+  _Carga(this.celularId, this.acompanantes, this.musica, this.cuando);
+}
+
+/// Sin acentos ni mayúsculas: lo que hace de "la persona".
+String _llave(String nombre) {
+  const con = 'áàäâãéèëêíìïîóòöôõúùüûñ';
+  const sin = 'aaaaaeeeeiiiiooooouuuun';
+  final b = StringBuffer();
+  for (final c in nombre.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase().split('')) {
+    final i = con.indexOf(c);
+    b.write(i < 0 ? c : sin[i]);
+  }
+  return b.toString();
 }
 
 /// La nube en memoria, de los dos lados: la página y el programa.
 class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
   final String eventoId;
-  final List<AlumnoDeMentira> alumnos;
+  final List<AlumnoDeMentira> alumnosDeLaFiesta;
 
   String? clave;
   String fiesta = '';
@@ -54,6 +75,10 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
   bool apagado = false;
   bool vencido = false;
 
+  /// "Ahora", como lo dice la nube al anotar cuándo pasó algo. La prueba lo
+  /// cambia para ver quién hizo qué y cuándo.
+  String reloj = 'jue 12/11 15:00';
+
   /// Hay algo enviado (o vencido) que todavía no se trajo.
   bool hayAviso = false;
 
@@ -62,11 +87,15 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
 
   final _celulares = <_Celular>[];
   final _cargas = <String, _Carga>{};
+  final _cambios = <CambioDelHistorial>[];
 
   /// Lo que se pidió, en orden: para comprobar qué se le avisó a la nube.
   final pedidos = <String>[];
 
-  DelegadoEnMemoria({required this.eventoId, required this.alumnos});
+  DelegadoEnMemoria({
+    required this.eventoId,
+    required List<AlumnoDeMentira> alumnos,
+  }) : alumnosDeLaFiesta = alumnos;
 
   void _red() {
     if (sinRed) throw Exception('sin red');
@@ -75,10 +104,61 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
   _Celular? _de(String? sesion) =>
       _celulares.where((c) => c.sesion == sesion).firstOrNull;
 
-  Iterable<AlumnoDeMentira> get _activos => alumnos.where((a) => a.activo);
+  _Celular? _celular(String? id) =>
+      _celulares.where((c) => c.id == id).firstOrNull;
+
+  Iterable<_Celular> _deLaPersona(String nombre) =>
+      _celulares.where((c) => _llave(c.nombre) == _llave(nombre));
+
+  /// Los ids de los celulares de la misma persona que [celularId].
+  Set<String> _aparatosDe(String? celularId) {
+    final c = _celular(celularId);
+    return c == null ? {} : {for (final x in _deLaPersona(c.nombre)) x.id};
+  }
+
+  /// Una persona por nombre, en el orden en que entraron.
+  List<_Celular> get _personas {
+    final vistas = <String>{};
+    return [
+      for (final c in _celulares)
+        if (vistas.add(_llave(c.nombre))) c,
+    ];
+  }
+
+  Iterable<AlumnoDeMentira> get _activos =>
+      alumnosDeLaFiesta.where((a) => a.activo);
 
   bool _enPrograma(AlumnoDeMentira a) =>
       a.acompanantes.isNotEmpty && a.musica.isNotEmpty;
+
+  EstadoDeLaCarga _estadoDe(AlumnoDeMentira a) {
+    final g = _cargas[a.id];
+    if (g == null) {
+      return _enPrograma(a) ? EstadoDeLaCarga.programa : EstadoDeLaCarga.falta;
+    }
+    if (g.traido) return EstadoDeLaCarga.aceptado;
+    return g.enviado ? EstadoDeLaCarga.enviado : EstadoDeLaCarga.sinEnviar;
+  }
+
+  List<String> _acompanantesVigentes(AlumnoDeMentira a) {
+    final g = _cargas[a.id];
+    return g != null && g.acompanantes.isNotEmpty ? g.acompanantes : a.acompanantes;
+  }
+
+  String _musicaVigente(AlumnoDeMentira a) {
+    final g = _cargas[a.id];
+    return g != null && g.musica.isNotEmpty ? g.musica : a.musica;
+  }
+
+  void _anotar(String alumnoId, String quien, String que, [_Carga? g]) =>
+      _cambios.add(CambioDelHistorial(
+        alumnoId: alumnoId,
+        quien: quien,
+        que: que,
+        cuandoTexto: reloj,
+        acompanantes: g?.acompanantes ?? const [],
+        musica: g?.musica ?? '',
+      ));
 
   // ── La página ─────────────────────────────────────────────────────────────
 
@@ -93,54 +173,58 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
     }
     final yo = _de(sesion);
     if (yo == null) {
+      final activas = _personas.where((c) => !c.sacado).toList();
       return ListaDelDelegado(
         ok: false,
         motivo: 'entrar',
         fiesta: fiesta,
         venceTexto: venceTexto,
         vencido: vencido,
-        lleno: _celulares.where((c) => !c.sacado).length >= cupo,
+        lleno: activas.length >= cupo,
+        delegados: [for (final c in activas) c.nombre],
       );
     }
     if (yo.sacado) {
       return ListaDelDelegado(ok: false, motivo: 'sacado', fiesta: fiesta);
     }
+    final mios = _aparatosDe(yo.id);
     final lista = <AlumnoDelLink>[];
+    var sinEnviar = 0;
     for (final a in _activos) {
       final g = _cargas[a.id];
-      final de = _enPrograma(a)
-          ? DeQuien.programa
-          : g == null
-              ? DeQuien.libre
-              : g.celularId == null
-                  ? DeQuien.suelto
-                  : g.celularId == yo.id
-                      ? DeQuien.mio
-                      : DeQuien.otro;
-      final veLoCargado = de == DeQuien.mio || de == DeQuien.suelto;
+      final estado = _estadoDe(a);
+      final esMio = g != null && mios.contains(g.celularId);
+      if (esMio && estado == EstadoDeLaCarga.sinEnviar) sinEnviar++;
       lista.add(AlumnoDelLink(
         id: a.id,
         nombre: a.nombre,
         division: a.division,
         progAcomp: a.acompanantes.isNotEmpty,
         progMusica: a.musica.isNotEmpty,
-        de: de,
-        cargo: de == DeQuien.otro
-            ? _celulares.firstWhere((c) => c.id == g!.celularId).nombre
-            : null,
-        acompanantes: veLoCargado ? g!.acompanantes : const [],
-        musica: veLoCargado ? g!.musica : '',
+        de: g == null
+            ? (_enPrograma(a) ? DeQuien.programa : DeQuien.libre)
+            : g.celularId == null
+                ? DeQuien.suelto
+                : esMio
+                    ? DeQuien.mio
+                    : DeQuien.otro,
+        cargo: _celular(g?.celularId)?.nombre,
+        cuandoTexto: g?.cuando,
+        acompanantes: _acompanantesVigentes(a),
+        musica: _musicaVigente(a),
+        estado: estado,
       ));
     }
-    final cargados =
-        lista.where((a) => a.de != DeQuien.libre).length;
+    final cargados = lista.where((a) => a.cargado).length;
     return ListaDelDelegado(
       ok: true,
       fiesta: fiesta,
       venceTexto: venceTexto,
       vencido: vencido,
       yoNombre: yo.nombre,
-      yoEntregado: yo.entregado,
+      yoEntregado: yo.envio != null,
+      yoEnvioTexto: yo.envio,
+      yoSinEnviar: sinEnviar,
       total: lista.length,
       cargados: cargados,
       faltan: lista.length - cargados,
@@ -156,11 +240,20 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
     if (this.clave == null || clave != this.clave) return no('link');
     if (apagado) return no('apagado');
     if (vencido) return no('vencido');
-    final limpio = nombre.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+    var limpio = nombre.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
     if (limpio.length < 5 || !limpio.contains(' ')) return no('nombre');
-    if (_celulares.where((c) => !c.sacado).length >= cupo) return no('lleno');
+    final suyos = _deLaPersona(limpio).toList();
+    String? envio;
+    if (suyos.isNotEmpty) {
+      // El mismo nombre desde otro celular: es la misma persona.
+      if (suyos.any((c) => c.sacado)) return no('sacado');
+      limpio = suyos.first.nombre;
+      envio = suyos.first.envio;
+    } else if (_personas.where((c) => !c.sacado).length >= cupo) {
+      return no('lleno');
+    }
     final n = _celulares.length + 1;
-    _celulares.add(_Celular('celular-$n', 'sesion-$n', limpio));
+    _celulares.add(_Celular('celular-$n', 'sesion-$n', limpio, reloj)..envio = envio);
     return RespuestaDelegado(ok: true, sesion: 'sesion-$n');
   }
 
@@ -173,18 +266,16 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
     required String musica,
   }) async {
     _red();
-    RespuestaDelegado no(String m, {String? campo, String? cargo}) =>
-        RespuestaDelegado(ok: false, motivo: m, campo: campo, cargo: cargo);
+    RespuestaDelegado no(String m, {String? campo}) =>
+        RespuestaDelegado(ok: false, motivo: m, campo: campo);
     if (this.clave == null || clave != this.clave) return no('link');
     if (apagado) return no('apagado');
     if (vencido) return no('vencido');
     final yo = _de(sesion);
     if (yo == null) return no('sesion');
     if (yo.sacado) return no('sacado');
-    if (yo.entregado) return no('entregado');
     final a = _activos.where((x) => x.id == alumnoId).firstOrNull;
     if (a == null) return no('alumno');
-    if (_enPrograma(a)) return no('ya_cargado');
     final nombres = [
       for (final n in acompanantes)
         if (n.trim().isNotEmpty) n.trim(),
@@ -197,25 +288,15 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
     if (tema.length > kMaxLetrasMusicaDelegado) {
       return no('largo', campo: 'musica');
     }
-    if (a.acompanantes.isNotEmpty && nombres.isNotEmpty) {
-      return no('ya_cargado', campo: 'acompanantes');
-    }
-    if (a.musica.isNotEmpty && tema.isNotEmpty) {
-      return no('ya_cargado', campo: 'musica');
-    }
-    final g = _cargas[alumnoId];
-    if (g != null && g.celularId != null && g.celularId != yo.id) {
-      return no(
-        'otro',
-        cargo: _celulares.firstWhere((c) => c.id == g.celularId).nombre,
-      );
-    }
+    // Todos corrigen todo: no importa quién lo cargó, si ya se envió ni si ya
+    // está en el programa.
     if (nombres.isEmpty && tema.isEmpty) {
-      if (g == null) return no('vacio');
-      _cargas.remove(alumnoId);
+      if (_cargas.remove(alumnoId) == null) return no('vacio');
+      _anotar(alumnoId, yo.nombre, 'vacio');
       return const RespuestaDelegado(ok: true, libre: true);
     }
-    _cargas[alumnoId] = _Carga(yo.id, nombres, tema);
+    final g = _cargas[alumnoId] = _Carga(yo.id, nombres, tema, reloj);
+    _anotar(alumnoId, yo.nombre, 'guardo', g);
     return const RespuestaDelegado(ok: true);
   }
 
@@ -229,9 +310,18 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
     final yo = _de(sesion);
     if (yo == null) return no('sesion');
     if (yo.sacado) return no('sacado');
-    if (yo.entregado) return const RespuestaDelegado(ok: true, ya: true);
-    if (!_cargas.values.any((g) => g.celularId == yo.id)) return no('nada');
-    yo.entregado = true;
+    final mios = _aparatosDe(yo.id);
+    final suyas = _cargas.values.where((g) => mios.contains(g.celularId)).toList();
+    if (suyas.isEmpty) return no('nada');
+    final nuevas = suyas.where((g) => !g.enviado).toList();
+    // Sin nada nuevo no cambia nada: Enviar no cierra, y tampoco avisa de más.
+    if (nuevas.isEmpty) return const RespuestaDelegado(ok: true, ya: true);
+    for (final g in nuevas) {
+      g.enviado = true;
+    }
+    for (final c in _deLaPersona(yo.nombre)) {
+      c.envio = reloj;
+    }
     hayAviso = true;
     return const RespuestaDelegado(ok: true);
   }
@@ -245,10 +335,7 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
       return const EstadoDelLink.sinLink();
     }
     final activos = _activos.toList();
-    final enPrograma = activos.where(_enPrograma).length;
-    final cargados = activos
-        .where((a) => !_enPrograma(a) && _cargas.containsKey(a.id))
-        .length;
+    int cuantos(EstadoDeLaCarga e) => activos.where((a) => _estadoDe(a) == e).length;
     return EstadoDelLink(
       hay: true,
       clave: clave!,
@@ -265,17 +352,42 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
           CelularDelLink(
             id: c.id,
             nombre: c.nombre,
-            entroTexto: 'jueves 12/11 a las 21:00',
+            entroTexto: c.entro,
             cargados: _cargas.values.where((g) => g.celularId == c.id).length,
-            entregado: c.entregado,
-            entregadoTexto: c.entregado ? 'jueves 12/11 a las 21:30' : null,
+            entregado: c.envio != null,
+            entregadoTexto: c.envio,
             sacado: c.sacado,
           ),
       ],
+      delegados: [
+        for (final p in _personas)
+          DelegadoDelLink(
+            id: p.id,
+            nombre: p.nombre,
+            entroTexto: p.entro,
+            aparatos: _deLaPersona(p.nombre).length,
+            cargados: _cargas.values
+                .where((g) => _aparatosDe(p.id).contains(g.celularId))
+                .length,
+            sinEnviar: _cargas.values
+                .where((g) =>
+                    _aparatosDe(p.id).contains(g.celularId) &&
+                    !g.enviado &&
+                    !g.traido)
+                .length,
+            envioTexto: p.envio,
+            sacado: p.sacado,
+          ),
+      ],
       total: activos.length,
-      enPrograma: enPrograma,
-      cargados: cargados,
-      faltan: activos.length - enPrograma - cargados,
+      enPrograma: cuantos(EstadoDeLaCarga.programa),
+      cargados: activos
+          .where((a) => !_enPrograma(a) && _cargas.containsKey(a.id))
+          .length,
+      faltan: cuantos(EstadoDeLaCarga.falta),
+      sinEnviar: cuantos(EstadoDeLaCarga.sinEnviar),
+      enviados: cuantos(EstadoDeLaCarga.enviado),
+      aceptados: cuantos(EstadoDeLaCarga.aceptado),
       aviso: hayAviso ? 'Acompañantes y música para traer: $fiesta' : null,
     );
   }
@@ -310,6 +422,13 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
   ]) async {
     _red();
     pedidos.add('$accion|${valor ?? ''}');
+    const deUnDelegado = {'reabrir', 'sacar_dejando', 'sacar_borrando', 'readmitir'};
+    if (deUnDelegado.contains(accion) && _celular(valor) == null) {
+      return const RespuestaDelegado(ok: false, motivo: 'celular');
+    }
+    final suyos = deUnDelegado.contains(accion)
+        ? _deLaPersona(_celular(valor)!.nombre).toList()
+        : const <_Celular>[];
     switch (accion) {
       case 'apagar':
         apagado = true;
@@ -318,21 +437,44 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
       case 'vence':
         venceLocal = valor!;
         venceTexto = 'el nuevo límite';
+        // Una fecha futura reabre: también un link cerrado a mano.
+        if (valor.compareTo('2026-11-12 15:00') > 0) {
+          apagado = false;
+          vencido = false;
+        } else {
+          vencido = true;
+        }
       case 'cupo':
         cupo = int.parse(valor!);
       case 'reabrir':
-        _celulares.firstWhere((c) => c.id == valor).entregado = false;
+        for (final c in suyos) {
+          c.envio = null;
+        }
       case 'sacar_dejando':
-        _celulares.firstWhere((c) => c.id == valor).sacado = true;
-        for (final g in _cargas.values) {
-          if (g.celularId == valor) g.celularId = null;
+        // Lo que cargó sigue diciendo que lo cargó esa persona.
+        for (final c in suyos) {
+          c.sacado = true;
         }
       case 'sacar_borrando':
-        _celulares.firstWhere((c) => c.id == valor).sacado = true;
-        _cargas.removeWhere((_, g) => g.celularId == valor);
+        final ids = {for (final c in suyos) c.id};
+        for (final c in suyos) {
+          c.sacado = true;
+        }
+        for (final e in _cargas.entries.toList()) {
+          if (!ids.contains(e.value.celularId)) continue;
+          _anotar(e.key, 'Junior Eventos', 'borrado', e.value);
+          _cargas.remove(e.key);
+        }
+      case 'readmitir':
+        for (final c in suyos) {
+          c.sacado = false;
+        }
       case 'traido':
         for (final id in (jsonDecode(valor!) as List)) {
-          _cargas[id]?.traido = true;
+          final g = _cargas[id];
+          if (g == null) continue;
+          if (!g.traido) _anotar('$id', 'Junior Eventos', 'aceptado', g);
+          g.traido = true;
         }
         hayAviso = false;
       default:
@@ -345,7 +487,7 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
   Future<List<CargaDelDelegado>> cargas(String eventoId) async {
     _red();
     return [
-      for (final a in alumnos)
+      for (final a in alumnosDeLaFiesta)
         if (_cargas[a.id] case final g?)
           CargaDelDelegado(
             alumnoId: a.id,
@@ -354,13 +496,43 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
             activo: a.activo,
             acompanantes: g.acompanantes,
             musica: g.musica,
-            cargo: g.celularId == null
-                ? null
-                : _celulares.firstWhere((c) => c.id == g.celularId).nombre,
-            entregado: g.celularId != null &&
-                _celulares.firstWhere((c) => c.id == g.celularId).entregado,
+            cargo: _celular(g.celularId)?.nombre,
+            entregado: g.enviado,
+            cuandoTexto: g.cuando,
+            traido: g.traido,
           ),
     ];
+  }
+
+  @override
+  Future<List<AlumnoDelTablero>> alumnos(String eventoId) async {
+    _red();
+    return [
+      for (final a in _activos)
+        AlumnoDelTablero(
+          alumnoId: a.id,
+          alumno: a.nombre,
+          division: a.division,
+          acompanantes: _acompanantesVigentes(a),
+          musica: _musicaVigente(a),
+          estado: _estadoDe(a),
+          cargo: _celular(_cargas[a.id]?.celularId)?.nombre,
+          delegadoId: switch (_celular(_cargas[a.id]?.celularId)) {
+            final c? => _deLaPersona(c.nombre).first.id,
+            null => null,
+          },
+          cuandoTexto: _cargas[a.id]?.cuando,
+          otraVez: _cargas[a.id] != null &&
+              !_cargas[a.id]!.traido &&
+              (a.acompanantes.isNotEmpty || a.musica.isNotEmpty),
+        ),
+    ];
+  }
+
+  @override
+  Future<List<CambioDelHistorial>> historial(String eventoId) async {
+    _red();
+    return List.of(_cambios);
   }
 
   @override
@@ -385,6 +557,19 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
       );
     }
     return (await entrar(clave!, nombre)).sesion!;
+  }
+
+  /// El jefe trae a la grilla lo de [alumnoIds] y queda en el programa, como
+  /// hace ACEPTAR Y CARGAR.
+  Future<void> aceptar(Iterable<String> alumnoIds) async {
+    for (final id in alumnoIds) {
+      final g = _cargas[id];
+      final a = alumnosDeLaFiesta.firstWhere((x) => x.id == id);
+      if (g == null) continue;
+      if (g.acompanantes.isNotEmpty) a.acompanantes = List.of(g.acompanantes);
+      if (g.musica.isNotEmpty) a.musica = g.musica;
+    }
+    await cambiar(eventoId, 'traido', jsonEncode(alumnoIds.toList()));
   }
 
   /// Lo que la nube tiene cargado para [alumnoId], y si ya se trajo.

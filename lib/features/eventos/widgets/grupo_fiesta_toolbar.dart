@@ -55,8 +55,12 @@ class GrupoFiestaToolbar extends StatelessWidget {
   /// jefe: sin él queda a la vista, apagado, con [kSoloEnModoJefe].
   final VoidCallback onAcompanantesYMusica;
 
+  /// La ventana del link de los delegados (6.9.2): el estado, quién cargó a
+  /// quién y cuándo, reabrir y traer. También solo en modo jefe.
+  final VoidCallback onLinkDeLosDelegados;
+
   /// Los delegados mandaron acompañantes y música por el link y todavía no
-  /// se trajo (6.8.0): un punto en PLANILLAS, y lo dice su renglón.
+  /// se trajo (6.8.0): un punto en PLANILLAS, y lo dice el renglón del link.
   final bool hayParaTraer;
 
   const GrupoFiestaToolbar({
@@ -75,6 +79,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
     required this.alumnosConMora,
     required this.onEntradas,
     required this.onAcompanantesYMusica,
+    required this.onLinkDeLosDelegados,
     this.hayParaTraer = false,
   });
 
@@ -240,10 +245,17 @@ class GrupoFiestaToolbar extends StatelessWidget {
             icono: Icons.music_note_outlined,
             color: Colors.deepPurple,
             titulo: 'Acompañantes y música',
+            detalle: esJefe ? 'El Excel que completa el delegado' : kSoloEnModoJefe,
+          ),
+          _item(
+            accion: esJefe ? onLinkDeLosDelegados : null,
+            icono: Icons.link_rounded,
+            color: Colors.deepPurple,
+            titulo: 'Link para los delegados',
             detalle: esJefe
                 ? (hayParaTraer
                     ? 'Los delegados mandaron algo: traelo acá'
-                    : 'Excel o link para los delegados')
+                    : 'Lo cargan desde el celular; vos aceptás')
                 : (hayParaTraer
                     ? 'Los delegados mandaron algo. $kSoloEnModoJefe'
                     : kSoloEnModoJefe),

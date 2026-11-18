@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,7 +6,6 @@ import '../../../models/contrato_alumno.dart';
 import '../../delegado/datos/link_del_delegado.dart';
 import '../services/planilla_delegado.dart';
 import '../services/planilla_delegado_bloqueo.dart';
-import 'link_del_delegado_panel.dart';
 
 /// El nombre del archivo que se le manda al delegado.
 String nombreArchivoPlanillaDelegado(String institucion) {
@@ -32,12 +30,13 @@ String nombreArchivoPlanillaDelegado(String institucion) {
 /// - [onImportar]: guarda los cambios (todos o ninguno) y devuelve, si hay,
 ///   algo más para decir. Si tira, no se guardó nada.
 ///
-/// **El link del delegado** (6.8.0): con [link], debajo del Excel va la sección
-/// LINK PARA LOS DELEGADOS (`LinkDelDelegadoPanel`). TRAER LO CARGADO muestra
-/// el mismo "Antes de guardar", armado con lo que cargaron por el link; lo
-/// que todavía no enviaron va aparte, con un tilde para incluirlo. Guardar es
-/// el mismo [onImportar]: del alumno solo entran acompañantes y música.
-/// Después se le avisa a la nube qué se trajo, y eso no frena nada.
+/// **El link del delegado**: desde la 6.9.2 tiene su ventana propia
+/// (`LinkDelDelegadoVentana`), y de ahí TRAER LO CARGADO abre esta con [link] y
+/// [traerAlAbrir]: muestra el mismo "Antes de guardar", armado con lo que
+/// cargaron por el link, con **quién lo cargó y cuándo**; lo que todavía no
+/// enviaron va aparte, con un tilde para incluirlo. Guardar es el mismo
+/// [onImportar]: del alumno solo entran acompañantes y música. Después se le
+/// avisa a la nube qué se trajo, y eso no frena nada.
 ///
 /// Devuelve `true` al cerrarse si se importó algo.
 class AcompanantesMusicaDialog extends StatefulWidget {
@@ -51,18 +50,13 @@ class AcompanantesMusicaDialog extends StatefulWidget {
   final Future<Uint8List?> Function() onElegirArchivo;
   final Future<String?> Function(List<CambioDelegado> cambios) onImportar;
 
-  /// El link del delegado de esta fiesta. Null: la sección no se muestra.
+  /// El link del delegado de esta fiesta, para traer lo que cargaron. Null:
+  /// la ventana es solo la del Excel.
   final LinkDelDelegado? link;
 
-  /// El link completo que se copia, a partir de la clave.
-  final String Function(String clave)? urlDelLink;
-
-  /// Abrir ya en la revisión de lo que mandaron (se llega así desde la
-  /// alerta del Centro de Comando).
+  /// Abrir ya en la revisión de lo que mandaron (se llega así desde TRAER LO
+  /// CARGADO, en la ventana del link).
   final bool traerAlAbrir;
-
-  /// Para las pruebas: cómo se elige el límite.
-  final ElegirLimite? elegirLimite;
 
   /// Lo que se hace después de traer, cuando ya cambió lo que hay para traer.
   final VoidCallback? onTrajo;
@@ -76,9 +70,7 @@ class AcompanantesMusicaDialog extends StatefulWidget {
     required this.onElegirArchivo,
     required this.onImportar,
     this.link,
-    this.urlDelLink,
     this.traerAlAbrir = false,
-    this.elegirLimite,
     this.onTrajo,
   });
 
@@ -104,19 +96,20 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
   /// Lo que cargaron los delegados, si el simulacro viene del link.
   List<CargaDelDelegado>? _cargas;
   bool _incluirSinEnviar = false;
-  final _panel = GlobalKey<LinkDelDelegadoPanelState>();
 
   bool get _delLink => _cargas != null;
 
   /// Lo cargado por quien todavía no apretó Enviar.
-  List<CargaDelDelegado> get _sinEnviar =>
-      [for (final c in _cargas ?? const <CargaDelDelegado>[]) if (!c.entregado) c];
+  List<CargaDelDelegado> get _sinEnviar => [
+    for (final c in _cargas ?? const <CargaDelDelegado>[])
+      if (!c.entregado) c,
+  ];
 
   /// Lo que entra en la revisión: lo enviado y, si se tildó, lo demás.
   List<CargaDelDelegado> get _incluidas => [
-        for (final c in _cargas ?? const <CargaDelDelegado>[])
-          if (c.entregado || _incluirSinEnviar) c,
-      ];
+    for (final c in _cargas ?? const <CargaDelDelegado>[])
+      if (c.entregado || _incluirSinEnviar) c,
+  ];
 
   @override
   void initState() {
@@ -236,15 +229,15 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
   }
 
   ResultadoPlanilla _simulacroDelLink() => PlanillaDelegado.comparar(
-        lectura: lecturaDeLasCargas(
-          eventoId: widget.eventoId,
-          fiesta: widget.institucion,
-          cargas: _incluidas,
-        ),
-        alumnos: _alumnos,
-        eventoId: widget.eventoId,
-        institucion: widget.institucion,
-      );
+    lectura: lecturaDeLasCargas(
+      eventoId: widget.eventoId,
+      fiesta: widget.institucion,
+      cargas: _incluidas,
+    ),
+    alumnos: _alumnos,
+    eventoId: widget.eventoId,
+    institucion: widget.institucion,
+  );
 
   Future<void> _importar() async {
     final cambios = _simulacro!.cambios;
@@ -286,7 +279,6 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
         'las otras PCs.${algoMas == null ? '' : ' $algoMas'}'
         '${avisado ? '' : ' No se le pudo avisar a la nube que ya se trajo: la alerta puede seguir un rato.'}',
       );
-      unawaited(_panel.currentState?.recargar());
     } catch (_) {
       if (mounted) {
         _decir(
@@ -347,42 +339,36 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
         _dato('Con música', _conMusica),
       ],
     ),
-    const SizedBox(height: 14),
-    Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      children: [
-        ElevatedButton.icon(
-          key: const Key('delegado_exportar'),
-          onPressed: _ocupado ? null : _exportar,
-          icon: const Icon(Icons.download_rounded, size: 18),
-          label: const Text('EXPORTAR EXCEL'),
-        ),
-        OutlinedButton.icon(
-          key: const Key('delegado_importar'),
-          onPressed: _ocupado ? null : _elegir,
-          icon: const Icon(Icons.upload_rounded, size: 18),
-          label: const Text('IMPORTAR EXCEL'),
-        ),
-      ],
-    ),
-    const SizedBox(height: 10),
-    Text(
-      'El Excel es solo de esta institución, con todos sus alumnos menos '
-      'los dados de baja. El delegado completa hasta $kMaxAcompanantes '
-      'acompañantes y la música de cada uno.',
-      style: Theme.of(context).textTheme.bodySmall,
-    ),
-    if (widget.link != null)
-      LinkDelDelegadoPanel(
-        key: _panel,
-        link: widget.link!,
-        eventoId: widget.eventoId,
-        fiesta: widget.institucion,
-        urlDelLink: widget.urlDelLink ?? (clave) => clave,
-        onTraer: _traerDelLink,
-        elegirLimite: widget.elegirLimite ?? elegirLimiteConSelectores,
+    // Llegando desde la ventana del link, exportar e importar el Excel no van:
+    // queda la cuenta de arriba y lo que se acaba de cargar.
+    if (!widget.traerAlAbrir) ...[
+      const SizedBox(height: 14),
+      Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        children: [
+          ElevatedButton.icon(
+            key: const Key('delegado_exportar'),
+            onPressed: _ocupado ? null : _exportar,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('EXPORTAR EXCEL'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('delegado_importar'),
+            onPressed: _ocupado ? null : _elegir,
+            icon: const Icon(Icons.upload_rounded, size: 18),
+            label: const Text('IMPORTAR EXCEL'),
+          ),
+        ],
       ),
+      const SizedBox(height: 10),
+      Text(
+        'El Excel es solo de esta institución, con todos sus alumnos menos '
+        'los dados de baja. El delegado completa hasta $kMaxAcompanantes '
+        'acompañantes y la música de cada uno.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
     if (_dicho != null)
       _aviso(
         _dicho!,
@@ -404,9 +390,12 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
     }
     final pisan = r.cambios.where((c) => c.pisaAlgo).toList();
     final conComa = r.cambios.where((c) => c.conComa).length;
+    // Quién cargó cada cosa y cuándo: "lo cargó LAURA GÓMEZ · jue 12/11 16:00".
     final cargo = {
       for (final c in _cargas ?? const <CargaDelDelegado>[])
-        c.alumnoId: c.cargo ?? 'alguien a quien se sacó',
+        c.alumnoId: c.cargo == null
+            ? 'un delegado'
+            : '${c.cargo}${c.cuandoTexto == null ? '' : ' · ${c.cuandoTexto}'}',
     };
     final sinEnviar = _sinEnviar;
     return [
@@ -471,7 +460,8 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Text(
                           '${PlanillaDelegado.nombreLimpio(c.alumno)}: '
-                          '${c.tenia} → ${c.leido}',
+                          '${c.tenia} → ${c.leido}'
+                          '${cargo[c.alumno.id] == null ? '' : '  · lo cambió ${cargo[c.alumno.id]}'}',
                           style: const TextStyle(fontSize: 13),
                         ),
                       ),
@@ -523,10 +513,10 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
           onChanged: _ocupado
               ? null
               : (v) => setState(() {
-                    _incluirSinEnviar = v == true;
-                    _entendido = false;
-                    _simulacro = _simulacroDelLink();
-                  }),
+                  _incluirSinEnviar = v == true;
+                  _entendido = false;
+                  _simulacro = _simulacroDelLink();
+                }),
         ),
       if (pisan.isNotEmpty)
         CheckboxListTile(
@@ -593,11 +583,18 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                 key: const Key('delegado_volver'),
                 onPressed: _ocupado
                     ? null
-                    : () => setState(() {
-                        _simulacro = null;
-                        _cargas = null;
-                        _dicho = null;
-                      }),
+                    : () {
+                        // Desde la ventana del link, volver es volver a ella.
+                        if (widget.traerAlAbrir) {
+                          Navigator.pop(context, _importo);
+                          return;
+                        }
+                        setState(() {
+                          _simulacro = null;
+                          _cargas = null;
+                          _dicho = null;
+                        });
+                      },
                 child: const Text('VOLVER'),
               ),
               if (r.rechazo == null)
@@ -608,8 +605,8 @@ class _AcompanantesMusicaDialogState extends State<AcompanantesMusicaDialog> {
                     r.cambios.isEmpty
                         ? (_delLink ? 'NADA PARA CARGAR' : 'NADA PARA IMPORTAR')
                         : _delLink
-                            ? 'ACEPTAR Y CARGAR ${r.cambios.length} ALUMNO(S)'
-                            : 'IMPORTAR ${r.cambios.length} ALUMNO(S)',
+                        ? 'ACEPTAR Y CARGAR ${r.cambios.length} ALUMNO(S)'
+                        : 'IMPORTAR ${r.cambios.length} ALUMNO(S)',
                   ),
                 ),
             ],

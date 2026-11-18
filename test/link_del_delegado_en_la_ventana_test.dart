@@ -1,16 +1,16 @@
-// El link del delegado en PLANILLAS → "Acompañantes y música" (6.8.0): la
-// sección del link, TRAER LO CARGADO y ACEPTAR Y CARGAR. Lo que mandan los
-// delegados entra a la grilla solo cuando el jefe acepta, y por el mismo camino
-// que el Excel.
-import 'dart:typed_data';
-
+// La ventana "Link para los delegados" (6.9.2), entera, con una nube en
+// memoria: el estado en grande, reabrir con otra fecha, los delegados por
+// persona, los alumnos con quién los cargó y cuándo, el historial, y TRAER LO
+// CARGADO → ACEPTAR Y CARGAR. Lo que mandan los delegados entra a la grilla
+// solo cuando el jefe acepta, y por el mismo camino que el Excel.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/delegado/datos/link_del_delegado.dart';
 import 'package:arguello_events/features/eventos/services/planilla_delegado.dart';
 import 'package:arguello_events/features/eventos/widgets/acompanantes_musica_dialog.dart';
-import 'package:arguello_events/features/eventos/widgets/link_del_delegado_panel.dart';
+import 'package:arguello_events/features/eventos/widgets/link_del_delegado_ventana.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
 import 'helpers/delegado_en_memoria.dart';
@@ -69,43 +69,68 @@ class _Mundo {
 
   /// Lo que pasa justo después de guardar en la grilla.
   void Function()? alImportar;
+
+  /// El límite que "elige" el jefe en los selectores.
+  LimiteElegido limite =
+      (dia: DateTime(2026, 11, 19), hora: const TimeOfDay(hour: 20, minute: 0));
 }
 
-Future<_Mundo> _abrir(
-  WidgetTester tester,
-  DelegadoEnMemoria nube, {
-  bool traerAlAbrir = false,
-  LimiteElegido? limite,
-}) async {
+/// Abre la ventana del link como la abre la fiesta: TRAER LO CARGADO abre el
+/// "Antes de guardar" de siempre, encima.
+Future<_Mundo> _abrir(WidgetTester tester, DelegadoEnMemoria nube) async {
   final mundo = _Mundo();
-  tester.view.physicalSize = const Size(1366, 1100);
+  tester.view.physicalSize = const Size(1366, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: AcompanantesMusicaDialog(
-          eventoId: _fiesta,
-          institucion: 'NORMAL MARIANO ILOZA',
-          alumnos: _grilla(),
-          onGuardarArchivo: (_, _) async => true,
-          onElegirArchivo: () async => null as Uint8List?,
-          onImportar: (cambios) async {
-            mundo.importados.add(cambios);
-            mundo.alImportar?.call();
-            return null;
-          },
-          link: nube,
-          urlDelLink: (clave) => 'https://ejemplo/?delegado&clave=$clave',
-          traerAlAbrir: traerAlAbrir,
-          onTrajo: () => mundo.avisosRefrescados++,
-          elegirLimite: (_, _) async =>
-              limite ??
-              (dia: DateTime(2026, 11, 19), hora: const TimeOfDay(hour: 20, minute: 0)),
+        body: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => LinkDelDelegadoVentana(
+                  link: nube,
+                  eventoId: _fiesta,
+                  fiesta: 'NORMAL MARIANO ILOZA',
+                  urlDelLink: (clave) => 'https://ejemplo/?delegado&clave=$clave',
+                  elegirLimite: (_, _) async => mundo.limite,
+                  onTraer: () => showDialog<bool>(
+                    context: context,
+                    builder: (_) => AcompanantesMusicaDialog(
+                      eventoId: _fiesta,
+                      institucion: 'NORMAL MARIANO ILOZA',
+                      alumnos: _grilla(),
+                      onGuardarArchivo: (_, _) async => true,
+                      onElegirArchivo: () async => null as Uint8List?,
+                      onImportar: (cambios) async {
+                        mundo.importados.add(cambios);
+                        // Lo aceptado queda en el programa, como en la app.
+                        for (final c in cambios) {
+                          final a = nube.alumnosDeLaFiesta
+                              .firstWhere((x) => x.id == c.alumno.id);
+                          if (c.acompanantes != null) a.acompanantes = c.acompanantes!;
+                          if (c.musica != null) a.musica = c.musica!;
+                        }
+                        mundo.alImportar?.call();
+                        return null;
+                      },
+                      link: nube,
+                      traerAlAbrir: true,
+                      onTrajo: () => mundo.avisosRefrescados++,
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('abrir la ventana'),
+            ),
+          ),
         ),
       ),
     ),
   );
+  await tester.tap(find.text('abrir la ventana'));
   await tester.pumpAndSettle();
   return mundo;
 }
@@ -118,7 +143,18 @@ Future<void> _tocar(WidgetTester tester, String llave) async {
   await tester.pumpAndSettle();
 }
 
-/// Laura carga a Bruno y envía; Pedro carga a Sofía y no envía.
+String _texto(WidgetTester tester, String llave) =>
+    tester.widget<Text>(find.byKey(Key(llave))).data!;
+
+/// El texto del recuadro con esa llave (el chip de estado de un alumno).
+String _chip(WidgetTester tester, String llave) => tester
+    .widget<Text>(
+      find.descendant(of: find.byKey(Key(llave)), matching: find.byType(Text)),
+    )
+    .data!;
+
+/// Laura carga a Bruno y envía; una hora después Pedro carga a Sofía y no
+/// envía.
 Future<void> _cargaron(DelegadoEnMemoria nube) async {
   final laura = await nube.conDelegado('Laura Gómez');
   await nube.guardar(
@@ -129,6 +165,7 @@ Future<void> _cargaron(DelegadoEnMemoria nube) async {
     musica: 'Vivir mi vida - Marc Anthony',
   );
   await nube.entregar(nube.clave!, laura);
+  nube.reloj = 'jue 12/11 16:00';
   final pedro = await nube.conDelegado('Pedro Sosa');
   await nube.guardar(
     clave: nube.clave!,
@@ -140,27 +177,24 @@ Future<void> _cargaron(DelegadoEnMemoria nube) async {
 }
 
 void main() {
-  group('la sección del link', () {
-    testWidgets('sin link: se elige el límite y cuántos, y CREAR LINK lo crea '
-        'con el nombre de la fiesta', (tester) async {
+  group('sin link', () {
+    testWidgets('se elige el límite y cuántos, y CREAR LINK lo crea con el '
+        'nombre de la fiesta', (tester) async {
       final nube = _nube();
       await _abrir(tester, nube);
-      expect(find.text('LINK PARA LOS DELEGADOS'), findsOneWidget);
-      // El Excel sigue ahí.
-      expect(find.byKey(const Key('delegado_exportar')), findsOneWidget);
-      expect(find.byKey(const Key('delegado_importar')), findsOneWidget);
+      expect(find.text('Link para los delegados'), findsOneWidget);
+      expect(find.text('NORMAL MARIANO ILOZA'), findsOneWidget);
+      expect(find.textContaining('todavía no tiene link'), findsOneWidget);
 
       await _tocar(tester, 'link_elegir_limite');
       expect(find.text('Hasta el 19/11 a las 20:00'), findsOneWidget);
       await _tocar(tester, 'link_crear');
 
       expect(nube.pedidos, ['crear|NORMAL MARIANO ILOZA|2026-11-19 20:00|1']);
-      expect(
-        find.text('https://ejemplo/?delegado&clave=c1a2b3'),
-        findsOneWidget,
-      );
-      expect(find.text('Abierto'), findsOneWidget);
+      expect(_texto(tester, 'link_estado'), 'ABIERTO hasta el jueves 19/11 a las 20:00');
+      expect(find.text('https://ejemplo/?delegado&clave=c1a2b3'), findsOneWidget);
       expect(find.byKey(const Key('link_crear')), findsNothing);
+      expect(find.byKey(const Key('link_sin_delegados')), findsOneWidget);
       // Nadie cargó nada: no hay qué traer.
       final traer = tester.widget<ElevatedButton>(find.byKey(const Key('link_traer')));
       expect(traer.onPressed, isNull);
@@ -168,78 +202,315 @@ void main() {
 
     testWidgets('un límite que ya pasó: lo dice y no crea', (tester) async {
       final nube = _nube();
-      await _abrir(
-        tester,
-        nube,
-        limite: (dia: DateTime(2026, 11, 1), hora: const TimeOfDay(hour: 9, minute: 5)),
-      );
+      final mundo = await _abrir(tester, nube);
+      mundo.limite =
+          (dia: DateTime(2026, 11, 1), hora: const TimeOfDay(hour: 9, minute: 5));
       await _tocar(tester, 'link_elegir_limite');
       expect(find.text('Hasta el 01/11 a las 09:05'), findsOneWidget);
       await _tocar(tester, 'link_crear');
       expect(
-        find.text('El día y la hora límite tienen que ser futuros.'),
-        findsOneWidget,
+        _texto(tester, 'link_dicho'),
+        'El día y la hora límite tienen que ser futuros.',
       );
       expect(nube.clave, isNull);
     });
 
-    testWidgets('con link: quién entró, cuánto cargó y si envió; apagar, '
-        'reabrirle y sacar', (tester) async {
+    testWidgets('sin internet lo dice, y REINTENTAR abre', (tester) async {
+      final nube = _nube()..sinRed = true;
+      await _abrir(tester, nube);
+      expect(find.byKey(const Key('link_sin_red')), findsOneWidget);
+      nube.sinRed = false;
+      await _tocar(tester, 'link_reintentar');
+      expect(find.byKey(const Key('link_crear')), findsOneWidget);
+    });
+  });
+
+  group('arriba: el estado', () {
+    testWidgets('abierto: lo dice en grande, con la cuenta de cada estado', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      await _abrir(tester, nube);
+      expect(_texto(tester, 'link_estado'), 'ABIERTO hasta el jueves 19/11 a las 20:00');
+      expect(
+        _texto(tester, 'link_cuenta'),
+        'De 4 alumnos: 1 faltan · 1 sin enviar · 1 enviados · 0 aceptados · '
+        '1 ya estaban en el programa.',
+      );
+      expect(find.text('TRAER LO CARGADO (1)'), findsOneWidget);
+      expect(find.text('CAMBIAR LA FECHA…'), findsOneWidget);
+      expect(find.text('CERRAR AHORA'), findsOneWidget);
+    });
+
+    testWidgets('CERRAR AHORA lo cierra; REABRIR HASTA… con otra fecha lo abre '
+        'para todos, las veces que haga falta', (tester) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      nube.pedidos.clear();
+      final mundo = await _abrir(tester, nube);
+
+      await _tocar(tester, 'link_apagar');
+      expect(_texto(tester, 'link_estado'), 'CERRADO');
+      expect(_texto(tester, 'link_estado_detalle'), contains('Lo cerraste vos'));
+      expect(find.text('CERRAR AHORA'), findsNothing);
+      expect(find.text('REABRIR HASTA…'), findsOneWidget);
+
+      mundo.limite =
+          (dia: DateTime(2026, 11, 25), hora: const TimeOfDay(hour: 21, minute: 0));
+      await _tocar(tester, 'link_cambiar_limite');
+      expect(_texto(tester, 'link_estado'), startsWith('ABIERTO hasta el'));
+      expect(
+        _texto(tester, 'link_dicho'),
+        'Abierto hasta el 25/11 a las 21:00. Todos pueden volver a cargar y '
+        'corregir.',
+      );
+
+      mundo.limite =
+          (dia: DateTime(2026, 11, 30), hora: const TimeOfDay(hour: 10, minute: 30));
+      await _tocar(tester, 'link_cambiar_limite');
+      expect(_texto(tester, 'link_dicho'), 'El límite quedó para el 30/11 a las 10:30.');
+      expect(nube.pedidos, [
+        'apagar|',
+        'vence|2026-11-25 21:00',
+        'vence|2026-11-30 10:30',
+      ]);
+    });
+
+    testWidgets('vencido: dice que el plazo terminó y ofrece reabrir', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      nube.vencido = true;
+      await _abrir(tester, nube);
+      expect(_texto(tester, 'link_estado'), 'CERRADO');
+      expect(
+        _texto(tester, 'link_estado_detalle'),
+        contains('El plazo terminó el jueves 19/11 a las 20:00'),
+      );
+      await _tocar(tester, 'link_cambiar_limite');
+      expect(_texto(tester, 'link_estado'), startsWith('ABIERTO hasta el'));
+      expect(nube.vencido, isFalse);
+    });
+
+    testWidgets('COPIAR LINK lo dice, y el cupo se cambia y es de personas', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      nube.pedidos.clear();
+      // El portapapeles de la prueba: anota lo que se copió.
+      final copiado = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (llamada) async {
+          if (llamada.method == 'Clipboard.setData') {
+            copiado.add('${(llamada.arguments as Map)['text']}');
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await _abrir(tester, nube);
+      await _tocar(tester, 'link_copiar');
+      expect(copiado, ['https://ejemplo/?delegado&clave=c1a2b3']);
+      expect(_texto(tester, 'link_dicho'), 'Link copiado. Pegalo en WhatsApp.');
+      expect(find.text('3 personas'), findsOneWidget);
+      await _tocar(tester, 'link_cupo');
+      await tester.tap(find.text('5 personas').last);
+      await tester.pumpAndSettle();
+      expect(nube.pedidos, ['cupo|5']);
+      expect(nube.cupo, 5);
+    });
+  });
+
+  group('los delegados', () {
+    testWidgets('por persona: cuándo entró, cuánto cargó y cuándo envió', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      // Laura entra además desde otro celular.
+      await nube.entrar(nube.clave!, 'laura gomez');
+      await _abrir(tester, nube);
+
+      expect(find.text('LAURA GÓMEZ'), findsOneWidget, reason: 'una sola vez');
+      expect(
+        find.text('Entró jue 12/11 15:00 · desde 2 celulares'),
+        findsOneWidget,
+      );
+      expect(find.text('Cargó 1 · envió jue 12/11 15:00'), findsOneWidget);
+      expect(find.text('PEDRO SOSA'), findsOneWidget);
+      expect(find.text('Entró jue 12/11 16:00'), findsOneWidget);
+      expect(find.text('Cargó 1 · todavía no envió'), findsOneWidget);
+    });
+
+    testWidgets('tocar un delegado deja ver solo sus alumnos; "Todos" vuelve', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      await _abrir(tester, nube);
+      expect(find.byKey(Key('link_alumno_$_bruno')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_sofia')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_lucia')), findsOneWidget);
+
+      await _tocar(tester, 'link_delegado_celular-2'); // Pedro
+      expect(find.byKey(Key('link_alumno_$_sofia')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_bruno')), findsNothing);
+      expect(find.byKey(Key('link_alumno_$_lucia')), findsNothing);
+
+      await _tocar(tester, 'link_delegado_todos');
+      expect(find.byKey(Key('link_alumno_$_bruno')), findsOneWidget);
+    });
+
+    testWidgets('SACAR dejando lo que cargó: no entra más y lo suyo sigue '
+        'diciendo que lo cargó; DEJAR ENTRAR lo vuelve a dejar', (tester) async {
       final nube = _nube();
       await _cargaron(nube);
       nube.pedidos.clear();
       await _abrir(tester, nube);
 
-      expect(find.textContaining('LAURA GÓMEZ · entró el'), findsOneWidget);
-      expect(find.textContaining('cargó 1 · envió el'), findsOneWidget);
-      expect(find.textContaining('PEDRO SOSA · entró el'), findsOneWidget);
-      expect(find.textContaining('todavía no envió'), findsOneWidget);
-      expect(
-        find.text('De 4 alumnos: 1 ya estaban en el programa · 2 cargaron los '
-            'delegados · faltan 1'),
-        findsOneWidget,
-      );
-
-      await _tocar(tester, 'link_apagar');
-      expect(find.text('Apagado'), findsOneWidget);
-      await _tocar(tester, 'link_apagar');
-      expect(find.text('Abierto'), findsOneWidget);
-
-      await _tocar(tester, 'link_reabrir_celular-1');
-      await _tocar(tester, 'link_cambiar_limite');
       await _tocar(tester, 'link_sacar_celular-2');
       expect(find.text('Sacar a PEDRO SOSA'), findsOneWidget);
+      expect(
+        find.textContaining('sigue diciendo que lo cargó PEDRO SOSA'),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('link_sacar_dejando')));
       await tester.pumpAndSettle();
 
-      expect(nube.pedidos, [
-        'apagar|',
-        'prender|',
-        'reabrir|celular-1',
-        'vence|2026-11-19 20:00',
-        'sacar_dejando|celular-2',
-      ]);
-      expect(find.textContaining('PEDRO SOSA (sacado)'), findsOneWidget);
+      expect(_texto(tester, 'link_dicho'), 'PEDRO SOSA ya no puede entrar.');
+      expect(find.text('Sacado · entró jue 12/11 16:00'), findsOneWidget);
+      expect(_texto(tester, 'link_quien_$_sofia'), 'Lo cargó PEDRO SOSA · jue 12/11 16:00');
+      expect((await nube.entrar(nube.clave!, 'Pedro Sosa')).motivo, 'sacado');
+
+      await _tocar(tester, 'link_readmitir_celular-2');
+      expect(_texto(tester, 'link_dicho'), 'PEDRO SOSA puede entrar de nuevo.');
+      expect((await nube.entrar(nube.clave!, 'Pedro Sosa')).ok, isTrue);
+      expect(nube.pedidos, ['sacar_dejando|celular-2', 'readmitir|celular-2']);
     });
 
-    testWidgets('sin internet lo dice, y el Excel sigue andando', (tester) async {
-      final nube = _nube()..sinRed = true;
+    testWidgets('SACAR borrando: lo que cargó vuelve a faltar, y queda en el '
+        'historial', (tester) async {
+      final nube = _nube();
+      await _cargaron(nube);
       await _abrir(tester, nube);
-      expect(find.byKey(const Key('link_sin_internet')), findsOneWidget);
-      final exportar = tester.widget<ElevatedButton>(
-        find.byKey(const Key('delegado_exportar')),
-      );
-      expect(exportar.onPressed, isNotNull);
-      nube.sinRed = false;
-      await tester.tap(find.text('REINTENTAR'));
+      await _tocar(tester, 'link_sacar_celular-2');
+      await tester.tap(find.byKey(const Key('link_sacar_borrando')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('link_crear')), findsOneWidget);
+
+      expect(nube.cargaDe(_sofia), isNull);
+      expect(_chip(tester, 'link_estado_$_sofia'), 'Falta');
+      await _tocar(tester, 'link_historial_$_sofia');
+      expect(
+        find.text('jue 12/11 16:00 · Junior Eventos · Se borró al sacar al delegado'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('los alumnos', () {
+    testWidgets('cada uno con su estado, lo vigente, quién lo cargó y cuándo', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      await _abrir(tester, nube);
+
+      expect(_chip(tester, 'link_estado_$_lucia'), 'Ya estaba en el programa');
+      expect(_chip(tester, 'link_estado_$_bruno'), 'Enviado · falta traerlo');
+      expect(_chip(tester, 'link_estado_$_mateo'), 'Falta');
+      expect(_chip(tester, 'link_estado_$_sofia'), 'Sin enviar');
+      expect(find.textContaining('SOSA, DYLAN'), findsNothing);
+
+      expect(_texto(tester, 'link_quien_$_bruno'), 'Lo cargó LAURA GÓMEZ · jue 12/11 15:00');
+      expect(_texto(tester, 'link_quien_$_sofia'), 'Lo cargó PEDRO SOSA · jue 12/11 16:00');
+      expect(find.byKey(Key('link_quien_$_lucia')), findsNothing);
+      expect(
+        find.text('Acompañantes: ÁLVAREZ, EVA · DE LA CRUZ Y SOSA / PAZ, ANA — '
+            'Música: Vivir mi vida - Marc Anthony'),
+        findsOneWidget,
+      );
+      // Al que le falta la música se le ven los acompañantes del programa.
+      expect(find.text('Acompañantes: BENÍTEZ, CARLA'), findsOneWidget);
+    });
+
+    testWidgets('los filtros: faltan, sin enviar y para traer', (tester) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      await _abrir(tester, nube);
+
+      await _tocar(tester, 'link_filtro_faltan');
+      expect(find.byKey(Key('link_alumno_$_mateo')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_bruno')), findsNothing);
+
+      await _tocar(tester, 'link_filtro_sinEnviar');
+      expect(find.byKey(Key('link_alumno_$_sofia')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_mateo')), findsNothing);
+
+      await _tocar(tester, 'link_filtro_paraTraer');
+      expect(find.byKey(Key('link_alumno_$_bruno')), findsOneWidget);
+      expect(find.byKey(Key('link_alumno_$_sofia')), findsNothing);
+
+      // Con un delegado elegido y un filtro que no le toca: lo dice.
+      await _tocar(tester, 'link_delegado_celular-2');
+      await _tocar(tester, 'link_filtro_paraTraer');
+      expect(find.byKey(const Key('link_sin_alumnos')), findsOneWidget);
+    });
+
+    testWidgets('HISTORIAL: cada vez que alguien guardó, con quién y cuándo', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await _cargaron(nube);
+      // Pedro corrige lo que había cargado Laura.
+      nube.reloj = 'jue 12/11 17:30';
+      final pedro = (await nube.entrar(nube.clave!, 'Pedro Sosa')).sesion!;
+      await nube.guardar(
+        clave: nube.clave!,
+        sesion: pedro,
+        alumnoId: _bruno,
+        acompanantes: ['ÁLVAREZ, EVA'],
+        musica: 'Otro tema',
+      );
+      await _abrir(tester, nube);
+
+      expect(_texto(tester, 'link_quien_$_bruno'), 'Lo cargó PEDRO SOSA · jue 12/11 17:30');
+      expect(_chip(tester, 'link_estado_$_bruno'), 'Sin enviar',
+          reason: 'lo corregido después de enviar vuelve a quedar sin enviar');
+      expect(find.byKey(Key('link_cambios_$_bruno')), findsNothing);
+
+      await _tocar(tester, 'link_historial_$_bruno');
+      expect(
+        find.text('jue 12/11 15:00 · LAURA GÓMEZ · Guardó: ÁLVAREZ, EVA · DE LA '
+            'CRUZ Y SOSA / PAZ, ANA — Música: Vivir mi vida - Marc Anthony'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('jue 12/11 17:30 · PEDRO SOSA · Guardó: ÁLVAREZ, EVA — '
+            'Música: Otro tema'),
+        findsOneWidget,
+      );
+      // El que ya estaba en el programa lo dice.
+      await _tocar(tester, 'link_historial_$_lucia');
+      expect(
+        find.textContaining('Se cargó en el programa (por Excel o a mano)'),
+        findsOneWidget,
+      );
+      await _tocar(tester, 'link_historial_$_bruno');
+      expect(find.byKey(Key('link_cambios_$_bruno')), findsNothing);
     });
   });
 
   group('traer y aceptar', () {
-    testWidgets('TRAER muestra lo enviado, quién lo cargó, y no guarda nada; '
-        'ACEPTAR Y CARGAR guarda eso y le avisa a la nube', (tester) async {
+    testWidgets('TRAER muestra lo enviado, quién lo cargó y cuándo, y no guarda '
+        'nada; ACEPTAR Y CARGAR guarda eso, le avisa a la nube, y la ventana lo '
+        'muestra aceptado', (tester) async {
       final nube = _nube();
       await _cargaron(nube);
       nube.pedidos.clear();
@@ -253,17 +524,21 @@ void main() {
         find.textContaining('ÁLVAREZ, BRUNO · ÁLVAREZ, EVA'),
         findsOneWidget,
       );
-      expect(find.textContaining('lo cargó LAURA GÓMEZ'), findsOneWidget);
+      expect(
+        find.textContaining('lo cargó LAURA GÓMEZ · jue 12/11 15:00'),
+        findsOneWidget,
+      );
       // Lo de Pedro, que no envió, no está en la lista: va aparte.
-      expect(find.textContaining('GÓMEZ, SOFÍA ·'), findsNothing);
+      expect(find.textContaining('lo cargó PEDRO SOSA'), findsNothing);
       expect(
         find.text('Incluir también lo que todavía no enviaron (1 alumno(s))'),
         findsOneWidget,
       );
       // En el link la coma es parte del nombre: no hay aviso.
       expect(find.textContaining('con coma'), findsNothing);
-      expect(find.textContaining('traen una coma'), findsNothing);
       expect(find.text('ACEPTAR Y CARGAR 1 ALUMNO(S)'), findsOneWidget);
+      // Llegando desde el link, lo del Excel no va.
+      expect(find.byKey(const Key('delegado_exportar')), findsNothing);
 
       await _tocar(tester, 'delegado_confirmar');
 
@@ -284,9 +559,27 @@ void main() {
       expect(nube.hayAviso, isFalse);
       expect(mundo.avisosRefrescados, 1);
       expect(find.textContaining('Se cargaron 1 alumno(s)'), findsOneWidget);
+      expect(find.byKey(const Key('delegado_exportar')), findsNothing);
+
+      // Cierra la revisión: la ventana del link se releyó.
+      await _tocar(tester, 'delegado_cerrar');
+      expect(find.text('Antes de guardar'), findsNothing);
+      expect(_chip(tester, 'link_estado_$_bruno'), 'Aceptado');
+      expect(
+        _texto(tester, 'link_cuenta'),
+        contains('0 enviados · 1 aceptados'),
+      );
+      await _tocar(tester, 'link_historial_$_bruno');
+      expect(
+        find.text('jue 12/11 16:00 · Junior Eventos · Aceptado y cargado en el '
+            'programa'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('VOLVER sin aceptar no cambia nada', (tester) async {
+    testWidgets('VOLVER sin aceptar no cambia nada y vuelve a la ventana', (
+      tester,
+    ) async {
       final nube = _nube();
       await _cargaron(nube);
       nube.pedidos.clear();
@@ -296,7 +589,9 @@ void main() {
       expect(mundo.importados, isEmpty);
       expect(nube.pedidos, isEmpty);
       expect(nube.hayAviso, isTrue);
-      expect(find.text('LINK PARA LOS DELEGADOS'), findsOneWidget);
+      expect(find.text('Antes de guardar'), findsNothing);
+      expect(find.text('Link para los delegados'), findsOneWidget);
+      expect(find.text('TRAER LO CARGADO (1)'), findsOneWidget);
     });
 
     testWidgets('lo que no enviaron entra solo si se tilda', (tester) async {
@@ -307,7 +602,10 @@ void main() {
       await _tocar(tester, 'link_traer');
       await _tocar(tester, 'delegado_incluir_sin_enviar');
       expect(find.text('ACEPTAR Y CARGAR 2 ALUMNO(S)'), findsOneWidget);
-      expect(find.textContaining('lo cargó PEDRO SOSA'), findsOneWidget);
+      expect(
+        find.textContaining('lo cargó PEDRO SOSA · jue 12/11 16:00'),
+        findsOneWidget,
+      );
       await _tocar(tester, 'delegado_confirmar');
       expect(
         [for (final c in mundo.importados.single) c.alumno.id]..sort(),
@@ -316,14 +614,48 @@ void main() {
       expect(nube.pedidos, ['traido|["$_bruno","$_sofia"]']);
     });
 
-    testWidgets('llegando desde la alerta abre directo en la revisión', (
+    testWidgets('lo aceptado se corrige y vuelve para aceptar: la ventana lo '
+        'marca, y la revisión dice qué reemplaza y quién lo cambió', (
       tester,
     ) async {
       final nube = _nube();
       await _cargaron(nube);
-      await _abrir(tester, nube, traerAlAbrir: true);
-      expect(find.text('Antes de guardar'), findsOneWidget);
-      expect(find.text('ACEPTAR Y CARGAR 1 ALUMNO(S)'), findsOneWidget);
+      await nube.aceptar([_bruno]);
+      // Al otro día, Pedro corrige la música de Bruno y envía.
+      nube.reloj = 'vie 13/11 09:10';
+      final pedro = (await nube.entrar(nube.clave!, 'Pedro Sosa')).sesion!;
+      await nube.guardar(
+        clave: nube.clave!,
+        sesion: pedro,
+        alumnoId: _bruno,
+        acompanantes: ['ÁLVAREZ, EVA', 'DE LA CRUZ Y SOSA / PAZ, ANA'],
+        musica: 'Tema corregido',
+      );
+      await nube.entregar(nube.clave!, pedro);
+      final mundo = await _abrir(tester, nube);
+
+      expect(_chip(tester, 'link_estado_$_bruno'), 'Enviado · falta traerlo');
+      expect(
+        _chip(tester, 'link_otra_vez_$_bruno'),
+        'Corrige lo que ya está en el programa',
+      );
+      expect(nube.hayAviso, isTrue, reason: 'le llega para aceptar de nuevo');
+
+      await _tocar(tester, 'link_traer');
+      // En la revisión se ve con lo que quedó en la grilla de esta PC (que en
+      // la prueba no cambió): lo que importa es quién y qué.
+      expect(
+        find.textContaining('lo cargó PEDRO SOSA · vie 13/11 09:10'),
+        findsWidgets,
+      );
+      await _tocar(tester, 'delegado_confirmar');
+      expect(
+        mundo.importados.single.map((c) => c.musica).toSet(),
+        containsAll(['Tema corregido', 'Persiana americana']),
+      );
+      await _tocar(tester, 'delegado_cerrar');
+      expect(_chip(tester, 'link_estado_$_bruno'), 'Aceptado');
+      expect(find.byKey(Key('link_otra_vez_$_bruno')), findsNothing);
     });
 
     testWidgets('si no se le puede avisar a la nube que se trajo, lo cargado '
@@ -387,14 +719,14 @@ void main() {
       expect(c.pisaAlgo, isFalse);
     });
 
-    test('si mientras tanto en el programa le cargaron otra cosa, se marca '
-        'que se reemplaza', () {
+    test('corregir lo que ya está en el programa se marca: se reemplaza', () {
       final r = revisar([carga(_lucia, musica: 'Otra música')]);
       expect(r.cambios.single.pisaAlgo, isTrue);
       expect(r.cambios.single.tenia, 'Música: Vivir mi vida');
     });
 
-    test('lo que ya está igual no se vuelve a cargar', () {
+    test('lo que ya está igual no se vuelve a cargar: el delegado que abre uno '
+        'del programa y guarda sin cambiar nada no genera nada', () {
       final r = revisar([
         carga(_lucia, acomp: ['ACOSTA, JORGE'], musica: 'Vivir mi vida'),
       ]);

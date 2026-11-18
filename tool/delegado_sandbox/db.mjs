@@ -9,15 +9,21 @@ export const FIESTA_B = 'bbbbbbbb-0000-4000-8000-000000000001';
 export const alumnoA = (n) => `a0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 export const alumnoB = (n) => `b0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-/** El SQL que va a la nube: el mismo archivo de la migración. */
+/** El SQL que va a la nube: los mismos archivos de las migraciones, en orden. */
 export const SQL_DE_LA_NUBE = '../../supabase/migrations/20261113120000_link_delegado.sql';
+/** La segunda parte (6.9.2): todos corrigen todo, Enviar no cierra, el historial. */
+export const SQL_DE_LA_NUBE_2 = '../../supabase/migrations/20261118120000_link_delegado_reabrir.sql';
+export const SQL_DE_LA_NUBE_TODO = [SQL_DE_LA_NUBE, SQL_DE_LA_NUBE_2];
 
 const TIPOS = { p_evento: 'uuid', p_alumno: 'uuid', p_acompanantes: 'jsonb', p_cupo: 'integer' };
 
-export async function abrir({ relojDePrueba = false } = {}) {
+export async function abrir({ relojDePrueba = false, soloLaPrimera = false } = {}) {
   const db = new PGlite();
   await db.exec(leer('sql/00_entorno.sql'));
+  // `soloLaPrimera`: la nube como quedó con la 6.8.0, para probar que correr la
+  // segunda parte encima no pierde nada.
   await db.exec(leer(SQL_DE_LA_NUBE));
+  if (!soloLaPrimera) await db.exec(leer(SQL_DE_LA_NUBE_2));
   if (relojDePrueba) await db.exec(leer('sql/02_reloj_de_prueba.sql'));
   await db.exec(leer('sql/01_datos.sql'));
 
@@ -122,5 +128,11 @@ export async function abrir({ relojDePrueba = false } = {}) {
     return datos.length;
   };
 
-  return { rpc, sql, reiniciar, reloj, grilla, guardarEnLaGrilla };
+  /** Corre la segunda parte del SQL encima (para probar la pasada de una a otra). */
+  const correrLaSegunda = () => enFila(async () => {
+    await db.exec(leer(SQL_DE_LA_NUBE_2));
+    if (relojDePrueba) await db.exec(leer('sql/02_reloj_de_prueba.sql'));
+  });
+
+  return { rpc, sql, reiniciar, reloj, grilla, guardarEnLaGrilla, correrLaSegunda };
 }

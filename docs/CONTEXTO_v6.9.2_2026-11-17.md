@@ -3,7 +3,9 @@
 **Estado (18-nov-2026): EN CURSO, sin publicar.** Se llamaba 6.10.0: **el usuario le puso 6.9.2 el 18-nov** (la
 versión va a ser `6.9.2+77`). Plan aprobado por el usuario el 17-nov
 (`C:\Users\lover\.claude\plans\hay-un-tema-en-precious-owl.md`), en cuatro partes. **Programadas y probadas las
-Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `pubspec.yaml` sigue en `6.9.1+76`.
+Partes 1, 2 y 3** (la 3, el link del delegado, el 18-nov; guardada en git, falta correr la suite entera); la 4, sin
+empezar. Nada instalado, **ningún SQL corrido** (hay uno nuevo del link esperando), `pubspec.yaml` sigue en
+`6.9.1+76`. **Plan: 3 de 4 partes.**
 
 ## Para retomar en otro chat
 
@@ -13,16 +15,21 @@ Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `
 - **Parte 2 (el descuento solo para lo que la familia tenía al sorteo): programada y probada entera** (18-nov): lo que
   se anota al sortear, la cuenta partida, la entrega, VENDER, los papeles, **la lista de PRECIOS para las fiestas ya
   sorteadas, el guardado de lo aceptado, la puesta al día de la tablet y el simulacro sobre una copia de la base**.
-- **Parte 3 (el link del delegado): la maqueta está hecha y se le mostró el 18-nov; falta su OK para programar.**
-  `docs/maqueta_link_delegado_2026-11-18.html` (`preview_start` con `maquetas`): el programa en dos formas para
-  elegir (**A · Dos solapas** y **B · Todo en una hoja**) y el celular del delegado, que comparten los datos (lo que
-  se guarda en el celular aparece en el programa con quién y cuándo). **Tiene que decir cuál de las dos formas
-  quiere.** En la maqueta, Enviar manda solo lo que cargó o corrigió ese delegado.
+- **Parte 3 (el link del delegado): programada y probada en el sandbox el 18-nov.** El usuario vio la maqueta
+  (`docs/maqueta_link_delegado_2026-11-18.html`) y, sobre las dos formas, dijo **"hacé la mejor que a vos te
+  parezca"**: se hizo la **B · Todo en una hoja**. Está todo en "Lo programado el 18-nov (la Parte 3)", abajo.
+  **El 18-nov cortó a mitad de las roturas a propósito y pidió dejar el contexto**: se comprobó que el corte no
+  dejó nada roto (el SQL igual a su respaldo, ninguna marca de rotura en `lib/`), las reglas dan 73 de 73 y las
+  pruebas del link 131 en verde. **No se corrió la suite entera después de la Parte 3**, ni se terminaron las
+  roturas: es lo primero que sigue.
 - **Parte 4 ("a confirmar"): sin empezar.**
 - **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
   y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
   nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el
   18-nov; falta su mirada** (sobre todo la lista del simulacro: es la que va a aceptar en PRECIOS).
+- **Las capturas del recorrido del link** (la página del celular y la ventana del programa, de verdad, contra el
+  Postgres de prueba) están en `build/capturas_6.9.2/` (fuera de git) y **se le mandaron el 18-nov al cortar; falta
+  que las mire.**
 - La suite entera, al cortar: ver "Cómo quedó la suite", abajo.
 
 ### Qué pidió el usuario (17-nov) y qué decidió
@@ -137,28 +144,93 @@ Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `
   familias que agregaron después (y la línea del sorteo como sale desde la 6.6.2, sin "· Jefe · 1 cambio");
   `tool/lugares_al_sorteo_muestra_test.dart` (nuevo) saca las seis capturas de las pantallas nuevas.
 
+### Lo programado el 18-nov (la Parte 3: el link del delegado)
+
+**Por qué no los dejaba entrar** (diagnóstico del 17-nov): el delegado se reconocía por el navegador (un token en
+`localStorage`), no por la persona; el cupo contaba aparatos y viene en 1; con el cupo lleno la página ni pedía el
+nombre; cambiar la fecha no le reabría a quien ya había enviado; y REABRIRLE actuaba sobre la fila del aparato viejo.
+
+**Las reglas nuevas** (decididas por el usuario el 17-nov; cambian tres de las del 12-nov)
+- **El delegado es la persona, no el celular** (`delegado_llave(nombre)`): el mismo nombre entra desde otro celular
+  aunque el cupo esté lleno (la entrada dice "¿Ya entraste? Tocá tu nombre"), y el cupo cuenta personas. Tope de 30
+  aparatos por link.
+- **Todos corrigen todo**: lo que cargó otro delegado y lo que ya está en el programa se abren, con un cartel antes
+  ("Vas a cambiar lo que cargó … ¿Seguir?") y lo vigente a la vista mientras pregunta.
+- **Enviar no cierra**: avisa al programa y se puede enviar otra vez. Guardar después de enviar deja ese alumno
+  "sin enviar" de nuevo.
+- **Lo único que cierra es la fecha límite** (o CERRAR AHORA). **Se reabre las veces que quiera**: una fecha futura
+  lo prende solo.
+- **Quién cargó a quién y cuándo**, y un historial por alumno (tabla nueva `cambios_delegado`, solo se agregan
+  filas).
+- **Lo aceptado se puede corregir**: si un delegado guarda sobre algo ya aceptado, vuelve a "para traer".
+- Sacar a un delegado vale para todos sus celulares; se lo puede volver a dejar entrar (`readmitir`).
+- **A la grilla sigue entrando solo lo que el jefe acepta**, por el `onImportar` del Excel. Eso no cambió.
+
+**El SQL** — `supabase/migrations/20261118120000_link_delegado_reabrir.sql`. **SIN CORRER en la nube.** Solo agrega:
+la columna `cargas_delegado.enviado_at`, la tabla `cambios_delegado` (cerrada del todo, con `n` de orden) y
+funciones. **Ninguna función cambia de firma** (un test lo compara con el SQL del 13-nov); se reescriben por dentro
+`delegado_aviso`, `delegado_lista`, `delegado_entrar`, `delegado_guardar`, `delegado_entregar`, `delegado_link`,
+`delegado_link_cambiar` y `delegado_cargas`; nuevas con usuario, `delegado_alumnos_estado(uuid)` y
+`delegado_historial(uuid)` (`delegado_alumnos` es `returns table`: no se le agrega una columna con
+`create or replace`). Las funciones pasan de 17 a 22. Los estados de un alumno: `falta`, `programa`, `sin_enviar`,
+`enviado`, `aceptado`. **Una página vieja (la web de la 6.9.1) sigue andando con el SQL nuevo**: lo que se agrega
+al JSON lo ignora.
+
+**Las pantallas**
+- `lib/features/delegado/pagina/pagina_del_delegado.dart`: la entrada con los nombres, todo se abre, el cartel de
+  corregir, Enviar sin diálogo y "Enviar otra vez", "Gracias" con la hora.
+- **La ventana propia, forma B**: `lib/features/eventos/widgets/link_del_delegado_ventana.dart` (nueva; reemplaza
+  a `link_del_delegado_panel.dart`, **borrado**). Se abre desde **PLANILLAS ▾ → "Link para los delegados"** (solo en
+  modo jefe) y desde la alerta del Centro de Comando. Arriba el estado en grande con COPIAR, CAMBIAR LA FECHA /
+  REABRIR HASTA… y CERRAR AHORA; los delegados (sacar, volver a dejar entrar); los alumnos con filtro, estado, quién
+  y cuándo, y el historial que se despliega; TRAER LO CARGADO abre el "Antes de guardar" de siempre. Lo que pasó se
+  dice fijo abajo (`link_dicho`).
+- `acompanantes_musica_dialog.dart` ya no tiene la sección del link; con `traerAlAbrir` muestra solo la revisión, y
+  dice "lo cargó X · cuándo".
+- **`detalle_evento_masivo_screen.dart` es el único que lee `linkDelDelegadoProvider`**
+  (`_abrirLinkDeLosDelegados`, con la llave del modo jefe); la ventana recibe el link ya armado
+  (`test/solo_modo_jefe_test.dart` lo vigila).
+- Datos: `nube_del_delegado.dart` (`EstadoDeLaCarga`, `soloLectura => vencido`) y `link_del_delegado.dart`
+  (`DelegadoDelLink`, `AlumnoDelTablero`, `CambioDelHistorial`, y en la interfaz `alumnos` e `historial`).
+
+**Pruebas hechas**
+- Las reglas, contra el mismo archivo del SQL: `tool/delegado_sandbox/` (`node pruebas.mjs`), **73 de 73**. El
+  sandbox corre los dos SQL en orden (`db.mjs`: `abrir({soloLaPrimera})`, `correrLaSegunda()`), y una prueba pasa
+  de la primera parte a la segunda con datos cargados.
+- Las pantallas: `test/pagina_del_delegado_test.dart`, `test/link_del_delegado_en_la_ventana_test.dart`,
+  `test/link_delegado_cerrado_test.dart`, `test/alertas_del_delegado_test.dart`, `test/grupo_fiesta_toolbar_test.dart`
+  y `test/solo_modo_jefe_test.dart`: 131 en verde. El doble es `test/helpers/delegado_en_memoria.dart`.
+- **De punta a punta en el navegador** (la página y la ventana de verdad contra el Postgres de prueba): crear el
+  link, entrar, guardar, enviar (sigue abierto), **entrar desde otro celular con el cupo lleno tocando el nombre**,
+  un segundo delegado corrige lo de la primera con el cartel, la alerta abre la ventana, el historial, TRAER →
+  ACEPTAR Y CARGAR → "Aceptado", CERRAR AHORA y REABRIR HASTA… Salió bien. Al recorrerla aparecieron tres cosas, ya
+  arregladas: el aviso nombraba a quien ya no tenía nada suyo para traer ("LAURA GÓMEZ (0)"); con el cartel
+  "¿Seguir?" no se veía lo que se iba a cambiar; y lo que pasó quedaba al final de la lista, sin verse.
+- Para repetirla: compilar `tool/link_delegado_prueba.dart` como la web
+  (`flutter build web -t tool/link_delegado_prueba.dart --output build/link_delegado_prueba`) y `preview_start` con
+  `delegado-sandbox` (`.claude/launch.json`: `tool/delegado_sandbox/servidor.mjs`, puerto 8800). **La compilación que
+  hay en `build/` es anterior a los tres arreglos: compilar de nuevo.** En el navegador de la app, Flutter solo
+  dibuja con la pestaña al frente, y los clics van por coordenadas.
+
 ### Lo que falta, en orden
 
-**Antes de seguir:** que el usuario mire las muestras y la lista del simulacro (ver "Dónde quedó").
+1. **Cerrar la Parte 3:**
+   - las roturas a propósito (quedaron a medias): las del SQL, cambiando una regla del archivo y corriendo
+     `node pruebas.mjs` (siempre con una copia del SQL al lado para devolverlo), y las de las pantallas con
+     `bash tool/romper_una_regla.sh <casos>`;
+   - **la suite entera** (`bash tool/suite_por_tandas.sh`) y `flutter analyze lib test tool`;
+   - que el usuario mire las capturas del recorrido (`build/capturas_6.9.2/`).
+2. **Parte 4 — "a confirmar"**: `git stash pop` (`stash@{0}`), y lo que falta está en "La Parte B" de
+   `docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la tenía cargada).
+3. **Después**: la versión `6.9.2+77` (`pubspec.yaml` y el `.iss`) y publicar con él: foto de la mora, **el SQL del
+   link con su OK en el momento** (comprobado con `md5(prosrc)` y una prueba en un bloque `do` que se deshace solo,
+   como el 13-nov), instalador por pasos, release y web. **Al publicar, repetir el simulacro de los lugares sobre una
+   copia nueva** y decirle: "no vender entradas desde un equipo sin esta versión".
+4. **Queda del usuario** (no frena): mirar las muestras de la planilla y `simulacro_lugares_al_sorteo.txt`.
 
-**Parte 3 — el link del delegado** (todo el detalle, con las funciones una por una, en el plan)
-1. **La maqueta: hecha** (`docs/maqueta_link_delegado_2026-11-18.html`). **Se programa con su OK, y con la forma
-   que elija (A o B).**
-2. SQL nuevo, solo de agregar: `supabase/migrations/20261117120000_link_delegado_reabrir.sql`. Ninguna función
-   cambia de firma **ni de lo que devuelve** (`delegado_alumnos` es `returns table`: no se le puede agregar una
-   columna con `create or replace`; lo de más va en una función nueva). Tabla nueva `cambios_delegado` (el
-   historial). Se prueba en `tool/delegado_sandbox/` antes de darlo por bueno.
-3. La página, la ventana propia (PLANILLAS ▾ → "Link para los delegados") y las pruebas.
-4. Por qué no los dejaba entrar (diagnóstico del 17-nov): el delegado se reconoce por el navegador (un token en
-   `localStorage`), no por la persona; el cupo cuenta aparatos y viene en 1; con el cupo lleno la página ni pide el
-   nombre; cambiar la fecha no le reabre a quien ya envió; y REABRIRLE actúa sobre la fila del aparato viejo.
-
-**Parte 4 — "a confirmar"**: `git stash pop` (`stash@{0}`), y lo que falta está en "La Parte B" de
-`docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la tenía cargada).
-
-**Después**: la suite entera, la versión `6.9.2+77` (`pubspec.yaml` y el `.iss`), CLAUDE.md, y publicar con él (foto
-de la mora, el SQL del link con su OK en el momento, instalador por pasos, release y web). **Al publicar, repetir el
-simulacro de los lugares sobre una copia nueva** y decirle: "no vender entradas desde un equipo sin esta versión".
+**El orden del SQL del link al publicar:** se corre antes de publicar la web y de instalar. La web vieja sigue
+andando con el SQL nuevo; la ventana y la página nuevas **no** andan con el SQL viejo (piden funciones que no
+existen).
 
 ### Lo que hay que saber antes de tocar
 
@@ -191,8 +263,9 @@ simulacro de los lugares sobre una copia nueva** y decirle: "no vender entradas 
 
 ### Cómo quedó la suite
 
-`bash tool/suite_por_tandas.sh`, el 18-nov: **5.322 pruebas, ninguna falla** (305 archivos). El 17-nov a la noche
-eran 5.189 en 301.
+`bash tool/suite_por_tandas.sh`, el 18-nov **después de la Parte 2**: **5.322 pruebas, ninguna falla** (305
+archivos). El 17-nov a la noche eran 5.189 en 301. **Después de la Parte 3 no se corrió entera**: solo las pruebas
+del link (131, en verde) y las reglas del sandbox (73 de 73).
 
 `flutter analyze` sobre `lib`, `test` y `tool`: ningún error, y nada en los archivos tocados el 18-nov (los avisos que
 quedan son de antes: `detalle_evento_masivo_screen.dart`, `dry_run_cobro_simulator.dart`, dos `tool/_tmp_*`).

@@ -1,6 +1,10 @@
-// La página del link del delegado (6.8.0), entera, con una nube en memoria.
+// La página del link del delegado, entera, con una nube en memoria.
 // Lo que se prueba acá es lo que hace la pantalla con lo que contesta la nube;
 // las reglas se prueban contra el SQL (`tool/delegado_sandbox/pruebas.mjs`).
+//
+// Desde la 6.9.2 (decisión del usuario, 17-nov-2026): todos corrigen todo,
+// Enviar no cierra, lo único que cierra es la fecha límite, y desde otro
+// celular se entra tocando el nombre.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,7 +45,7 @@ Future<void> _abrir(
   SesionesDelDelegado? sesiones,
   String? clave,
 }) async {
-  tester.view.physicalSize = const Size(390, 1400);
+  tester.view.physicalSize = const Size(390, 1500);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -70,6 +74,35 @@ Future<void> _tocar(WidgetTester tester, String llave) async {
   await tester.tap(f);
   await tester.pumpAndSettle();
 }
+
+/// Lo que dice el texto con esa llave (o el que lleva adentro, si la llave es
+/// de su recuadro).
+String _texto(WidgetTester tester, String llave) {
+  final f = find.byKey(Key(llave));
+  final w = tester.widget(f);
+  if (w is Text) return w.data!;
+  return tester
+      .widget<Text>(find.descendant(of: f, matching: find.byType(Text)).first)
+      .data!;
+}
+
+String _escrito(WidgetTester tester, String llave) =>
+    tester.widget<TextField>(find.byKey(Key(llave))).controller!.text;
+
+Future<void> _guardarDesdeAfuera(
+  DelegadoEnMemoria nube,
+  String sesion,
+  String alumnoId, {
+  List<String> acompanantes = const [],
+  String musica = '',
+}) =>
+    nube.guardar(
+      clave: nube.clave!,
+      sesion: sesion,
+      alumnoId: alumnoId,
+      acompanantes: acompanantes,
+      musica: musica,
+    );
 
 void main() {
   group('antes de entrar', () {
@@ -104,6 +137,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('ÁLVAREZ'), findsNothing);
+      // Nadie entró todavía: no hay nombres para tocar.
+      expect(find.text('¿Ya entraste? Tocá tu nombre'), findsNothing);
 
       await _entrar(tester, 'Laura');
       expect(find.text('Escribí tu nombre y tu apellido.'), findsOneWidget);
@@ -113,15 +148,67 @@ void main() {
       expect(find.text('ÁLVAREZ, BRUNO'), findsOneWidget);
     });
 
-    testWidgets('con el cupo completo, otro celular no entra', (tester) async {
+    testWidgets('con el cupo completo otra persona no entra, pero quien ya '
+        'entró toca su nombre desde otro celular y sigue con lo suyo', (
+      tester,
+    ) async {
       final nube = _nube();
-      await nube.conDelegado('Laura Gómez', cupo: 1);
-      await _abrir(tester, nube);
+      final primera = await nube.conDelegado('Laura Gómez', cupo: 1);
+      await _guardarDesdeAfuera(nube, primera, 'a2', musica: 'Tema de Laura');
+      // Otro celular: no tiene ninguna sesión guardada.
+      final otroCelular = SesionesEnMemoria();
+      await _abrir(tester, nube, sesiones: otroCelular);
+
       expect(
         find.textContaining('Ya entraron todos los delegados'),
         findsOneWidget,
       );
       expect(find.byKey(const Key('delegado_nombre')), findsNothing);
+      expect(find.text('¿Ya entraste? Tocá tu nombre'), findsOneWidget);
+      expect(find.text('LAURA GÓMEZ'), findsOneWidget);
+      expect(find.textContaining('ÁLVAREZ'), findsNothing);
+
+      await _tocar(tester, 'delegado_soy_0');
+      expect(find.text('Hola, LAURA GÓMEZ.'), findsOneWidget);
+      expect(find.textContaining('Tema de Laura'), findsOneWidget);
+      // Lo que cargó en el otro celular es suyo: lo abre sin aviso.
+      await _tocar(tester, 'delegado_abrir_a2');
+      expect(find.byKey(const Key('delegado_cartel')), findsNothing);
+      expect(_escrito(tester, 'delegado_musica'), 'Tema de Laura');
+
+      final sesion = await otroCelular.leer('c1a2b3');
+      expect(sesion, isNotNull);
+      expect(sesion, isNot(primera), reason: 'cada celular tiene su sesión');
+      final e = await nube.estado(_fiesta);
+      expect(e.delegados.single.aparatos, 2, reason: 'una persona, dos celulares');
+    });
+
+    testWidgets('escribiendo el mismo nombre, sin acentos ni mayúsculas, '
+        'también es la misma persona', (tester) async {
+      final nube = _nube();
+      await nube.conDelegado('Laura Gómez', cupo: 2);
+      await _abrir(tester, nube);
+      await _entrar(tester, 'laura gomez');
+      expect(find.text('Hola, LAURA GÓMEZ.'), findsOneWidget);
+      expect((await nube.estado(_fiesta)).delegados, hasLength(1));
+    });
+
+    testWidgets('a quien se sacó no lo deja entrar con su nombre, y lo dice', (
+      tester,
+    ) async {
+      final nube = _nube();
+      await nube.conDelegado('Laura Gómez', cupo: 2);
+      final laura = (await nube.estado(_fiesta)).delegados.single.id;
+      await nube.cambiar(_fiesta, 'sacar_dejando', laura);
+      await _abrir(tester, nube);
+      // Ya no figura entre los nombres para tocar.
+      expect(find.text('LAURA GÓMEZ'), findsNothing);
+      await _entrar(tester, 'Laura Gómez');
+      expect(
+        _texto(tester, 'delegado_error_entrada'),
+        contains('Con ese nombre ya no se puede entrar'),
+      );
+      expect(find.textContaining('ÁLVAREZ'), findsNothing);
     });
 
     testWidgets('apagado o vencido: lo dice y no deja entrar', (tester) async {
@@ -171,27 +258,27 @@ void main() {
       expect(find.textContaining('SOSA'), findsNothing);
       expect(find.text('1 de 4 alumnos cargados'), findsOneWidget);
       expect(
-        find.text('Tenés hasta el jueves 19/11 a las 20:00.'),
-        findsOneWidget,
+        _texto(tester, 'delegado_plazo'),
+        'Tenés hasta el jueves 19/11 a las 20:00 para cargar y corregir.',
       );
     });
 
-    testWidgets('lo ya cargado en el programa va tachado, dice "Ya cargado" y '
-        'no se puede abrir', (tester) async {
+    testWidgets('lo ya cargado en el programa se ve, dice "Ya cargado en el '
+        'programa" y se puede abrir', (tester) async {
       final nube = _nube();
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
       await _abrir(tester, nube, sesiones: sesiones);
 
-      expect(find.text('Ya cargado'), findsOneWidget);
-      expect(find.byKey(const Key('delegado_abrir_a1')), findsNothing);
+      expect(_texto(tester, 'delegado_quien_a1'), 'Ya cargado en el programa');
+      expect(find.textContaining('ACOSTA, JORGE'), findsOneWidget);
+      expect(find.textContaining('Vivir mi vida'), findsOneWidget);
+      expect(find.byKey(const Key('delegado_abrir_a1')), findsOneWidget);
       final nombre = tester.widget<Text>(find.text('ACOSTA, LUCÍA'));
-      expect(nombre.style?.decoration, TextDecoration.lineThrough);
-      // Y no muestra lo que tiene cargado.
-      expect(find.textContaining('ACOSTA, JORGE'), findsNothing);
-      await tester.tap(find.text('ACOSTA, LUCÍA'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('delegado_guardar')), findsNothing);
+      expect(nombre.style?.decoration, isNull, reason: 'ya no va tachado');
+      // Al que le falta algo no le pone el rótulo de cargado.
+      expect(find.byKey(const Key('delegado_quien_a3')), findsNothing);
+      expect(find.text('Falta'), findsNWidgets(3));
     });
 
     testWidgets('buscar "gomez" encuentra a GÓMEZ', (tester) async {
@@ -229,16 +316,21 @@ void main() {
       expect(ac.maxLength, kMaxLetrasAcompananteDelegado);
     });
 
-    testWidgets('el que ya tiene acompañantes en el programa solo completa la '
-        'música', (tester) async {
+    testWidgets('el que ya tiene acompañantes en el programa los ve en su '
+        'casillero y completa la música', (tester) async {
       final nube = _nube();
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
       await _abrir(tester, nube, sesiones: sesiones);
       await _tocar(tester, 'delegado_abrir_a3');
 
-      expect(find.text('Ya están cargados en el programa.'), findsOneWidget);
-      expect(find.byKey(const Key('delegado_ac1')), findsNothing);
+      // Le falta la música: no es "corregir lo de otro", abre directo.
+      expect(find.byKey(const Key('delegado_cartel')), findsNothing);
+      expect(_escrito(tester, 'delegado_ac1'), 'BENÍTEZ, CARLA');
+      expect(
+        find.textContaining('Un casillero vacío no borra nada'),
+        findsOneWidget,
+      );
       await tester.enterText(
         find.byKey(const Key('delegado_musica')),
         'Tema de Mateo',
@@ -246,12 +338,11 @@ void main() {
       await tester.pumpAndSettle();
       await _tocar(tester, 'delegado_guardar');
       expect(nube.cargaDe('a3')!.musica, 'Tema de Mateo');
-      expect(nube.cargaDe('a3')!.acompanantes, isEmpty);
+      expect(nube.cargaDe('a3')!.acompanantes, ['BENÍTEZ, CARLA']);
     });
 
-    testWidgets('Guardar guarda ese alumno, lo marca "Guardado" y no envía', (
-      tester,
-    ) async {
+    testWidgets('Guardar guarda ese alumno, dice quién y cuándo, lo marca "Sin '
+        'enviar" y no envía', (tester) async {
       final nube = _nube();
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
@@ -269,16 +360,20 @@ void main() {
       await _tocar(tester, 'delegado_guardar');
 
       expect(nube.cargaDe('a2')!.acompanantes, ['ÁLVAREZ, EVA']);
-      expect(find.text('Guardado'), findsOneWidget);
+      expect(find.text('Sin enviar'), findsOneWidget);
+      expect(
+        _texto(tester, 'delegado_quien_a2'),
+        'Ya cargado · LAURA GÓMEZ · jue 12/11 15:00',
+      );
       expect(find.text('2 de 4 alumnos cargados'), findsOneWidget);
       expect(find.byKey(const Key('delegado_gracias')), findsNothing);
       expect(nube.hayAviso, isFalse, reason: 'guardar no le avisa al jefe');
-      expect((await nube.estado(_fiesta)).celulares.single.entregado, isFalse);
+      expect((await nube.estado(_fiesta)).delegados.single.envioTexto, isNull);
 
       // Cierra la página y vuelve en el mismo celular: sigue adentro.
       await _abrir(tester, nube, sesiones: sesiones);
       expect(find.text('Hola, LAURA GÓMEZ.'), findsOneWidget);
-      expect(find.text('Guardado'), findsOneWidget);
+      expect(find.text('Sin enviar'), findsOneWidget);
       expect(find.textContaining('ÁLVAREZ, EVA'), findsOneWidget);
     });
 
@@ -315,32 +410,133 @@ void main() {
       expect(find.byKey(const Key('delegado_guardar')), findsNothing);
       expect(nube.cargaDe('a2'), isNull);
     });
+
+    testWidgets('lo que ya está en el programa: avisa antes de dejar escribir, '
+        'y "No, volver" no toca nada', (tester) async {
+      final nube = _nube();
+      final sesiones = SesionesEnMemoria();
+      await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
+      await _abrir(tester, nube, sesiones: sesiones);
+      await _tocar(tester, 'delegado_abrir_a1');
+
+      expect(
+        find.text('Vas a cambiar lo que ya está cargado en el programa. '
+            '¿Seguir?'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('delegado_ac1')), findsNothing);
+      expect(find.byKey(const Key('delegado_guardar')), findsNothing);
+      // Lo que va a cambiar sigue a la vista mientras pregunta.
+      expect(find.textContaining('ACOSTA, JORGE'), findsOneWidget);
+      expect(find.textContaining('Vivir mi vida'), findsOneWidget);
+
+      await _tocar(tester, 'delegado_no_corregir');
+      expect(find.byKey(const Key('delegado_cartel')), findsNothing);
+      expect(nube.cargaDe('a1'), isNull);
+      // Al abrirlo de nuevo vuelve a avisar.
+      await _tocar(tester, 'delegado_abrir_a1');
+      expect(find.byKey(const Key('delegado_cartel')), findsOneWidget);
+    });
+
+    testWidgets('con "Sí, corregir" se abre con lo que tiene; guardar no cambia '
+        'el programa: queda para que el jefe lo acepte', (tester) async {
+      final nube = _nube();
+      final sesiones = SesionesEnMemoria();
+      await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
+      await _abrir(tester, nube, sesiones: sesiones);
+      await _tocar(tester, 'delegado_abrir_a1');
+      await _tocar(tester, 'delegado_si_corregir');
+
+      expect(_escrito(tester, 'delegado_ac1'), 'ACOSTA, JORGE');
+      expect(_escrito(tester, 'delegado_musica'), 'Vivir mi vida');
+      await tester.enterText(find.byKey(const Key('delegado_ac2')), 'ríos, marta');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'delegado_guardar');
+
+      expect(nube.cargaDe('a1')!.acompanantes, ['ACOSTA, JORGE', 'RÍOS, MARTA']);
+      expect(nube.cargaDe('a1')!.traido, isFalse);
+      expect(nube.alumnosDeLaFiesta.first.acompanantes, ['ACOSTA, JORGE'],
+          reason: 'el programa no cambió');
+      final a1 = (await nube.alumnos(_fiesta)).first;
+      expect([a1.estado, a1.otraVez], [EstadoDeLaCarga.sinEnviar, true]);
+      expect(
+        _texto(tester, 'delegado_quien_a1'),
+        'Ya cargado · LAURA GÓMEZ · jue 12/11 15:00',
+      );
+    });
   });
 
   group('varios delegados', () {
-    testWidgets('lo que cargó otro se ve cerrado, con su nombre y sin lo que '
-        'escribió', (tester) async {
+    testWidgets('lo que cargó otro se ve, con quién lo cargó y cuándo', (
+      tester,
+    ) async {
       final nube = _nube();
       final laura = await nube.conDelegado('Laura Gómez');
-      await nube.guardar(
-        clave: nube.clave!,
-        sesion: laura,
-        alumnoId: 'a2',
+      await _guardarDesdeAfuera(
+        nube,
+        laura,
+        'a2',
         acompanantes: ['ÁLVAREZ, EVA'],
-        musica: 'Tema secreto',
+        musica: 'Tema de Laura',
       );
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Pedro Sosa'));
       await _abrir(tester, nube, sesiones: sesiones);
 
-      expect(find.text('Lo cargó LAURA GÓMEZ'), findsOneWidget);
-      expect(find.byKey(const Key('delegado_abrir_a2')), findsNothing);
-      expect(find.textContaining('Tema secreto'), findsNothing);
-      expect(find.textContaining('ÁLVAREZ, EVA'), findsNothing);
+      expect(
+        _texto(tester, 'delegado_quien_a2'),
+        'Ya cargado · LAURA GÓMEZ · jue 12/11 15:00',
+      );
+      expect(find.textContaining('Tema de Laura'), findsOneWidget);
+      expect(find.textContaining('ÁLVAREZ, EVA'), findsOneWidget);
+      expect(find.byKey(const Key('delegado_abrir_a2')), findsOneWidget);
+      // Para Pedro no es "sin enviar": eso es de quien lo cargó.
+      expect(find.text('Sin enviar'), findsNothing);
     });
 
-    testWidgets('si otro lo cargó mientras lo tenía abierto, se lo dice y lo '
-        'de aquel queda', (tester) async {
+    testWidgets('corregir lo de otro: avisa con su nombre y, al guardar, queda '
+        'a nombre de quien corrigió, con el historial de los dos', (
+      tester,
+    ) async {
+      final nube = _nube();
+      final laura = await nube.conDelegado('Laura Gómez');
+      await _guardarDesdeAfuera(nube, laura, 'a2', musica: 'Tema de Laura');
+      final sesiones = SesionesEnMemoria();
+      await sesiones.guardar('c1a2b3', await nube.conDelegado('Pedro Sosa'));
+      await _abrir(tester, nube, sesiones: sesiones);
+
+      await _tocar(tester, 'delegado_abrir_a2');
+      expect(
+        find.text('Vas a cambiar lo que cargó LAURA GÓMEZ. ¿Seguir?'),
+        findsOneWidget,
+      );
+      await _tocar(tester, 'delegado_si_corregir');
+      expect(_escrito(tester, 'delegado_musica'), 'Tema de Laura');
+      await tester.enterText(
+        find.byKey(const Key('delegado_musica')),
+        'Tema corregido',
+      );
+      await tester.pumpAndSettle();
+      nube.reloj = 'jue 12/11 16:00';
+      await _tocar(tester, 'delegado_guardar');
+
+      expect(nube.cargaDe('a2')!.musica, 'Tema corregido');
+      expect((await nube.cargas(_fiesta)).single.cargo, 'PEDRO SOSA');
+      expect(
+        _texto(tester, 'delegado_quien_a2'),
+        'Ya cargado · PEDRO SOSA · jue 12/11 16:00',
+      );
+      expect(
+        [for (final h in await nube.historial(_fiesta)) '${h.quien} ${h.cuandoTexto}'],
+        ['LAURA GÓMEZ jue 12/11 15:00', 'PEDRO SOSA jue 12/11 16:00'],
+      );
+      // Ahora es de Pedro: lo vuelve a abrir sin aviso.
+      await _tocar(tester, 'delegado_abrir_a2');
+      expect(find.byKey(const Key('delegado_cartel')), findsNothing);
+    });
+
+    testWidgets('si otro lo guardó mientras lo tenía abierto, queda lo último '
+        'y dice de quién es', (tester) async {
       final nube = _nube();
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Pedro Sosa'));
@@ -350,20 +546,12 @@ void main() {
       await tester.pumpAndSettle();
       // Mientras tanto, Laura guarda al mismo alumno.
       final laura = await nube.conDelegado('Laura Gómez');
-      await nube.guardar(
-        clave: nube.clave!,
-        sesion: laura,
-        alumnoId: 'a2',
-        acompanantes: [],
-        musica: 'De Laura',
-      );
+      await _guardarDesdeAfuera(nube, laura, 'a2', musica: 'De Laura');
       await _tocar(tester, 'delegado_guardar');
-      expect(
-        find.text('A ese alumno ya lo cargó LAURA GÓMEZ.'),
-        findsOneWidget,
-      );
-      expect(nube.cargaDe('a2')!.musica, 'De Laura');
-      expect(find.text('Lo cargó LAURA GÓMEZ'), findsOneWidget);
+
+      expect(nube.cargaDe('a2')!.musica, 'De Pedro');
+      expect(_texto(tester, 'delegado_quien_a2'), startsWith('Ya cargado · PEDRO SOSA'));
+      expect(await nube.historial(_fiesta), hasLength(2));
     });
   });
 
@@ -375,15 +563,20 @@ void main() {
       final sesiones = SesionesEnMemoria();
       final laura = await nube.conDelegado('Laura Gómez');
       await sesiones.guardar('c1a2b3', laura);
-      await nube.guardar(
-        clave: nube.clave!,
-        sesion: laura,
-        alumnoId: 'a2',
+      await _guardarDesdeAfuera(
+        nube,
+        laura,
+        'a2',
         acompanantes: ['ÁLVAREZ, EVA'],
         musica: 'Tema',
       );
       await _abrir(tester, nube, sesiones: sesiones);
       return (nube, sesiones);
+    }
+
+    Future<void> enviar(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('delegado_enviar')));
+      await tester.pumpAndSettle();
     }
 
     testWidgets('Guardar y Enviar no se confunden: uno de contorno en el '
@@ -399,12 +592,13 @@ void main() {
         isA<FilledButton>(),
       );
       expect(
-        find.text('Guardar no envía. Cuando termines, tocá Enviar.'),
+        find.text('Guardar no envía. Cuando termines, tocá Enviar: no cierra '
+            'nada, podés seguir corrigiendo.'),
         findsOneWidget,
       );
       final guardar = tester.getCenter(find.byKey(const Key('delegado_guardar')));
-      final enviar = tester.getCenter(find.byKey(const Key('delegado_enviar')));
-      expect(enviar.dy, greaterThan(guardar.dy));
+      final boton = tester.getCenter(find.byKey(const Key('delegado_enviar')));
+      expect(boton.dy, greaterThan(guardar.dy));
     });
 
     testWidgets('con un alumno abierto y sin guardar, frena y lo dice', (
@@ -414,15 +608,13 @@ void main() {
       await _tocar(tester, 'delegado_abrir_a4');
       await tester.enterText(find.byKey(const Key('delegado_musica')), 'Tema');
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
+      await enviar(tester);
       expect(
         find.text('Tenés cambios sin guardar en GÓMEZ, SOFÍA. Guardalos o '
             'descartalos antes de enviar.'),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('delegado_confirmar')), findsNothing);
-      expect((await nube.estado(_fiesta)).celulares.single.entregado, isFalse);
+      expect((await nube.estado(_fiesta)).delegados.single.envioTexto, isNull);
 
       // Al guardar, ese aviso se va: ya no hay nada sin guardar.
       await _tocar(tester, 'delegado_guardar');
@@ -437,8 +629,7 @@ void main() {
       await _tocar(tester, 'delegado_abrir_a4');
       await tester.enterText(find.byKey(const Key('delegado_musica')), 'Tema');
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
+      await enviar(tester);
       expect(find.textContaining('Tenés cambios sin guardar'), findsOneWidget);
       await _tocar(tester, 'delegado_descartar');
       expect(find.textContaining('Tenés cambios sin guardar'), findsNothing);
@@ -451,89 +642,90 @@ void main() {
       final sesiones = SesionesEnMemoria();
       await sesiones.guardar('c1a2b3', await nube.conDelegado('Laura Gómez'));
       await _abrir(tester, nube, sesiones: sesiones);
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
+      await enviar(tester);
       expect(find.text('Todavía no guardaste ningún alumno.'), findsOneWidget);
-      expect(find.byKey(const Key('delegado_confirmar')), findsNothing);
+      expect(nube.hayAviso, isFalse);
     });
 
-    testWidgets('el aviso dice el número justo de los que faltan; sin tildar '
-        'no confirma; "Seguir revisando" no envía', (tester) async {
-      final (nube, _) = await conUnoGuardado(tester);
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Antes de enviar, una última revisión'), findsOneWidget);
-      expect(
-        find.textContaining('El envío se hace una sola vez'),
-        findsOneWidget,
-      );
-      // De 4: uno ya estaba en el programa, uno lo guardó Laura. Faltan 2.
-      expect(
-        find.text('Todavía hay 2 alumnos de la fiesta sin completar. Si les '
-            'tocan a otro delegado, podés enviar igual.'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.byKey(const Key('delegado_confirmar')));
-      await tester.pumpAndSettle();
-      expect(find.text('Tildá la casilla para confirmar.'), findsOneWidget);
-      expect((await nube.estado(_fiesta)).celulares.single.entregado, isFalse);
-
-      await tester.tap(find.byKey(const Key('delegado_seguir')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('delegado_confirmar')), findsNothing);
-      expect((await nube.estado(_fiesta)).celulares.single.entregado, isFalse);
-      expect(nube.cargaDe('a2')!.musica, 'Tema');
-    });
-
-    testWidgets('con todo completo el aviso no dice que falte nadie', (
-      tester,
-    ) async {
-      final nube = _nube();
-      final sesiones = SesionesEnMemoria();
-      final laura = await nube.conDelegado('Laura Gómez');
-      await sesiones.guardar('c1a2b3', laura);
-      for (final id in ['a2', 'a3', 'a4']) {
-        await nube.guardar(
-          clave: nube.clave!,
-          sesion: laura,
-          alumnoId: id,
-          acompanantes: [],
-          musica: 'Tema',
-        );
-      }
-      await _abrir(tester, nube, sesiones: sesiones);
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('delegado_faltan')), findsNothing);
-    });
-
-    testWidgets('tildar y confirmar envía: agradece, y ya no se puede tocar '
-        'nada ni volver a enviar', (tester) async {
+    testWidgets('Enviar avisa sin preguntar, agradece con la hora, y todo se '
+        'sigue pudiendo abrir y enviar de nuevo', (tester) async {
       final (nube, sesiones) = await conUnoGuardado(tester);
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('delegado_soy')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('delegado_confirmar')));
-      await tester.pumpAndSettle();
+      expect(find.text('Enviar'), findsOneWidget);
+      await enviar(tester);
 
-      expect((await nube.estado(_fiesta)).celulares.single.entregado, isTrue);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect((await nube.estado(_fiesta)).delegados.single.envioTexto, 'jue 12/11 15:00');
       expect(nube.hayAviso, isTrue, reason: 'enviar sí le avisa al jefe');
-      expect(find.text('¡Listo, muchas gracias!'), findsOneWidget);
+      expect(find.byKey(const Key('delegado_gracias')), findsOneWidget);
       expect(
-        find.text('Enviaste 1 alumno. Ya no se puede cambiar.'),
+        find.text('¡Gracias! Recibimos tu parte el jue 12/11 15:00.'),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('delegado_enviar')), findsNothing);
-      expect(find.byKey(const Key('delegado_abrir_a2')), findsNothing);
-      expect(find.byKey(const Key('delegado_abrir_a4')), findsNothing);
+      expect(
+        find.text('Si corregís algo, tocá Enviar otra vez para avisarnos.'),
+        findsOneWidget,
+      );
+      // Nada quedó cerrado.
+      expect(find.text('Enviar otra vez'), findsOneWidget);
+      expect(find.byKey(const Key('delegado_abrir_a2')), findsOneWidget);
+      expect(find.byKey(const Key('delegado_abrir_a4')), findsOneWidget);
+      expect(find.text('Sin enviar'), findsNothing);
+      expect(
+        _texto(tester, 'delegado_plazo'),
+        'Tenés hasta el jueves 19/11 a las 20:00 para cargar y corregir.',
+      );
 
-      // Vuelve a abrir: sigue el agradecimiento.
+      // Vuelve a abrir: sigue diciendo que se recibió, y sigue abierto.
       await _abrir(tester, nube, sesiones: sesiones);
       expect(find.byKey(const Key('delegado_gracias')), findsOneWidget);
-      expect(find.byKey(const Key('delegado_enviar')), findsNothing);
+      expect(find.byKey(const Key('delegado_enviar')), findsOneWidget);
+    });
+
+    testWidgets('enviar otra vez sin nada nuevo: lo dice y no avisa de nuevo', (
+      tester,
+    ) async {
+      final (nube, _) = await conUnoGuardado(tester);
+      await enviar(tester);
+      nube.hayAviso = false; // el jefe ya lo trajo
+      await enviar(tester);
+      expect(find.text('No tenés nada nuevo para enviar.'), findsOneWidget);
+      expect(nube.hayAviso, isFalse);
+    });
+
+    testWidgets('corregir después de enviar: dice que quedó sin enviar, y '
+        'Enviar otra vez avisa de nuevo', (tester) async {
+      final (nube, _) = await conUnoGuardado(tester);
+      await enviar(tester);
+      nube.hayAviso = false;
+
+      await _tocar(tester, 'delegado_abrir_a2');
+      expect(find.byKey(const Key('delegado_cartel')), findsNothing,
+          reason: 'es suyo: no avisa');
+      await tester.enterText(
+        find.byKey(const Key('delegado_musica')),
+        'Tema corregido',
+      );
+      await tester.pumpAndSettle();
+      nube.reloj = 'jue 12/11 16:00';
+      await _tocar(tester, 'delegado_guardar');
+
+      expect(find.text('Sin enviar'), findsOneWidget);
+      expect(
+        find.text('Después corregiste 1 alumno: tocá Enviar otra vez para '
+            'avisarnos.'),
+        findsOneWidget,
+      );
+      expect(nube.hayAviso, isFalse, reason: 'guardar no avisa');
+      expect((await nube.estado(_fiesta)).sinEnviar, 1);
+
+      await enviar(tester);
+      expect(nube.hayAviso, isTrue);
+      expect((await nube.estado(_fiesta)).sinEnviar, 0);
+      expect(
+        find.text('¡Gracias! Recibimos tu parte el jue 12/11 16:00.'),
+        findsOneWidget,
+      );
+      expect(find.text('Sin enviar'), findsNothing);
     });
 
     testWidgets('después de enviar, el agradecimiento queda a la vista aunque '
@@ -545,11 +737,8 @@ void main() {
       await tester.drag(find.byType(ListView), const Offset(0, -600));
       await tester.pumpAndSettle();
       expect(find.text('Hola, LAURA GÓMEZ.').hitTestable(), findsNothing);
-      await tester.tap(find.byKey(const Key('delegado_enviar')));
-      await tester.pumpAndSettle();
-      await _tocar(tester, 'delegado_soy');
-      await _tocar(tester, 'delegado_confirmar');
-      expect(find.text('¡Listo, muchas gracias!').hitTestable(), findsOneWidget);
+      await enviar(tester);
+      expect(find.byKey(const Key('delegado_gracias')).hitTestable(), findsOneWidget);
       // Entero y desde arriba: se ve hasta el saludo.
       expect(find.text('Hola, LAURA GÓMEZ.').hitTestable(), findsOneWidget);
       expect(
@@ -558,18 +747,38 @@ void main() {
       );
     });
 
-    testWidgets('si el plazo terminó estando adentro, lo dice y no hay Enviar',
-        (tester) async {
+    testWidgets('si el plazo terminó estando adentro, lo dice y no hay Enviar '
+        'ni se abre ningún alumno', (tester) async {
       final (nube, sesiones) = await conUnoGuardado(tester);
       nube.vencido = true;
       await _abrir(tester, nube, sesiones: sesiones);
       expect(
-        find.text('El plazo terminó el jueves 19/11 a las 20:00. Ya no se '
-            'puede cargar ni enviar.'),
-        findsOneWidget,
+        _texto(tester, 'delegado_plazo'),
+        'El plazo terminó el jueves 19/11 a las 20:00. Ya no se puede cargar '
+        'ni corregir.',
       );
       expect(find.byKey(const Key('delegado_enviar')), findsNothing);
       expect(find.byKey(const Key('delegado_abrir_a4')), findsNothing);
+      // Pero lo cargado se sigue viendo.
+      expect(find.textContaining('ÁLVAREZ, EVA'), findsOneWidget);
+    });
+
+    testWidgets('el jefe reabre con otra fecha: quien ya había enviado vuelve a '
+        'cargar y a enviar', (tester) async {
+      final (nube, sesiones) = await conUnoGuardado(tester);
+      await enviar(tester);
+      nube.vencido = true;
+      await _abrir(tester, nube, sesiones: sesiones);
+      expect(find.byKey(const Key('delegado_enviar')), findsNothing);
+
+      await nube.cambiar(_fiesta, 'vence', '2026-11-25 21:00');
+      await _abrir(tester, nube, sesiones: sesiones);
+      expect(find.byKey(const Key('delegado_enviar')), findsOneWidget);
+      await _tocar(tester, 'delegado_abrir_a4');
+      await tester.enterText(find.byKey(const Key('delegado_musica')), 'Nuevo');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'delegado_guardar');
+      expect(nube.cargaDe('a4')!.musica, 'Nuevo');
     });
   });
 }

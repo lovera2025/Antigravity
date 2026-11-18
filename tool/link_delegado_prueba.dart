@@ -1,4 +1,5 @@
-// La prueba de punta a punta del link del delegado (6.8.0), para el navegador.
+// La prueba de punta a punta del link del delegado (6.8.0 y 6.9.2), para el
+// navegador.
 //
 // Es **la página de verdad y la ventana de verdad**, hablando con el Postgres
 // de prueba de `tool/delegado_sandbox/` en vez de con la nube: el cliente de
@@ -25,6 +26,7 @@ import 'package:arguello_events/features/delegado/datos/link_del_delegado.dart';
 import 'package:arguello_events/features/delegado/delegado_providers.dart';
 import 'package:arguello_events/features/delegado/pagina/delegado_app.dart';
 import 'package:arguello_events/features/eventos/widgets/acompanantes_musica_dialog.dart';
+import 'package:arguello_events/features/eventos/widgets/link_del_delegado_ventana.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 
@@ -83,7 +85,8 @@ void main() {
 }
 
 /// Lo que hace de programa: las alertas del inicio, la ventana de PLANILLAS →
-/// "Acompañantes y música" (la de verdad) y la grilla de la fiesta.
+/// "Link para los delegados" (la de verdad), la revisión de "Acompañantes y
+/// música" (la de verdad) y la grilla de la fiesta.
 class _Programa extends ConsumerStatefulWidget {
   final SupabaseClient nube;
   const _Programa({required this.nube});
@@ -132,9 +135,28 @@ class _ProgramaState extends ConsumerState<_Programa> {
     await _leerGrilla();
   }
 
-  /// PLANILLAS → "Acompañantes y música". Con [traer], como llegando desde la
-  /// alerta: directo en la revisión.
-  Future<void> _abrir({bool traer = false}) async {
+  /// PLANILLAS → "Link para los delegados" (6.9.2): la ventana del link. TRAER
+  /// LO CARGADO abre la revisión de siempre, encima.
+  Future<void> _abrirElLink() async {
+    final link = ref.read(linkDelDelegadoProvider);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LinkDelDelegadoVentana(
+        link: link,
+        eventoId: _fiestaId,
+        fiesta: _fiesta,
+        urlDelLink: (clave) =>
+            '${Uri.base.origin.replaceFirst(':8800', ':8801')}/?delegado&clave=$clave',
+        onTraer: () => _abrir(traerDe: link),
+      ),
+    );
+    await _actualizar();
+  }
+
+  /// PLANILLAS → "Acompañantes y música". Con [traerDe], como llegando desde
+  /// la ventana del link: directo en la revisión.
+  Future<void> _abrir({LinkDelDelegado? traerDe}) async {
     await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -163,10 +185,8 @@ class _ProgramaState extends ConsumerState<_Programa> {
           );
           return null;
         },
-        link: ref.read(linkDelDelegadoProvider),
-        urlDelLink: (clave) =>
-            '${Uri.base.origin.replaceFirst(':8800', ':8801')}/?delegado&clave=$clave',
-        traerAlAbrir: traer,
+        link: traerDe,
+        traerAlAbrir: traerDe != null,
         onTrajo: () => ref.invalidate(avisosDelDelegadoProvider),
       ),
     );
@@ -210,22 +230,31 @@ class _ProgramaState extends ConsumerState<_Programa> {
               key: Key('prueba_sin_alertas'),
             )
           else
-            // La alerta de verdad. En el programa abre la fiesta; acá, que no
-            // hay fiesta que abrir, abre la misma ventana en la revisión.
+            // La alerta de verdad. En el programa abre la fiesta en la ventana
+            // del link; acá, que no hay fiesta que abrir, abre esa ventana.
             GestureDetector(
               key: const Key('prueba_alerta'),
-              onTap: () => _abrir(traer: true),
+              onTap: _abrirElLink,
               child: const AbsorbPointer(child: AlertasDelDelegado()),
             ),
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ElevatedButton.icon(
-              key: const Key('prueba_planillas'),
-              onPressed: _abrir,
-              icon: const Icon(Icons.music_note_outlined),
-              label: const Text('PLANILLAS → Acompañantes y música'),
-            ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                key: const Key('prueba_link'),
+                onPressed: _abrirElLink,
+                icon: const Icon(Icons.link_rounded),
+                label: const Text('PLANILLAS → Link para los delegados'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('prueba_planillas'),
+                onPressed: _abrir,
+                icon: const Icon(Icons.music_note_outlined),
+                label: const Text('PLANILLAS → Acompañantes y música'),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Text(

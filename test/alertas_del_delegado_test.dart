@@ -46,6 +46,7 @@ Widget _barra({required bool hayParaTraer, bool esJefe = true}) => MaterialApp(
             alumnosConMora: 0,
             onEntradas: () {},
             onAcompanantesYMusica: () {},
+            onLinkDeLosDelegados: () {},
             hayParaTraer: hayParaTraer,
           ),
         ),
@@ -167,7 +168,7 @@ void main() {
       expect(punto.isLabelVisible, isFalse);
       await tester.tap(find.byKey(const Key('fiesta_planillas')));
       await tester.pumpAndSettle();
-      expect(find.text('Excel o link para los delegados'), findsOneWidget);
+      expect(find.text('Lo cargan desde el celular; vos aceptás'), findsOneWidget);
     });
 
     testWidgets('sin modo jefe se ve que hay algo, y por qué no puede', (

@@ -38,6 +38,12 @@
       "port": 8795
     },
     {
+      "name": "delegado-sandbox",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tool/delegado_sandbox/servidor.mjs"],
+      "port": 8800
+    },
+    {
       "name": "maquetas",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8796", "--bind", "127.0.0.1", "--directory", "docs"],

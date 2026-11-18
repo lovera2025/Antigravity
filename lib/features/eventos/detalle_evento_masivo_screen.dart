@@ -75,6 +75,7 @@ import '../recepcion/services/puerta_al_dia.dart';
 import 'services/planilla_delegado_archivos.dart';
 import 'utils/evento_presentacion.dart';
 import 'widgets/acompanantes_musica_dialog.dart';
+import 'widgets/link_del_delegado_ventana.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/chip_mesas_sillas.dart';
@@ -90,6 +91,7 @@ import 'widgets/perdonar_mora_alumno_dialog.dart';
 import 'widgets/congelar_mora_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
 import 'retiro_entradas_screen.dart';
+import '../delegado/datos/link_del_delegado.dart';
 import '../delegado/delegado_providers.dart';
 import '../entradas/datos/config_entradas.dart' show ConfigEntradas;
 import '../entradas/providers/entradas_providers.dart';
@@ -237,7 +239,7 @@ class _DetalleEventoMasivoScreenState
     _setupRealtime();
     if (widget.abrirLoDelDelegado) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _abrirAcompanantesYMusica(traerDelLink: true);
+        if (mounted) _abrirLinkDeLosDelegados();
       });
     }
     _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
@@ -1382,6 +1384,7 @@ class _DetalleEventoMasivoScreenState
           alumnosConMora: alumnosConMora.length,
           onEntradas: _abrirRetiroEntradas,
           onAcompanantesYMusica: _abrirAcompanantesYMusica,
+          onLinkDeLosDelegados: _abrirLinkDeLosDelegados,
           hayParaTraer: ref.watch(avisosDelDelegadoProvider).value?.any(
                     (a) => a.eventoId == widget.evento.id,
                   ) ??
@@ -4390,13 +4393,77 @@ class _DetalleEventoMasivoScreenState
 
   /// Devuelve los números de la copia guardada al deshacer, solo a quienes
   /// siguen sin mesa y sin pisar ningún número que hoy esté ocupado.
+  /// El nombre con el que la fiesta sale en el Excel del delegado y en su link.
+  String _institucionParaElDelegado(List<ContratoAlumno> alumnos) =>
+      EventoPresentacion.institucionOEventoParaPdf(
+        evento: widget.evento,
+        institucionAlumno: [
+          for (final a in alumnos)
+            if (!a.esBajaTemporal && (a.institucion ?? '').trim().isNotEmpty)
+              a.institucion,
+        ].firstOrNull,
+      );
+
+  /// PLANILLAS → "Link para los delegados" (6.9.2): la ventana del link de
+  /// esta fiesta. Se llega también desde la alerta del Centro de Comando.
+  ///
+  /// Solo el jefe: el renglón ya llega apagado sin modo jefe, y acá está la
+  /// segunda llave. **Es el único lugar que lee `linkDelDelegadoProvider`**
+  /// (`test/solo_modo_jefe_test.dart`). La ventana no guarda nada en la
+  /// grilla: TRAER LO CARGADO abre el "Antes de guardar" de siempre, con sus
+  /// llaves.
+  Future<void> _abrirLinkDeLosDelegados() async {
+    if (!ref.read(esRolJefeProvider)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '$kSoloEnModoJefe: el link de los delegados lo maneja el jefe.',
+          ),
+        ),
+      );
+      return;
+    }
+    final link = ref.read(linkDelDelegadoProvider);
+    final List<ContratoAlumno> alumnos;
+    try {
+      alumnos =
+          await ref.read(contratosRepositoryProvider).getByEvento(widget.evento.id);
+    } catch (e) {
+      debugPrint('No se pudieron leer los alumnos para el link: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudieron leer los alumnos. Probá de nuevo.'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => LinkDelDelegadoVentana(
+        link: link,
+        eventoId: widget.evento.id,
+        fiesta: _institucionParaElDelegado(alumnos),
+        urlDelLink: urlDelLinkDelDelegado,
+        onTraer: () => _abrirAcompanantesYMusica(traerDe: link),
+      ),
+    );
+    ref.invalidate(avisosDelDelegadoProvider);
+  }
+
   /// PLANILLAS → "Acompañantes y música": el Excel que completa el delegado
-  /// de esta institución, para exportar y para importar de vuelta.
+  /// de esta institución, para exportar y para importar de vuelta. Con
+  /// [traerDe] (desde la ventana del link) abre ya en la revisión de lo que
+  /// cargaron los delegados.
   ///
   /// Lo carga solo el jefe. El renglón ya llega apagado sin modo jefe; acá
   /// están las otras dos llaves: al abrir y, otra vez, justo antes de guardar.
   /// Lo que decide —qué se carga y qué no— está en `planilla_delegado.dart`.
-  Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {
+  Future<void> _abrirAcompanantesYMusica({LinkDelDelegado? traerDe}) async {
     void soloJefe() {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4432,21 +4499,13 @@ class _DetalleEventoMasivoScreenState
       barrierDismissible: false,
       builder: (context) => AcompanantesMusicaDialog(
         eventoId: eventoId,
-        institucion: EventoPresentacion.institucionOEventoParaPdf(
-          evento: widget.evento,
-          institucionAlumno: [
-            for (final a in alumnos)
-              if (!a.esBajaTemporal && (a.institucion ?? '').trim().isNotEmpty)
-                a.institucion,
-          ].firstOrNull,
-        ),
+        institucion: _institucionParaElDelegado(alumnos),
         alumnos: alumnos,
         onGuardarArchivo: guardarPlanillaDelegado,
         onElegirArchivo: elegirPlanillaDelegado,
-        // El link del delegado (6.8.0): la sección de abajo del Excel.
-        link: ref.read(linkDelDelegadoProvider),
-        urlDelLink: urlDelLinkDelDelegado,
-        traerAlAbrir: traerDelLink,
+        // Desde la ventana del link (6.9.2): abre en la revisión de lo cargado.
+        link: traerDe,
+        traerAlAbrir: traerDe != null,
         onTrajo: () => ref.invalidate(avisosDelDelegadoProvider),
         onImportar: (cambios) async {
           if (!ref.read(esRolJefeProvider)) {

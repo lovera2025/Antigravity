@@ -426,10 +426,10 @@ void main() {
   });
 
   test('el link del delegado se maneja solo desde la ventana del jefe', () {
-    // Crear el link, apagarlo, sacar a un delegado y aceptar lo que mandaron
-    // pasan todos por `linkDelDelegadoProvider`. Solo lo lee la pantalla de la
-    // fiesta, y adentro de la función que ya tiene las llaves del modo jefe:
-    // así lo del link queda detrás de las mismas tres llaves que el Excel.
+    // Crear el link, cerrarlo, reabrirlo, sacar a un delegado y aceptar lo que
+    // mandaron pasan todos por `linkDelDelegadoProvider`. Solo lo lee la
+    // pantalla de la fiesta, y adentro de la función que abre la ventana del
+    // link (6.9.2), después de preguntar por el modo jefe.
     final quienes = <String>{
       for (final f in Directory('lib').listSync(recursive: true))
         if (f is File &&
@@ -442,24 +442,51 @@ void main() {
       pantallaFiesta,
     });
     final fiesta = leer(pantallaFiesta);
-    final i = fiesta.indexOf(
-      'Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {',
-    );
+    final i = fiesta.indexOf('Future<void> _abrirLinkDeLosDelegados() async {');
+    expect(i, greaterThanOrEqualTo(0));
     final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
-    expect('linkDelDelegadoProvider'.allMatches(fiesta), hasLength(1));
-    expect(cuerpo, contains('link: ref.read(linkDelDelegadoProvider),'));
-    // Y aceptar lo del link guarda por el mismo `onImportar` del Excel: la
-    // ventana no tiene otro camino a la grilla.
+    // Aparece dos veces: en la explicación de la función y donde se lee.
+    expect('ref.read(linkDelDelegadoProvider)'.allMatches(fiesta), hasLength(1));
+    final llave = cuerpo.indexOf('if (!ref.read(esRolJefeProvider)) {');
+    expect(llave, greaterThanOrEqualTo(0));
+    expect(
+      cuerpo.indexOf('final link = ref.read(linkDelDelegadoProvider);'),
+      greaterThan(llave),
+      reason: 'el link se lee recién después de la llave',
+    );
+    expect(cuerpo.indexOf('LinkDelDelegadoVentana('), greaterThan(llave));
+    // TRAER LO CARGADO abre el "Antes de guardar" de siempre, con sus llaves.
+    expect(
+      cuerpo,
+      contains('onTraer: () => _abrirAcompanantesYMusica(traerDe: link),'),
+    );
+
+    // El renglón de PLANILLAS llega apagado sin modo jefe.
+    final barra =
+        leer('lib/features/eventos/widgets/grupo_fiesta_toolbar.dart');
+    expect(barra, contains('accion: esJefe ? onLinkDeLosDelegados : null,'));
+
+    // La ventana del link no tiene ningún camino a la grilla: no guarda
+    // alumnos, solo le habla al link que le pasaron.
+    final delLink =
+        leer('lib/features/eventos/widgets/link_del_delegado_ventana.dart');
+    for (final prohibido in [
+      'onImportar',
+      'contratosRepositoryProvider',
+      'cargarAcompanantesYMusica',
+      'linkDelDelegadoProvider',
+      'ConsumerStatefulWidget',
+    ]) {
+      expect(delLink, isNot(contains(prohibido)), reason: prohibido);
+    }
+    // Y aceptar lo del link guarda por el mismo `onImportar` del Excel.
     final ventana =
         leer('lib/features/eventos/widgets/acompanantes_musica_dialog.dart');
     expect('widget.onImportar('.allMatches(ventana), hasLength(1));
     expect(ventana, isNot(contains('contratosRepositoryProvider')));
     expect(ventana, isNot(contains('cargarAcompanantesYMusica')));
-    // La alerta del inicio llega por la misma función, con sus llaves.
-    expect(
-      fiesta,
-      contains('if (mounted) _abrirAcompanantesYMusica(traerDelLink: true);'),
-    );
+    // La alerta del inicio llega por la misma función, con su llave.
+    expect(fiesta, contains('if (mounted) _abrirLinkDeLosDelegados();'));
   });
 
   test('el Excel del delegado lo carga solo el jefe, con las tres llaves', () {
@@ -470,7 +497,7 @@ void main() {
 
     final fiesta = leer(pantallaFiesta);
     final i = fiesta.indexOf(
-      'Future<void> _abrirAcompanantesYMusica({bool traerDelLink = false}) async {',
+      'Future<void> _abrirAcompanantesYMusica({LinkDelDelegado? traerDe}) async {',
     );
     expect(i, greaterThanOrEqualTo(0));
     final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));

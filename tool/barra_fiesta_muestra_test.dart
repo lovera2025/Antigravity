@@ -185,6 +185,7 @@ Widget _barra(
               alumnosConMora: 14,
               onEntradas: () {},
               onAcompanantesYMusica: () {},
+              onLinkDeLosDelegados: () {},
             ),
           ),
           SizedBox(width: compacto ? 6 : 8),

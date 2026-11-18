@@ -628,8 +628,27 @@ ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.clau
     guardar lo aceptado no cambia ninguna otra tabla, renglón ni columna. **La lista lleva nombres: va a `build/`.**
   - **Un equipo con la 6.9.x no conoce la regla y vende todo con descuento:** al publicar, no vender entradas desde un
     equipo sin esta versión.
-- **Parte 3, sin empezar: el link del delegado** (todos corrigen todo, Enviar no bloquea, cierra solo la fecha
-  límite, se reabre las veces que quiera, quién cargó a quién y cuándo, ventana propia). **La maqueta va primero.**
+- **Parte 3, programada y probada en el sandbox (18-nov): el link del delegado, de nuevo** (el usuario vio la maqueta
+  y dijo "hacé la mejor que a vos te parezca": se hizo la forma B, todo en una hoja). **Falta la suite entera y
+  terminar las roturas a propósito** (cortó a mitad; ver "Lo que falta, en orden" del CONTEXTO).
+  - **Un SQL nuevo en la nube, solo de agregar, SIN CORRER:**
+    `supabase/migrations/20261118120000_link_delegado_reabrir.sql` (la columna `cargas_delegado.enviado_at`, la tabla
+    `cambios_delegado` y funciones: de 17 a 22). **Ninguna función cambia de firma**; lo de más va en funciones
+    nuevas (`delegado_alumnos_estado`, `delegado_historial`). La web vieja anda con el SQL nuevo; **la ventana y la
+    página nuevas no andan con el SQL viejo**: se corre antes de publicar la web y de instalar.
+  - **El delegado es la persona, no el celular** (`delegado_llave(nombre)`): el mismo nombre entra desde otro
+    celular aunque el cupo esté lleno, y el cupo cuenta personas.
+  - **Todos corrigen todo** (con un cartel antes de tocar lo de otro o lo del programa), **Enviar no cierra** (se
+    envía las veces que haga falta; guardar después deja ese alumno "sin enviar"), **cierra solo la fecha límite** y
+    **se reabre las veces que quiera** (una fecha futura lo prende). Cada guardado queda en el historial
+    (`cambios_delegado`, solo se agregan filas), con quién y cuándo.
+  - **A la grilla sigue entrando solo lo que el jefe acepta**, por el `onImportar` del Excel.
+  - **La ventana propia**: PLANILLAS ▾ → "Link para los delegados" (solo en modo jefe) y la alerta del Centro de
+    Comando abren `link_del_delegado_ventana.dart` (`link_del_delegado_panel.dart` ya no existe; "Acompañantes y
+    música" quedó solo con el Excel). **`detalle_evento_masivo_screen.dart` es el único que lee
+    `linkDelDelegadoProvider`** (`_abrirLinkDeLosDelegados`); la ventana recibe el link ya armado.
+  - Las reglas: `tool/delegado_sandbox/` corre los dos SQL en orden (`node pruebas.mjs`, 73). De punta a punta:
+    `tool/link_delegado_prueba.dart` compilado como la web y `preview_start` con `delegado-sandbox`.
 - **Parte 4, sin empezar: terminar "a confirmar"** (`git stash pop`).
 - **En esta PC no hay con qué pasar un PDF a imagen** (ni `pdftoppm` ni un paquete de Python), y un PDF armado con las
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que

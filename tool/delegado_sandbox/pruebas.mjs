@@ -1,7 +1,7 @@
 // Las pruebas de reglas: contra el SQL de verdad, en el Postgres de prueba.
 // Cada una empieza con los datos como al principio y el reloj en la misma hora.
 import { writeFileSync, readFileSync } from 'node:fs';
-import { abrir, FIESTA_A, FIESTA_B, alumnoA, alumnoB, SQL_DE_LA_NUBE } from './db.mjs';
+import { abrir, FIESTA_A, FIESTA_B, alumnoA, alumnoB, SQL_DE_LA_NUBE_TODO } from './db.mjs';
 import { comparar, datosAGuardar } from './revision.js';
 
 const nube = await abrir({ relojDePrueba: true });
@@ -51,6 +51,10 @@ const cambiar = (accion, valor = null) => nube.rpc('jefe', 'delegado_link_cambia
 });
 const cargas = () => nube.rpc('jefe', 'delegado_cargas', { p_evento: FIESTA_A });
 const pendientes = () => nube.rpc('jefe', 'delegado_pendientes', {});
+const estados = () => nube.rpc('jefe', 'delegado_alumnos_estado', { p_evento: FIESTA_A });
+const historial = () => nube.rpc('jefe', 'delegado_historial', { p_evento: FIESTA_A });
+const estadoDe = async (n) => (await estados()).find((e) => e.alumno_id === alumnoA(n));
+const MAS_TARDE = '2026-11-12 16:00:00-03';
 const celular = async (nombre) => (await link()).celulares.find((c) => c.nombre === nombre.toUpperCase()).id;
 const deLista = (l, n) => l.alumnos.find((a) => a.id === alumnoA(n));
 const foto = async () => JSON.stringify(await nube.sql('select * from public.contratos_alumnos order by id'));
@@ -152,26 +156,35 @@ prueba('A10b', 'Con el link bien pero sin haber entrado: dice la fiesta y ningú
   igual(otra.motivo, 'entrar'); cierto(!('alumnos' in otra), 'devolvió alumnos con una sesión inventada');
 });
 
-prueba('A11', 'Alumno que ya tiene acompañantes y música en el programa: cerrado, y guardarle algo se rechaza', async () => {
+prueba('A11', 'Alumno que ya tiene acompañantes y música en el programa: se ve lo cargado y se puede corregir; la grilla no cambia hasta traer', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
+  const antes = await foto();
   const a = deLista(await lista(clave, s), 1);
-  igual(a.de, 'programa', 'de:');
+  igual([a.de, a.estado, a.en_programa], ['programa', 'programa', true], 'estado:');
   igual([a.prog_acomp, a.prog_musica], [true, true], 'programa:');
-  igual([a.acompanantes, a.musica], [null, null], 'no muestra lo cargado:');
-  igual(await guardar(clave, s, alumnoA(1), ['OTRO, NOMBRE'], 'otra'), { ok: false, motivo: 'ya_cargado' });
-  igual(await guardar(clave, s, alumnoA(1), [], 'otra'), { ok: false, motivo: 'ya_cargado' });
+  igual([a.acompanantes, a.musica], [['ACOSTA, JORGE', 'RÍOS, MARTA'], 'Vivir mi vida · Marc Anthony'], 'muestra lo cargado:');
+  igual(await guardar(clave, s, alumnoA(1), ['ACOSTA, JORGE', 'RÍOS, MIRTA'], 'Vivir mi vida · Marc Anthony'), { ok: true });
+  const b = deLista(await lista(clave, s), 1);
+  igual([b.de, b.estado, b.mio, b.cargo], ['mio', 'sin_enviar', true, 'LAURA GÓMEZ'], 'corregido:');
+  igual(b.acompanantes, ['ACOSTA, JORGE', 'RÍOS, MIRTA'], 'lo vigente:');
+  igual(await foto(), antes, 'la grilla no cambió:');
+  const e = await estadoDe(1);
+  igual([e.estado, e.otra_vez], ['sin_enviar', true], 'para el jefe:');
 });
 
-prueba('A12', 'Alumno con solo acompañantes en el programa: se completa la música y nada más', async () => {
+prueba('A12', 'Alumno con solo acompañantes en el programa: los ve y completa la música; un casillero vacío no borra', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   const a = deLista(await lista(clave, s), 3);
-  igual([a.de, a.prog_acomp, a.prog_musica], ['libre', true, false], 'estado:');
-  igual(await guardar(clave, s, alumnoA(3), ['OTRO, NOMBRE'], 'Tema'), { ok: false, motivo: 'ya_cargado', campo: 'acompanantes' });
+  igual([a.de, a.estado, a.prog_acomp, a.prog_musica], ['libre', 'falta', true, false], 'estado:');
+  igual([a.acompanantes, a.musica], [['BENÍTEZ, CARLA'], ''], 'lo que ve:');
   igual(await guardar(clave, s, alumnoA(3), [], 'Tema de Mateo'), { ok: true });
   const c = await cargas();
   igual([c[0].acompanantes, c[0].musica], [[], 'Tema de Mateo'], 'lo cargado:');
+  // Lo vigente junta las dos cosas: la música del link y los acompañantes del programa.
+  const b = deLista(await lista(clave, s), 3);
+  igual([b.acompanantes, b.musica], [['BENÍTEZ, CARLA'], 'Tema de Mateo'], 'lo vigente:');
 });
 
 prueba('A13', 'En el programa se borra lo cargado de un alumno: en el link vuelve a quedar libre', async () => {
@@ -343,13 +356,14 @@ prueba('C2', 'Con todo completo no falta nadie', async () => {
   igual((await lista(clave, s)).faltan, 0, 'faltan:');
 });
 
-prueba('C5', 'Enviar: queda enviado', async () => {
+prueba('C5', 'Enviar: queda enviado, con la hora, y sin nada pendiente', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   await guardar(clave, s, alumnoA(2), [], 'Tema');
-  igual((await lista(clave, s)).yo, { nombre: 'LAURA GÓMEZ', entregado: false }, 'antes:');
+  igual((await lista(clave, s)).yo, { nombre: 'LAURA GÓMEZ', entregado: false, envio_texto: null, sin_enviar: 1 }, 'antes:');
   igual(await entregar(clave, s), { ok: true });
-  igual((await lista(clave, s)).yo, { nombre: 'LAURA GÓMEZ', entregado: true }, 'después:');
+  igual((await lista(clave, s)).yo, { nombre: 'LAURA GÓMEZ', entregado: true, envio_texto: 'jue 12/11 15:00', sin_enviar: 0 }, 'después:');
+  igual((await estadoDe(2)).estado, 'enviado', 'para el jefe:');
 });
 
 prueba('C5b', 'Enviar sin haber guardado ningún alumno: no envía', async () => {
@@ -358,19 +372,22 @@ prueba('C5b', 'Enviar sin haber guardado ningún alumno: no envía', async () =>
   igual(await entregar(clave, s), { ok: false, motivo: 'nada' });
 });
 
-prueba('C7', 'Guardar lo suyo después de enviar: lo rechaza y no cambia nada', async () => {
+prueba('C7', 'Guardar después de enviar: se puede, y lo corregido vuelve a quedar sin enviar', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   await guardar(clave, s, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema');
+  await guardar(clave, s, alumnoA(4), [], 'De Sofía');
   await entregar(clave, s);
-  igual(await guardar(clave, s, alumnoA(2), ['OTRA, COSA'], 'Otro'), { ok: false, motivo: 'entregado' });
-  igual(await guardar(clave, s, alumnoA(4), [], 'Otro'), { ok: false, motivo: 'entregado' });
-  igual(await guardar(clave, s, alumnoA(2), [], ''), { ok: false, motivo: 'entregado' });
-  const c = await cargas();
-  igual([c.length, c[0].acompanantes, c[0].musica], [1, ['ÁLVAREZ, EVA'], 'Tema'], 'quedó:');
+  igual((await estados()).filter((e) => e.estado === 'enviado').length, 2, 'enviados:');
+  await nube.reloj(MAS_TARDE);
+  igual(await guardar(clave, s, alumnoA(2), ['OTRA, COSA'], 'Otro'), { ok: true });
+  igual([(await estadoDe(2)).estado, (await estadoDe(4)).estado], ['sin_enviar', 'enviado'], 'después de corregir uno:');
+  igual((await lista(clave, s)).yo.sin_enviar, 1, 'le dice que tiene uno sin enviar:');
+  const c = (await cargas()).find((x) => x.alumno_id === alumnoA(2));
+  igual([c.acompanantes, c.musica, c.enviado, c.entregado, c.cuando_texto], [['OTRA, COSA'], 'Otro', false, false, 'jue 12/11 16:00'], 'quedó:');
 });
 
-prueba('C8', 'Confirmar dos veces: una sola entrega', async () => {
+prueba('C8', 'Enviar dos veces sin nada nuevo: no cambia nada', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   await guardar(clave, s, alumnoA(2), [], 'Tema');
@@ -383,18 +400,23 @@ prueba('C8', 'Confirmar dos veces: una sola entrega', async () => {
   igual((await nube.sql('select entregado_at::text as t from public.celulares_delegado'))[0].t, antes, 'la hora de la entrega no cambió:');
 });
 
-prueba('C9', 'Otro delegado sigue después de que el primero envió: puede, y solo alumnos libres', async () => {
+prueba('C9', 'Otro delegado sigue después de que el primero envió: puede, y también corregir lo del primero', async () => {
   const clave = await crear();
   const laura = await entrar(clave, 'Laura Gómez');
   const pedro = await entrar(clave, 'Pedro Sosa');
   await guardar(clave, laura, alumnoA(2), [], 'Tema');
   await entregar(clave, laura);
   igual(await guardar(clave, pedro, alumnoA(5), [], 'Tema'), { ok: true });
-  igual(await guardar(clave, pedro, alumnoA(2), [], 'Pisar'), { ok: false, motivo: 'otro', cargo: 'LAURA GÓMEZ' });
+  await nube.reloj(MAS_TARDE);
+  igual(await guardar(clave, pedro, alumnoA(2), [], 'Corregido por Pedro'), { ok: true });
+  const a = deLista(await lista(clave, laura), 2);
+  igual([a.de, a.cargo, a.musica, a.estado, a.cuando_texto], ['otro', 'PEDRO SOSA', 'Corregido por Pedro', 'sin_enviar', 'jue 12/11 16:00'], 'lo que ve Laura:');
   igual(await entregar(clave, pedro), { ok: true });
+  igual((await estados()).filter((e) => e.estado === 'enviado').map((e) => e.cargo), ['PEDRO SOSA', 'PEDRO SOSA'], 'los dos quedaron enviados por Pedro:');
+  igual(await entregar(clave, laura), { ok: false, motivo: 'nada' }, 'a Laura ya no le queda nada suyo:');
 });
 
-prueba('C10', 'Reabrirle el envío: vuelve a editar lo suyo, y la grilla no cambió', async () => {
+prueba('C10', 'Reabrirle el envío (lo usa la versión anterior del programa): sigue andando', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   const grillaAntes = await foto();
@@ -450,41 +472,50 @@ prueba('D2', 'Volver con la misma sesión: sigue adentro, con lo suyo', async ()
   igual((await link()).celulares.length, 1, 'no ocupó otro lugar:');
 });
 
-prueba('D3', 'El segundo celular ve lo del primero cerrado, con el nombre y sin el contenido', async () => {
+prueba('D3', 'El segundo celular ve lo del primero, con quién lo cargó y cuándo', async () => {
   const clave = await crear();
   const laura = await entrar(clave, 'Laura Gómez');
   const pedro = await entrar(clave, 'Pedro Sosa');
   await guardar(clave, laura, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema secreto');
   const a = deLista(await lista(clave, pedro), 2);
-  igual([a.de, a.cargo, a.acompanantes, a.musica], ['otro', 'LAURA GÓMEZ', null, null], 'lo que ve Pedro:');
+  igual([a.de, a.cargo, a.acompanantes, a.musica, a.estado, a.mio, a.cuando_texto],
+    ['otro', 'LAURA GÓMEZ', ['ÁLVAREZ, EVA'], 'Tema secreto', 'sin_enviar', false, 'jue 12/11 15:00'], 'lo que ve Pedro:');
+  igual(deLista(await lista(clave, laura), 2).mio, true, 'para Laura es suyo:');
 });
 
-prueba('D4', 'El segundo guarda un alumno del primero: lo rechaza y lo del primero queda intacto', async () => {
+prueba('D4', 'El segundo corrige un alumno del primero: queda a su nombre, y el historial dice los dos', async () => {
   const clave = await crear();
   const laura = await entrar(clave, 'Laura Gómez');
   const pedro = await entrar(clave, 'Pedro Sosa');
   await guardar(clave, laura, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema de Laura');
-  igual(await guardar(clave, pedro, alumnoA(2), ['PISAR, PISAR'], 'Pisado'), { ok: false, motivo: 'otro', cargo: 'LAURA GÓMEZ' });
-  igual(await guardar(clave, pedro, alumnoA(2), [], ''), { ok: false, motivo: 'otro', cargo: 'LAURA GÓMEZ' }, 'vaciarlo tampoco:');
+  await nube.reloj(MAS_TARDE);
+  igual(await guardar(clave, pedro, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema de Pedro'), { ok: true });
   const a = deLista(await lista(clave, laura), 2);
-  igual([a.de, a.acompanantes, a.musica], ['mio', ['ÁLVAREZ, EVA'], 'Tema de Laura'], 'lo de Laura:');
+  igual([a.de, a.cargo, a.musica], ['otro', 'PEDRO SOSA', 'Tema de Pedro'], 'lo que ve Laura:');
+  igual((await historial()).map((h) => [h.alumno_id, h.quien, h.que, h.musica, h.cuando_texto]), [
+    [alumnoA(2), 'LAURA GÓMEZ', 'guardo', 'Tema de Laura', 'jue 12/11 15:00'],
+    [alumnoA(2), 'PEDRO SOSA', 'guardo', 'Tema de Pedro', 'jue 12/11 16:00'],
+  ], 'historial:');
+  igual((await cargas()).length, 1, 'un solo renglón por alumno:');
 });
 
-prueba('D5', 'Dos celulares guardan el mismo alumno libre a la vez: queda el de uno solo', async () => {
+prueba('D5', 'Dos celulares guardan el mismo alumno a la vez: queda un solo renglón, el del último, y el historial tiene los dos', async () => {
   const clave = await crear();
   const laura = await entrar(clave, 'Laura Gómez');
   const pedro = await entrar(clave, 'Pedro Sosa');
   for (let vuelta = 0; vuelta < 20; vuelta++) {
     const n = 2 + (vuelta % 10);
-    if (n === 3) continue;
+    await nube.sql('delete from public.cambios_delegado');
     await nube.sql('delete from public.cargas_delegado');
     const pares = vuelta % 2 === 0
       ? [guardar(clave, laura, alumnoA(n), [], 'De Laura'), guardar(clave, pedro, alumnoA(n), [], 'De Pedro')]
       : [guardar(clave, pedro, alumnoA(n), [], 'De Pedro'), guardar(clave, laura, alumnoA(n), [], 'De Laura')];
     const r = await Promise.all(pares);
-    igual(r.filter((x) => x.ok).length, 1, `vuelta ${vuelta}, cuántos ganaron:`);
-    igual(r.filter((x) => x.motivo === 'otro').length, 1, `vuelta ${vuelta}, a cuántos les avisó:`);
-    igual((await cargas()).length, 1, `vuelta ${vuelta}, renglones:`);
+    igual(r.filter((x) => x.ok).length, 2, `vuelta ${vuelta}, cuántos guardaron:`);
+    const c = await cargas();
+    igual(c.length, 1, `vuelta ${vuelta}, renglones:`);
+    igual(c[0].cargo, c[0].musica === 'De Laura' ? 'LAURA GÓMEZ' : 'PEDRO SOSA', `vuelta ${vuelta}, el renglón dice de quién es:`);
+    igual((await historial()).map((h) => h.quien).sort(), ['LAURA GÓMEZ', 'PEDRO SOSA'], `vuelta ${vuelta}, historial:`);
   }
 });
 
@@ -512,7 +543,7 @@ prueba('D7', 'Link para 2 delegados: el tercero no entra', async () => {
   }
 });
 
-prueba('D8', 'Sacar un celular dejando lo que cargó: no entra más y sus alumnos quedan libres para corregir', async () => {
+prueba('D8', 'Sacar a un delegado dejando lo que cargó: no entra más, ni con su nombre desde otro celular, y lo suyo sigue diciendo que lo cargó él', async () => {
   const clave = await crear({ cupo: 2 });
   const laura = await entrar(clave, 'Laura Gómez');
   const pedro = await entrar(clave, 'Pedro Sosa');
@@ -522,10 +553,12 @@ prueba('D8', 'Sacar un celular dejando lo que cargó: no entra más y sus alumno
   igual((await lista(clave, laura)).motivo, 'sacado', 'Laura al abrir:');
   igual(await guardar(clave, laura, alumnoA(4), [], 'x'), { ok: false, motivo: 'sacado' }, 'Laura al guardar:');
   igual(await entregar(clave, laura), { ok: false, motivo: 'sacado' }, 'Laura al enviar:');
+  igual(await entrarCrudo(clave, 'laura gomez'), { ok: false, motivo: 'sacado' }, 'con su nombre desde otro celular:');
   const a = deLista(await lista(clave, pedro), 2);
-  igual([a.de, a.acompanantes, a.musica], ['suelto', ['ÁLVAREZ, EVA'], 'Tema de Laura'], 'lo que ve Pedro:');
-  igual(await guardar(clave, pedro, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema corregido'), { ok: true });
-  igual(deLista(await lista(clave, pedro), 2).de, 'mio', 'pasó a Pedro:');
+  igual([a.de, a.cargo, a.acompanantes, a.musica], ['otro', 'LAURA GÓMEZ', ['ÁLVAREZ, EVA'], 'Tema de Laura'], 'lo que ve Pedro:');
+  igual((await link()).delegados.map((d) => [d.nombre, d.sacado, d.cargados]), [['LAURA GÓMEZ', true, 1], ['PEDRO SOSA', false, 0]], 'para el jefe:');
+  igual((await lista(clave, null)).delegados, [{ nombre: 'PEDRO SOSA' }], 'en la entrada ya no figura:');
+  igual(await guardar(clave, pedro, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema corregido'), { ok: true }, 'Pedro lo corrige:');
   cierto((await entrarCrudo(clave, 'Nueva Delegada')).ok, 'el lugar no quedó libre');
 });
 
@@ -559,11 +592,11 @@ prueba('D10', 'Link apagado: nadie entra ni guarda, y no dice ningún alumno', a
 
 prueba('D11', 'Leer o escribir las tablas sin usuario: no puede', async () => {
   await crear();
-  for (const t of ['links_delegado', 'celulares_delegado', 'cargas_delegado', 'contratos_alumnos', 'eventos']) {
+  for (const t of ['links_delegado', 'celulares_delegado', 'cargas_delegado', 'cambios_delegado', 'contratos_alumnos', 'eventos']) {
     const e = await falla(nube.sql(`select * from public.${t}`, [], 'anon'), `un anónimo leyó ${t}`);
     cierto(/permission denied/.test(e.message), `${t}: ${e.message}`);
   }
-  for (const t of ['links_delegado', 'celulares_delegado', 'cargas_delegado']) {
+  for (const t of ['links_delegado', 'celulares_delegado', 'cargas_delegado', 'cambios_delegado']) {
     await falla(nube.sql(`delete from public.${t}`, [], 'anon'), `un anónimo borró ${t}`);
     await falla(nube.sql(`update public.${t} set evento_id = evento_id`, [], 'anon'), `un anónimo cambió ${t}`);
     const e = await falla(nube.sql(`select * from public.${t}`, [], 'jefe'), `alguien con usuario leyó ${t} directo`);
@@ -581,6 +614,10 @@ prueba('D12', 'Usar lo del jefe, o lo de adentro, sin usuario: lo rechaza', asyn
     ['delegado_pendientes', {}],
     ['delegado_alumnos', { p_evento: FIESTA_A }],
     ['delegado_aviso', { p_evento: FIESTA_A }],
+    ['delegado_alumnos_estado', { p_evento: FIESTA_A }],
+    ['delegado_historial', { p_evento: FIESTA_A }],
+    ['delegado_tablero', { p_evento: FIESTA_A }],
+    ['delegado_alumnos_datos', { p_evento: FIESTA_A }],
   ];
   for (const [fn, args] of delJefe) {
     const e = await falla(nube.rpc('anon', fn, args), `un anónimo usó ${fn}`);
@@ -759,26 +796,266 @@ prueba('E5', 'Guardar: a la grilla entra solo lo revisado, y un casillero vacío
   igual(comparar(await cargas(), await nube.grilla(FIESTA_A)).cambios.length, 0, 'traer de nuevo no trae nada:');
 });
 
-prueba('E6', 'Un delegado cambia algo después de reabrirle: la grilla no cambia hasta que traés', async () => {
+prueba('E6', 'Un delegado corrige lo que ya habías traído: la grilla no cambia hasta que lo traés de nuevo, y te lo marca', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
   await guardar(clave, s, alumnoA(2), [], 'Primera');
   await entregar(clave, s);
+  let r = comparar(await cargas(), await nube.grilla(FIESTA_A));
+  await nube.guardarEnLaGrilla(FIESTA_A, r.cambios.map(datosAGuardar));
+  igual(await cambiar('traido', JSON.stringify(r.cambios.map((c) => c.alumno_id))), { ok: true });
+  const despuesDeTraer = await foto();
+  igual((await estadoDe(2)).estado, 'aceptado', 'aceptado:');
+  igual((await link()).aviso, null, 'sin aviso:');
+  await nube.reloj(MAS_TARDE);
+  igual(await guardar(clave, s, alumnoA(2), [], 'Segunda'), { ok: true }, 'corrige lo ya traído:');
+  igual(await foto(), despuesDeTraer, 'la grilla:');
+  const e = await estadoDe(2);
+  igual([e.estado, e.otra_vez, e.musica], ['sin_enviar', true, 'Segunda'], 'vuelve para aceptar:');
+  igual((await link()).aviso, null, 'un guardado suelto no avisa:');
+  igual(await entregar(clave, s), { ok: true }, 'reenvía:');
+  const aviso = (await link()).aviso ?? '';
+  cierto(/envió LAURA GÓMEZ \(1\)/.test(aviso), `aviso: ${aviso}`);
+  r = comparar(await cargas(), await nube.grilla(FIESTA_A));
+  igual(r.cambios.map((c) => [c.alumno, c.musica, c.teniaMusica]), [['ÁLVAREZ, BRUNO', 'Segunda', 'Primera']], 'la revisión dice qué reemplaza:');
+});
+
+// ── N. La segunda parte (6.9.2): todos corrigen todo, Enviar no cierra ──────
+
+prueba('N1', 'Desde otro celular: con su nombre entra aunque el cupo esté lleno, y sigue con lo suyo', async () => {
+  const clave = await crear({ cupo: 1 });
+  const uno = await entrar(clave, 'Laura Gómez');
+  await guardar(clave, uno, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema');
+  igual(await entrarCrudo(clave, 'Pedro Sosa'), { ok: false, motivo: 'lleno' }, 'otra persona no entra:');
+  const otro = await entrar(clave, '  laura  GOMEZ ');
+  cierto(otro !== uno, 'le dio la misma sesión');
+  const l = await lista(clave, otro);
+  igual([l.yo.nombre, l.mios], ['LAURA GÓMEZ', 1], 'es ella, con lo suyo:');
+  igual(deLista(l, 2).de, 'mio', 'lo que cargó en el otro celular es suyo:');
+  igual(await guardar(clave, otro, alumnoA(4), [], 'Desde el otro'), { ok: true });
+  igual((await lista(clave, uno)).mios, 2, 'y el primer celular lo ve:');
+  const k = await link();
+  igual(k.delegados.map((d) => [d.nombre, d.aparatos, d.cargados]), [['LAURA GÓMEZ', 2, 2]], 'una sola persona, dos aparatos:');
+  igual(k.celulares.length, 2, 'los dos aparatos siguen en la lista de antes:');
+});
+
+prueba('N2', 'La entrada dice quiénes ya entraron, sin ningún alumno', async () => {
+  const clave = await crear();
+  igual((await lista(clave, null)).delegados, [], 'al principio, nadie:');
+  await entrar(clave, 'Laura Gómez');
+  await nube.reloj(MAS_TARDE);
+  await entrar(clave, 'Pedro Sosa');
+  await entrar(clave, 'Laura Gómez');
+  const l = await lista(clave, null);
+  igual([l.ok, l.motivo, l.lleno], [false, 'entrar', false], 'la entrada:');
+  igual(l.delegados, [{ nombre: 'LAURA GÓMEZ' }, { nombre: 'PEDRO SOSA' }], 'una vez cada uno, en el orden en que entraron:');
+  cierto(!('alumnos' in l), 'dio alumnos sin haber entrado');
+  igual((await lista(clave, 'una-sesion-inventada')).delegados.length, 2, 'con una sesión que no existe, lo mismo:');
+});
+
+prueba('N3', 'El cupo cuenta personas, no celulares', async () => {
+  const clave = await crear({ cupo: 2 });
+  await entrar(clave, 'Laura Gómez');
+  await entrar(clave, 'Laura Gómez');
+  await entrar(clave, 'Laura Gómez');
+  igual((await lista(clave, null)).lleno, false, 'una persona con tres celulares no llena:');
+  await entrar(clave, 'Pedro Sosa');
+  igual((await lista(clave, null)).lleno, true, 'con dos personas, lleno:');
+  igual(await entrarCrudo(clave, 'Tercero Colado'), { ok: false, motivo: 'lleno' }, 'la tercera persona:');
+  cierto((await entrarCrudo(clave, 'pedro sosa')).ok, 'Pedro desde otro celular no entró');
+});
+
+prueba('N4', 'Reenviar: lo corregido después de enviar avisa de nuevo cuando se envía otra vez', async () => {
+  const clave = await crear();
+  const s = await entrar(clave, 'Laura Gómez');
+  await guardar(clave, s, alumnoA(2), [], 'Tema');
+  await entregar(clave, s);
   const r = comparar(await cargas(), await nube.grilla(FIESTA_A));
   await nube.guardarEnLaGrilla(FIESTA_A, r.cambios.map(datosAGuardar));
-  await cambiar('traido');
-  const despuesDeTraer = await foto();
-  await cambiar('reabrir', (await link()).celulares[0].id);
-  // Bruno ya tiene música en el programa: desde el link no se la puede cambiar.
-  igual(await guardar(clave, s, alumnoA(2), [], 'Segunda'), { ok: false, motivo: 'ya_cargado', campo: 'musica' }, 'lo ya traído:');
-  igual(await guardar(clave, s, alumnoA(4), [], 'De Sofía'), { ok: true }, 'otro alumno:');
-  igual(await foto(), despuesDeTraer, 'la grilla:');
+  await cambiar('traido', JSON.stringify(r.cambios.map((c) => c.alumno_id)));
+  igual(await pendientes(), [], 'después de traer, sin avisos:');
+  await nube.reloj(MAS_TARDE);
+  igual(await entregar(clave, s), { ok: true, ya: true }, 'enviar sin nada nuevo:');
+  igual(await pendientes(), [], 'no avisa por un envío vacío:');
+  await guardar(clave, s, alumnoA(4), [], 'Otro tema');
+  igual(await pendientes(), [], 'un guardado suelto no avisa:');
+  igual(await entregar(clave, s), { ok: true }, 'el segundo envío:');
+  const p = await pendientes();
+  igual(p.length, 1, 'avisos:');
+  cierto(/envió LAURA GÓMEZ \(1\)/.test(p[0].texto), p[0].texto);
+  igual((await lista(clave, s)).yo.envio_texto, 'jue 12/11 16:00', 'la hora del último envío:');
+});
+
+prueba('N5', 'Reabrir con otra fecha: vuelven a cargar todos, también quien ya había enviado', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), [], 'Tema');
+  await entregar(clave, laura);
+  await nube.reloj('2026-11-20 10:00:00-03');
+  igual(await guardar(clave, laura, alumnoA(2), [], 'Tarde'), { ok: false, motivo: 'vencido' }, 'vencido:');
+  igual((await link()).estado, 'vencido', 'estado:');
+  igual(await cambiar('vence', '2026-11-25 21:00'), { ok: true });
+  const k = await link();
+  igual([k.estado, k.vence_texto], ['abierto', 'miércoles 25/11 a las 21:00'], 'reabierto:');
+  igual(await guardar(clave, laura, alumnoA(2), [], 'Corregido'), { ok: true }, 'la que ya había enviado:');
+  igual(await guardar(clave, pedro, alumnoA(5), [], 'De Pedro'), { ok: true }, 'el otro:');
+  cierto((await entrarCrudo(clave, 'Nueva Delegada')).ok, 'una nueva no entró');
+  igual(await cambiar('vence', '2026-11-30 21:00'), { ok: true }, 'y otra vez:');
+  igual((await link()).vence_texto, 'lunes 30/11 a las 21:00', 'las veces que quiera:');
+});
+
+prueba('N6', 'Reabrir un link cerrado a mano: poner una fecha futura lo prende', async () => {
+  const clave = await crear();
+  const s = await entrar(clave, 'Laura Gómez');
+  igual(await cambiar('apagar'), { ok: true });
+  igual((await link()).estado, 'apagado', 'cerrado:');
+  igual(await guardar(clave, s, alumnoA(2), [], 'Tema'), { ok: false, motivo: 'apagado' });
+  igual(await cambiar('vence', '2026-11-25 21:00'), { ok: true });
+  igual((await link()).estado, 'abierto', 'reabierto:');
+  igual(await guardar(clave, s, alumnoA(2), [], 'Tema'), { ok: true });
+  igual(await cambiar('apagar'), { ok: true });
+  igual(await cambiar('vence', '2026-11-01 10:00'), { ok: true }, 'una fecha pasada:');
+  igual((await link()).estado, 'apagado', 'una fecha pasada no lo prende:');
+});
+
+prueba('N7', 'La lista de ALUMNOS del jefe: los 12, cada uno con su estado, quién y cuándo', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema');   // se envía y se trae
+  await guardar(clave, laura, alumnoA(4), [], 'De Sofía');             // se envía
+  await entregar(clave, laura);
+  await cambiar('traido', JSON.stringify([alumnoA(2)]));
+  await nube.reloj(MAS_TARDE);
+  await guardar(clave, pedro, alumnoA(5), ['DÍAZ, ANA'], '');          // sin enviar
+  const e = await estados();
+  igual(e.length, 12, 'cuántos:');
+  igual(e.map((x) => x.alumno), ORDEN, 'orden:');
+  igual(e.map((x) => x.estado), ['programa', 'aceptado', 'falta', 'enviado', 'sin_enviar', ...Array(7).fill('falta')], 'estados:');
+  igual([e[1].cargo, e[1].cuando_texto, e[1].acompanantes, e[1].musica], ['LAURA GÓMEZ', 'jue 12/11 15:00', ['ÁLVAREZ, EVA'], 'Tema'], 'el aceptado:');
+  igual([e[4].cargo, e[4].cuando_texto], ['PEDRO SOSA', 'jue 12/11 16:00'], 'el de Pedro:');
+  igual([e[0].cargo, e[0].cuando_texto, e[0].musica], [null, null, 'Vivir mi vida · Marc Anthony'], 'el que ya estaba en el programa:');
+  igual(e[2].acompanantes, ['BENÍTEZ, CARLA'], 'al que le falta la música se le ven los acompañantes:');
+  const k = await link();
+  igual([k.faltan, k.sin_enviar, k.enviados, k.aceptados, k.en_programa], [8, 1, 1, 1, 1], 'la cuenta de arriba:');
+  igual(k.delegados.map((d) => [d.nombre, d.cargados, d.sin_enviar, d.envio_texto]), [['LAURA GÓMEZ', 2, 0, 'jue 12/11 15:00'], ['PEDRO SOSA', 1, 1, null]], 'los delegados:');
+  igual(e[4].delegado_id, k.delegados[1].id, 'el alumno dice de qué delegado es:');
+});
+
+prueba('N8', 'El historial: quién guardó, vació, aceptó y borró, en orden', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema');
+  await entregar(clave, laura);
+  await nube.reloj(MAS_TARDE);
+  await cambiar('traido', JSON.stringify([alumnoA(2)]));
+  await nube.reloj('2026-11-12 17:00:00-03');
+  await guardar(clave, pedro, alumnoA(5), [], 'De Pedro');
+  await nube.reloj('2026-11-12 18:00:00-03');
+  await guardar(clave, pedro, alumnoA(5), [], '');
+  await guardar(clave, pedro, alumnoA(6), [], 'Otro de Pedro');
+  await nube.reloj('2026-11-12 19:00:00-03');
+  await cambiar('sacar_borrando', await celular('Pedro Sosa'));
+  igual((await historial()).map((h) => [h.alumno_id, h.quien, h.que, h.cuando_texto]), [
+    [alumnoA(2), 'LAURA GÓMEZ', 'guardo', 'jue 12/11 15:00'],
+    [alumnoA(2), 'Junior Eventos', 'aceptado', 'jue 12/11 16:00'],
+    [alumnoA(5), 'PEDRO SOSA', 'guardo', 'jue 12/11 17:00'],
+    [alumnoA(5), 'PEDRO SOSA', 'vacio', 'jue 12/11 18:00'],
+    [alumnoA(6), 'PEDRO SOSA', 'guardo', 'jue 12/11 18:00'],
+    [alumnoA(6), 'Junior Eventos', 'borrado', 'jue 12/11 19:00'],
+  ], 'historial:');
+  igual(await cambiar('traido', JSON.stringify([alumnoA(2)])), { ok: true });
+  igual((await historial()).filter((h) => h.que === 'aceptado').length, 1, 'traer dos veces lo mismo no lo anota dos veces:');
+});
+
+prueba('N9', 'Volver a dejar entrar a quien se había sacado', async () => {
+  const clave = await crear({ cupo: 1 });
+  const laura = await entrar(clave, 'Laura Gómez');
+  const otro = await entrar(clave, 'Laura Gómez');
+  const id = await celular('Laura Gómez');
+  igual(await cambiar('sacar_dejando', id), { ok: true });
+  igual([(await lista(clave, laura)).motivo, (await lista(clave, otro)).motivo], ['sacado', 'sacado'], 'sale de sus dos celulares:');
+  igual(await cambiar('readmitir', id), { ok: true });
+  igual([(await lista(clave, laura)).ok, (await lista(clave, otro)).ok], [true, true], 'vuelve a entrar con los dos:');
+  cierto((await entrarCrudo(clave, 'Laura Gómez')).ok, 'y con su nombre desde otro');
+  igual(await cambiar('readmitir', 'cualquier-cosa'), { ok: false, motivo: 'celular' }, 'un celular que no existe:');
+});
+
+prueba('N10', 'Al vencer avisa por lo que nadie envió, también lo corregido después de enviar', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  await guardar(clave, laura, alumnoA(2), [], 'Tema');
+  await guardar(clave, laura, alumnoA(4), [], 'Otro');
+  await entregar(clave, laura);
+  const primero = comparar(await cargas(), await nube.grilla(FIESTA_A));
+  await nube.guardarEnLaGrilla(FIESTA_A, primero.cambios.map(datosAGuardar));
+  await cambiar('traido', JSON.stringify(primero.cambios.map((c) => c.alumno_id)));
+  await nube.reloj(MAS_TARDE);
+  await guardar(clave, laura, alumnoA(4), [], 'Corregido y sin enviar');
+  igual((await link()).aviso, null, 'antes de vencer no avisa:');
+  await nube.reloj('2026-11-20 10:00:00-03');
+  const aviso = (await link()).aviso ?? '';
+  cierto(/venció sin enviar: LAURA GÓMEZ \(cargó 1\)/.test(aviso), `aviso: ${aviso}`);
+  const r = comparar(await cargas(), await nube.grilla(FIESTA_A), { incluirSinEnviar: true });
+  igual(r.cambios.map((c) => c.alumno_id), [alumnoA(4)], 'lo que queda para traer:');
+});
+
+prueba('N12', 'El aviso nombra solo a quien tiene algo suyo para traer', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), [], 'De Laura');
+  await entregar(clave, laura);
+  await nube.reloj(MAS_TARDE);
+  // Pedro corrige el único alumno de Laura y envía: lo de ella ya no está.
+  await guardar(clave, pedro, alumnoA(2), [], 'De Pedro');
+  await entregar(clave, pedro);
+  const aviso = (await link()).aviso ?? '';
+  cierto(/envió PEDRO SOSA \(1\)/.test(aviso), `aviso: ${aviso}`);
+  cierto(!/LAURA/.test(aviso), `nombra a Laura sin nada suyo: ${aviso}`);
+});
+
+prueba('N11', 'Pasar de la primera parte a la segunda: lo cargado y enviado sigue igual, y el historial arranca con lo que había', async () => {
+  const vieja = await abrir({ relojDePrueba: true, soloLaPrimera: true });
+  await vieja.reloj(AHORA);
+  const jefe = (fn, args) => vieja.rpc('jefe', fn, args);
+  const anon = (fn, args) => vieja.rpc('anon', fn, args);
+  const clave = (await jefe('delegado_link_crear', { p_evento: FIESTA_A, p_fiesta: FIESTA, p_vence_local: LIMITE, p_cupo: 2 })).clave;
+  const laura = (await anon('delegado_entrar', { p_clave: clave, p_nombre: 'Laura Gómez' })).sesion;
+  const pedro = (await anon('delegado_entrar', { p_clave: clave, p_nombre: 'Pedro Sosa' })).sesion;
+  const g = (s, n, m) => anon('delegado_guardar', { p_clave: clave, p_sesion: s, p_alumno: alumnoA(n), p_acompanantes: [], p_musica: m });
+  await g(laura, 2, 'De Laura'); await g(laura, 4, 'Otra de Laura'); await g(pedro, 5, 'De Pedro');
+  await anon('delegado_entregar', { p_clave: clave, p_sesion: laura });
+  const contar = async () => (await vieja.sql(`select (select count(*)::int from public.links_delegado) as links,
+    (select count(*)::int from public.celulares_delegado) as celulares, (select count(*)::int from public.cargas_delegado) as cargas,
+    (select count(*)::int from public.contratos_alumnos) as alumnos`))[0];
+  const antes = await contar();
+  const cargasAntes = await jefe('delegado_cargas', { p_evento: FIESTA_A });
+
+  await vieja.correrLaSegunda();
+  await vieja.reloj(AHORA);
+  igual(await contar(), antes, 'los conteos:');
+  const despues = await jefe('delegado_cargas', { p_evento: FIESTA_A });
+  igual(despues.map((c) => [c.alumno_id, c.musica, c.cargo, c.entregado]), cargasAntes.map((c) => [c.alumno_id, c.musica, c.cargo, c.entregado]), 'lo cargado y quién lo envió:');
+  igual(despues.map((c) => c.enviado), [true, true, false], 'lo enviado sigue enviado:');
+  const h = await jefe('delegado_historial', { p_evento: FIESTA_A });
+  igual(h.map((x) => [x.quien, x.que, x.musica]).sort(), [['LAURA GÓMEZ', 'guardo', 'De Laura'], ['LAURA GÓMEZ', 'guardo', 'Otra de Laura'], ['PEDRO SOSA', 'guardo', 'De Pedro']].sort(), 'el historial arranca con lo que había:');
+  // Las sesiones de antes siguen andando, y la que había enviado ahora puede corregir.
+  igual(await g(laura, 2, 'Corregido'), { ok: true }, 'la sesión vieja, ya enviada:');
+
+  await vieja.correrLaSegunda();
+  igual((await jefe('delegado_historial', { p_evento: FIESTA_A })).length, 4, 'correrlo dos veces no repite el historial:');
+  igual(await contar(), antes, 'ni cambia los conteos:');
 });
 
 prueba('G1', 'El SQL de la nube no escribe nunca en los alumnos ni en las fiestas', async () => {
-  const sqlNube = readFileSync(new URL(SQL_DE_LA_NUBE, import.meta.url), 'utf8');
-  for (const tabla of ['contratos_alumnos', 'eventos']) {
-    cierto(!new RegExp(`(insert\\s+into|update|delete\\s+from|alter\\s+table|drop\\s+table)\\s+(public\\.)?${tabla}\\b`, 'i').test(sqlNube), `el SQL escribe en ${tabla}`);
+  for (const archivo of SQL_DE_LA_NUBE_TODO) {
+    const sqlNube = readFileSync(new URL(archivo, import.meta.url), 'utf8');
+    for (const tabla of ['contratos_alumnos', 'eventos']) {
+      cierto(!new RegExp(`(insert\\s+into|update|delete\\s+from|alter\\s+table|drop\\s+table)\\s+(public\\.)?${tabla}\\b`, 'i').test(sqlNube), `${archivo} escribe en ${tabla}`);
+    }
   }
   const clave = await crear();
   const antes = await foto();
@@ -786,7 +1063,7 @@ prueba('G1', 'El SQL de la nube no escribe nunca en los alumnos ni en las fiesta
   await guardar(clave, s, alumnoA(2), ['ÁLVAREZ, EVA'], 'Tema');
   await entregar(clave, s);
   const id = (await link()).celulares[0].id;
-  for (const [accion, valor] of [['reabrir', id], ['cupo', '2'], ['vence', '2026-11-20 10:00'], ['apagar'], ['prender'], ['traido'], ['sacar_dejando', id]]) {
+  for (const [accion, valor] of [['reabrir', id], ['cupo', '2'], ['vence', '2026-11-20 10:00'], ['apagar'], ['prender'], ['traido'], ['sacar_dejando', id], ['readmitir', id], ['sacar_borrando', id]]) {
     igual(await cambiar(accion, valor ?? null), { ok: true }, `${accion}:`);
   }
   igual(await cambiar('inventada'), { ok: false, motivo: 'accion' });

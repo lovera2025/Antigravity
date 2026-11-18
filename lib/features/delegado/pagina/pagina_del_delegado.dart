@@ -12,8 +12,12 @@ import 'sesiones_del_delegado.dart';
 /// Tampoco usa el reloj del celular: el límite viene escrito por la nube.
 ///
 /// - **Guardar**, en el lugar de cada alumno, guarda ese alumno y nada más.
-/// - **Enviar**, uno solo y abajo, es el definitivo: pregunta antes y se hace
-///   una sola vez.
+/// - **Enviar**, uno solo y abajo, le avisa a la empresa. **No cierra nada**
+///   (6.9.2): se sigue corrigiendo hasta la fecha límite y se puede enviar de
+///   nuevo.
+/// - **Todos corrigen todo** (6.9.2): lo que cargó otro delegado y lo que ya
+///   está en el programa se abren igual, con un aviso antes de dejar escribir.
+/// - **Desde otro celular** se entra tocando el nombre con el que ya se entró.
 class PaginaDelDelegado extends StatefulWidget {
   final String clave;
   final NubeDelDelegado nube;
@@ -33,7 +37,6 @@ class PaginaDelDelegado extends StatefulWidget {
 const _fondo = Color(0xFFF3F5F9);
 const _tinta = Color(0xFF17202E);
 const _suave = Color(0xFF5A6678);
-const _tenue = Color(0xFF9AA4B2);
 const _linea = Color(0xFFD9DFE8);
 const _azul = Color(0xFF1E57B8);
 const _verde = Color(0xFF0E7A4B);
@@ -68,8 +71,6 @@ const _porQueNo = <String, String>{
   'largo': 'Es demasiado largo. Acortalo un poco.',
   'formato': 'No se pudo leer lo que escribiste. Probá de nuevo.',
   'alumno': 'Este alumno ya no está en la lista.',
-  'ya_cargado':
-      'Eso ya está cargado en el programa y no se puede cambiar desde acá.',
 };
 
 class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
@@ -88,6 +89,10 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
   /// El alumno abierto, y si tiene algo escrito sin guardar.
   String? _abierto;
   bool _sucio = false;
+
+  /// Ya dijo "sí, corregir" en el aviso de este alumno (lo cargó otro, o ya
+  /// está en el programa).
+  bool _confirmoCorregir = false;
 
   String? _errorEntrada;
   String? _errorForm;
@@ -130,25 +135,31 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
   void _cerrarAlumno() {
     _abierto = null;
     _sucio = false;
+    _confirmoCorregir = false;
     _errorForm = null;
   }
 
   // ── Entrar ────────────────────────────────────────────────────────────────
 
-  Future<void> _entrar() async {
+  /// Entra con lo escrito o, si viene [nombre], con el nombre que tocó: quien
+  /// ya entró desde otro celular sigue con lo suyo.
+  Future<void> _entrar([String? nombre]) async {
     if (_ocupado) return;
     setState(() {
       _ocupado = true;
       _errorEntrada = null;
     });
     try {
-      final r = await widget.nube.entrar(widget.clave, _nombre.text);
+      final r = await widget.nube.entrar(widget.clave, nombre ?? _nombre.text);
       if (r.ok && r.sesion != null) {
         _sesion = r.sesion;
         await widget.sesiones.guardar(widget.clave, r.sesion!);
         await _cargar();
       } else if (r.motivo == 'nombre') {
         _errorEntrada = 'Escribí tu nombre y tu apellido.';
+      } else if (r.motivo == 'sacado') {
+        _errorEntrada = 'Con ese nombre ya no se puede entrar. Si te parece un '
+            'error, avisale a Junior Eventos.';
       } else {
         await _cargar();
       }
@@ -174,6 +185,7 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
     setState(() {
       _abierto = a.id;
       _sucio = false;
+      _confirmoCorregir = false;
       _errorForm = null;
       _errorBarra = null;
       _ac1.text = a.acompanantes.isNotEmpty ? a.acompanantes[0] : '';
@@ -205,24 +217,19 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
         sesion: _sesion ?? '',
         alumnoId: a.id,
         acompanantes: [
-          if (!a.progAcomp)
-            for (final c in [_ac1, _ac2])
-              if (c.text.trim().isNotEmpty) c.text.trim().toUpperCase(),
+          for (final c in [_ac1, _ac2])
+            if (c.text.trim().isNotEmpty) c.text.trim().toUpperCase(),
         ],
-        musica: a.progMusica ? '' : _musica.text,
+        musica: _musica.text,
       );
       if (r.ok) {
         _cerrarAlumno();
         await _cargar();
-      } else if (r.motivo == 'otro') {
-        _cerrarAlumno();
-        await _cargar();
-        _errorBarra = 'A ese alumno ya lo cargó ${r.cargo ?? 'otro delegado'}.';
       } else if (_porQueNo.containsKey(r.motivo)) {
         _errorForm = _porQueNo[r.motivo];
       } else {
-        // El link venció, se apagó, o este celular ya envió: se muestra cómo
-        // quedó.
+        // El link venció o se cerró, o a este delegado lo sacaron: se muestra
+        // cómo quedó.
         _cerrarAlumno();
         await _cargar();
       }
@@ -236,6 +243,8 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
 
   // ── Enviar ────────────────────────────────────────────────────────────────
 
+  /// Enviar: le avisa a la empresa. **No cierra nada** (6.9.2), así que no
+  /// pregunta antes: si después corrige algo, envía de nuevo.
   Future<void> _quiereEnviar() async {
     if (_ocupado) return;
     final lista = _lista;
@@ -247,28 +256,22 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
           'Guardalos o descartalos antes de enviar.');
       return;
     }
-    setState(() => _errorBarra = null);
-    // Los números del aviso, recién leídos: otro delegado pudo cargar recién.
-    await _cargar();
-    final ahora = _lista;
-    if (!mounted || ahora == null || !ahora.ok || ahora.soloLectura) return;
-    if (ahora.mios == 0) {
-      setState(() => _errorBarra = 'Todavía no guardaste ningún alumno.');
-      return;
-    }
-    final confirmo = await showDialog<bool>(
-      context: context,
-      builder: (context) => _AvisoDeEnviar(faltan: ahora.faltan),
-    );
-    if (confirmo != true || !mounted) return;
-    setState(() => _ocupado = true);
+    setState(() {
+      _ocupado = true;
+      _errorBarra = null;
+    });
     try {
-      await widget.nube.entregar(widget.clave, _sesion ?? '');
+      final r = await widget.nube.entregar(widget.clave, _sesion ?? '');
       await _cargar();
-      if (mounted && _lista?.yoEntregado != true) {
-        _errorBarra = 'No se pudo enviar. Probá de nuevo.';
-      } else if (mounted) {
+      if (!mounted) return;
+      if (r.ok && r.ya) {
+        _errorBarra = 'No tenés nada nuevo para enviar.';
+      } else if (r.ok) {
         _arriba();
+      } else if (r.motivo == 'nada') {
+        _errorBarra = 'Todavía no guardaste ningún alumno.';
+      } else if (_lista?.ok == true && _lista?.soloLectura != true) {
+        _errorBarra = 'No se pudo enviar. Probá de nuevo.';
       }
     } catch (_) {
       _errorBarra = 'No se pudo enviar. Revisá tu internet y probá de nuevo.';
@@ -277,7 +280,7 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
     }
   }
 
-  /// Lleva la lista arriba de todo: ahí está el agradecimiento.
+  /// Lleva la lista arriba de todo: ahí dice que se envió.
   ///
   /// Recién cuando la pantalla ya se acomodó, y otra vez en el cuadro que
   /// sigue: al aparecer el agradecimiento arriba de lo que se estaba mirando,
@@ -319,7 +322,7 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
         ),
       ),
       bottomNavigationBar:
-          adentro && !lista.soloLectura ? _barraDeEnviar() : null,
+          adentro && !lista.soloLectura ? _barraDeEnviar(lista) : null,
     );
   }
 
@@ -415,7 +418,7 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
                 'Eventos.',
           ),
         'sacado' => _mensaje(
-            'Este celular ya no puede cargar',
+            'Ya no podés cargar en esta fiesta',
             'Si te parece un error, avisale a Junior Eventos.',
           ),
         _ => _mensaje(
@@ -443,20 +446,6 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
                 style: TextStyle(fontSize: 15, color: _suave),
               ),
             ])
-          else if (l.lleno)
-            _tarjeta(const [
-              Text(
-                'Ya entraron todos los delegados que esperábamos para esta '
-                'fiesta.',
-                key: Key('delegado_mensaje'),
-                style: TextStyle(fontSize: 17, color: _tinta),
-              ),
-              SizedBox(height: 6),
-              Text(
-                'Si te falta entrar a vos, avisale a Junior Eventos.',
-                style: TextStyle(fontSize: 15, color: _suave),
-              ),
-            ])
           else ...[
             _cinta('Hay tiempo hasta el ${l.venceTexto}.'),
             const SizedBox(height: 14),
@@ -474,34 +463,102 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
                 'Si no lo sos, cerrá esta página: esta lista no es para vos.',
                 style: TextStyle(fontSize: 15, color: _suave),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Tu nombre y apellido',
-                style: TextStyle(fontWeight: FontWeight.w700, color: _tinta),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                key: const Key('delegado_nombre'),
-                controller: _nombre,
-                maxLength: 60,
-                textCapitalization: TextCapitalization.words,
-                onSubmitted: (_) => _entrar(),
-                decoration: _casillero('Nombre y apellido'),
-              ),
-              _error(_errorEntrada, key: const Key('delegado_error_entrada')),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  key: const Key('delegado_entrar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _azul,
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                  onPressed: _ocupado ? null : _entrar,
-                  child: const Text('Soy delegado, entrar'),
-                ),
-              ),
             ]),
+            // Quien ya entró sigue con lo suyo desde cualquier celular.
+            if (l.delegados.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _tarjeta([
+                const Text(
+                  '¿Ya entraste? Tocá tu nombre',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _tinta,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Sirve desde cualquier celular: seguís con lo que ya '
+                  'cargaste.',
+                  style: TextStyle(fontSize: 14, color: _suave),
+                ),
+                for (final (i, nombre) in l.delegados.indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        key: Key('delegado_soy_$i'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _tinta,
+                          alignment: Alignment.centerLeft,
+                          minimumSize: const Size.fromHeight(50),
+                          side: const BorderSide(color: _linea, width: 1.5),
+                        ),
+                        onPressed: _ocupado ? null : () => _entrar(nombre),
+                        child: Text(
+                          nombre,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (l.lleno)
+                  _error(_errorEntrada, key: const Key('delegado_error_entrada')),
+              ]),
+            ],
+            const SizedBox(height: 12),
+            if (l.lleno)
+              _tarjeta(const [
+                Text(
+                  'Ya entraron todos los delegados que esperábamos para esta '
+                  'fiesta.',
+                  key: Key('delegado_mensaje'),
+                  style: TextStyle(fontSize: 17, color: _tinta),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Si te falta entrar a vos, avisale a Junior Eventos.',
+                  style: TextStyle(fontSize: 15, color: _suave),
+                ),
+              ])
+            else
+              _tarjeta([
+                Text(
+                  l.delegados.isEmpty
+                      ? 'Tu nombre y apellido'
+                      : '¿Es la primera vez? Tu nombre y apellido',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _tinta,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  key: const Key('delegado_nombre'),
+                  controller: _nombre,
+                  maxLength: 60,
+                  textCapitalization: TextCapitalization.words,
+                  onSubmitted: (_) => _entrar(),
+                  decoration: _casillero('Nombre y apellido'),
+                ),
+                _error(_errorEntrada, key: const Key('delegado_error_entrada')),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    key: const Key('delegado_entrar'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _azul,
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    onPressed: _ocupado ? null : _entrar,
+                    child: const Text('Soy delegado, entrar'),
+                  ),
+                ),
+              ]),
           ],
         ],
       );
@@ -544,11 +601,24 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
             style: const TextStyle(fontSize: 15, color: _suave),
           ),
         ),
-        if (l.yoEntregado) ...[
+        if (l.vencido)
+          _cinta(
+            'El plazo terminó el ${l.venceTexto}. Ya no se puede cargar ni '
+            'corregir.',
+            key: const Key('delegado_plazo'),
+          )
+        else
+          _cinta(
+            'Tenés hasta el ${l.venceTexto} para cargar y corregir.',
+            key: const Key('delegado_plazo'),
+          ),
+        // Haber enviado no cierra nada: solo se le dice que llegó.
+        if (l.yoEntregado)
           Container(
             key: const Key('delegado_gracias'),
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: _okFondo,
               borderRadius: BorderRadius.circular(14),
@@ -556,46 +626,29 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '¡Listo, muchas gracias!',
-                  style: TextStyle(
-                    fontSize: 20,
+                Text(
+                  '¡Gracias! Recibimos tu parte'
+                  '${l.yoEnvioTexto == null ? '' : ' el ${l.yoEnvioTexto}'}.',
+                  style: const TextStyle(
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: _okTinta,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Recibimos tu parte de ${l.fiesta}. Si necesitás corregir '
-                  'algo, escribinos.',
-                  style: const TextStyle(fontSize: 15, color: _okTinta),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '— Junior Eventos',
-                  style: TextStyle(fontSize: 15, color: _okTinta),
-                ),
+                if (!l.vencido) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    l.yoSinEnviar > 0
+                        ? 'Después corregiste '
+                            '${_cuantos(l.yoSinEnviar, 'alumno', 'alumnos')}: '
+                            'tocá Enviar otra vez para avisarnos.'
+                        : 'Si corregís algo, tocá Enviar otra vez para '
+                            'avisarnos.',
+                    style: const TextStyle(fontSize: 15, color: _okTinta),
+                  ),
+                ],
               ],
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Enviaste ${_cuantos(l.mios, 'alumno', 'alumnos')}. Ya no se '
-              'puede cambiar.',
-              style: const TextStyle(fontSize: 15, color: _suave),
-            ),
-          ),
-        ] else if (l.vencido)
-          _cinta(
-            'El plazo terminó el ${l.venceTexto}. Ya no se puede cargar ni '
-            'enviar.',
-            key: const Key('delegado_plazo'),
-          )
-        else
-          _cinta(
-            'Tenés hasta el ${l.venceTexto}.',
-            key: const Key('delegado_plazo'),
           ),
         const SizedBox(height: 14),
         Text(
@@ -655,35 +708,23 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
     );
   }
 
+  /// A la derecha de cada alumno: si falta, si es suyo y no lo envió, o listo.
   Widget _chip(AlumnoDelLink a) {
-    final (texto, fondo, tinta, borde) = switch (a.de) {
-      DeQuien.programa => ('Ya cargado', Colors.transparent, _grisTinta, true),
-      DeQuien.otro => (
-          'Lo cargó ${a.cargo ?? 'otro delegado'}',
-          Colors.transparent,
-          _grisTinta,
-          true,
-        ),
-      DeQuien.mio => ('Guardado', _okFondo, _okTinta, false),
-      DeQuien.suelto => ('Para revisar', _faltaFondo, _faltaTinta, false),
-      DeQuien.libre => ('Falta', _faltaFondo, _faltaTinta, false),
+    final (texto, fondo, tinta) = switch (a.estado) {
+      EstadoDeLaCarga.falta => ('Falta', _faltaFondo, _faltaTinta),
+      EstadoDeLaCarga.sinEnviar when a.de == DeQuien.mio =>
+        ('Sin enviar', _avisoFondo, _avisoTinta),
+      _ => ('Cargado', _okFondo, _okTinta),
     };
     return Container(
-      constraints: const BoxConstraints(maxWidth: 170),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: fondo,
         borderRadius: BorderRadius.circular(999),
-        border: borde ? Border.all(color: _tenue) : null,
       ),
       child: Text(
         texto,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 13,
-          color: tinta,
-          fontWeight: borde ? FontWeight.w400 : FontWeight.w700,
-        ),
+        style: TextStyle(fontSize: 13, color: tinta, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -704,17 +745,30 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
               children: [
                 Text(
                   a.nombre,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
-                    color: a.cerrado ? _tenue : _tinta,
-                    fontWeight: a.cerrado ? FontWeight.w400 : FontWeight.w700,
-                    decoration: a.cerrado ? TextDecoration.lineThrough : null,
+                    color: _tinta,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (!a.cerrado && !abierto && resumen.isNotEmpty)
+                // Con el formulario abierto no hace falta: está en los
+                // casilleros. Mientras pregunta "¿Seguir?", sí: es lo que se
+                // va a cambiar.
+                if ((!abierto || (a.esDeOtro && !_confirmoCorregir)) &&
+                    resumen.isNotEmpty)
                   Text(
                     resumen,
                     style: const TextStyle(fontSize: 13, color: _suave),
+                  ),
+                // Quién lo cargó y cuándo: todos ven lo de todos.
+                if (a.cargado)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      a.rotuloDeCargado,
+                      key: Key('delegado_quien_${a.id}'),
+                      style: const TextStyle(fontSize: 12.5, color: _grisTinta),
+                    ),
                   ),
               ],
             ),
@@ -728,15 +782,15 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
       key: Key('delegado_alumno_${a.id}'),
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
-        color: a.cerrado ? _grisFondo : Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: a.cerrado ? _grisFondo : _linea),
+        border: Border.all(color: _linea),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // Lo cerrado no se toca: no es un botón.
-          if (a.cerrado || soloLectura)
+          // Todo se puede abrir. Lo único que cierra es la fecha límite.
+          if (soloLectura)
             cara
           else
             InkWell(
@@ -744,11 +798,81 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
               onTap: () => _tocar(a),
               child: cara,
             ),
-          if (abierto && !a.cerrado && !soloLectura) _elFormulario(a),
+          if (abierto && !soloLectura)
+            a.esDeOtro && !_confirmoCorregir
+                ? _elAvisoDeCorregir(a)
+                : _elFormulario(a),
         ],
       ),
     );
   }
+
+  /// Antes de dejar corregir lo que cargó otro (o lo que ya está en el
+  /// programa): lo dice y pregunta. Lo vigente sigue a la vista arriba, en la
+  /// cara del alumno.
+  Widget _elAvisoDeCorregir(AlumnoDelLink a) => Container(
+        key: const Key('delegado_cartel'),
+        width: double.infinity,
+        decoration:
+            const BoxDecoration(border: Border(top: BorderSide(color: _linea))),
+        padding: const EdgeInsets.all(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _faltaFondo,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                switch (a.de) {
+                  DeQuien.otro when a.cargo != null =>
+                    'Vas a cambiar lo que cargó ${a.cargo}. ¿Seguir?',
+                  DeQuien.programa =>
+                    'Vas a cambiar lo que ya está cargado en el programa. '
+                        '¿Seguir?',
+                  _ => 'Vas a cambiar lo que ya estaba cargado. ¿Seguir?',
+                },
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: _faltaTinta,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('delegado_no_corregir'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _tinta,
+                        backgroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(46),
+                      ),
+                      onPressed: () => setState(_cerrarAlumno),
+                      child: const Text('No, volver'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('delegado_si_corregir'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _azul,
+                        minimumSize: const Size.fromHeight(46),
+                      ),
+                      onPressed: () => setState(() => _confirmoCorregir = true),
+                      child: const Text('Sí, corregir'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _fijo(String texto) => Container(
         width: double.infinity,
@@ -791,22 +915,19 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
               ),
             ),
             const SizedBox(height: 6),
-            if (a.progAcomp)
-              _fijo('Ya están cargados en el programa.')
-            else
-              // Dos casilleros, ni uno más: no hay botón para agregar.
-              for (final (i, c) in [_ac1, _ac2].indexed)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: TextField(
-                    key: Key('delegado_ac${i + 1}'),
-                    controller: c,
-                    maxLength: kMaxLetrasAcompananteDelegado,
-                    textCapitalization: TextCapitalization.characters,
-                    onChanged: (_) => _escribio(),
-                    decoration: _casillero('Apellido, nombre'),
-                  ),
+            // Dos casilleros, ni uno más: no hay botón para agregar.
+            for (final (i, c) in [_ac1, _ac2].indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  key: Key('delegado_ac${i + 1}'),
+                  controller: c,
+                  maxLength: kMaxLetrasAcompananteDelegado,
+                  textCapitalization: TextCapitalization.characters,
+                  onChanged: (_) => _escribio(),
+                  decoration: _casillero('Apellido, nombre'),
                 ),
+              ),
             const SizedBox(height: 4),
             const Text(
               'Música',
@@ -817,21 +938,23 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
               ),
             ),
             const SizedBox(height: 6),
-            if (a.progMusica)
-              _fijo('Ya está cargada en el programa.')
-            else
-              TextField(
-                key: const Key('delegado_musica'),
-                controller: _musica,
-                maxLength: kMaxLetrasMusicaDelegado,
-                minLines: 3,
-                maxLines: 5,
-                onChanged: (_) => _escribio(),
-                decoration: _casillero(
-                  'Tema y artista, y todo el detalle que haga falta: versión, '
-                  'desde qué minuto, un link…',
-                  contador: true,
-                ),
+            TextField(
+              key: const Key('delegado_musica'),
+              controller: _musica,
+              maxLength: kMaxLetrasMusicaDelegado,
+              minLines: 3,
+              maxLines: 5,
+              onChanged: (_) => _escribio(),
+              decoration: _casillero(
+                'Tema y artista, y todo el detalle que haga falta: versión, '
+                'desde qué minuto, un link…',
+                contador: true,
+              ),
+            ),
+            if (a.progAcomp || a.progMusica)
+              _fijo(
+                'Lo que ya está en el programa cambia recién cuando Junior '
+                'Eventos lo acepta. Un casillero vacío no borra nada.',
               ),
             _error(_errorForm, key: const Key('delegado_error_alumno')),
             Row(
@@ -873,7 +996,7 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
         ),
       );
 
-  Widget _barraDeEnviar() => Container(
+  Widget _barraDeEnviar(ListaDelDelegado l) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(top: BorderSide(color: _linea)),
@@ -897,7 +1020,8 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 6),
                       child: Text(
-                        'Guardar no envía. Cuando termines, tocá Enviar.',
+                        'Guardar no envía. Cuando termines, tocá Enviar: no '
+                        'cierra nada, podés seguir corrigiendo.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: _suave),
                       ),
@@ -914,9 +1038,9 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
                           ),
                         ),
                         onPressed: _ocupado ? null : _quiereEnviar,
-                        child: const Text(
-                          'Enviar',
-                          style: TextStyle(
+                        child: Text(
+                          l.yoEntregado ? 'Enviar otra vez' : 'Enviar',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -930,128 +1054,4 @@ class _PaginaDelDelegadoState extends State<PaginaDelDelegado> {
           ),
         ),
       );
-}
-
-/// El aviso de Enviar: una última revisión, con una casilla. Devuelve `true`
-/// solo si tildó y confirmó.
-class _AvisoDeEnviar extends StatefulWidget {
-  final int faltan;
-  const _AvisoDeEnviar({required this.faltan});
-
-  @override
-  State<_AvisoDeEnviar> createState() => _AvisoDeEnviarState();
-}
-
-class _AvisoDeEnviarState extends State<_AvisoDeEnviar> {
-  bool _soy = false;
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) {
-    final n = widget.faltan;
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.all(16),
-      title: const Text(
-        'Antes de enviar, una última revisión',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-      ),
-      content: SizedBox(
-        width: 448,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Gracias por completar la lista. Te pedimos que la revises con '
-                'calma: con estos datos organizamos la entrada de cada alumno. '
-                'El envío se hace una sola vez y, una vez confirmado, no se '
-                'puede modificar.',
-                style: TextStyle(fontSize: 15, color: _tinta),
-              ),
-              if (n > 0)
-                Container(
-                  key: const Key('delegado_faltan'),
-                  margin: const EdgeInsets.only(top: 12),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _faltaFondo,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    n == 1
-                        ? 'Todavía hay 1 alumno de la fiesta sin completar. Si '
-                            'le toca a otro delegado, podés enviar igual.'
-                        : 'Todavía hay $n alumnos de la fiesta sin completar. '
-                            'Si les tocan a otro delegado, podés enviar igual.',
-                    style: const TextStyle(fontSize: 15, color: _faltaTinta),
-                  ),
-                ),
-              CheckboxListTile(
-                key: const Key('delegado_soy'),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _soy,
-                onChanged: (v) => setState(() {
-                  _soy = v == true;
-                  _error = null;
-                }),
-                title: const Text(
-                  'Soy delegado de esta fiesta y revisé lo que cargué.',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-              ),
-              if (_error != null)
-                Text(
-                  _error!,
-                  key: const Key('delegado_error_aviso'),
-                  style: const TextStyle(fontSize: 14, color: _rojo),
-                ),
-              const SizedBox(height: 14),
-              // A todo el ancho y uno debajo del otro: en un celular, dos
-              // botones lado a lado quedaban disparejos.
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  key: const Key('delegado_seguir'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _tinta,
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Seguir revisando'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  key: const Key('delegado_confirmar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _verde,
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                  onPressed: () {
-                    if (!_soy) {
-                      setState(
-                        () => _error = 'Tildá la casilla para confirmar.',
-                      );
-                      return;
-                    }
-                    Navigator.pop(context, true);
-                  },
-                  child: const Text(
-                    'Confirmar envío',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

@@ -1,4 +1,9 @@
 -- SOLO DEL SANDBOX. Datos inventados. Correrlo de nuevo deja todo como al principio.
+do $$ begin
+  if to_regclass('public.cambios_delegado') is not null then
+    delete from public.cambios_delegado;
+  end if;
+end $$;
 delete from public.cargas_delegado;
 delete from public.celulares_delegado;
 delete from public.links_delegado;
