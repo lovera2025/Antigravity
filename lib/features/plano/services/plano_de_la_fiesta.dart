@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../eventos/services/adicional_a_confirmar.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
@@ -33,6 +34,15 @@ class AvisoPlano {
   const AvisoPlano(this.texto, {this.mesa, this.grave = false});
 }
 
+/// Una mesa adicional "a confirmar" en el plano (6.9.2): de qué familia es y
+/// cuánto le falta. Lo que se le hace (cobrar, anular) es del jefe.
+class MesaAConfirmar {
+  final String alumnoId;
+  final AdicionalAConfirmar adicional;
+
+  const MesaAConfirmar(this.alumnoId, this.adicional);
+}
+
 /// Cómo está el salón en una palabra, para el encabezado. [sinMesas] es el
 /// salón vacío (6.1.0): el espacio armado, con las mesas todavía por poner.
 enum SemaforoPlano { entran, revisar, faltan, sinMesas }
@@ -56,6 +66,11 @@ class PlanoDeLaFiesta {
   final List<OcupaHoja> ocupa;
   final List<AvisoPlano> avisos;
 
+  /// Las mesas adicionales que no están pagas enteras, por número de mesa
+  /// (6.9.2, [AdicionalesDeLaFamilia]): en la pantalla van punteadas, y en modo
+  /// jefe se cobran o se anulan. **Sale de los pagos; sin ellos, vacío.**
+  final Map<int, MesaAConfirmar> aConfirmar;
+
   /// Las familias con adicional: juntas o separadas.
   late final FamiliasEnElPlano familias =
       FamiliasEnElPlano.desde(armado, estado);
@@ -70,6 +85,7 @@ class PlanoDeLaFiesta {
     required this.sinLugar,
     required this.ocupa,
     required this.avisos,
+    this.aConfirmar = const {},
   });
 
   /// El color de cada división de la leyenda, como índice en la paleta del
@@ -226,9 +242,31 @@ class PlanoDeLaFiesta {
     required ConfigPlano config,
     required List<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos = const {},
+
+    /// Los pagos de cada familia, por id de contrato: de ahí sale qué mesa
+    /// adicional está "a confirmar". Null (no se leyeron): ninguna.
+    Map<String, List<Map<String, dynamic>>>? pagos,
   }) {
     final porId = {for (final a in alumnos) a.id: a};
     final avisos = <AvisoPlano>[];
+
+    final aConfirmar = <int, MesaAConfirmar>{};
+    if (pagos != null) {
+      for (final a in alumnos) {
+        // La baja conserva su mesa, pero esa noche no viene: nada que confirmar.
+        if (a.esBajaTemporal) continue;
+        final suyas = AdicionalesDeLaFamilia.aConfirmar(
+          a,
+          pagos[a.id] ?? const [],
+        );
+        for (final x in suyas) {
+          final n = x.mesa;
+          if (n != null && armado.existe(n)) {
+            aConfirmar[n] = MesaAConfirmar(a.id, x);
+          }
+        }
+      }
+    }
 
     // Las fijadas, con la familia para la que son. Una fijada para alguien que
     // ya no está en la fiesta (o está de baja) no se dibuja: se avisa.
@@ -263,7 +301,11 @@ class PlanoDeLaFiesta {
       fijadas: fijadas,
       ordenDivisiones:
           config.ordenDivisiones.isEmpty ? null : config.ordenDivisiones,
+      aConfirmar: aConfirmar.keys.toSet(),
     );
+    // Una mesa en conflicto (dos familias) no se dibuja "a confirmar": primero
+    // hay que resolver de quién es.
+    aConfirmar.removeWhere((n, _) => !estado.info(n).aConfirmar);
 
     final medidas = config.medidas;
     final necesarias = mesasQueNecesita(alumnos);
@@ -420,6 +462,7 @@ class PlanoDeLaFiesta {
       sinLugar: sinLugar,
       ocupa: MedirSalon.ocupa(armado, lugarM: medidas.lugarMesaM),
       avisos: avisos,
+      aConfirmar: Map.unmodifiable(aConfirmar),
     );
   }
 

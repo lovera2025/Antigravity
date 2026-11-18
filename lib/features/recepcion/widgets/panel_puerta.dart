@@ -595,7 +595,9 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
             Text(g.division!, style: _letra(size: 12, color: _suave)),
           if (t.mesa != null) ...[
             if (g.division != null) _punto(),
-            Text('Mesa ${t.mesa}',
+            // Sin las adicionales "a confirmar" (16-nov-2026): esas van
+            // apagadas, en su propia línea.
+            Text('Mesa ${g.mesaConfirmada ?? t.mesa}',
                 style: _letra(size: 13, negrita: true, color: _texto)),
           ] else if (g.sinMesa) ...[
             if (g.division != null) _punto(),
@@ -664,21 +666,35 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     }
     return [
       for (final m in mesas)
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(
+        if (m.estado == EstadoMesaPuerta.aConfirmar)
+          _lineaAConfirmar(
             m.texto,
             key: ValueKey('mesa_${g.contratoId}_${m.numero}'),
-            style: _letra(
-              size: 12,
-              negrita: m.estado == EstadoMesaPuerta.revisar,
-              color: switch (m.estado) {
-                EstadoMesaPuerta.conLugar => _suave,
-                EstadoMesaPuerta.llena => _ambar,
-                EstadoMesaPuerta.revisar => Colors.redAccent,
-              },
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              m.texto,
+              key: ValueKey('mesa_${g.contratoId}_${m.numero}'),
+              style: _letra(
+                size: 12,
+                negrita: m.estado == EstadoMesaPuerta.revisar,
+                color: switch (m.estado) {
+                  EstadoMesaPuerta.conLugar => _suave,
+                  EstadoMesaPuerta.llena => _ambar,
+                  EstadoMesaPuerta.revisar => Colors.redAccent,
+                  EstadoMesaPuerta.aConfirmar => _suave,
+                },
+              ),
             ),
           ),
+      if (g.adicionalesSinMesa > 0)
+        _lineaAConfirmar(
+          g.adicionalesSinMesa == 1
+              ? 'Mesa adicional · a confirmar'
+              : '${g.adicionalesSinMesa} mesas adicionales · a confirmar',
+          key: ValueKey('mesa_${g.contratoId}_sin_mesa'),
         ),
       if (g.sillasAConfirmar)
         Text(
@@ -688,6 +704,34 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
       for (final s in g.movimientos) _movimiento(g, p, s),
     ];
   }
+
+  /// Una mesa adicional "a confirmar" (16-nov-2026): apagada y con un
+  /// relojito, sin palabras de plata, porque la familia puede estar mirando la
+  /// pantalla. Al tocarla, solo una nota para la recepcionista: la confirma el
+  /// jefe. Ni cobrar ni anular: eso es del jefe, en el PLANO.
+  Widget _lineaAConfirmar(String texto, {required Key key}) => Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: InkWell(
+          key: key,
+          borderRadius: BorderRadius.circular(6),
+          onTap: () => setState(
+            () => _aviso = const _Aviso('Esta mesa la confirma el jefe.'),
+          ),
+          child: Opacity(
+            opacity: 0.6,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.schedule_rounded, size: 13, color: _suave),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(texto, style: _letra(size: 12, color: _suave)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   /// Los botones de la familia: SUMAR SILLA y VER EN EL PLANO (6.5.0), juntos y
   /// a la izquierda; en un celular angosto bajan de renglón solos.

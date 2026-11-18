@@ -29,6 +29,10 @@ enum EstadoMesaPuerta {
   /// Tiene más de las que entran (dos notebooks sumaron a la vez, o una silla
   /// quedó en una mesa que ya no es de la familia): hay que mirarla.
   revisar,
+
+  /// Una mesa adicional que no está paga entera (16-nov-2026): la confirma el
+  /// jefe. No se le suman sillas.
+  aConfirmar,
 }
 
 /// Una mesa de la familia, con sus sillas del contrato y las sumadas esa noche.
@@ -48,12 +52,18 @@ class SillasDeUnaMesa {
   /// mesa después de anotarla).
   final bool fueraDeSusMesas;
 
+  /// Una mesa adicional que no está paga entera ("a confirmar", 16-nov-2026):
+  /// la confirma el jefe. En la puerta se ve apagada, sin palabras de plata, y
+  /// no se le suman sillas.
+  final bool aConfirmar;
+
   const SillasDeUnaMesa({
     required this.numero,
     required this.esPrincipal,
     required this.extraDelContrato,
     required this.sumadas,
     this.fueraDeSusMesas = false,
+    this.aConfirmar = false,
   });
 
   static const int tope = SalonMesas.maxSillasExtraPorMesa;
@@ -61,7 +71,7 @@ class SillasDeUnaMesa {
   int get extra => extraDelContrato + sumadas;
 
   /// Cuántas más entran en esta mesa.
-  int get lugar => fueraDeSusMesas ? 0 : max(0, tope - extra);
+  int get lugar => fueraDeSusMesas || aConfirmar ? 0 : max(0, tope - extra);
 
   bool get puedeAgregar => lugar > 0;
 
@@ -69,6 +79,7 @@ class SillasDeUnaMesa {
 
   EstadoMesaPuerta get estado {
     if (fueraDeSusMesas || deMas > 0) return EstadoMesaPuerta.revisar;
+    if (aConfirmar) return EstadoMesaPuerta.aConfirmar;
     return puedeAgregar ? EstadoMesaPuerta.conLugar : EstadoMesaPuerta.llena;
   }
 
@@ -81,6 +92,9 @@ class SillasDeUnaMesa {
       return 'Mesa $numero: ${_sillas(sumadas)} sumada${sumadas == 1 ? '' : 's'} '
           'esta noche, pero ya no es de la familia: revisar';
     }
+    // Discreta: la familia puede estar mirando la pantalla. Ni plata ni
+    // sillas: no se le suman.
+    if (aConfirmar && deMas == 0) return 'Mesa adicional $numero · a confirmar';
     final b = StringBuffer(esPrincipal ? 'Mesa $numero' : 'Mesa adicional $numero')
       ..write(': ${SalonMesas.sillasPorMesa} sillas');
     if (extra > 0) b.write(' + $extra extra');
@@ -105,6 +119,7 @@ class SillasDeUnaMesa {
         'contrato': extraDelContrato,
         'sumadas': sumadas,
         if (fueraDeSusMesas) 'fuera': true,
+        if (aConfirmar) 'confirmar': true,
       };
 
   static SillasDeUnaMesa? fromJson(Object? json) {
@@ -118,6 +133,7 @@ class SillasDeUnaMesa {
       extraDelContrato: entero(json['contrato']),
       sumadas: entero(json['sumadas']),
       fueraDeSusMesas: json['fuera'] == true,
+      aConfirmar: json['confirmar'] == true,
     );
   }
 }
@@ -136,8 +152,9 @@ class SillasDeLaFamilia {
   factory SillasDeLaFamilia.de(
     ContratoAlumno a,
     SillasReparto? guardado,
-    Iterable<SillaPuerta> sumadasVigentes,
-  ) {
+    Iterable<SillaPuerta> sumadasVigentes, {
+    Set<int> aConfirmar = const {},
+  }) {
     final numeros = SalonMesas.tieneNumeros(a)
         ? [for (final t in SalonMesas.tramos(a)) ...t]
         : const <int>[];
@@ -150,7 +167,12 @@ class SillasDeLaFamilia {
     return _armar(
       [
         for (var i = 0; i < numeros.length; i++)
-          (numeros[i], i == 0, delContrato[numeros[i]] ?? 0),
+          (
+            numeros[i],
+            i == 0,
+            delContrato[numeros[i]] ?? 0,
+            aConfirmar.contains(numeros[i]),
+          ),
       ],
       a.id,
       sumadasVigentes,
@@ -158,7 +180,8 @@ class SillasDeLaFamilia {
   }
 
   static SillasDeLaFamilia _armar(
-    List<(int numero, bool principal, int delContrato)> propias,
+    List<(int numero, bool principal, int delContrato, bool aConfirmar)>
+        propias,
     String contratoId,
     Iterable<SillaPuerta> vigentes,
   ) {
@@ -171,12 +194,13 @@ class SillasDeLaFamilia {
     }
     final numeros = {for (final p in propias) p.$1};
     return SillasDeLaFamilia([
-      for (final (numero, principal, delContrato) in propias)
+      for (final (numero, principal, delContrato, aConfirmar) in propias)
         SillasDeUnaMesa(
           numero: numero,
           esPrincipal: principal,
           extraDelContrato: delContrato,
           sumadas: sumadas[numero] ?? 0,
+          aConfirmar: aConfirmar,
         ),
       for (final e in sumadas.entries)
         if (!numeros.contains(e.key))
@@ -201,7 +225,7 @@ class SillasDeLaFamilia {
         [
           for (final m in mesas)
             if (!m.fueraDeSusMesas)
-              (m.numero, m.esPrincipal, m.extraDelContrato),
+              (m.numero, m.esPrincipal, m.extraDelContrato, m.aConfirmar),
         ],
         contratoId,
         vigentes,

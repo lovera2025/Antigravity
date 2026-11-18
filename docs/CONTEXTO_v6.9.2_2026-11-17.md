@@ -21,8 +21,22 @@ empezar. Nada instalado, **ningún SQL corrido** (hay uno nuevo del link esperan
   **Cerrada el 18-nov en un segundo chat**: la suite entera, las roturas a propósito (del SQL y de las pantallas)
   y el recorrido en el navegador otra vez. Las roturas encontraron cuatro cosas, ya arregladas: está todo en
   "El cierre de la Parte 3", abajo. **Falta solo que el usuario mire las capturas.**
-- **Parte 4 ("a confirmar"): sin empezar.** Es lo que sigue, con su plan corto y el OK del usuario antes de
-  programar.
+- **Parte 4 ("a confirmar"): EN CURSO** (el usuario dio el OK el 18-nov; se cortó por el límite de uso). El
+  `git stash` ya se recuperó y está guardado en la rama. **Hecho y probado:** Recepción, el celular y el tótem
+  (`test/mesa_a_confirmar_en_la_puerta_test.dart`, 16 pruebas; el doble `ContratosEnMemoria` ahora da los pagos, antes
+  iba a la base y la puerta se quedaba esperando); el servicio pasó a
+  `lib/features/eventos/services/adicional_a_confirmar.dart`; `InfoMesa.aConfirmar`, `EstadoPlano.desde(aConfirmar:)`,
+  `PlanoDeLaFiesta.desde(pagos:)` con `aConfirmar` (mesa → de quién y cuánto falta); el dibujo punteado y apagado
+  con un relojito (`PintorPlano._aConfirmar`; el papel no la distingue); y el plano de la recepcionista
+  (`PlanoDeLaLlegada.para(aConfirmar:)`, `SalonEntero`), que no la enciende. **Falta, en orden:** (1) pruebas del
+  dibujo y de `PlanoDeLaFiesta` con pagos; (2) `PlanoEventoScreen._cargar` lee los pagos y se los pasa al plano y
+  al cuerpo (`PlanoEventoCuerpo` necesita `pagos` para `_planoVisto`); (3) en la tarjeta de la familia elegida,
+  "Mesa adicional N · a confirmar · A pagar: $X" con COBRAR y ANULAR (apagados sin modo jefe, con el motivo);
+  (4) COBRAR: el plano devuelve a quién cobrarle y la fiesta abre el cobro de siempre; (5) ANULAR, solo con $0
+  pagado y **con internet**: primero soltar la mesa por `_cambiarMesas` (un `soltarUna` en `CambiosDeMesa`, sin
+  tipo de movimiento nuevo) y después bajar la adicional por el camino de Editar alumno, sacado de `_submit` a un
+  servicio; si lo segundo falla, decirlo; (6) recorrido con el mouse en `tool/plano_prueba.dart`, capturas, suite
+  entera y roturas.
 - **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
   y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
   nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el

@@ -215,7 +215,8 @@ class _HojaPlanoFamiliaState extends State<HojaPlanoFamilia> {
     final g = widget.grupo;
     final t = g.titular;
     final partes = [
-      if (t.mesa != null) 'Mesa ${t.mesa}',
+      // Sin las adicionales "a confirmar" (6.9.2): como en la lista.
+      if (t.mesa != null) 'Mesa ${g.mesaConfirmada ?? t.mesa}',
       ?g.division,
       if (g.personas.any((p) => p.ingresado))
         'ADENTRO${t.textoHora == null ? '' : ' · ${t.textoHora}'}',

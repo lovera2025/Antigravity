@@ -337,6 +337,10 @@ DecisionSilla decidirSilla({
       final String? aviso;
       if (pedida == null || pedida == mesa.numero) {
         aviso = null;
+      } else if (familia.mesa(pedida)?.aConfirmar ?? false) {
+        // Una adicional "a confirmar" (16-nov-2026): la confirma el jefe.
+        aviso = 'La mesa $pedida la confirma el jefe: la silla va a la mesa '
+            '${mesa.numero}.';
       } else if (familia.mesa(pedida) != null) {
         aviso = 'La mesa $pedida ya estaba llena: la silla va a la mesa '
             '${mesa.numero}.';

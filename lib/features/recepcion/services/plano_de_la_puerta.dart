@@ -47,10 +47,14 @@ class SalonParaLaPuerta {
   /// La familia en el salón, como en la llegada del tótem: su mesa encendida y
   /// el camino. Null sin mesa (antes del sorteo) o con un número que el plano
   /// no tiene (uno cargado a mano).
+  ///
+  /// La adicional "a confirmar" (6.9.2) no se enciende: va apagada y punteada,
+  /// sin palabras. El camino llega a la mesa paga.
   PlanoDeLaLlegada? deLaFamilia(GrupoPuerta g) => PlanoDeLaLlegada.para(
         armado,
         mesa: g.titular.mesa,
         nombre: g.titular.nombre,
+        aConfirmar: g.mesasAConfirmar,
       );
 
   /// La bienvenida de [g], para volver a verla: el titular, como lo saluda el
@@ -140,7 +144,12 @@ class SalonEntero {
     }
     return SalonEntero._(
       hoja: CuadroDelSalon.hojaPrincipal(armado) ?? armado.hojas.first.id,
-      estado: EstadoPlano.desde(armado: armado, ocupantes: ocupantes),
+      estado: EstadoPlano.desde(
+        armado: armado,
+        ocupantes: ocupantes,
+        // Las adicionales "a confirmar" (6.9.2), apagadas y punteadas.
+        aConfirmar: {for (final g in puerta.grupos) ...g.mesasAConfirmar},
+      ),
       familiaDeMesa: familiaDeMesa,
       faltan: faltan,
       familiasQueFaltan: familiasQueFaltan,

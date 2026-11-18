@@ -103,24 +103,47 @@ class AlumnosDeLaPuerta {
   final List<ContratoAlumno> alumnos;
   final Map<String, SillasReparto> repartos;
 
-  const AlumnosDeLaPuerta(this.alumnos, this.repartos);
+  /// Los pagos de cada familia (por id de contrato), de la base de esta PC:
+  /// de ahí sale qué mesa adicional está "a confirmar" (16-nov-2026). Null si
+  /// no se pudieron leer: entonces no se marca ninguna.
+  final Map<String, List<Map<String, dynamic>>>? pagos;
+
+  const AlumnosDeLaPuerta(this.alumnos, this.repartos, [this.pagos]);
 }
 
-/// Los alumnos de un evento y sus repartos de sillas, de la base de esta PC.
-/// Lo leen Recepción ([alumnosDeLaPuertaProvider]) y la ficha del tótem.
+/// Los alumnos de un evento, sus repartos de sillas y sus pagos, de la base de
+/// esta PC. Lo leen Recepción ([alumnosDeLaPuertaProvider]) y la ficha del
+/// tótem.
 Future<AlumnosDeLaPuerta> leerAlumnosDeLaPuerta(
   ContratosRepository contratos,
   SillasRepartoRepository sillas,
   String eventoId,
 ) async {
   final alumnos = await contratos.getByEvento(eventoId);
-  final repartos =
-      await sillas.obtenerPorContratoIds([for (final a in alumnos) a.id]);
-  return AlumnosDeLaPuerta(alumnos, repartos);
+  final ids = [for (final a in alumnos) a.id];
+  final repartos = await sillas.obtenerPorContratoIds(ids);
+  // Los pagos no frenan la puerta: si no se pueden leer, sin "a confirmar".
+  Map<String, List<Map<String, dynamic>>>? pagos;
+  try {
+    pagos = {for (final id in ids) id: <Map<String, dynamic>>[]};
+    for (final p in await contratos.getPagosForContratoIds(ids)) {
+      final id = p['contrato_alumno_id'];
+      if (id is String) pagos[id]?.add(p);
+    }
+  } catch (e) {
+    debugPrint('Recepción: no se pudieron leer los pagos: $e');
+    pagos = null;
+  }
+  return AlumnosDeLaPuerta(alumnos, repartos, pagos);
 }
 
 /// Lo que bajó de la otra PC y cambia lo que se ve en la puerta de un masivo.
-const _tablasDeLaPuerta = {'contratos_alumnos', 'sillas_reparto'};
+/// Los pagos, por la mesa adicional "a confirmar".
+const _tablasDeLaPuerta = {
+  'contratos_alumnos',
+  'sillas_reparto',
+  'pagos_contrato_alumno',
+};
 
 /// Los alumnos de un evento masivo, de la base de esta PC. Se vuelven a leer
 /// cuando baja de la otra PC un cambio de alumnos o de sillas, y cada vez que
@@ -361,6 +384,7 @@ final puertaDelEventoProvider = Provider.autoDispose
     PuertaDelEvento.masivo(
       alumnos: a.alumnos,
       repartos: a.repartos,
+      pagos: a.pagos,
       invitados: i,
       sillasPuerta: sillas.value ?? const [],
       valesAnulados: anulados,

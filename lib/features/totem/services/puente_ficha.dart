@@ -277,6 +277,8 @@ Future<FichaTotem> armarFichaTotem(
     PuertaDelEvento.masivo(
       alumnos: a.alumnos,
       repartos: a.repartos,
+      // Con los pagos, la mesa adicional "a confirmar" no se enciende.
+      pagos: a.pagos,
       invitados: const [],
       reservados: reservados,
     ),

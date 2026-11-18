@@ -539,6 +539,8 @@ class PintorPlano extends CustomPainter {
       case EstiloPlano.neon:
         _mesaNeon(canvas, c, r, info, foco);
     }
+    // Se ve a cualquier distancia: es lo que hay que saber de esa mesa.
+    if (info.aConfirmar) _aConfirmar(canvas, c, r, foco);
 
     // Una libre que quedó ocupada sigue mostrando la raya. El candado se ve
     // solo mientras la fijada espera a su familia ([InfoMesa.conCandado]).
@@ -689,10 +691,13 @@ class PintorPlano extends CustomPainter {
     tp.paint(canvas, Offset(franja.center.dx - tp.width / 2, franja.top));
   }
 
+  /// Se dibuja como una mesa con familia. La adicional "a confirmar" (6.9.2),
+  /// no: va apagada, como una vacía, con su borde punteado ([_aConfirmar]).
   bool _conFamilia(InfoMesa i) =>
-      i.estado == EstadoMesa.ocupada ||
-      i.estado == EstadoMesa.fijada ||
-      i.estado == EstadoMesa.conflicto;
+      !i.aConfirmar &&
+      (i.estado == EstadoMesa.ocupada ||
+          i.estado == EstadoMesa.fijada ||
+          i.estado == EstadoMesa.conflicto);
 
   void _mesaGala(
     Canvas canvas,
@@ -916,6 +921,46 @@ class PintorPlano extends CustomPainter {
       c + Offset(r * 0.62, -r * 0.62),
       p,
     );
+  }
+
+  /// Una mesa adicional "a confirmar" (6.9.2): el borde punteado en vez del
+  /// entero, y un relojito a las once (ahí iría el candado, que una mesa
+  /// entregada no lleva). Sin color de alarma ni palabras: la mesa ya va
+  /// apagada ([_conFamilia]) y esto solo dice que falta confirmarla.
+  void _aConfirmar(Canvas canvas, Offset c, double r, bool foco) {
+    final color = foco ? tema.resaltado : tema.mesaBorde;
+    // Tapa el borde entero que dibujó el estilo.
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..color = tema.fondo,
+    );
+    _circuloPunteado(
+      canvas,
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+      segmentos: 14,
+      lleno: 0.5,
+    );
+    final centro = c + Offset(-r * 0.72, -r * 0.72);
+    final a = math.max(7.0, r * 0.34);
+    final trazo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    canvas.drawCircle(centro, a + 1.5, Paint()..color = tema.fondo);
+    canvas.drawCircle(centro, a, trazo);
+    canvas.drawLine(centro, centro + Offset(0, -a * 0.58), trazo);
+    canvas.drawLine(centro, centro + Offset(a * 0.46, 0), trazo);
   }
 
   /// El candado va a las once: a la una está la joya de la división (Gala).

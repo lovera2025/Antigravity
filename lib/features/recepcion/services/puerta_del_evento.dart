@@ -6,6 +6,7 @@ import '../../../models/sillas_reparto.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
+import '../../eventos/services/adicional_a_confirmar.dart';
 import 'lista_puerta.dart';
 import 'reservados_de_la_puerta.dart';
 import 'sillas_de_la_puerta.dart';
@@ -90,9 +91,14 @@ class PuertaDelEvento {
   /// quien no es alumno (los profes, 6.5.0; [reservadosDeLaPuerta]): van como
   /// un grupo por mesa, con su distinción, y se les marca el ingreso como a
   /// cualquiera. No tienen contrato: ni sillas de la noche ni nada de cobros.
+  ///
+  /// [pagos] son los de cada familia (por id de contrato): de ahí sale qué mesa
+  /// adicional está "a confirmar" (16-nov-2026, [AdicionalesDeLaFamilia]). Sin
+  /// ellos (null) no se marca ninguna.
   factory PuertaDelEvento.masivo({
     required List<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos = const {},
+    Map<String, List<Map<String, dynamic>>>? pagos,
     required List<Invitado> invitados,
     List<SillaPuerta> sillasPuerta = const [],
     ValesAnulados valesAnulados = ValesAnulados.ninguno,
@@ -120,6 +126,14 @@ class PuertaDelEvento {
       final conNombre = filas.where((f) => !f.esAlumno).length;
       final musica = a.musicaElegida?.trim() ?? '';
       final suyas = sillasPorAlumno[a.id] ?? const <SillaPuerta>[];
+      final aConfirmar = AdicionalesDeLaFamilia.aConfirmar(
+        a,
+        pagos == null ? null : (pagos[a.id] ?? const []),
+      );
+      final mesasAConfirmar = {
+        for (final x in aConfirmar)
+          if (x.mesa != null) x.mesa!,
+      };
       grupos.add(
         GrupoPuerta._(
           contratoId: a.id,
@@ -127,7 +141,10 @@ class PuertaDelEvento {
             a,
             repartos[a.id],
             suyas.where((s) => s.vigente),
+            aConfirmar: mesasAConfirmar,
           ),
+          mesasAConfirmar: mesasAConfirmar,
+          adicionalesSinMesa: aConfirmar.where((x) => x.mesa == null).length,
           movimientos: suyas,
           conValeAnulado: {
             for (final s in suyas)
@@ -395,6 +412,16 @@ class GrupoPuerta {
   /// sientan en esa mesa y ninguno acompaña a otro. Null en una familia.
   final String? reservadaPara;
 
+  /// Sus mesas adicionales que no están pagas enteras: "a confirmar"
+  /// (16-nov-2026). La recepcionista las ve apagadas, sin palabras de plata
+  /// ni botones; las confirma el jefe en el PLANO. Vacío en un particular, en
+  /// lo cargado a mano y sin los pagos.
+  final Set<int> mesasAConfirmar;
+
+  /// Cuántas adicionales "a confirmar" no tienen mesa (no salieron en el
+  /// sorteo porque no estaban pagas).
+  final int adicionalesSinMesa;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -410,7 +437,21 @@ class GrupoPuerta {
     this.movimientos = const [],
     this.conValeAnulado = const {},
     this.reservadaPara,
+    this.mesasAConfirmar = const {},
+    this.adicionalesSinMesa = 0,
   });
+
+  /// Las mesas de la familia que se muestran como suyas: sin las "a
+  /// confirmar". Es lo que dicen la línea "Mesa 12" de la puerta, el título del
+  /// plano y el tótem. Null si no tiene mesa.
+  String? get mesaConfirmada {
+    final mesa = titular.mesa;
+    if (mesa == null || mesasAConfirmar.isEmpty) return mesa;
+    final quedan = MesasExtraUtils.numerosMesaDesdeTexto(mesa)
+        .where((n) => !mesasAConfirmar.contains(n))
+        .toList();
+    return SalonMesas.textoPuertaDeNumeros(quedan);
+  }
 
   /// Si [silla] tiene el vale anulado en la barra.
   bool valeAnulado(SillaPuerta silla) => conValeAnulado.contains(silla.id);
@@ -438,13 +479,26 @@ class GrupoPuerta {
           'movimientos': [for (final s in movimientos) s.toMap()],
         if (conValeAnulado.isNotEmpty) 'anuladas': [...conValeAnulado],
         if (reservadaPara != null) 'reservada': reservadaPara,
+        if (mesasAConfirmar.isNotEmpty)
+          'aConfirmar': [...mesasAConfirmar]..sort(),
+        if (adicionalesSinMesa > 0) 'adicionalesSinMesa': adicionalesSinMesa,
       };
 
   factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
     final mesas = json['sillasPorMesa'];
     final movimientos = json['movimientos'];
     final anuladas = json['anuladas'];
+    final aConfirmar = json['aConfirmar'];
+    final sinMesa = json['adicionalesSinMesa'];
     return GrupoPuerta._(
+      // Lo de la mesa "a confirmar" (16-nov-2026) se lee si viene: una central
+      // más vieja no lo manda.
+      mesasAConfirmar: {
+        if (aConfirmar is List)
+          for (final n in aConfirmar)
+            if (n is int) n,
+      },
+      adicionalesSinMesa: sinMesa is int ? sinMesa : 0,
       titular: PersonaPuerta._fromJson(
         json['titular'] as Map<String, dynamic>,
         eventoId,

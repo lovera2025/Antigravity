@@ -334,13 +334,32 @@ class InvitadosEnMemoria extends InvitadosRepository {
 }
 
 class ContratosEnMemoria extends ContratosRepository {
-  ContratosEnMemoria(SupabaseClient supabase, this.alumnos)
+  ContratosEnMemoria(SupabaseClient supabase, this.alumnos, {this.pagos})
       : super(supabase, ConexionApagada());
   List<ContratoAlumno> alumnos;
+
+  /// Los pagos de cada familia, por id de contrato (6.9.2: de ahí sale la mesa
+  /// adicional "a confirmar"). **Null: como si no se pudieran leer**, así en
+  /// las pruebas que no hablan de pagos ninguna mesa queda "a confirmar".
+  Map<String, List<Map<String, dynamic>>>? pagos;
 
   @override
   Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
       eventoId == eventoMasivo ? alumnos : const [];
+
+  /// Nunca va a la base de la PC: sin esto la puerta se quedaba esperando.
+  @override
+  Future<List<Map<String, dynamic>>> getPagosForContratoIds(
+    List<String> contratoIds,
+  ) async {
+    final p = pagos;
+    if (p == null) throw StateError('La prueba no cargó pagos');
+    return [
+      for (final id in contratoIds)
+        for (final pago in p[id] ?? const <Map<String, dynamic>>[])
+          {...pago, 'contrato_alumno_id': id},
+    ];
+  }
 }
 
 class SillasEnMemoria extends SillasRepartoRepository {
@@ -476,7 +495,8 @@ class PuertaEnMemoria {
     Map<String, SillasReparto> repartos = const {},
     List<SillaPuerta> sillasDeLaNoche = const [],
     ArmadoSalon? plano,
-  })  : contratos = ContratosEnMemoria(supabase, alumnos),
+    Map<String, List<Map<String, dynamic>>>? pagos,
+  })  : contratos = ContratosEnMemoria(supabase, alumnos, pagos: pagos),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
         sillas = SillasEnMemoria(repartos),
         sillasPuerta = SillasPuertaEnMemoria(sillasDeLaNoche),

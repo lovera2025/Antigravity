@@ -97,13 +97,16 @@ class FichaTotem {
         }
         continue;
       }
+      // Sin las adicionales "a confirmar" (16-nov-2026): el tótem enciende
+      // solo las mesas pagas, y nadie en el salón se entera.
+      final mesa = g.mesaConfirmada;
       personas[titular.id] = PersonaFicha(
         id: titular.id,
         nombre: titular.nombre,
         familia: titular.id,
         esAlumno: true,
-        mesa: titular.mesa,
-        sillas: titular.mesa == null ? null : g.sillas,
+        mesa: mesa,
+        sillas: mesa == null ? null : g.sillas,
         musica: g.musica,
       );
       for (final a in g.acompanantes) {
@@ -112,7 +115,7 @@ class FichaTotem {
           nombre: a.nombre,
           familia: titular.id,
           esAlumno: false,
-          mesa: a.mesa,
+          mesa: a.mesa == null ? null : mesa,
           sillas: a.mesa == null ? null : g.sillas,
           titular: titular.nombre,
         );

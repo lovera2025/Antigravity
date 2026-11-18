@@ -47,23 +47,33 @@ class PlanoDeLaLlegada {
 
   /// Null si no hay qué mostrar: sin plano, sin mesa (antes del sorteo) o con
   /// un número que el plano no tiene (uno cargado a mano).
+  ///
+  /// [aConfirmar]: las mesas adicionales de la familia que no están pagas
+  /// enteras (6.9.2). **No se encienden**: van apagadas y punteadas. Solo las
+  /// pasa la pantalla de la recepcionista; el tótem del salón no las recibe y
+  /// no las dibuja.
   static PlanoDeLaLlegada? para(
     ArmadoSalon? armado, {
     required String? mesa,
     required String nombre,
+    Set<int> aConfirmar = const {},
   }) {
     if (armado == null) return null;
     final enElPlano = [
       for (final n in MesasExtraUtils.numerosMesaDesdeTexto(mesa))
-        if (armado.existe(n)) n,
+        if (armado.existe(n) && !aConfirmar.contains(n)) n,
     ];
     final principal = OcupantePlano.principalDe(enElPlano);
     if (principal == null) return null;
     final hoja = armado.mesa(principal)!.hoja;
+    final punteadas = {
+      for (final n in aConfirmar)
+        if (armado.existe(n)) n,
+    };
     final familia = OcupantePlano(
       id: 'llegada',
       nombre: nombre,
-      numeros: enElPlano,
+      numeros: [...enElPlano, ...punteadas],
       division: division,
     );
     return PlanoDeLaLlegada._(
@@ -74,7 +84,11 @@ class PlanoDeLaLlegada {
           if (armado.mesa(n)!.hoja == hoja) n,
       },
       principal: principal,
-      estado: EstadoPlano.desde(armado: armado, ocupantes: [familia]),
+      estado: EstadoPlano.desde(
+        armado: armado,
+        ocupantes: [familia],
+        aConfirmar: punteadas,
+      ),
       ruta: CaminoALaMesa.trazar(armado, principal),
     );
   }

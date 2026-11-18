@@ -191,6 +191,22 @@ class SalonMesas {
     if (texto.isEmpty) return null;
     final ts = tramos(a);
     if (ts.isEmpty) return texto;
+    return _textoPuertaDeTramos(ts);
+  }
+
+  /// Lo mismo que [textoMesasPuerta], de unos números sueltos: las mesas de una
+  /// familia sin las adicionales "a confirmar" (16-nov-2026). Null sin números.
+  static String? textoPuertaDeNumeros(Iterable<int> numeros) {
+    final ts = SorteoMesasMotor.tramosDe(numeros.toSet().toList()..sort())
+      ..sort((x, y) {
+        final c = y.length.compareTo(x.length);
+        return c != 0 ? c : x.first.compareTo(y.first);
+      });
+    if (ts.isEmpty) return null;
+    return _textoPuertaDeTramos(ts);
+  }
+
+  static String _textoPuertaDeTramos(List<List<int>> ts) {
     final partes = ts.map(_textoTramo).toList();
     if (partes.length == 1) return partes.single;
     return '${partes.sublist(0, partes.length - 1).join(', ')} y ${partes.last}';

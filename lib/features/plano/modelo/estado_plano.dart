@@ -115,6 +115,12 @@ class InfoMesa {
   /// Null: lleva [reservada].
   final String? quienesEnUnRenglon;
 
+  /// Una mesa adicional de su familia que no está paga entera: **"a
+  /// confirmar"** (6.9.2, `AdicionalesDeLaFamilia`). En la pantalla va apagada
+  /// y con el borde punteado, sin palabras de plata; el papel no la distingue.
+  /// Solo en una mesa ocupada por una sola familia.
+  final bool aConfirmar;
+
   const InfoMesa({
     required this.numero,
     this.estado = EstadoMesa.vacia,
@@ -126,6 +132,7 @@ class InfoMesa {
     this.libre = false,
     this.reservada,
     this.quienesEnUnRenglon,
+    this.aConfirmar = false,
   });
 
   OcupantePlano? get ocupante => ocupantes.isEmpty ? null : ocupantes.first;
@@ -233,6 +240,10 @@ class EstadoPlano {
     Map<int, String> quienesEnUnRenglon = const {},
     Map<int, OcupantePlano> fijadas = const {},
     List<String>? ordenDivisiones,
+
+    /// Las mesas adicionales que no están pagas enteras (6.9.2): se dibujan
+    /// "a confirmar". Lo decide quien arma el plano, con los pagos.
+    Set<int> aConfirmar = const {},
   }) {
     final divisiones = _ordenar(ocupantes, fijadas, ordenDivisiones);
     final todos = [...ocupantes, ...fijadas.values];
@@ -334,6 +345,7 @@ class EstadoPlano {
         quienesEnUnRenglon: libre && reservadas.containsKey(n)
             ? _nombreDe(quienesEnUnRenglon[n])
             : null,
+        aConfirmar: estado == EstadoMesa.ocupada && aConfirmar.contains(n),
       );
     }
     return EstadoPlano._(
