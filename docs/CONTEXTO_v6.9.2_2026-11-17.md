@@ -18,18 +18,19 @@ empezar. Nada instalado, **ningún SQL corrido** (hay uno nuevo del link esperan
 - **Parte 3 (el link del delegado): programada y probada en el sandbox el 18-nov.** El usuario vio la maqueta
   (`docs/maqueta_link_delegado_2026-11-18.html`) y, sobre las dos formas, dijo **"hacé la mejor que a vos te
   parezca"**: se hizo la **B · Todo en una hoja**. Está todo en "Lo programado el 18-nov (la Parte 3)", abajo.
-  **El 18-nov cortó a mitad de las roturas a propósito y pidió dejar el contexto**: se comprobó que el corte no
-  dejó nada roto (el SQL igual a su respaldo, ninguna marca de rotura en `lib/`), las reglas dan 73 de 73 y las
-  pruebas del link 131 en verde. **No se corrió la suite entera después de la Parte 3**, ni se terminaron las
-  roturas: es lo primero que sigue.
-- **Parte 4 ("a confirmar"): sin empezar.**
+  **Cerrada el 18-nov en un segundo chat**: la suite entera, las roturas a propósito (del SQL y de las pantallas)
+  y el recorrido en el navegador otra vez. Las roturas encontraron cuatro cosas, ya arregladas: está todo en
+  "El cierre de la Parte 3", abajo. **Falta solo que el usuario mire las capturas.**
+- **Parte 4 ("a confirmar"): sin empezar.** Es lo que sigue, con su plan corto y el OK del usuario antes de
+  programar.
 - **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
   y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
   nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el
   18-nov; falta su mirada** (sobre todo la lista del simulacro: es la que va a aceptar en PRECIOS).
 - **Las capturas del recorrido del link** (la página del celular y la ventana del programa, de verdad, contra el
-  Postgres de prueba) están en `build/capturas_6.9.2/` (fuera de git) y **se le mandaron el 18-nov al cortar; falta
-  que las mire.**
+  Postgres de prueba) están en `build/capturas_6.9.2/` (fuera de git) y **se le mandaron el 18-nov; falta que las
+  mire.** La 3 (el cartel "¿Seguir?") y la 4 (la ventana con los estados) se sacaron de nuevo en el segundo chat,
+  con todo arreglado, y se le mandaron otra vez: las de la mañana eran de antes de los arreglos.
 - La suite entera, al cortar: ver "Cómo quedó la suite", abajo.
 
 ### Qué pidió el usuario (17-nov) y qué decidió
@@ -194,7 +195,8 @@ al JSON lo ignora.
   (`DelegadoDelLink`, `AlumnoDelTablero`, `CambioDelHistorial`, y en la interfaz `alumnos` e `historial`).
 
 **Pruebas hechas**
-- Las reglas, contra el mismo archivo del SQL: `tool/delegado_sandbox/` (`node pruebas.mjs`), **73 de 73**. El
+- Las reglas, contra el mismo archivo del SQL: `tool/delegado_sandbox/` (`node pruebas.mjs`), **73 de 73** (77
+  de 77 después del cierre, abajo). El
   sandbox corre los dos SQL en orden (`db.mjs`: `abrir({soloLaPrimera})`, `correrLaSegunda()`), y una prueba pasa
   de la primera parte a la segunda con datos cargados.
 - Las pantallas: `test/pagina_del_delegado_test.dart`, `test/link_del_delegado_en_la_ventana_test.dart`,
@@ -212,16 +214,49 @@ al JSON lo ignora.
   hay en `build/` es anterior a los tres arreglos: compilar de nuevo.** En el navegador de la app, Flutter solo
   dibuja con la pestaña al frente, y los clics van por coordenadas.
 
+### El cierre de la Parte 3 (18-nov, segundo chat)
+
+**Las roturas a propósito del SQL quedaron como herramienta**: `node roturas.mjs` (en `tool/delegado_sandbox/`)
+rompe una regla por vez **en una copia** del archivo (`db.mjs` acepta `SQL_DEL_LINK_2`, una dirección `file:///`),
+corre `pruebas.mjs` contra la copia y dice qué pruebas fallaron. El archivo de la migración no se toca (compara su
+huella al final). Son **43 casos, todos detectados**. Un caso nuevo va en la lista `CASOS`.
+
+**Las de las pantallas**: 59 casos con `bash tool/romper_una_regla.sh` (la página, la ventana, la revisión, los
+datos, la alerta, el renglón de PLANILLAS, `link_delegado_cerrado_test` y la llave del modo jefe). **58
+detectados.** El que no: si el plazo termina con un alumno abierto, la página lo cierra (`_cerrarAlumno` en
+`_cargar`); rota esa línea no cambia nada a la vista (con el plazo vencido el formulario ya no se dibuja y no hay
+cómo recargar), así que es una defensa sin prueba propia.
+
+**Lo que encontraron, ya arreglado:**
+- **Un aviso que se perdía** (SQL, `delegado_aviso`): si un delegado enviaba **mientras el jefe tenía la revisión
+  abierta**, al aceptar lo de antes ese envío no avisaba nunca (el aviso comparaba la hora del envío con la del
+  último traer). Ahora **mira cada carga**: avisa mientras haya algo enviado sin traer. Prueba N15. El doble en
+  memoria (`delegado_en_memoria.dart`) hace lo mismo. **`traido` se manda siempre con la lista de alumnos** (así
+  lo hacen esta versión y la 6.9.1): sin la lista no apaga el aviso.
+- **Tres reglas del SQL sin vigía**: Enviar marcaba solo lo de quien envía (N13) y la llave de usuario de adentro
+  de las funciones del jefe (N14: aunque a un anónimo se le diera permiso de más, piden usuario).
+- **Nada comprobaba que el programa leyera bien lo que contesta la nube** (los dobles arman los objetos a mano:
+  leer `sin_enviar` como enviado o `vencido` como abierto pasaba todo). Ahora hay **muestras**:
+  `node muestras.mjs` corre una historia fija contra el SQL de verdad y guarda las respuestas en
+  `test/datos/nube_del_delegado.json`; `test/nube_del_delegado_se_lee_test.dart` las lee con los `fromJson` del
+  programa; y `pruebas.mjs` (M1) falla si el archivo ya no es lo que contesta el SQL. **Si cambia el SQL del
+  link: `node muestras.mjs` y después esa prueba.**
+- La alerta del Centro de Comando "se puede tocar" no miraba que hiciera algo (ahora sí).
+- `test/puerta_sigue_al_salon_test.dart` buscaba `_abrirAcompanantesYMusica` por su firma vieja (era la única
+  falla de la suite entera); la regla estaba bien.
+
+**Al recorrer la ventana de verdad otra vez** aparecieron dos detalles, arreglados con su prueba: la cuenta decía
+"1 enviados" (`_laCuenta`, en singular con uno solo), y **si el equipo no deja copiar, COPIAR LINK no hacía nada**
+(pasa en el navegador de la prueba): ahora lo dice, y el link está escrito para seleccionarlo.
+
+**Las reglas del SQL: 77 de 77** (`node pruebas.mjs`).
+
 ### Lo que falta, en orden
 
-1. **Cerrar la Parte 3:**
-   - las roturas a propósito (quedaron a medias): las del SQL, cambiando una regla del archivo y corriendo
-     `node pruebas.mjs` (siempre con una copia del SQL al lado para devolverlo), y las de las pantallas con
-     `bash tool/romper_una_regla.sh <casos>`;
-   - **la suite entera** (`bash tool/suite_por_tandas.sh`) y `flutter analyze lib test tool`;
-   - que el usuario mire las capturas del recorrido (`build/capturas_6.9.2/`).
-2. **Parte 4 — "a confirmar"**: `git stash pop` (`stash@{0}`), y lo que falta está en "La Parte B" de
-   `docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la tenía cargada).
+1. **De la Parte 3, solo que el usuario mire las capturas** (`build/capturas_6.9.2/`). No frena.
+2. **Parte 4 — "a confirmar"**: primero el plan corto y su OK. Después `git stash pop` (`stash@{0}`); lo que
+   falta está en "La Parte B" de `docs/CONTEXTO_v6.9.1_2026-11-16.md`. Su derecho al descuento no cambia (ya la
+   tenía cargada).
 3. **Después**: la versión `6.9.2+77` (`pubspec.yaml` y el `.iss`) y publicar con él: foto de la mora, **el SQL del
    link con su OK en el momento** (comprobado con `md5(prosrc)` y una prueba en un bloque `do` que se deshace solo,
    como el 13-nov), instalador por pasos, release y web. **Al publicar, repetir el simulacro de los lugares sobre una
@@ -264,11 +299,12 @@ existen).
 ### Cómo quedó la suite
 
 `bash tool/suite_por_tandas.sh`, el 18-nov **después de la Parte 2**: **5.322 pruebas, ninguna falla** (305
-archivos). El 17-nov a la noche eran 5.189 en 301. **Después de la Parte 3 no se corrió entera**: solo las pruebas
-del link (131, en verde) y las reglas del sandbox (73 de 73).
+archivos). El 17-nov a la noche eran 5.189 en 301. **Después de la Parte 3 y de su cierre (18-nov, segundo
+chat): 5.357 pruebas, ninguna falla** (306 archivos), y las reglas del sandbox, 77 de 77.
 
-`flutter analyze` sobre `lib`, `test` y `tool`: ningún error, y nada en los archivos tocados el 18-nov (los avisos que
-quedan son de antes: `detalle_evento_masivo_screen.dart`, `dry_run_cobro_simulator.dart`, dos `tool/_tmp_*`).
+`flutter analyze` sobre `lib`, `test` y `tool`: nada en los archivos tocados el 18-nov. Lo que queda es de antes:
+avisos en `detalle_evento_masivo_screen.dart` y `dry_run_cobro_simulator.dart`, y tres errores en
+`tool/_tmp_espindola_audit.dart` (un script viejo de un solo uso, que no es parte del programa).
 
 **Queda para mirar** (del 17-nov): el panel del PLANO usa la misma cuenta que la planilla ("4 con cena · 4
 generales") y no dice las entradas que se compran aparte (las de las sillas y la adicional); si hace falta, se le

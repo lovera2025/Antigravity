@@ -215,9 +215,22 @@ class _LinkDelDelegadoVentanaState extends State<LinkDelDelegadoVentana> {
     );
   }
 
+  /// Si el equipo no deja copiar (pasa en algunos navegadores), lo dice: el
+  /// link está escrito debajo y se puede seleccionar. Antes el botón no hacía
+  /// nada y no avisaba.
   Future<void> _copiar(String url) async {
-    await Clipboard.setData(ClipboardData(text: url));
-    if (mounted) _decir('Link copiado. Pegalo en WhatsApp.');
+    try {
+      await Clipboard.setData(ClipboardData(text: url));
+      if (mounted) _decir('Link copiado. Pegalo en WhatsApp.');
+    } catch (_) {
+      if (mounted) {
+        _decir(
+          'No se pudo copiar solo. El link está escrito arriba: '
+          'seleccionalo y copialo.',
+          error: true,
+        );
+      }
+    }
   }
 
   Future<void> _sacar(DelegadoDelLink d) async {
@@ -456,6 +469,17 @@ class _LinkDelDelegadoVentanaState extends State<LinkDelDelegadoVentana> {
         ),
       ];
 
+  /// "De 12 alumnos: 9 faltan · 1 sin enviar · 1 enviado · 0 aceptados · 1 ya
+  /// estaba en el programa.": con uno solo no dice "1 enviados".
+  static String _laCuenta(EstadoDelLink e) {
+    String n(int c, String uno, String varios) => '$c ${c == 1 ? uno : varios}';
+    return 'De ${n(e.total, 'alumno', 'alumnos')}: '
+        '${n(e.faltan, 'falta', 'faltan')} · ${e.sinEnviar} sin enviar · '
+        '${n(e.enviados, 'enviado', 'enviados')} · '
+        '${n(e.aceptados, 'aceptado', 'aceptados')} · '
+        '${n(e.enPrograma, 'ya estaba', 'ya estaban')} en el programa.';
+  }
+
   List<Widget> _conLink(ThemeData tema, EstadoDelLink e) {
     final abierto = e.abierto;
     final color = abierto ? Colors.green.shade700 : Colors.red.shade700;
@@ -552,9 +576,7 @@ class _LinkDelDelegadoVentanaState extends State<LinkDelDelegadoVentana> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
-            'De ${e.total} alumnos: ${e.faltan} faltan · ${e.sinEnviar} sin '
-            'enviar · ${e.enviados} enviados · ${e.aceptados} aceptados · '
-            '${e.enPrograma} ya estaban en el programa.',
+            _laCuenta(e),
             key: const Key('link_cuenta'),
             style: tema.textTheme.bodySmall,
           ),

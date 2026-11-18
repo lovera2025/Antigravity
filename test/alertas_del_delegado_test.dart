@@ -72,6 +72,8 @@ void main() {
       expect(find.byKey(const Key('alerta_delegado_$_fiesta')), findsOneWidget);
       expect(find.textContaining('envió LAURA GÓMEZ (2)'), findsOneWidget);
       expect(find.byType(InkWell), findsOneWidget);
+      // Que esté dibujada no alcanza: tiene que hacer algo al tocarla.
+      expect(tester.widget<InkWell>(find.byType(InkWell)).onTap, isNotNull);
     });
   });
 

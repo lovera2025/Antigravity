@@ -3,6 +3,7 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { abrir, FIESTA_A, FIESTA_B, alumnoA, alumnoB, SQL_DE_LA_NUBE_TODO } from './db.mjs';
 import { comparar, datosAGuardar } from './revision.js';
+import { armarMuestras, ARCHIVO_DE_MUESTRAS } from './muestras.mjs';
 
 const nube = await abrir({ relojDePrueba: true });
 const AHORA = '2026-11-12 15:00:00-03';
@@ -723,7 +724,8 @@ prueba('E9', 'Traés: el aviso se va y no vuelve hasta que haya un envío nuevo'
   await entregar(clave, laura);
   igual((await pendientes()).length, 1, 'antes de traer:');
   await nube.reloj('2026-11-12 16:00:00-03');
-  igual(await cambiar('traido'), { ok: true });
+  // Como el programa: dice qué alumnos trajo. El aviso mira cada carga.
+  igual(await cambiar('traido', JSON.stringify([alumnoA(2)])), { ok: true });
   igual(await pendientes(), [], 'después de traer:');
   await nube.reloj('2026-11-12 17:00:00-03');
   await guardar(clave, pedro, alumnoA(5), [], 'Tema');
@@ -1050,6 +1052,85 @@ prueba('N11', 'Pasar de la primera parte a la segunda: lo cargado y enviado sigu
   igual(await contar(), antes, 'ni cambia los conteos:');
 });
 
+prueba('N13', 'Enviar marca solo lo de quien envía: lo de otro delegado sigue sin enviar', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), [], 'De Laura');
+  await guardar(clave, pedro, alumnoA(5), [], 'De Pedro');
+  igual(await entregar(clave, laura), { ok: true });
+  igual([(await estadoDe(2)).estado, (await estadoDe(5)).estado], ['enviado', 'sin_enviar'], 'cada alumno:');
+  const k = await link();
+  igual(k.delegados.map((d) => [d.nombre, d.sin_enviar]), [['LAURA GÓMEZ', 0], ['PEDRO SOSA', 1]], 'por delegado:');
+  cierto(/envió LAURA GÓMEZ \(1\)/.test(k.aviso ?? '') && !/PEDRO/.test(k.aviso ?? ''), `aviso: ${k.aviso}`);
+  igual(deLista(await lista(clave, pedro), 5).estado, 'sin_enviar', 'lo que ve Pedro:');
+  igual(await entregar(clave, pedro), { ok: true }, 'Pedro todavía tiene qué enviar:');
+});
+
+prueba('N14', 'La segunda llave: aunque a un anónimo se le diera permiso de más, lo del jefe pide usuario', async () => {
+  await crear();
+  const delJefe = [
+    ['delegado_link', { p_evento: FIESTA_A }],
+    ['delegado_link_crear', { p_evento: FIESTA_B, p_fiesta: 'San José', p_vence_local: LIMITE, p_cupo: 1 }],
+    ['delegado_link_cambiar', { p_evento: FIESTA_A, p_accion: 'apagar', p_valor: null }],
+    ['delegado_cargas', { p_evento: FIESTA_A }],
+    ['delegado_pendientes', {}],
+    ['delegado_alumnos_estado', { p_evento: FIESTA_A }],
+    ['delegado_historial', { p_evento: FIESTA_A }],
+  ];
+  const nombres = delJefe.map(([fn]) => `'${fn}'`).join(', ');
+  const permiso = (dar) => nube.sql(`do $$ declare f record; begin
+    for f in select p.oid::regprocedure as firma from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname in (${nombres}) loop
+      execute format('${dar ? 'grant execute on function %s to anon' : 'revoke execute on function %s from anon'}', f.firma);
+    end loop; end $$;`);
+  await permiso(true);
+  try {
+    for (const [fn, args] of delJefe) {
+      const e = await falla(nube.rpc('anon', fn, args), `un anónimo con permiso de más usó ${fn}`);
+      cierto(/se maneja con usuario/.test(e.message), `${fn}: ${e.message}`);
+    }
+  } finally {
+    await permiso(false);
+  }
+  igual((await link()).estado, 'abierto', 'el link sigue prendido:');
+  igual(await link(FIESTA_B), { ok: false, motivo: 'sin_link' }, 'no se creó nada en B:');
+  const e = await falla(nube.rpc('anon', 'delegado_historial', { p_evento: FIESTA_A }), 'el permiso de más quedó puesto');
+  cierto(/permission denied/.test(e.message), `después: ${e.message}`);
+});
+
+prueba('N15', 'Un delegado envía mientras el jefe mira la revisión: al aceptar lo de antes, el aviso sigue por lo nuevo', async () => {
+  const clave = await crear();
+  const laura = await entrar(clave, 'Laura Gómez');
+  const pedro = await entrar(clave, 'Pedro Sosa');
+  await guardar(clave, laura, alumnoA(2), [], 'De Laura');
+  await entregar(clave, laura);
+  // El jefe abre la revisión: ve solo lo de Laura.
+  const revision = comparar(await cargas(), await nube.grilla(FIESTA_A));
+  igual(revision.cambios.map((c) => c.alumno_id), [alumnoA(2)], 'lo que revisa:');
+  // Mientras la mira, Pedro guarda y envía.
+  await nube.reloj(MAS_TARDE);
+  await guardar(clave, pedro, alumnoA(5), [], 'De Pedro');
+  await entregar(clave, pedro);
+  // El jefe acepta lo que tenía a la vista, un rato después.
+  await nube.reloj('2026-11-12 16:05:00-03');
+  await nube.guardarEnLaGrilla(FIESTA_A, revision.cambios.map(datosAGuardar));
+  await cambiar('traido', JSON.stringify(revision.cambios.map((c) => c.alumno_id)));
+  const k = await link();
+  igual([k.enviados, k.aceptados], [1, 1], 'uno aceptado y uno todavía para traer:');
+  cierto(/envió PEDRO SOSA \(1\)/.test(k.aviso ?? '') && !/LAURA/.test(k.aviso ?? ''), `aviso: ${k.aviso}`);
+  igual((await pendientes()).length, 1, 'la alerta del inicio sigue:');
+  // Y cuando trae eso, se va.
+  await cambiar('traido', JSON.stringify([alumnoA(5)]));
+  igual([(await link()).aviso, await pendientes()], [null, []], 'después de traerlo:');
+});
+
+prueba('M1', 'Las muestras que lee el programa (test/datos) son lo que contesta este SQL', async () => {
+  const guardadas = readFileSync(ARCHIVO_DE_MUESTRAS, 'utf8').replace(/\r\n/g, '\n');
+  const ahora = await armarMuestras(nube);
+  cierto(guardadas === ahora, 'cambió lo que contesta el SQL: corré `node muestras.mjs` y después `flutter test test/nube_del_delegado_se_lee_test.dart`');
+});
+
 prueba('G1', 'El SQL de la nube no escribe nunca en los alumnos ni en las fiestas', async () => {
   for (const archivo of SQL_DE_LA_NUBE_TODO) {
     const sqlNube = readFileSync(new URL(archivo, import.meta.url), 'utf8');
@@ -1088,7 +1169,8 @@ for (const r of resultados) {
   console.log(`${r.pasa ? 'PASA   ' : 'NO PASA'} ${r.id.padEnd(4)} ${r.titulo}${r.pasa ? '' : `\n          → ${r.error}`}`);
 }
 console.log(`\n${resultados.length - mal.length} de ${resultados.length} pasan.`);
-writeFileSync(new URL('./RESULTADO_reglas.md', import.meta.url), [
+// Con una copia rota a propósito no se pisa el resultado de verdad.
+if (!process.env.SQL_DEL_LINK_2) writeFileSync(new URL('./RESULTADO_reglas.md', import.meta.url), [
   '# Pruebas de reglas contra el SQL',
   '',
   `${resultados.length - mal.length} de ${resultados.length} pasan.`,

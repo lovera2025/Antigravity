@@ -164,9 +164,9 @@ as $$
 $$;
 
 -- El aviso para el programa. Null si no hay nada que avisar.
--- Salta cuando alguien envió después de la última vez que se trajo (también un
--- reenvío, si trae algo nuevo), o cuando el link venció con algo cargado que no se
--- envió y todavía no se trajo. Nunca por un guardado suelto.
+-- Salta mientras haya algo enviado sin traer (también un reenvío, si trae algo
+-- nuevo), o cuando el link venció con algo cargado que no se envió y todavía no
+-- se trajo. Nunca por un guardado suelto.
 -- ROLLBACK: (vuelve la del archivo 20261113120000_link_delegado.sql)
 create or replace function public.delegado_aviso(p_evento uuid)
 returns text
@@ -177,7 +177,6 @@ set search_path = public
 as $$
 declare
   v_link     public.links_delegado%rowtype;
-  v_desde    timestamptz;
   v_vencido  boolean;
   v_enviaron text;
   v_no       text;
@@ -185,29 +184,21 @@ declare
 begin
   select * into v_link from public.links_delegado l where l.evento_id = p_evento;
   if not found then return null; end if;
-  v_desde   := coalesce(v_link.traido_at, '-infinity'::timestamptz);
   v_vencido := public.delegado_ahora() >= v_link.vence_at;
 
-  -- Por persona: quién envió desde la última vez, y cuánto suyo falta traer.
-  select string_agg(p.nombre || ' (' || n.cuantos || ')', ', ' order by p.envio)
+  -- Por persona: lo enviado que todavía no se trajo. **Se mira cada carga, no la
+  -- hora del último traer**: si un delegado envía mientras el jefe tiene la
+  -- revisión abierta, al aceptar lo de antes el aviso sigue por lo nuevo.
+  -- Quien envió y ya no tiene nada suyo para traer (otro lo corrigió) no figura.
+  select string_agg(p.nombre || ' (' || p.cuantos || ')', ', ' order by p.envio, p.nombre)
     into v_enviaron
   from (
-    select public.delegado_llave(c.nombre) as llave,
-           min(c.nombre) as nombre, max(c.entregado_at) as envio
-    from public.celulares_delegado c
-    where c.evento_id = p_evento and c.entregado_at is not null
-    group by public.delegado_llave(c.nombre)
-    having max(c.entregado_at) > v_desde
-  ) p
-  join lateral (
-    select count(*) as cuantos
+    select min(c.nombre) as nombre, max(g.enviado_at) as envio, count(*) as cuantos
     from public.cargas_delegado g
-    join public.celulares_delegado d on d.id = g.celular_id
-    where g.evento_id = p_evento and g.traido_at is null
-      and public.delegado_llave(d.nombre) = p.llave
-  ) n on true
-  -- Quien envió y ya no tiene nada suyo para traer (otro lo corrigió) no figura.
-  where n.cuantos > 0;
+    join public.celulares_delegado c on c.id = g.celular_id
+    where g.evento_id = p_evento and g.traido_at is null and g.enviado_at is not null
+    group by public.delegado_llave(c.nombre)
+  ) p;
 
   -- Al vencer: lo cargado que nadie envió (o que se corrigió después de enviar).
   select string_agg(p.nombre || ' (cargó ' || p.cuantos || ')', ', ' order by p.entro)

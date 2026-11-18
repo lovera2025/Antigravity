@@ -1,0 +1,1065 @@
+{
+ "link_sin": {
+  "ok": false,
+  "motivo": "sin_link"
+ },
+ "crear": {
+  "ok": true,
+  "clave": "CLAVE",
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "lista_link_malo": {
+  "ok": false,
+  "motivo": "link"
+ },
+ "lista_sin_nadie": {
+  "ok": false,
+  "lleno": false,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "motivo": "entrar",
+  "vencido": false,
+  "delegados": [],
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "entrar_nombre": {
+  "ok": false,
+  "motivo": "nombre"
+ },
+ "entrar_ok": {
+  "ok": true,
+  "sesion": "SESION-LAURA"
+ },
+ "entrar_lleno": {
+  "ok": false,
+  "motivo": "lleno"
+ },
+ "lista_para_entrar": {
+  "ok": false,
+  "lleno": true,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "motivo": "entrar",
+  "vencido": false,
+  "delegados": [
+   {
+    "nombre": "LAURA GÓMEZ"
+   },
+   {
+    "nombre": "PEDRO SOSA"
+   }
+  ],
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "guardar_ok": {
+  "ok": true
+ },
+ "guardar_vacio": {
+  "ok": false,
+  "motivo": "vacio"
+ },
+ "guardar_tope": {
+  "ok": false,
+  "motivo": "tope"
+ },
+ "guardar_largo": {
+  "ok": false,
+  "campo": "musica",
+  "motivo": "largo"
+ },
+ "entregar_nada": {
+  "ok": false,
+  "motivo": "nada"
+ },
+ "entregar_ok": {
+  "ok": true
+ },
+ "entregar_ya": {
+  "ok": true,
+  "ya": true
+ },
+ "pendientes": [
+  {
+   "texto": "Acompañantes y música para traer: Escuela Normal · Promo 2026 · envió LAURA GÓMEZ (2) · faltan 9 alumnos",
+   "evento_id": "aaaaaaaa-0000-4000-8000-000000000001"
+  }
+ ],
+ "guardar_libre": {
+  "ok": true,
+  "libre": true
+ },
+ "lista_adentro": {
+  "ok": true,
+  "yo": {
+   "nombre": "LAURA GÓMEZ",
+   "entregado": true,
+   "sin_enviar": 1,
+   "envio_texto": "jue 12/11 15:00"
+  },
+  "mios": 3,
+  "total": 12,
+  "faltan": 7,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "alumnos": [
+   {
+    "de": "otro",
+    "id": "a0000000-0000-4000-8000-000000000001",
+    "mio": false,
+    "cargo": "PEDRO SOSA",
+    "estado": "sin_enviar",
+    "musica": "Corregido por Pedro",
+    "nombre": "ACOSTA, LUCÍA",
+    "division": "6° A",
+    "prog_acomp": true,
+    "en_programa": true,
+    "prog_musica": true,
+    "acompanantes": [
+     "ACOSTA, JORGE",
+     "RÍOS, MARTA"
+    ],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000002",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "enviado",
+    "musica": "Tema de Laura",
+    "nombre": "ÁLVAREZ, BRUNO",
+    "division": "6° A",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [
+     "ÁLVAREZ, EVA"
+    ],
+    "cuando_texto": "jue 12/11 15:00"
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000003",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "BENÍTEZ, MATEO",
+    "division": "6° A",
+    "prog_acomp": true,
+    "en_programa": true,
+    "prog_musica": false,
+    "acompanantes": [
+     "BENÍTEZ, CARLA"
+    ],
+    "cuando_texto": null
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000004",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "aceptado",
+    "musica": "Para aceptar",
+    "nombre": "CABRERA, SOFÍA",
+    "division": "6° A",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": "jue 12/11 15:00"
+   },
+   {
+    "de": "otro",
+    "id": "a0000000-0000-4000-8000-000000000005",
+    "mio": false,
+    "cargo": "PEDRO SOSA",
+    "estado": "sin_enviar",
+    "musica": "De Pedro",
+    "nombre": "DÍAZ, TOMÁS",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [
+     "DÍAZ, ANA"
+    ],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000006",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "sin_enviar",
+    "musica": "Sin enviar de Laura",
+    "nombre": "ESCOBAR, VALENTINA",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000007",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "FERNÁNDEZ, JOAQUÍN",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000008",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "GÓMEZ, SOFÍA",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000009",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "IBARRA, CAMILA",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000010",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "LEDESMA, SANTINO",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000011",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "MEZA, MARTINA",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000012",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "OJEDA, THIAGO",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   }
+  ],
+  "vencido": false,
+  "cargados": 5,
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "link_abierto": {
+  "ok": true,
+  "cupo": 2,
+  "aviso": "Acompañantes y música para traer: Escuela Normal · Promo 2026 · envió LAURA GÓMEZ (1) · faltan 7 alumnos",
+  "clave": "CLAVE",
+  "total": 12,
+  "estado": "abierto",
+  "faltan": 7,
+  "cargados": 4,
+  "enviados": 1,
+  "aceptados": 1,
+  "celulares": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "cargados": 3,
+    "entregado": true,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": "jueves 12/11 a las 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": false,
+    "cargados": 2,
+    "entregado": false,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": null
+   }
+  ],
+  "delegados": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "aparatos": 1,
+    "cargados": 3,
+    "sin_enviar": 1,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": "jue 12/11 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": false,
+    "aparatos": 1,
+    "cargados": 2,
+    "sin_enviar": 2,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": null
+   }
+  ],
+  "sin_enviar": 3,
+  "en_programa": 0,
+  "vence_local": "2026-11-19 20:00",
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "cargas": [
+  {
+   "cargo": "PEDRO SOSA",
+   "activo": true,
+   "alumno": "ACOSTA, LUCÍA",
+   "musica": "Corregido por Pedro",
+   "suelto": false,
+   "traido": false,
+   "enviado": false,
+   "division": "6° A",
+   "alumno_id": "a0000000-0000-4000-8000-000000000001",
+   "entregado": false,
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "activo": true,
+   "alumno": "ÁLVAREZ, BRUNO",
+   "musica": "Tema de Laura",
+   "suelto": false,
+   "traido": false,
+   "enviado": true,
+   "division": "6° A",
+   "alumno_id": "a0000000-0000-4000-8000-000000000002",
+   "entregado": true,
+   "acompanantes": [
+    "ÁLVAREZ, EVA"
+   ],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "activo": true,
+   "alumno": "CABRERA, SOFÍA",
+   "musica": "Para aceptar",
+   "suelto": false,
+   "traido": true,
+   "enviado": true,
+   "division": "6° A",
+   "alumno_id": "a0000000-0000-4000-8000-000000000004",
+   "entregado": true,
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "cargo": "PEDRO SOSA",
+   "activo": true,
+   "alumno": "DÍAZ, TOMÁS",
+   "musica": "De Pedro",
+   "suelto": false,
+   "traido": false,
+   "enviado": false,
+   "division": "6° B",
+   "alumno_id": "a0000000-0000-4000-8000-000000000005",
+   "entregado": false,
+   "acompanantes": [
+    "DÍAZ, ANA"
+   ],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "activo": true,
+   "alumno": "ESCOBAR, VALENTINA",
+   "musica": "Sin enviar de Laura",
+   "suelto": false,
+   "traido": false,
+   "enviado": false,
+   "division": "6° B",
+   "alumno_id": "a0000000-0000-4000-8000-000000000006",
+   "entregado": false,
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  }
+ ],
+ "alumnos_estado": [
+  {
+   "cargo": "PEDRO SOSA",
+   "alumno": "ACOSTA, LUCÍA",
+   "estado": "sin_enviar",
+   "musica": "Corregido por Pedro",
+   "division": "6° A",
+   "otra_vez": true,
+   "alumno_id": "a0000000-0000-4000-8000-000000000001",
+   "delegado_id": "celular-2",
+   "acompanantes": [
+    "ACOSTA, JORGE",
+    "RÍOS, MARTA"
+   ],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "alumno": "ÁLVAREZ, BRUNO",
+   "estado": "enviado",
+   "musica": "Tema de Laura",
+   "division": "6° A",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000002",
+   "delegado_id": "celular-1",
+   "acompanantes": [
+    "ÁLVAREZ, EVA"
+   ],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "cargo": null,
+   "alumno": "BENÍTEZ, MATEO",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° A",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000003",
+   "delegado_id": null,
+   "acompanantes": [
+    "BENÍTEZ, CARLA"
+   ],
+   "cuando_texto": null
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "alumno": "CABRERA, SOFÍA",
+   "estado": "aceptado",
+   "musica": "Para aceptar",
+   "division": "6° A",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000004",
+   "delegado_id": "celular-1",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "cargo": "PEDRO SOSA",
+   "alumno": "DÍAZ, TOMÁS",
+   "estado": "sin_enviar",
+   "musica": "De Pedro",
+   "division": "6° B",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000005",
+   "delegado_id": "celular-2",
+   "acompanantes": [
+    "DÍAZ, ANA"
+   ],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "cargo": "LAURA GÓMEZ",
+   "alumno": "ESCOBAR, VALENTINA",
+   "estado": "sin_enviar",
+   "musica": "Sin enviar de Laura",
+   "division": "6° B",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000006",
+   "delegado_id": "celular-1",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "cargo": null,
+   "alumno": "FERNÁNDEZ, JOAQUÍN",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° B",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000007",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  },
+  {
+   "cargo": null,
+   "alumno": "GÓMEZ, SOFÍA",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° B",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000008",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  },
+  {
+   "cargo": null,
+   "alumno": "IBARRA, CAMILA",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° C",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000009",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  },
+  {
+   "cargo": null,
+   "alumno": "LEDESMA, SANTINO",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° C",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000010",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  },
+  {
+   "cargo": null,
+   "alumno": "MEZA, MARTINA",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° C",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000011",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  },
+  {
+   "cargo": null,
+   "alumno": "OJEDA, THIAGO",
+   "estado": "falta",
+   "musica": "",
+   "division": "6° C",
+   "otra_vez": false,
+   "alumno_id": "a0000000-0000-4000-8000-000000000012",
+   "delegado_id": null,
+   "acompanantes": [],
+   "cuando_texto": null
+  }
+ ],
+ "historial": [
+  {
+   "que": "guardo",
+   "quien": "LAURA GÓMEZ",
+   "musica": "Tema de Laura",
+   "alumno_id": "a0000000-0000-4000-8000-000000000002",
+   "acompanantes": [
+    "ÁLVAREZ, EVA"
+   ],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "que": "guardo",
+   "quien": "LAURA GÓMEZ",
+   "musica": "Para aceptar",
+   "alumno_id": "a0000000-0000-4000-8000-000000000004",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "que": "aceptado",
+   "quien": "Junior Eventos",
+   "musica": "Para aceptar",
+   "alumno_id": "a0000000-0000-4000-8000-000000000004",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 15:00"
+  },
+  {
+   "que": "guardo",
+   "quien": "PEDRO SOSA",
+   "musica": "De Pedro",
+   "alumno_id": "a0000000-0000-4000-8000-000000000005",
+   "acompanantes": [
+    "DÍAZ, ANA"
+   ],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "que": "guardo",
+   "quien": "LAURA GÓMEZ",
+   "musica": "Sin enviar de Laura",
+   "alumno_id": "a0000000-0000-4000-8000-000000000006",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "que": "guardo",
+   "quien": "LAURA GÓMEZ",
+   "musica": "Se saca",
+   "alumno_id": "a0000000-0000-4000-8000-000000000007",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "que": "vacio",
+   "quien": "LAURA GÓMEZ",
+   "musica": "",
+   "alumno_id": "a0000000-0000-4000-8000-000000000007",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  },
+  {
+   "que": "guardo",
+   "quien": "PEDRO SOSA",
+   "musica": "Corregido por Pedro",
+   "alumno_id": "a0000000-0000-4000-8000-000000000001",
+   "acompanantes": [],
+   "cuando_texto": "jue 12/11 16:00"
+  }
+ ],
+ "sacar": {
+  "ok": true
+ },
+ "entrar_sacado": {
+  "ok": false,
+  "motivo": "sacado"
+ },
+ "lista_sacado": {
+  "ok": false,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "motivo": "sacado",
+  "vencido": false,
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "link_con_sacado": {
+  "ok": true,
+  "cupo": 2,
+  "aviso": "Acompañantes y música para traer: Escuela Normal · Promo 2026 · envió LAURA GÓMEZ (1) · faltan 7 alumnos",
+  "clave": "CLAVE",
+  "total": 12,
+  "estado": "abierto",
+  "faltan": 7,
+  "cargados": 4,
+  "enviados": 1,
+  "aceptados": 1,
+  "celulares": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "cargados": 3,
+    "entregado": true,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": "jueves 12/11 a las 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "cargados": 2,
+    "entregado": false,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": null
+   }
+  ],
+  "delegados": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "aparatos": 1,
+    "cargados": 3,
+    "sin_enviar": 1,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": "jue 12/11 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "aparatos": 1,
+    "cargados": 2,
+    "sin_enviar": 2,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": null
+   }
+  ],
+  "sin_enviar": 3,
+  "en_programa": 0,
+  "vence_local": "2026-11-19 20:00",
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "lista_apagado": {
+  "ok": false,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "motivo": "apagado",
+  "vencido": false,
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "link_apagado": {
+  "ok": true,
+  "cupo": 2,
+  "aviso": "Acompañantes y música para traer: Escuela Normal · Promo 2026 · envió LAURA GÓMEZ (1) · faltan 7 alumnos",
+  "clave": "CLAVE",
+  "total": 12,
+  "estado": "apagado",
+  "faltan": 7,
+  "cargados": 4,
+  "enviados": 1,
+  "aceptados": 1,
+  "celulares": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "cargados": 3,
+    "entregado": true,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": "jueves 12/11 a las 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "cargados": 2,
+    "entregado": false,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": null
+   }
+  ],
+  "delegados": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "aparatos": 1,
+    "cargados": 3,
+    "sin_enviar": 1,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": "jue 12/11 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "aparatos": 1,
+    "cargados": 2,
+    "sin_enviar": 2,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": null
+   }
+  ],
+  "sin_enviar": 3,
+  "en_programa": 0,
+  "vence_local": "2026-11-19 20:00",
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "lista_vencido": {
+  "ok": true,
+  "yo": {
+   "nombre": "LAURA GÓMEZ",
+   "entregado": true,
+   "sin_enviar": 1,
+   "envio_texto": "jue 12/11 15:00"
+  },
+  "mios": 3,
+  "total": 12,
+  "faltan": 7,
+  "fiesta": "Escuela Normal · Promo 2026",
+  "alumnos": [
+   {
+    "de": "otro",
+    "id": "a0000000-0000-4000-8000-000000000001",
+    "mio": false,
+    "cargo": "PEDRO SOSA",
+    "estado": "sin_enviar",
+    "musica": "Corregido por Pedro",
+    "nombre": "ACOSTA, LUCÍA",
+    "division": "6° A",
+    "prog_acomp": true,
+    "en_programa": true,
+    "prog_musica": true,
+    "acompanantes": [
+     "ACOSTA, JORGE",
+     "RÍOS, MARTA"
+    ],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000002",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "enviado",
+    "musica": "Tema de Laura",
+    "nombre": "ÁLVAREZ, BRUNO",
+    "division": "6° A",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [
+     "ÁLVAREZ, EVA"
+    ],
+    "cuando_texto": "jue 12/11 15:00"
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000003",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "BENÍTEZ, MATEO",
+    "division": "6° A",
+    "prog_acomp": true,
+    "en_programa": true,
+    "prog_musica": false,
+    "acompanantes": [
+     "BENÍTEZ, CARLA"
+    ],
+    "cuando_texto": null
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000004",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "aceptado",
+    "musica": "Para aceptar",
+    "nombre": "CABRERA, SOFÍA",
+    "division": "6° A",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": "jue 12/11 15:00"
+   },
+   {
+    "de": "otro",
+    "id": "a0000000-0000-4000-8000-000000000005",
+    "mio": false,
+    "cargo": "PEDRO SOSA",
+    "estado": "sin_enviar",
+    "musica": "De Pedro",
+    "nombre": "DÍAZ, TOMÁS",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [
+     "DÍAZ, ANA"
+    ],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "mio",
+    "id": "a0000000-0000-4000-8000-000000000006",
+    "mio": true,
+    "cargo": "LAURA GÓMEZ",
+    "estado": "sin_enviar",
+    "musica": "Sin enviar de Laura",
+    "nombre": "ESCOBAR, VALENTINA",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": "jue 12/11 16:00"
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000007",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "FERNÁNDEZ, JOAQUÍN",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000008",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "GÓMEZ, SOFÍA",
+    "division": "6° B",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000009",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "IBARRA, CAMILA",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000010",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "LEDESMA, SANTINO",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000011",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "MEZA, MARTINA",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   },
+   {
+    "de": "libre",
+    "id": "a0000000-0000-4000-8000-000000000012",
+    "mio": false,
+    "cargo": null,
+    "estado": "falta",
+    "musica": "",
+    "nombre": "OJEDA, THIAGO",
+    "division": "6° C",
+    "prog_acomp": false,
+    "en_programa": false,
+    "prog_musica": false,
+    "acompanantes": [],
+    "cuando_texto": null
+   }
+  ],
+  "vencido": true,
+  "cargados": 5,
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "link_vencido": {
+  "ok": true,
+  "cupo": 2,
+  "aviso": "Acompañantes y música para traer: Escuela Normal · Promo 2026 · envió LAURA GÓMEZ (1) · venció sin enviar: LAURA GÓMEZ (cargó 1), PEDRO SOSA (cargó 2) · faltan 7 alumnos",
+  "clave": "CLAVE",
+  "total": 12,
+  "estado": "vencido",
+  "faltan": 7,
+  "cargados": 4,
+  "enviados": 1,
+  "aceptados": 1,
+  "celulares": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "cargados": 3,
+    "entregado": true,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": "jueves 12/11 a las 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "cargados": 2,
+    "entregado": false,
+    "entro_texto": "jueves 12/11 a las 15:00",
+    "entregado_texto": null
+   }
+  ],
+  "delegados": [
+   {
+    "id": "celular-1",
+    "nombre": "LAURA GÓMEZ",
+    "sacado": false,
+    "aparatos": 1,
+    "cargados": 3,
+    "sin_enviar": 1,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": "jue 12/11 15:00"
+   },
+   {
+    "id": "celular-2",
+    "nombre": "PEDRO SOSA",
+    "sacado": true,
+    "aparatos": 1,
+    "cargados": 2,
+    "sin_enviar": 2,
+    "entro_texto": "jue 12/11 15:00",
+    "envio_texto": null
+   }
+  ],
+  "sin_enviar": 3,
+  "en_programa": 0,
+  "vence_local": "2026-11-19 20:00",
+  "vence_texto": "jueves 19/11 a las 20:00"
+ },
+ "guardar_vencido": {
+  "ok": false,
+  "motivo": "vencido"
+ },
+ "cambiar_mal": {
+  "ok": false,
+  "motivo": "accion"
+ }
+}

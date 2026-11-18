@@ -476,7 +476,9 @@ class DelegadoEnMemoria implements NubeDelDelegado, LinkDelDelegado {
           if (!g.traido) _anotar('$id', 'Junior Eventos', 'aceptado', g);
           g.traido = true;
         }
-        hayAviso = false;
+        // Como la nube: el aviso sigue mientras quede algo enviado sin traer
+        // (lo que un delegado envió mientras el jefe miraba la revisión).
+        hayAviso = _cargas.values.any((g) => g.enviado && !g.traido);
       default:
         return const RespuestaDelegado(ok: false, motivo: 'accion');
     }

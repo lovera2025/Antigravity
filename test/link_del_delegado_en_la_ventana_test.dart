@@ -235,8 +235,9 @@ void main() {
       expect(_texto(tester, 'link_estado'), 'ABIERTO hasta el jueves 19/11 a las 20:00');
       expect(
         _texto(tester, 'link_cuenta'),
-        'De 4 alumnos: 1 faltan · 1 sin enviar · 1 enviados · 0 aceptados · '
-        '1 ya estaban en el programa.',
+        // Con uno solo va en singular: no dice "1 enviados".
+        'De 4 alumnos: 1 falta · 1 sin enviar · 1 enviado · 0 aceptados · '
+        '1 ya estaba en el programa.',
       );
       expect(find.text('TRAER LO CARGADO (1)'), findsOneWidget);
       expect(find.text('CAMBIAR LA FECHA…'), findsOneWidget);
@@ -325,6 +326,38 @@ void main() {
       await tester.pumpAndSettle();
       expect(nube.pedidos, ['cupo|5']);
       expect(nube.cupo, 5);
+    });
+
+    testWidgets('si el equipo no deja copiar, lo dice y el link queda escrito '
+        'para seleccionarlo', (tester) async {
+      // Pasó en el navegador de la prueba (18-nov): el botón no hacía nada.
+      final nube = _nube();
+      await _cargaron(nube);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (llamada) async {
+          if (llamada.method == 'Clipboard.setData') {
+            throw PlatformException(code: 'copy_fail');
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await _abrir(tester, nube);
+      await _tocar(tester, 'link_copiar');
+      expect(tester.takeException(), isNull);
+      expect(
+        _texto(tester, 'link_dicho'),
+        'No se pudo copiar solo. El link está escrito arriba: seleccionalo y '
+        'copialo.',
+      );
+      expect(
+        tester.widget<SelectableText>(find.byKey(const Key('link_url'))).data,
+        'https://ejemplo/?delegado&clave=c1a2b3',
+      );
     });
   });
 
@@ -567,7 +600,7 @@ void main() {
       expect(_chip(tester, 'link_estado_$_bruno'), 'Aceptado');
       expect(
         _texto(tester, 'link_cuenta'),
-        contains('0 enviados · 1 aceptados'),
+        contains('0 enviados · 1 aceptado ·'),
       );
       await _tocar(tester, 'link_historial_$_bruno');
       expect(

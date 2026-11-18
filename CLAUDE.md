@@ -628,9 +628,9 @@ ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.clau
     guardar lo aceptado no cambia ninguna otra tabla, renglón ni columna. **La lista lleva nombres: va a `build/`.**
   - **Un equipo con la 6.9.x no conoce la regla y vende todo con descuento:** al publicar, no vender entradas desde un
     equipo sin esta versión.
-- **Parte 3, programada y probada en el sandbox (18-nov): el link del delegado, de nuevo** (el usuario vio la maqueta
-  y dijo "hacé la mejor que a vos te parezca": se hizo la forma B, todo en una hoja). **Falta la suite entera y
-  terminar las roturas a propósito** (cortó a mitad; ver "Lo que falta, en orden" del CONTEXTO).
+- **Parte 3, programada, probada y cerrada (18-nov): el link del delegado, de nuevo** (el usuario vio la maqueta
+  y dijo "hacé la mejor que a vos te parezca": se hizo la forma B, todo en una hoja). La suite entera y las roturas
+  a propósito, hechas ("El cierre de la Parte 3" del CONTEXTO). **Falta solo que mire las capturas.**
   - **Un SQL nuevo en la nube, solo de agregar, SIN CORRER:**
     `supabase/migrations/20261118120000_link_delegado_reabrir.sql` (la columna `cargas_delegado.enviado_at`, la tabla
     `cambios_delegado` y funciones: de 17 a 22). **Ninguna función cambia de firma**; lo de más va en funciones
@@ -647,8 +647,15 @@ ahí está **lo hecho y lo que falta, en orden**; el plan, `C:\Users\lover\.clau
     Comando abren `link_del_delegado_ventana.dart` (`link_del_delegado_panel.dart` ya no existe; "Acompañantes y
     música" quedó solo con el Excel). **`detalle_evento_masivo_screen.dart` es el único que lee
     `linkDelDelegadoProvider`** (`_abrirLinkDeLosDelegados`); la ventana recibe el link ya armado.
-  - Las reglas: `tool/delegado_sandbox/` corre los dos SQL en orden (`node pruebas.mjs`, 73). De punta a punta:
-    `tool/link_delegado_prueba.dart` compilado como la web y `preview_start` con `delegado-sandbox`.
+  - **El aviso mira cada carga** (`delegado_aviso`): avisa mientras haya algo enviado sin traer, no por la hora del
+    último traer (un delegado que enviaba con la revisión del jefe abierta no avisaba nunca). **`traido` va siempre
+    con la lista de alumnos.**
+  - Las reglas: `tool/delegado_sandbox/` corre los dos SQL en orden (`node pruebas.mjs`, 77). **Las roturas a
+    propósito del SQL: `node roturas.mjs`** (43 casos, sobre una copia; el archivo de verdad no se toca). De punta
+    a punta: `tool/link_delegado_prueba.dart` compilado como la web y `preview_start` con `delegado-sandbox`.
+  - **Lo que contesta la nube lo lee el programa en una prueba** (`test/nube_del_delegado_se_lee_test.dart`, con
+    `test/datos/nube_del_delegado.json`, que saca `node muestras.mjs` del SQL de verdad). **Si cambia el SQL del
+    link: `node muestras.mjs` y después esa prueba** (si no, `pruebas.mjs` falla en M1).
 - **Parte 4, sin empezar: terminar "a confirmar"** (`git stash pop`).
 - **En esta PC no hay con qué pasar un PDF a imagen** (ni `pdftoppm` ni un paquete de Python), y un PDF armado con las
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que

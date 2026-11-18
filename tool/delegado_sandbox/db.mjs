@@ -12,7 +12,10 @@ export const alumnoB = (n) => `b0000000-0000-4000-8000-${String(n).padStart(12, 
 /** El SQL que va a la nube: los mismos archivos de las migraciones, en orden. */
 export const SQL_DE_LA_NUBE = '../../supabase/migrations/20261113120000_link_delegado.sql';
 /** La segunda parte (6.9.2): todos corrigen todo, Enviar no cierra, el historial. */
-export const SQL_DE_LA_NUBE_2 = '../../supabase/migrations/20261118120000_link_delegado_reabrir.sql';
+// `SQL_DEL_LINK_2` (una dirección `file:///…`) lo cambia por una copia: así las
+// roturas a propósito (`roturas.mjs`) nunca tocan el archivo de verdad.
+export const SQL_DE_LA_NUBE_2 = process.env.SQL_DEL_LINK_2
+  ?? '../../supabase/migrations/20261118120000_link_delegado_reabrir.sql';
 export const SQL_DE_LA_NUBE_TODO = [SQL_DE_LA_NUBE, SQL_DE_LA_NUBE_2];
 
 const TIPOS = { p_evento: 'uuid', p_alumno: 'uuid', p_acompanantes: 'jsonb', p_cupo: 'integer' };
