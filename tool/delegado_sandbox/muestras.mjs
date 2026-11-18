@@ -61,7 +61,7 @@ export async function armarMuestras(nube) {
   await cambiar('traido', JSON.stringify([alumnoA(4)]));
 
   await nube.reloj(MAS_TARDE);
-  await guardar(pedro, 5, ['DÍAZ, ANA'], 'De Pedro');
+  await guardar(pedro, 5, ['DE PRUEBA, ANA'], 'De Pedro');
   await guardar(laura, 6, [], 'Sin enviar de Laura');
   await guardar(laura, 7, [], 'Se saca');
   m.guardar_libre = await guardar(laura, 7, [], '');

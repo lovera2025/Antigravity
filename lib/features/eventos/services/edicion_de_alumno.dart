@@ -18,7 +18,7 @@ import 'salon_mesas.dart';
 ///
 /// **La mora, igual** (6.1.0): una PC que todavía no bajó un perdón o un arreglo
 /// de la nube volvía a subir su mora vieja al editar cualquier cosa. Así, el
-/// 16-oct, editar a TOÑANEZ, AGUSTINA desde la PC del jefe habría devuelto a la
+/// 16-oct, editar a una alumna desde la PC del jefe habría devuelto a la
 /// nube los $166.200 cargados a mano que ya se habían puesto en 0.
 Map<String, dynamic> datosEdicionAlumno({
   required ContratoAlumno antes,

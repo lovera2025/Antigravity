@@ -114,7 +114,7 @@ prueba('A7', 'Guardar a un alumno de baja: lo rechaza', async () => {
 prueba('A8', 'Un alumno pasa a baja después de cargado: sale de la lista y al traer queda aparte, sin entrar a la grilla', async () => {
   const clave = await crear();
   const s = await entrar(clave, 'Laura Gómez');
-  igual(await guardar(clave, s, alumnoA(5), ['DÍAZ, ANA'], 'Tema uno'), { ok: true });
+  igual(await guardar(clave, s, alumnoA(5), ['DE PRUEBA, ANA'], 'Tema uno'), { ok: true });
   await entregar(clave, s);
   await nube.sql(`update public.contratos_alumnos set nombre_alumno = '[BAJA] ' || nombre_alumno where id = $1::uuid`, [alumnoA(5)]);
   const l = await lista(clave, s);
@@ -930,7 +930,7 @@ prueba('N7', 'La lista de ALUMNOS del jefe: los 12, cada uno con su estado, qui�
   await entregar(clave, laura);
   await cambiar('traido', JSON.stringify([alumnoA(2)]));
   await nube.reloj(MAS_TARDE);
-  await guardar(clave, pedro, alumnoA(5), ['DÍAZ, ANA'], '');          // sin enviar
+  await guardar(clave, pedro, alumnoA(5), ['DE PRUEBA, ANA'], '');          // sin enviar
   const e = await estados();
   igual(e.length, 12, 'cuántos:');
   igual(e.map((x) => x.alumno), ORDEN, 'orden:');

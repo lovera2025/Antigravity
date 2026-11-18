@@ -179,7 +179,7 @@
     "en_programa": false,
     "prog_musica": false,
     "acompanantes": [
-     "DÍAZ, ANA"
+     "DE PRUEBA, ANA"
     ],
     "cuando_texto": "jue 12/11 16:00"
    },
@@ -408,7 +408,7 @@
    "alumno_id": "a0000000-0000-4000-8000-000000000005",
    "entregado": false,
    "acompanantes": [
-    "DÍAZ, ANA"
+    "DE PRUEBA, ANA"
    ],
    "cuando_texto": "jue 12/11 16:00"
   },
@@ -493,7 +493,7 @@
    "alumno_id": "a0000000-0000-4000-8000-000000000005",
    "delegado_id": "celular-2",
    "acompanantes": [
-    "DÍAZ, ANA"
+    "DE PRUEBA, ANA"
    ],
    "cuando_texto": "jue 12/11 16:00"
   },
@@ -615,7 +615,7 @@
    "musica": "De Pedro",
    "alumno_id": "a0000000-0000-4000-8000-000000000005",
    "acompanantes": [
-    "DÍAZ, ANA"
+    "DE PRUEBA, ANA"
    ],
    "cuando_texto": "jue 12/11 16:00"
   },
@@ -882,7 +882,7 @@
     "en_programa": false,
     "prog_musica": false,
     "acompanantes": [
-     "DÍAZ, ANA"
+     "DE PRUEBA, ANA"
     ],
     "cuando_texto": "jue 12/11 16:00"
    },
