@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maqueta · El link del delegado</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+  /* el programa, con su tema claro */
+  --app:#f2f0eb; --card:#fbfbf9; --gris:#616161; --texto:#1c1b17; --m3:#6d5e0f; --m3suave:#efe3b4; --dorado:#d4af37;
+  --verde:#2e7d32; --rojo:#c62828; --naranja:#ef6c00;
+  /* la página del celular, con sus colores de hoy */
+  --cFondo:#f3f5f9; --cTinta:#17202e; --cSuave:#5a6678; --cLinea:#d9dfe8; --cAzul:#1e57b8; --cVerde:#0e7a4b;
+  --cOk:#ddf3e4; --cOkT:#1b6b3a; --cFalta:#fbebcb; --cFaltaT:#7a5200; --cGris:#e9edf2; --cGrisT:#6b7685; --cAviso:#e4ecfa; --cAvisoT:#1b3f86;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45}
+main{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:24px;font-weight:800;margin:0 0 4px}
+h2{font-size:17px;font-weight:800;margin:22px 0 6px}
+.sub{color:var(--tinta2);margin:0 0 6px}
+.aviso{background:var(--primario-suave);border-radius:12px;padding:9px 13px;margin:8px 0 14px;font-weight:600}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;margin:0 0 12px}
+.nota p{margin:0 0 4px}.nota ul{margin:4px 0 0;padding-left:20px}
+.mirar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 12px;font-size:13.5px;color:var(--tinta2)}
+.mirar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;color:var(--tinta);font-weight:600}
+.elegir{display:inline-flex;border:1.5px solid var(--primario);border-radius:999px;overflow:hidden}
+.elegir button{font:inherit;font-weight:700;font-size:13.5px;border:0;background:transparent;color:var(--tinta);padding:7px 14px;cursor:pointer}
+.elegir button.on{background:var(--primario);color:#fff}
+.dos{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start}
+.pegado{position:sticky;top:10px}
+@media (max-width:980px){.dos{grid-template-columns:1fr}.pegado{position:static}}
+.rotulo{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--tinta2);margin:0 0 6px;text-transform:uppercase}
+/* ───── el programa ───── */
+.app{background:var(--app);color:var(--texto);border-radius:20px;padding:14px 16px 18px;border:1px solid rgba(0,0,0,.12);font-size:14px;margin:0 0 16px}
+.app h3{margin:0;font-size:19px;font-weight:800}.app .fiesta{font-size:13px;color:var(--gris);margin:0 0 10px}
+.b{font:inherit;font-weight:700;font-size:12.5px;border-radius:999px;padding:8px 15px;border:1px solid #7e775f;background:transparent;color:var(--m3);cursor:pointer;white-space:nowrap}
+.b.lleno{background:var(--m3);border-color:var(--m3);color:#fff}
+.b.rojo{color:var(--rojo);border-color:var(--rojo)}
+.b.texto{border-color:transparent}.b.chico{padding:5px 11px;font-size:11.5px}
+.b:disabled{opacity:.38;cursor:not-allowed}
+.estado{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--card);border:1px solid rgba(0,0,0,.06);border-radius:20px;padding:12px 14px;margin:0 0 10px}
+.estado .grande{font-size:19px;font-weight:900;flex:1;min-width:230px;line-height:1.2}
+.estado .grande small{display:block;font-size:12.5px;font-weight:500;color:var(--gris)}
+.abierto{color:var(--verde)}.cerrado{color:var(--rojo)}
+.cuenta{font-size:13px;color:var(--gris);margin:0 0 10px}
+.cuenta b{color:var(--texto)}
+.solapas{display:flex;gap:4px;border-bottom:2px solid rgba(0,0,0,.1);margin:0 0 10px}
+.solapas button{font:inherit;font-weight:800;font-size:12.5px;letter-spacing:.06em;border:0;background:transparent;padding:9px 14px;cursor:pointer;color:var(--gris);border-bottom:3px solid transparent;margin-bottom:-2px}
+.solapas button.on{color:var(--m3);border-bottom-color:var(--dorado)}
+.filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}
+.f{font:inherit;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid rgba(0,0,0,.2);background:transparent;padding:5px 11px;cursor:pointer;color:var(--texto)}
+.f.on{background:var(--m3suave);border-color:var(--m3)}
+select{font:inherit;font-size:12.5px;border-radius:999px;border:1px solid rgba(0,0,0,.2);background:var(--card);padding:5px 10px}
+.tabla{width:100%;border-collapse:collapse;font-size:13px}
+.tabla th{font-size:10.5px;letter-spacing:.06em;font-weight:800;color:var(--gris);text-align:left;padding:6px 8px;white-space:nowrap}
+.tabla td{padding:8px;border-top:1px solid rgba(0,0,0,.08);vertical-align:top}
+.tabla td small{color:var(--gris);display:block}
+.chip{display:inline-flex;gap:5px;align-items:center;border-radius:99px;padding:3px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.chip.v{background:rgba(46,125,50,.13);color:var(--verde)}.chip.r{background:rgba(198,40,40,.12);color:var(--rojo)}
+.chip.n{background:rgba(239,108,0,.14);color:var(--naranja)}.chip.g{background:rgba(84,110,122,.13);color:#546e7a}.chip.az{background:rgba(30,87,184,.12);color:#1e57b8}
+.hist{background:rgba(0,0,0,.035);border-radius:12px;padding:8px 10px;font-size:12.5px;margin:6px 0 0}
+.hist div{padding:2px 0}
+.hoja{display:grid;grid-template-columns:230px minmax(0,1fr);gap:12px}
+@media (max-width:760px){.hoja{grid-template-columns:1fr}}
+.deleg{background:var(--card);border:1.5px solid rgba(0,0,0,.08);border-radius:16px;padding:9px 11px;margin:0 0 7px;cursor:pointer;width:100%;text-align:left;font:inherit;color:inherit;display:block}
+.deleg.on{border-color:var(--m3);box-shadow:0 0 0 1px var(--m3) inset}
+.deleg b{display:block}.deleg small{color:var(--gris);display:block;font-size:12px}
+.alu{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:9px 12px;margin:0 0 7px}
+.alu .arr{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.alu .arr b{flex:1;min-width:150px}
+.alu .det{font-size:12.5px;color:var(--gris);margin:3px 0 0}
+.alu .det b{color:var(--texto);font-weight:600}
+.menu{background:var(--card);border-radius:14px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:6px;width:270px}
+.menu div{padding:9px 12px;border-radius:9px;font-size:13.5px}
+.menu div.nuevo{background:var(--m3suave);font-weight:700}
+.alerta{background:#fff8e1;border:1px solid #ffd54f;border-radius:14px;padding:9px 12px;display:flex;gap:10px;align-items:center;font-weight:600;color:#7a5200;max-width:520px}
+/* ───── diálogos ───── */
+.velo{position:fixed;inset:0;background:rgba(20,20,30,.45);display:grid;place-items:center;z-index:9;padding:14px}
+.dlg{background:var(--card);color:var(--texto);border-radius:22px;padding:18px 20px;max-width:560px;width:100%;max-height:90vh;overflow:auto;font-size:14px}
+.dlg h3{margin:0 0 8px;font-size:18px}.dlg .pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin:14px 0 0}
+.dlg input[type=datetime-local]{font:inherit;padding:9px 12px;border-radius:14px;border:1px solid rgba(0,0,0,.25);background:#fff}
+/* ───── el celular ───── */
+.tel{background:#111;border-radius:34px;padding:10px;max-width:380px;margin:0 auto}
+.pant{background:var(--cFondo);color:var(--cTinta);border-radius:26px;height:min(680px,calc(100vh - 130px));overflow:auto;padding:16px 14px 18px;font-size:14.5px;position:relative}
+.marca{font-size:11px;font-weight:800;letter-spacing:.12em;color:var(--cSuave);margin:0 0 8px}
+.pant h4{font-size:19px;font-weight:800;margin:0 0 4px;line-height:1.2}
+.cinta{background:var(--cAviso);color:var(--cAvisoT);border-radius:12px;padding:8px 11px;font-weight:600;font-size:13px;margin:0 0 10px}
+.cinta.ok{background:var(--cOk);color:var(--cOkT)}.cinta.falta{background:var(--cFalta);color:var(--cFaltaT)}.cinta.gris{background:var(--cGris);color:var(--cGrisT)}
+.caja{background:#fff;border:1px solid var(--cLinea);border-radius:16px;padding:11px 12px;margin:0 0 9px}
+.cb{font:inherit;font-weight:700;font-size:14px;border-radius:14px;padding:11px 14px;border:1.5px solid var(--cAzul);background:var(--cAzul);color:#fff;cursor:pointer;width:100%}
+.cb.linea{background:#fff;color:var(--cAzul)}.cb.verde{background:var(--cVerde);border-color:var(--cVerde)}
+.cb.chico{width:auto;padding:7px 12px;font-size:13px}
+.cb:disabled{opacity:.4}
+.pant input[type=text],.pant textarea{font:inherit;width:100%;border:1.5px solid var(--cLinea);border-radius:12px;padding:10px 12px;background:#fff;color:var(--cTinta)}
+.pant textarea{min-height:64px;resize:vertical}
+.pant label.c{display:block;font-size:12.5px;font-weight:700;color:var(--cSuave);margin:9px 0 3px}
+.nom{display:flex;gap:8px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1.5px solid var(--cLinea);border-radius:14px;padding:10px 12px;margin:0 0 7px;cursor:pointer}
+.nom b{flex:1}
+.div{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--cSuave);margin:12px 0 5px}
+.a{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--cLinea);border-radius:14px;padding:9px 11px;margin:0 0 6px;cursor:pointer}
+.a b{display:block}.a small{display:block;color:var(--cSuave);font-size:12.5px}
+.et{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:700;margin:3px 0 0}
+.et.ok{background:var(--cOk);color:var(--cOkT)}.et.falta{background:var(--cFalta);color:var(--cFaltaT)}.et.gris{background:var(--cGris);color:var(--cGrisT)}
+.barra{position:sticky;bottom:0;background:var(--cFondo);padding:10px 0 0;margin:10px 0 0;border-top:1px solid var(--cLinea)}
+.cartel{background:var(--cFalta);color:var(--cFaltaT);border-radius:14px;padding:11px 12px;margin:0 0 10px;font-weight:600}
+.cartel .fila{display:flex;gap:8px;margin:9px 0 0}
+.err{color:#b3261e;font-weight:600;font-size:13px;margin:6px 0 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1d1d2b;color:#fff;border-radius:999px;padding:9px 18px;font-weight:600;font-size:13.5px;z-index:20}
+</style></head><body><main>
+<h1>El link del delegado, como quedaría</h1>
+<p class="sub">Maqueta para mirar antes de programar. Nada se guarda y los nombres son inventados.</p>
+<div class="aviso">Se puede tocar todo. Lo que hacés en el celular de la maqueta aparece en el programa, con quién lo cargó y cuándo.</div>
+
+<div class="nota">
+  <p><b>Lo que cambia, en cuatro renglones</b></p>
+  <ul>
+    <li><b>Todos corrigen todo.</b> Lo ya cargado dice quién lo cargó y cuándo, y se puede abrir; si era de otro, avisa antes.</li>
+    <li><b>Enviar no cierra.</b> Te avisa a vos; el delegado sigue corrigiendo y puede enviar de nuevo.</li>
+    <li><b>Lo único que cierra es la fecha límite</b>, y la reabrís las veces que quieras poniendo otra fecha.</li>
+    <li><b>Desde otro celular entra igual</b>: toca su nombre. El cupo cuenta personas, no aparatos.</li>
+  </ul>
+</div>
+
+<div class="mirar">
+  <span>El programa, en dos formas para elegir:</span>
+  <span class="elegir" id="dir"><button data-d="A">A · Dos solapas</button><button data-d="B">B · Todo en una hoja</button><button data-d="AB">Las dos</button></span>
+  <label><input type="checkbox" id="vencio"> Hacer de cuenta que ya pasó la fecha límite</label>
+</div>
+
+<div class="dos">
+  <div>
+    <p class="rotulo">Por dónde entrás</p>
+    <div class="app" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+      <div>
+        <div style="font-size:12px;color:var(--gris);margin:0 0 5px">La fiesta → <b>PLANILLAS ▾</b></div>
+        <div class="menu">
+          <div>Planilla del sorteo</div>
+          <div>Planilla de entrega</div>
+          <div>Acompañantes y música (Excel)</div>
+          <div class="nuevo">Link para los delegados <span id="punto"></span></div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:12px;color:var(--gris);margin:0 0 5px">Centro de Comando → <b>ALERTAS</b> (abre la misma ventana)</div>
+        <div id="alerta"></div>
+        <p style="font-size:12.5px;color:var(--gris);margin:8px 0 0">Hoy el link está al fondo del cartel del Excel. Pasa a tener su ventana propia.</p>
+      </div>
+    </div>
+    <div id="programa"></div>
+  </div>
+  <div class="pegado">
+    <p class="rotulo">El celular del delegado</p>
+    <div class="mirar" style="margin-bottom:8px"><span>Mirar como:</span>
+      <span class="elegir" id="quien"></span></div>
+    <div class="tel"><div class="pant" id="cel"></div></div>
+  </div>
+</div>
+<div id="dialogo"></div><div id="toast"></div>
+</main>
+<script>
+const FIESTA = 'INSTITUTO SAN LORENZO · Promoción 2026';
+const DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dos = n => String(n).padStart(2,'0');
+const largo = d => DIAS[d.getDay()] + ' ' + dos(d.getDate()) + '/' + dos(d.getMonth()+1) + ' a las ' + dos(d.getHours()) + ':' + dos(d.getMinutes());
+const corto = d => DIAS[d.getDay()].slice(0,3) + ' ' + dos(d.getDate()) + '/' + dos(d.getMonth()+1) + ' ' + dos(d.getHours()) + ':' + dos(d.getMinutes());
+const dia = (d,h,m) => new Date(2026, 10, d, h, m);
+
+const S = {
+  dir:'AB', solapa:'alumnos', filtro:'todos', deQuien:'', abiertos:{}, dlg:null,
+  ahora: dia(18,10,30), vence: dia(19,20,0), cerradoAMano:false, cupo:3,
+  delegados:[
+    {id:'laura', nombre:'LAURA GÓMEZ', entro:dia(17,19,2), envio:dia(17,21,40), sacado:false},
+    {id:'martin', nombre:'MARTÍN RUIZ', entro:dia(18,8,15), envio:null, sacado:false},
+  ],
+  // estado: falta · sin_enviar · enviado · aceptado · programa.  otraVez: se corrigió después de aceptado.
+  alumnos:[
+    {id:1, n:'ACOSTA, VALENTINA', d:'6° A', ac:['ACOSTA, JORGE','DÍAZ, MARÍA'], mu:'Tusa (Karol G), desde 0:45', q:'laura', c:dia(17,19,10), e:'aceptado'},
+    {id:2, n:'BENÍTEZ, JOAQUÍN', d:'6° A', ac:['BENÍTEZ, RAÚL','SOSA, CLARA'], mu:'La Mudanza (Bad Bunny)', q:'martin', c:dia(18,8,20), e:'sin_enviar', otraVez:true,
+      h:[{q:'laura', c:dia(17,19,14), t:'Cargó 2 acompañantes y la música'}, {q:'jefe', c:dia(17,22,5), t:'Aceptado y cargado en el programa'}, {q:'martin', c:dia(18,8,20), t:'Cambió un acompañante (era SOSA, CARLA)'}]},
+    {id:3, n:'CASTRO, MÍA', d:'6° A', ac:['CASTRO, HUGO'], mu:'', q:'laura', c:dia(17,19,21), e:'enviado'},
+    {id:4, n:'DOMÍNGUEZ, BRUNO', d:'6° A', ac:[], mu:'', q:null, c:null, e:'falta'},
+    {id:5, n:'ESPÍNDOLA, CAMILA', d:'6° A', ac:['ESPÍNDOLA, ROSA','LEIVA, OMAR'], mu:'Provenza (Karol G)', q:'laura', c:dia(17,19,30), e:'enviado'},
+    {id:6, n:'FERREYRA, LUCAS', d:'6° B', ac:['FERREYRA, ANA'], mu:'Mi Gente (J Balvin), versión corta', q:'martin', c:dia(18,8,31), e:'sin_enviar'},
+    {id:7, n:'GÓMEZ, SOFÍA', d:'6° B', ac:['GÓMEZ, PEDRO','RÍOS, ELSA'], mu:'Hawái (Maluma)', q:null, c:null, e:'programa'},
+    {id:8, n:'HERRERA, TOMÁS', d:'6° B', ac:['HERRERA, LUIS','PAZ, NORA'], mu:'', q:'martin', c:dia(18,8,40), e:'sin_enviar'},
+    {id:9, n:'IBARRA, MARTINA', d:'6° B', ac:[], mu:'', q:null, c:null, e:'falta'},
+    {id:10, n:'JUÁREZ, NICOLÁS', d:'6° B', ac:['JUÁREZ, IVÁN'], mu:'Ojitos Lindos (Bad Bunny)', q:'laura', c:dia(17,19,44), e:'aceptado'},
+  ],
+  // el celular
+  yo:null, cel:'entrada', nombreNuevo:'', abierto:null, form:null, avisado:false, errCel:'', enviando:false,
+};
+S.alumnos.forEach(a => { if (!a.h) a.h = a.q ? [{q:a.q, c:a.c, t:'Cargó ' + (a.ac.length === 1 ? '1 acompañante' : a.ac.length + ' acompañantes') + (a.mu ? ' y la música' : '')}] : []; });
+S.alumnos.filter(a => a.e === 'aceptado' && a.h.length === 1).forEach(a => a.h.push({q:'jefe', c:dia(17,22,5), t:'Aceptado y cargado en el programa'}));
+
+const nombreDe = id => id === 'jefe' ? 'Vos (el jefe)' : (S.delegados.find(d => d.id === id) || {nombre:'El programa'}).nombre;
+const abierto = () => !S.cerradoAMano && S.ahora < S.vence;
+const pasa = () => { S.ahora = new Date(S.ahora.getTime() + 60000); return S.ahora; };
+const paraTraer = () => S.alumnos.filter(a => a.e === 'enviado' || (!abierto() && a.e === 'sin_enviar'));
+const cargoDe = id => S.alumnos.filter(a => a.q === id).length;
+function decir(t){ $('#toast').innerHTML = '<div class="toast">' + esc(t) + '</div>'; clearTimeout(decir.t); decir.t = setTimeout(() => $('#toast').innerHTML = '', 2200); }
+
+const ESTADO = {
+  falta:['Falta','n'], sin_enviar:['Sin enviar','g'], enviado:['Enviado · falta traerlo','az'], aceptado:['Aceptado','v'], programa:['Ya estaba en el programa','v'],
+};
+function chipDe(a){
+  const [t,c] = ESTADO[a.e];
+  return '<span class="chip ' + c + '">' + t + '</span>' + (a.otraVez && a.e !== 'aceptado' ? ' <span class="chip r">Corregido después de aceptado</span>' : '');
+}
+const quienCuando = a => a.q ? '<b>' + esc(nombreDe(a.q)) + '</b><small>' + corto(a.c) + '</small>' : (a.e === 'programa' ? '<small>Por Excel o a mano</small>' : '<small>—</small>');
+
+function listaFiltrada(){
+  return S.alumnos.filter(a => {
+    if (S.deQuien && a.q !== S.deQuien) return false;
+    if (S.filtro === 'faltan') return a.e === 'falta';
+    if (S.filtro === 'sin_enviar') return a.e === 'sin_enviar';
+    if (S.filtro === 'traer') return a.e === 'enviado';
+    return true;
+  });
+}
+function historialDe(a){
+  if (!S.abiertos[a.id]) return '';
+  return '<div class="hist">' + (a.h.length ? a.h.map(x => '<div><b>' + corto(x.c) + '</b> · ' + esc(nombreDe(x.q)) + ' · ' + esc(x.t) + '</div>').join('') : 'Todavía nadie cargó a este alumno.') + '</div>';
+}
+function cabecera(){
+  const ab = abierto();
+  const c = e => S.alumnos.filter(a => a.e === e).length;
+  const traer = paraTraer().length;
+  return '<h3>Link para los delegados</h3><p class="fiesta">' + FIESTA + '</p>' +
+    '<div class="estado"><div class="grande ' + (ab ? 'abierto' : 'cerrado') + '">' +
+      (ab ? 'ABIERTO hasta el ' + largo(S.vence) : 'CERRADO') +
+      '<small>' + (ab ? 'Los delegados pueden cargar y corregir. Se cierra solo ese día.' : (S.cerradoAMano ? 'Lo cerraste vos.' : 'El plazo terminó el ' + largo(S.vence) + '.') + ' Nadie puede cargar hasta que lo reabras.') + '</small></div>' +
+      '<button class="b" data-a="copiar">COPIAR LINK</button>' +
+      '<button class="b ' + (ab ? '' : 'lleno') + '" data-a="reabrir">' + (ab ? 'CAMBIAR LA FECHA…' : 'REABRIR HASTA…') + '</button>' +
+      (ab ? '<button class="b rojo" data-a="cerrar">CERRAR AHORA</button>' : '') + '</div>' +
+    '<p class="cuenta">De <b>' + S.alumnos.length + '</b> alumnos: <b>' + c('falta') + '</b> faltan · <b>' + c('sin_enviar') + '</b> sin enviar · <b>' + c('enviado') + '</b> enviados · <b>' + c('aceptado') + '</b> aceptados · <b>' + c('programa') + '</b> ya estaban en el programa. ' +
+      'Delegados: hasta <select data-a="cupo">' + [1,2,3,4,5].map(n => '<option' + (n === S.cupo ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> personas.</p>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px"><button class="b lleno" data-a="traer"' + (traer ? '' : ' disabled') + '>TRAER LO CARGADO' + (traer ? ' (' + traer + ')' : '') + '</button>' +
+      '<span style="font-size:12.5px;color:var(--gris)">Nada entra a la grilla sin tu ACEPTAR Y CARGAR, como hoy.</span></div>';
+}
+function filtros(){
+  const f = (k,t) => '<button class="f' + (S.filtro === k ? ' on' : '') + '" data-f="' + k + '">' + t + '</button>';
+  return '<div class="filtros">' + f('todos','Todos') + f('faltan','Faltan') + f('sin_enviar','Sin enviar') + f('traer','Para traer') +
+    '<select data-a="dequien"><option value="">De todos los delegados</option>' + S.delegados.map(d => '<option value="' + d.id + '"' + (S.deQuien === d.id ? ' selected' : '') + '>' + esc(d.nombre) + '</option>').join('') + '</select></div>';
+}
+function filaDelegado(d){
+  return '<tr><td><b>' + esc(d.nombre) + '</b>' + (d.sacado ? ' <span class="chip r">Sacado</span>' : '') + '</td><td>' + corto(d.entro) + '</td><td>' + cargoDe(d.id) + ' alumnos</td><td>' +
+    (d.envio ? corto(d.envio) : '<span class="chip g">Todavía no envió</span>') + '</td><td style="white-space:nowrap"><button class="b chico texto" data-ver="' + d.id + '">VER SUS ALUMNOS</button>' +
+    (d.sacado ? '' : '<button class="b chico rojo" data-sacar="' + d.id + '">SACAR</button>') + '</td></tr>';
+}
+function programaA(){
+  let cuerpo;
+  if (S.solapa === 'delegados') {
+    cuerpo = '<table class="tabla"><tr><th>DELEGADO</th><th>ENTRÓ</th><th>CARGÓ</th><th>ENVIÓ</th><th></th></tr>' + S.delegados.map(filaDelegado).join('') + '</table>';
+  } else {
+    const l = listaFiltrada();
+    cuerpo = filtros() + '<table class="tabla"><tr><th>ALUMNO</th><th>ACOMPAÑANTES</th><th>MÚSICA</th><th>QUIÉN Y CUÁNDO</th><th>ESTADO</th><th></th></tr>' +
+      (l.length ? l.map(a => '<tr><td><b>' + esc(a.n) + '</b><small>' + a.d + '</small></td><td>' + (a.ac.length ? a.ac.map(esc).join('<br>') : '<small>—</small>') + '</td><td>' + (a.mu ? esc(a.mu) : '<small>—</small>') +
+        '</td><td>' + quienCuando(a) + '</td><td>' + chipDe(a) + '</td><td><button class="b chico texto" data-h="' + a.id + '">' + (S.abiertos[a.id] ? 'CERRAR' : 'HISTORIAL') + '</button></td></tr>' +
+        (S.abiertos[a.id] ? '<tr><td colspan="6" style="border-top:0;padding-top:0">' + historialDe(a) + '</td></tr>' : '')).join('') : '<tr><td colspan="6">Ningún alumno con ese filtro.</td></tr>') + '</table>';
+  }
+  return '<p class="rotulo">A · Dos solapas</p><div class="app">' + cabecera() +
+    '<div class="solapas"><button class="' + (S.solapa === 'delegados' ? 'on' : '') + '" data-s="delegados">DELEGADOS (' + S.delegados.length + ')</button>' +
+    '<button class="' + (S.solapa === 'alumnos' ? 'on' : '') + '" data-s="alumnos">ALUMNOS (' + S.alumnos.length + ')</button></div>' + cuerpo + '</div>';
+}
+function programaB(){
+  const l = listaFiltrada();
+  const izq = '<button class="deleg' + (S.deQuien === '' ? ' on' : '') + '" data-ver=""><b>Todos</b><small>' + S.alumnos.length + ' alumnos · ' + S.alumnos.filter(a => a.e === 'falta').length + ' faltan</small></button>' +
+    S.delegados.map(d => '<div style="position:relative"><button class="deleg' + (S.deQuien === d.id ? ' on' : '') + '" data-ver="' + d.id + '"><b>' + esc(d.nombre) + (d.sacado ? ' · sacado' : '') + '</b><small>Entró ' + corto(d.entro) + '</small><small>Cargó ' + cargoDe(d.id) + ' · ' +
+      (d.envio ? 'envió ' + corto(d.envio) : 'todavía no envió') + '</small></button>' + (d.sacado ? '' : '<button class="b chico rojo" style="position:absolute;right:8px;top:8px" data-sacar="' + d.id + '">SACAR</button>') + '</div>').join('');
+  const f = (k,t) => '<button class="f' + (S.filtro === k ? ' on' : '') + '" data-f="' + k + '">' + t + '</button>';
+  const der = '<div class="filtros">' + f('todos','Todos') + f('faltan','Faltan') + f('sin_enviar','Sin enviar') + f('traer','Para traer') + '</div>' +
+    (l.length ? l.map(a => '<div class="alu"><div class="arr"><b>' + esc(a.n) + ' <span style="font-weight:400;color:var(--gris)">· ' + a.d + '</span></b>' + chipDe(a) +
+      '<button class="b chico texto" data-h="' + a.id + '">' + (S.abiertos[a.id] ? 'CERRAR' : 'HISTORIAL') + '</button></div>' +
+      '<div class="det">' + (a.ac.length ? 'Acompañantes: <b>' + a.ac.map(esc).join(' · ') + '</b>' : 'Sin acompañantes cargados') + (a.mu ? ' — Música: <b>' + esc(a.mu) + '</b>' : '') + '</div>' +
+      (a.q ? '<div class="det">Lo cargó <b>' + esc(nombreDe(a.q)) + '</b> el ' + corto(a.c) + '</div>' : '') + historialDe(a) + '</div>').join('') : '<div class="alu">Ningún alumno con ese filtro.</div>');
+  return '<p class="rotulo">B · Todo en una hoja</p><div class="app">' + cabecera() + '<div class="hoja"><div>' + izq + '</div><div>' + der + '</div></div></div>';
+}
+
+/* ───── los diálogos del programa ───── */
+function dialogo(){
+  const d = S.dlg; if (!d) return '';
+  if (d.t === 'reabrir') {
+    const v = S.vence > S.ahora ? S.vence : new Date(S.ahora.getTime() + 2*86400000);
+    const iso = v.getFullYear() + '-' + dos(v.getMonth()+1) + '-' + dos(v.getDate()) + 'T' + dos(v.getHours()) + ':' + dos(v.getMinutes());
+    return '<div class="velo"><div class="dlg"><h3>' + (abierto() ? 'Cambiar la fecha límite' : 'Reabrir el link') + '</h3>' +
+      '<p>Hasta qué día y hora pueden cargar y corregir. Vale para todos los delegados, también los que ya enviaron. Lo podés cambiar las veces que quieras.</p>' +
+      '<input type="datetime-local" id="hasta" value="' + iso + '"><div class="pie"><button class="b texto" data-a="cancelar">CANCELAR</button><button class="b lleno" data-a="okReabrir">' + (abierto() ? 'GUARDAR' : 'REABRIR') + '</button></div></div></div>';
+  }
+  if (d.t === 'sacar') {
+    const x = S.delegados.find(k => k.id === d.id);
+    return '<div class="velo"><div class="dlg"><h3>Sacar a ' + esc(x.nombre) + '</h3><p>No va a poder entrar más con su nombre. Cargó ' + cargoDe(x.id) + ' alumnos.</p>' +
+      '<p style="color:var(--gris);font-size:13px">Si dejás lo que cargó, sigue diciendo que lo cargó ' + esc(x.nombre) + ' y cuándo.</p>' +
+      '<div class="pie"><button class="b texto" data-a="cancelar">NO SACAR</button><button class="b rojo" data-a="sacarBorrar">SACAR Y BORRAR LO QUE CARGÓ</button><button class="b lleno" data-a="sacarDejar">SACAR Y DEJAR LO QUE CARGÓ</button></div></div></div>';
+  }
+  if (d.t === 'traer') {
+    const l = paraTraer();
+    return '<div class="velo"><div class="dlg"><h3>Antes de guardar</h3><p>Es el mismo cartel de hoy, con quién cargó cada cosa y cuándo.</p>' +
+      l.map(a => '<div class="alu"><div class="arr"><b>' + esc(a.n) + '</b>' + (a.otraVez ? '<span class="chip r">Ya lo habías aceptado: lo corrigieron</span>' : '<span class="chip az">Nuevo</span>') + '</div>' +
+        '<div class="det">' + (a.ac.length ? 'Acompañantes: <b>' + a.ac.map(esc).join(' · ') + '</b>' : '') + (a.mu ? ' — Música: <b>' + esc(a.mu) + '</b>' : '') + '</div>' +
+        '<div class="det">Lo cargó <b>' + esc(nombreDe(a.q)) + '</b> el ' + corto(a.c) + '</div></div>').join('') +
+      '<div class="pie"><button class="b texto" data-a="cancelar">CANCELAR</button><button class="b lleno" data-a="aceptar">ACEPTAR Y CARGAR (' + l.length + ')</button></div></div></div>';
+  }
+  return '';
+}
+
+/* ───── el celular ───── */
+function celular(){
+  const ab = abierto();
+  const marca = '<p class="marca">JUNIOR EVENTOS</p>';
+  if (S.cel === 'entrada' || !S.yo) {
+    if (!ab) return marca + '<h4>' + FIESTA + '</h4><div class="cinta gris">El plazo para cargar terminó el ' + largo(S.vence) + '.</div><div class="caja">Si necesitás más tiempo, escribile a Junior Eventos.</div>';
+    const activos = S.delegados.filter(d => !d.sacado);
+    const lleno = activos.length >= S.cupo;
+    return marca + '<div class="cinta">Hay tiempo hasta el ' + largo(S.vence) + '.</div><h4>¿Sos delegado de ' + FIESTA + '?</h4>' +
+      '<p style="color:var(--cSuave);margin:0 0 10px">Si no lo sos, cerrá esta página: esta lista no es para vos.</p>' +
+      (activos.length ? '<div class="caja"><b>¿Ya entraste? Tocá tu nombre</b><p style="color:var(--cSuave);font-size:12.5px;margin:2px 0 8px">Sirve desde cualquier celular: seguís con lo que ya cargaste.</p>' +
+        activos.map(d => '<button class="nom" data-yo="' + d.id + '"><b>' + esc(d.nombre) + '</b><span>›</span></button>').join('') + '</div>' : '') +
+      (lleno ? '<div class="cinta falta">Ya entraron los ' + S.cupo + ' delegados que esperábamos. Si te falta entrar a vos, avisale a Junior Eventos.</div>'
+        : '<div class="caja"><b>¿Es la primera vez?</b><label class="c">Tu nombre y apellido</label><input type="text" id="nuevo" placeholder="Nombre y apellido" value="' + esc(S.nombreNuevo) + '">' +
+          (S.errCel ? '<p class="err">' + esc(S.errCel) + '</p>' : '') + '<div style="height:9px"></div><button class="cb" data-c="entrar">Soy delegado, entrar</button></div>');
+  }
+  const yo = S.delegados.find(d => d.id === S.yo);
+  if (S.cel === 'form') return marca + formulario(yo, ab);
+  const mios = S.alumnos.filter(a => a.q === S.yo);
+  const sinEnviar = mios.filter(a => a.e === 'sin_enviar');
+  let h = marca + '<h4>Hola, ' + esc(yo.nombre) + '.</h4>';
+  h += ab ? '<div class="cinta">Tenés hasta el ' + largo(S.vence) + ' para cargar y corregir.</div>' : '<div class="cinta gris">El plazo terminó el ' + largo(S.vence) + '. Ya no se puede cargar ni corregir.</div>';
+  if (yo.envio) h += '<div class="cinta ok">Enviaste el ' + corto(yo.envio) + '. Si corregís algo, tocá Enviar otra vez para avisarnos.</div>';
+  let div = '';
+  for (const a of S.alumnos) {
+    if (a.d !== div) { div = a.d; h += '<p class="div">' + div + '</p>'; }
+    let et;
+    if (a.e === 'falta') et = '<span class="et falta">Falta</span>';
+    else if (a.e === 'programa') et = '<span class="et gris">Ya cargado en el programa</span>';
+    else et = '<span class="et ok">Ya cargado · ' + esc(nombreDe(a.q)) + ' · ' + corto(a.c) + '</span>';
+    h += '<button class="a" data-al="' + a.id + '"><b>' + esc(a.n) + '</b>' + (a.ac.length ? '<small>' + a.ac.map(esc).join(' · ') + '</small>' : '') + et + '</button>';
+  }
+  h += '<div class="barra">' + (S.errCel ? '<p class="err" style="margin:0 0 8px">' + esc(S.errCel) + '</p>' : '') +
+    '<p style="font-size:12.5px;color:var(--cSuave);margin:0 0 7px">Cargaste ' + mios.length + ' · ' + sinEnviar.length + ' sin enviar. <b>Enviar no cierra</b>: podés seguir corrigiendo hasta la fecha límite.</p>' +
+    '<button class="cb verde" data-c="enviar"' + (ab ? '' : ' disabled') + '>' + (yo.envio ? 'Enviar otra vez' : 'Enviar') + '</button>' +
+    '<div style="height:7px"></div><button class="cb linea" data-c="salir">No soy ' + esc(yo.nombre) + '</button></div>';
+  return h;
+}
+function formulario(yo, ab){
+  const a = S.alumnos.find(x => x.id === S.abierto), f = S.form;
+  const deOtro = a.e !== 'falta' && a.q !== S.yo;
+  let h = '<button class="cb linea chico" data-c="volver">‹ Volver a la lista</button><div style="height:10px"></div><h4>' + esc(a.n) + '</h4><p style="color:var(--cSuave);margin:0 0 8px">' + a.d + '</p>';
+  if (a.e !== 'falta') h += '<div class="cinta ' + (a.e === 'programa' ? 'gris' : 'ok') + '">' + (a.e === 'programa' ? 'Ya está cargado en el programa.' : 'Ya cargado · ' + esc(nombreDe(a.q)) + ' · ' + corto(a.c)) + '</div>';
+  if (deOtro && !S.avisado && ab) {
+    return h + '<div class="cartel">Vas a cambiar lo que ' + (a.e === 'programa' ? 'ya está cargado en el programa' : 'cargó ' + esc(nombreDe(a.q))) + '. ¿Seguir?' +
+      '<div class="fila"><button class="cb linea chico" data-c="volver">No, volver</button><button class="cb chico" data-c="seguir">Sí, corregir</button></div></div>' +
+      '<div class="caja"><b>Acompañantes</b><p style="margin:3px 0 0">' + (a.ac.length ? a.ac.map(esc).join('<br>') : '—') + '</p></div><div class="caja"><b>Música</b><p style="margin:3px 0 0">' + (a.mu ? esc(a.mu) : '—') + '</p></div>';
+  }
+  const no = ab ? '' : ' disabled';
+  h += '<div class="caja"><b>Acompañantes</b> <span style="color:var(--cSuave);font-size:12.5px">hasta 2</span>' +
+    '<label class="c">Acompañante 1</label><input type="text" id="ac1" placeholder="Apellido, nombre" value="' + esc(f.ac1) + '"' + no + '>' +
+    '<label class="c">Acompañante 2</label><input type="text" id="ac2" placeholder="Apellido, nombre" value="' + esc(f.ac2) + '"' + no + '></div>' +
+    '<div class="caja"><b>Música para su entrada</b><label class="c">Tema y artista, y todo el detalle que haga falta</label><textarea id="mu"' + no + '>' + esc(f.mu) + '</textarea></div>' +
+    (S.errCel ? '<p class="err">' + esc(S.errCel) + '</p>' : '') +
+    '<button class="cb" data-c="guardar"' + no + '>Guardar</button><p style="font-size:12.5px;color:var(--cSuave);margin:7px 0 0">Guardar no envía. Cuando termines, tocá Enviar. Se puede corregir hasta el ' + largo(S.vence) + '.</p>';
+  return h;
+}
+
+/* ───── dibujar y tocar ───── */
+function dibujar(){
+  document.querySelectorAll('#dir button').forEach(b => b.classList.toggle('on', b.dataset.d === S.dir));
+  $('#programa').innerHTML = (S.dir !== 'B' ? programaA() : '') + (S.dir !== 'A' ? programaB() : '');
+  $('#dialogo').innerHTML = dialogo();
+  $('#cel').innerHTML = celular();
+  const traer = paraTraer().length;
+  $('#punto').innerHTML = traer ? '<span class="chip r">' + traer + '</span>' : '';
+  const ultimo = S.delegados.filter(d => d.envio).sort((a,b) => b.envio - a.envio)[0];
+  $('#alerta').innerHTML = traer ? '<div class="alerta">🔔 <span>' + (ultimo && abierto() ? esc(ultimo.nombre) + ' envió su parte de ' + FIESTA + '.' : 'El link de ' + FIESTA + ' cerró con cosas sin traer.') + ' Hay ' + traer + ' para aceptar.</span></div>'
+    : '<div class="alerta" style="background:transparent;border-style:dashed;color:var(--gris)">Sin alertas: no hay nada para aceptar.</div>';
+  $('#quien').innerHTML = '<button data-q="" class="' + (!S.yo ? 'on' : '') + '">Alguien que recién entra</button>' +
+    S.delegados.filter(d => !d.sacado).map(d => '<button data-q="' + d.id + '" class="' + (S.yo === d.id ? 'on' : '') + '">' + esc(d.nombre.split(' ')[0]) + '</button>').join('');
+}
+function leerForm(){ if (S.cel === 'form' && $('#ac1')) S.form = {ac1:$('#ac1').value, ac2:$('#ac2').value, mu:$('#mu').value}; if ($('#nuevo')) S.nombreNuevo = $('#nuevo').value; }
+function entrarComo(id){ S.yo = id; S.cel = id ? 'lista' : 'entrada'; S.errCel = ''; S.abierto = null; }
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'vencio') { leerForm(); S.ahora = t.checked ? dia(19,20,30) : dia(18,10,30); if (!t.checked && S.vence <= S.ahora) S.vence = dia(19,20,0); S.cerradoAMano = false; dibujar(); }
+  if (t.dataset.a === 'cupo') { S.cupo = +t.value; dibujar(); }
+  if (t.dataset.a === 'dequien') { S.deQuien = t.value; dibujar(); }
+});
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  leerForm();
+  const d = t.dataset;
+  if (d.d) S.dir = d.d;
+  else if (d.s) S.solapa = d.s;
+  else if (d.f) S.filtro = d.f;
+  else if (d.h) S.abiertos[d.h] = !S.abiertos[d.h];
+  else if ('ver' in d) { S.deQuien = d.ver; S.solapa = 'alumnos'; S.filtro = 'todos'; }
+  else if (d.sacar) S.dlg = {t:'sacar', id:d.sacar};
+  else if ('q' in d) entrarComo(d.q || null);
+  else if (d.yo) entrarComo(d.yo);
+  else if (d.al) { const a = S.alumnos.find(x => x.id === +d.al); S.abierto = a.id; S.cel = 'form'; S.avisado = false; S.errCel = ''; S.form = {ac1:a.ac[0] || '', ac2:a.ac[1] || '', mu:a.mu}; }
+  else if (d.a) accion(d.a);
+  else if (d.c) tocarCel(d.c);
+  dibujar();
+});
+function accion(a){
+  if (a === 'copiar') decir('Link copiado. Pegalo en WhatsApp.');
+  if (a === 'reabrir') S.dlg = {t:'reabrir'};
+  if (a === 'cerrar') { S.cerradoAMano = true; decir('Link cerrado. Nadie puede cargar hasta que lo reabras.'); }
+  if (a === 'cancelar') S.dlg = null;
+  if (a === 'okReabrir') {
+    const v = new Date($('#hasta').value);
+    if (isNaN(v) || v <= S.ahora) { decir('El día y la hora límite tienen que ser futuros.'); return; }
+    S.vence = v; S.cerradoAMano = false; S.dlg = null; decir('Abierto hasta el ' + largo(v) + '.');
+  }
+  if (a === 'traer') S.dlg = {t:'traer'};
+  if (a === 'aceptar') {
+    const l = paraTraer(), ahora = pasa();
+    l.forEach(x => { x.e = 'aceptado'; x.otraVez = false; x.h.push({q:'jefe', c:ahora, t:'Aceptado y cargado en el programa'}); });
+    S.dlg = null; decir(l.length + ' alumnos cargados en la grilla.');
+  }
+  if (a === 'sacarDejar' || a === 'sacarBorrar') {
+    const x = S.delegados.find(k => k.id === S.dlg.id); x.sacado = true;
+    if (a === 'sacarBorrar') S.alumnos.filter(k => k.q === x.id && k.e !== 'aceptado').forEach(k => { k.h.push({q:'jefe', c:pasa(), t:'Se borró lo que había cargado ' + x.nombre}); k.ac = []; k.mu = ''; k.q = null; k.c = null; k.e = 'falta'; k.otraVez = false; });
+    if (S.yo === x.id) entrarComo(null);
+    S.dlg = null; decir(x.nombre + ' ya no puede entrar.');
+  }
+}
+function tocarCel(c){
+  if (c === 'entrar') {
+    const n = S.nombreNuevo.trim().toUpperCase();
+    if (n.split(/\s+/).length < 2) { S.errCel = 'Escribí tu nombre y tu apellido.'; return; }
+    const llave = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    let x = S.delegados.find(k => !k.sacado && llave(k.nombre) === llave(n));
+    if (!x) { x = {id:'d' + Date.now(), nombre:n, entro:pasa(), envio:null, sacado:false}; S.delegados.push(x); }
+    S.nombreNuevo = ''; entrarComo(x.id);
+  }
+  if (c === 'salir') entrarComo(null);
+  if (c === 'volver') { S.cel = 'lista'; S.errCel = ''; }
+  if (c === 'seguir') S.avisado = true;
+  if (c === 'guardar') {
+    const a = S.alumnos.find(x => x.id === S.abierto), f = S.form;
+    const ac = [f.ac1, f.ac2].map(s => s.trim().toUpperCase()).filter(Boolean), mu = f.mu.trim();
+    if (!ac.length && !mu) { S.errCel = 'Escribí al menos un acompañante o la música.'; return; }
+    const antes = a.e, ahora = pasa();
+    const que = antes === 'falta' ? 'Cargó ' + (ac.length === 1 ? '1 acompañante' : ac.length + ' acompañantes') + (mu ? ' y la música' : '') : 'Corrigió lo cargado';
+    a.ac = ac; a.mu = mu; a.q = S.yo; a.c = ahora; a.h.push({q:S.yo, c:ahora, t:que});
+    if (antes === 'aceptado' || antes === 'programa' || a.otraVez) a.otraVez = true;
+    a.e = 'sin_enviar'; S.cel = 'lista'; S.errCel = '';
+    decir('Guardado. Cuando termines, tocá Enviar.');
+  }
+  if (c === 'enviar') {
+    const l = S.alumnos.filter(a => a.e === 'sin_enviar' && a.q === S.yo);
+    if (!l.length) { S.errCel = 'No tenés nada nuevo para enviar.'; return; }
+    const ahora = pasa(); l.forEach(a => a.e = 'enviado');
+    S.delegados.find(k => k.id === S.yo).envio = ahora; S.errCel = '';
+    decir('Enviado. Podés seguir corrigiendo hasta la fecha límite.');
+  }
+}
+dibujar();
+</script>
+</body></html>

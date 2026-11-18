@@ -13,7 +13,12 @@ Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `
 - **Parte 2 (el descuento solo para lo que la familia tenía al sorteo): programada y probada entera** (18-nov): lo que
   se anota al sortear, la cuenta partida, la entrega, VENDER, los papeles, **la lista de PRECIOS para las fiestas ya
   sorteadas, el guardado de lo aceptado, la puesta al día de la tablet y el simulacro sobre una copia de la base**.
-- **Parte 3 (el link del delegado) y Parte 4 ("a confirmar"): sin empezar.** Sigue la maqueta del link.
+- **Parte 3 (el link del delegado): la maqueta está hecha y se le mostró el 18-nov; falta su OK para programar.**
+  `docs/maqueta_link_delegado_2026-11-18.html` (`preview_start` con `maquetas`): el programa en dos formas para
+  elegir (**A · Dos solapas** y **B · Todo en una hoja**) y el celular del delegado, que comparten los datos (lo que
+  se guarda en el celular aparece en el programa con quién y cuándo). **Tiene que decir cuál de las dos formas
+  quiere.** En la maqueta, Enviar manda solo lo que cargó o corrigió ese delegado.
+- **Parte 4 ("a confirmar"): sin empezar.**
 - **Lo que tiene para mirar el usuario** (en `build/muestras_6.9.2/`, fuera de git): los PDF de la planilla del sorteo
   y de la de entrega con dos familias que agregaron después; las capturas `Lugares_1` a `Lugares_6` de las pantallas
   nuevas; y `simulacro_lugares_al_sorteo.txt`, la lista de cada fiesta ya sorteada, con nombres. **Se le mandaron el
@@ -137,8 +142,8 @@ Partes 1 y 2**; la 3 y la 4, sin empezar. Nada instalado, ningún SQL corrido, `
 **Antes de seguir:** que el usuario mire las muestras y la lista del simulacro (ver "Dónde quedó").
 
 **Parte 3 — el link del delegado** (todo el detalle, con las funciones una por una, en el plan)
-1. **La maqueta primero** (`docs/maqueta_link_delegado_2026-11-17.html`): el panel nuevo en dos direcciones y la
-   página del celular. **Se programa con su OK.**
+1. **La maqueta: hecha** (`docs/maqueta_link_delegado_2026-11-18.html`). **Se programa con su OK, y con la forma
+   que elija (A o B).**
 2. SQL nuevo, solo de agregar: `supabase/migrations/20261117120000_link_delegado_reabrir.sql`. Ninguna función
    cambia de firma **ni de lo que devuelve** (`delegado_alumnos` es `returns table`: no se le puede agregar una
    columna con `create or replace`; lo de más va en una función nueva). Tabla nueva `cambios_delegado` (el
