@@ -122,6 +122,12 @@ priorizó el sorteo de noviembre. El contexto está en
   encontrado por la revisión de VENTAS del 15-nov: la segunda anulación pisa a la primera en la nube.
   Postergado: necesita que el jefe anule la misma venta en dos PCs en segundos, y el arreglo toca la
   subida del motor.
+- [Anular con la 6.9.3 pisa una anulación de la 6.9.x guardada en la fila](anular-pisa-anulacion-de-la-6.9.x.md) —
+  encontrado por la revisión de la caja de entregas (20-nov): la anulación vieja se pierde de la historia (lo que
+  cuenta no cambia). Postergado: toca cómo se anula y se entrega, no la caja.
+- ["Emitido:" 3 horas antes en tres papeles, y la fecha de Finanzas de madrugada](horas-corridas-en-otros-papeles.md) —
+  visto de paso el 20-nov: `ArTime.nowAr()` pasado a un formato que ya pasa a la hora de Argentina. Son papeles de
+  cobros y mora, publicados: **preguntarle al usuario** antes de tocarlos.
 
 ## Hechos
 

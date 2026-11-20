@@ -13,7 +13,7 @@ import '../../models/entradas_retiro.dart';
 import '../../models/entrega_entradas.dart';
 import '../../models/evento.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
-import '../common/services/pdf_service.dart';
+import '../common/services/imprimir_planilla_de_entrega.dart';
 import '../common/utils/cortes_pantalla.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
@@ -760,7 +760,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     required bool blancoYNegro,
   }) async {
     try {
-      await PdfService.generarPlanillaEntrega(
+      await ref.read(imprimirPlanillaDeEntregaProvider)(
         widget.evento,
         _alumnos,
         material: material,

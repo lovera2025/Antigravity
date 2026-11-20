@@ -197,4 +197,142 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('LA ÚLTIMA'), findsNothing, reason: 'en el celular esa columna no va');
   });
+
+  // ── Los arreglos de la revisión independiente del 20-nov-2026 ──────────────
+
+  testWidgets('1. el TOTAL de familias cuenta una vez a la que recibió cada parte de otra '
+      'persona, y lo aclara', (tester) async {
+    final todos = [_alumno(_ana, 'GÓMEZ, ANA', 12), _alumno(_beto, 'LÓPEZ, BETO', 13)];
+    await _montar(
+      tester,
+      caja: CajaDeEntregas.de(alumnos: todos, todos: todos, retiros: const {}, renglones: [
+        _entrega(_ana, ParteEntrega.pulseras, _h(13), 'Carla'),
+        _entrega(_ana, ParteEntrega.generales, _h(14), 'Maxi'),
+        _entrega(_beto, ParteEntrega.pulseras, _h(15), 'Maxi'),
+      ]),
+    );
+    expect(_texto(tester, 'cierre_entregas_total_familias'), '2', reason: 'la columna suma 3');
+    expect(_texto(tester, 'cierre_entregas_total_pulseras'), '6');
+    expect(_texto(tester, 'cierre_entregas_total_generales'), '5');
+    expect(find.byKey(const Key('cierre_entregas_nota_familias')), findsOneWidget);
+  });
+
+  testWidgets('2. las 8 juntas con cada parte por su lado: se tacha solo lo que ya no cuenta y '
+      'el total suma lo de la tarjeta', (tester) async {
+    final todos = [_alumno(_ana, 'GÓMEZ, ANA', 12)];
+    await _montar(
+      tester,
+      caja: CajaDeEntregas.de(
+        alumnos: todos,
+        todos: todos,
+        retiros: {_ana: _filaDeLaVieja(entregadoAt: _h(10))},
+        renglones: [_entrega(_ana, ParteEntrega.pulseras, _h(11), 'Carla')],
+      ),
+    );
+    expect(_texto(tester, 'cierre_entregas_total_pulseras'), '3');
+    expect(_texto(tester, 'cierre_entregas_total_generales'), '5', reason: 'hoy daba 0');
+    await tester.tap(find.byKey(const Key('cierre_entregas_persona_Marta')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pulseras VIP: NO CUENTA: se volvió a entregar el 20/11 08:00 por Carla'),
+        findsOneWidget);
+    final hojas = _hojas(tester, 'Pulseras y generales (las 8 juntas)');
+    expect(hojas['Pulseras']?.decoration, TextDecoration.lineThrough);
+    expect(hojas['generales']?.decoration, isNot(TextDecoration.lineThrough));
+    final cant = _hojas(tester, '3 + 5');
+    expect(cant['3']?.decoration, TextDecoration.lineThrough);
+    expect(cant['5']?.decoration, isNot(TextDecoration.lineThrough));
+  });
+
+  testWidgets('3. una anulación de una entrega anterior se cuenta y se ve aparte',
+      (tester) async {
+    final todos = [_alumno(_ana, 'GÓMEZ, ANA', 12)];
+    await _montar(
+      tester,
+      caja: CajaDeEntregas.de(
+        alumnos: todos,
+        todos: todos,
+        retiros: {_ana: _filaDeLaVieja(entregadoAt: _h(13, 20), anuladoAt: _h(13, 10))},
+        renglones: const [],
+      ),
+    );
+    expect(_texto(tester, 'cierre_entregas_anuladas_valor'), '1', reason: 'hoy daba 0');
+    expect(find.byKey(const Key('cierre_entregas_anulaciones_anteriores')), findsOneWidget);
+    expect(
+      _texto(tester, 'cierre_entregas_anulacion_anterior_0'),
+      '20/11 10:10 · GÓMEZ, ANA · Anulación de una entrega anterior, por Jefe: se equivocó de familia',
+    );
+  });
+
+  testWidgets('4. lo de una familia hoy de baja va en el total, marcado, con la línea que lo '
+      'dice', (tester) async {
+    final ana = _alumno(_ana, 'GÓMEZ, ANA', 12);
+    final baja = _alumno(_beto, '[BAJA] LÓPEZ, BETO', 13);
+    await _montar(
+      tester,
+      caja: CajaDeEntregas.de(alumnos: [ana], todos: [ana, baja], retiros: const {}, renglones: [
+        _entrega(_ana, ParteEntrega.pulseras, _h(13), 'Carla'),
+        _entrega(_beto, ParteEntrega.pulseras, _h(13, 5), 'Carla'),
+      ]),
+    );
+    expect(_texto(tester, 'cierre_entregas_pulseras_valor'), '3 de 3');
+    expect(_texto(tester, 'cierre_entregas_total_pulseras'), '6');
+    expect(_texto(tester, 'cierre_entregas_bajas'),
+        'Incluye 3 pulseras de 1 familia hoy de baja (LÓPEZ, BETO): arriba no cuentan.');
+    expect(find.textContaining('hoy de baja', findRichText: true), findsWidgets);
+  });
+
+  testWidgets('7. una entrega que se volvió a dar sin anularla dice que no cuenta y por qué, y '
+      'sigue diciendo quién la retiró', (tester) async {
+    final todos = [_alumno(_ana, 'GÓMEZ, ANA', 12)];
+    await _montar(
+      tester,
+      caja: CajaDeEntregas.de(alumnos: todos, todos: todos, retiros: const {}, renglones: [
+        _entrega(_ana, ParteEntrega.generales, _h(13, 2), 'Carla',
+            tramos: const [TramoTalonario(5001, 5005)]),
+        _entrega(_ana, ParteEntrega.generales, _h(13, 7), 'Sofi',
+            tramos: const [TramoTalonario(5101, 5105)]),
+      ]),
+    );
+    expect(_texto(tester, 'cierre_entregas_detalle_titulo'), 'Carla · lo que entregó');
+    expect(find.text('NO CUENTA: se volvió a entregar el 20/11 10:07 por Sofi'), findsOneWidget);
+    expect(find.text('Madre · MARTA ACOSTA'), findsOneWidget,
+        reason: 'ese material salió: el jefe tiene que saber quién lo tiene');
+    expect(find.textContaining('ANULADA el'), findsNothing);
+    expect(_texto(tester, 'cierre_entregas_total_generales'), '5');
+  });
+}
+
+/// La fila de una entrega de las 8 juntas hecha con una 6.9.x, por Marta.
+EntradasRetiro _filaDeLaVieja({required DateTime entregadoAt, DateTime? anuladoAt}) =>
+    EntradasRetiro(
+      id: 'f0000000-0000-4000-8000-00000000000a',
+      contratoAlumnoId: _ana,
+      estado: EstadoRetiro.entregado,
+      vip: 3,
+      generales: 5,
+      tramos: const [TramoTalonario(1001, 1005)],
+      menores10: 0,
+      parentesco: ParentescoRetiro.padre,
+      retiroNombre: 'PADRE, UNO',
+      escribioEnPlanilla: true,
+      entregadoPor: 'Marta',
+      entregadoAt: entregadoAt,
+      anuladoPor: anuladoAt == null ? null : 'Jefe',
+      anuladoAt: anuladoAt,
+      anuladoMotivo: anuladoAt == null ? null : 'se equivocó de familia',
+      createdAt: entregadoAt,
+      updatedAt: entregadoAt,
+    );
+
+/// Los pedazos de texto del `Text.rich` que dice [completo], con su estilo.
+Map<String, TextStyle?> _hojas(WidgetTester tester, String completo) {
+  final rich = tester
+      .widgetList<RichText>(find.byType(RichText))
+      .firstWhere((r) => r.text.toPlainText() == completo);
+  final out = <String, TextStyle?>{};
+  rich.text.visitChildren((s) {
+    if (s is TextSpan && s.text != null) out[s.text!] = s.style;
+    return true;
+  });
+  return out;
 }

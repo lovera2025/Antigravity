@@ -175,12 +175,79 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
           )
         else ...[
           _tabla(caja, elegida!),
+          ..._debajoDelTotal(caja),
           const SizedBox(height: 12),
           _detalle(caja, elegida),
+        ],
+        if (caja.anulacionesAnteriores.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _anulacionesAnteriores(caja),
         ],
       ],
     );
   }
+
+  /// Lo que explica el TOTAL: lo de las familias hoy de baja (va en el total y
+  /// arriba no cuenta) y la familia que está en dos filas.
+  List<Widget> _debajoDelTotal(CajaDeEntregas caja) {
+    final bajas = caja.textoDeLasBajas;
+    return [
+      if (bajas != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: Text(
+            bajas,
+            key: const Key('cierre_entregas_bajas'),
+            style: TextStyle(fontSize: 12, color: _muted),
+          ),
+        ),
+      if (caja.familiasEnDosFilas)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: Text(
+            CajaDeEntregas.notaDeLasFamilias,
+            key: const Key('cierre_entregas_nota_familias'),
+            style: TextStyle(fontSize: 12, color: _muted),
+          ),
+        ),
+    ];
+  }
+
+  /// Las anulaciones que no van al lado de ninguna entrega de la lista.
+  Widget _anulacionesAnteriores(CajaDeEntregas caja) => Container(
+        key: const Key('cierre_entregas_anulaciones_anteriores'),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _linea),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'ANULACIONES DE UNA ENTREGA ANTERIOR',
+              style: TextStyle(fontSize: 13, letterSpacing: 1, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Cada una anuló una entrega que ya no está en la lista: quedó '
+              'reescrita al volver a entregar, o ya estaba anulada.',
+              style: TextStyle(fontSize: 12, color: _muted),
+            ),
+            const SizedBox(height: 6),
+            for (final (i, x) in caja.anulacionesAnteriores.indexed)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${horaCortaDeLaEntrega(x.cuando)} · ${x.familia}'
+                  '${x.deBaja ? ' (hoy de baja)' : ''} · ${x.texto}',
+                  key: Key('cierre_entregas_anulacion_anterior_$i'),
+                  style: TextStyle(fontSize: 13, color: Colors.red.shade400),
+                ),
+              ),
+          ],
+        ),
+      );
 
   String _falta(int n) => n <= 0 ? 'no falta ninguna' : 'faltan $n';
 
@@ -252,12 +319,6 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(children: hijos),
           );
-      var pulseras = 0, generales = 0, familias = 0;
-      for (final p in caja.personas) {
-        pulseras += p.pulseras;
-        generales += p.generales;
-        familias += p.familias;
-      }
       return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
@@ -319,9 +380,9 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
                     style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
                   ),
                 ),
-                num('$pulseras', fuerte: true, key: const Key('cierre_entregas_total_pulseras')),
-                num('$generales', fuerte: true, key: const Key('cierre_entregas_total_generales')),
-                num('$familias', fuerte: true),
+                num('${caja.pulserasDeLasFilas}', fuerte: true, key: const Key('cierre_entregas_total_pulseras')),
+                num('${caja.generalesDeLasFilas}', fuerte: true, key: const Key('cierre_entregas_total_generales')),
+                num('${caja.familiasConAlgo}', fuerte: true, key: const Key('cierre_entregas_total_familias')),
                 if (ancho) const SizedBox(width: 120),
               ]),
             ),
@@ -396,22 +457,7 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
     );
   }
 
-  String _que(EntregaDeLaCaja e) => e.deLasOchoJuntas
-      ? (e.parte == null ? 'Pulseras y generales (las 8 juntas)' : '${e.que} (las 8 juntas)')
-      : e.que;
-
-  String _anulada(EntregaDeLaCaja e) =>
-      'ANULADA'
-      '${e.anuladaAt == null ? '' : ' el ${horaCortaDeLaEntrega(e.anuladaAt!)}'}'
-      '${(e.anuladaPor ?? '').isEmpty ? '' : ' por ${e.anuladaPor}'}'
-      '${(e.motivoAnulacion ?? '').isEmpty ? '' : ': ${e.motivoAnulacion}'}';
-
-  Widget _retiro(EntregaDeLaCaja e) => e.anulada
-      ? Text(
-          _anulada(e),
-          style: TextStyle(fontSize: 13, color: Colors.red.shade400, fontWeight: FontWeight.w600),
-        )
-      : Text(e.quienRetiro, style: const TextStyle(fontSize: 13));
+  TextStyle get _normal => const TextStyle(fontSize: 13);
 
   TextStyle get _tachado => TextStyle(
         fontSize: 13,
@@ -419,8 +465,69 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
         decoration: TextDecoration.lineThrough,
       );
 
+  /// "Pulseras VIP", o en las 8 juntas "Pulseras y generales (las 8 juntas)",
+  /// tachando **solo la parte que ya no cuenta**.
+  InlineSpan _que(EntregaDeLaCaja e) {
+    if (!e.partida) {
+      final texto = e.deLasOchoJuntas
+          ? (e.parte == null ? 'Pulseras y generales (las 8 juntas)' : '${e.que} (las 8 juntas)')
+          : e.que;
+      return TextSpan(text: texto, style: e.vigente ? _normal : _tachado);
+    }
+    return TextSpan(children: [
+      TextSpan(text: 'Pulseras', style: e.pulserasVigentes ? _normal : _tachado),
+      TextSpan(text: ' y ', style: _normal),
+      TextSpan(text: 'generales', style: e.generalesVigentes ? _normal : _tachado),
+      TextSpan(text: ' (las 8 juntas)', style: _normal),
+    ]);
+  }
+
+  /// "3", "3 + 5", con la parte que no cuenta tachada.
+  InlineSpan _cantidad(EntregaDeLaCaja e) {
+    if (!e.partida) return TextSpan(text: e.cantidad, style: e.vigente ? _normal : _tachado);
+    return TextSpan(children: [
+      TextSpan(text: '${e.pulseras}', style: e.pulserasVigentes ? _normal : _tachado),
+      TextSpan(text: ' + ', style: _normal),
+      TextSpan(text: '${e.generales}', style: e.generalesVigentes ? _normal : _tachado),
+    ]);
+  }
+
+  Color? _color(TonoDeLaLinea t) => switch (t) {
+        TonoDeLaLinea.normal => null,
+        TonoDeLaLinea.apagado => _muted,
+        TonoDeLaLinea.anulada => Colors.red.shade400,
+        TonoDeLaLinea.noCuenta =>
+          widget.isDark ? Colors.orange.shade300 : Colors.orange.shade800,
+      };
+
+  /// Quién retiró, y por qué no cuenta lo que no cuenta (`EntregaDeLaCaja.estado`).
+  Widget _retiro(EntregaDeLaCaja e) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final l in e.estado(horaCortaDeLaEntrega))
+            Text(
+              l.texto,
+              style: TextStyle(
+                fontSize: 13,
+                color: _color(l.tono),
+                fontWeight: l.tono == TonoDeLaLinea.anulada || l.tono == TonoDeLaLinea.noCuenta
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
+            ),
+        ],
+      );
+
+  List<InlineSpan> _familia(EntregaDeLaCaja e) => [
+        TextSpan(
+          text: e.familia,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+        ),
+        if (e.deBaja)
+          TextSpan(text: ' · hoy de baja', style: TextStyle(fontSize: 12, color: _muted)),
+      ];
+
   Widget _renglonAncho(EntregaDeLaCaja e) {
-    final apagado = e.anulada || !e.vigente;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -428,24 +535,15 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
           width: 96,
           child: Text(horaCortaDeLaEntrega(e.cuando), style: TextStyle(fontSize: 13, color: _muted)),
         ),
-        Expanded(
-          flex: 3,
-          child: Text(e.familia, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(_que(e), style: apagado ? _tachado : const TextStyle(fontSize: 13)),
-        ),
-        SizedBox(
-          width: 52,
-          child: Text(e.cantidad, style: apagado ? _tachado : const TextStyle(fontSize: 13)),
-        ),
+        Expanded(flex: 3, child: Text.rich(TextSpan(children: _familia(e)))),
+        Expanded(flex: 3, child: Text.rich(_que(e))),
+        SizedBox(width: 52, child: Text.rich(_cantidad(e))),
         Expanded(flex: 5, child: _retiro(e)),
         Expanded(
           flex: 3,
           child: Text(
             e.numeros.isEmpty ? '—' : e.numeros,
-            style: TextStyle(fontSize: 13, color: apagado ? _muted : null),
+            style: TextStyle(fontSize: 13, color: e.numerosApagados ? _muted : null),
           ),
         ),
       ],
@@ -453,18 +551,26 @@ class _EntregasDelCierreState extends ConsumerState<EntregasDelCierre> {
   }
 
   Widget _renglonAngosto(EntregaDeLaCaja e) {
-    final apagado = e.anulada || !e.vigente;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${horaCortaDeLaEntrega(e.cuando)} · ${e.familia}',
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-        ),
-        Text(
-          '${_que(e)} · ${e.cantidad}${e.numeros.isEmpty ? '' : ' · ${e.numeros}'}',
-          style: apagado ? _tachado : const TextStyle(fontSize: 13),
-        ),
+        Text.rich(TextSpan(children: [
+          TextSpan(
+            text: '${horaCortaDeLaEntrega(e.cuando)} · ',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+          ),
+          ..._familia(e),
+        ])),
+        Text.rich(TextSpan(children: [
+          _que(e),
+          TextSpan(text: ' · ', style: _normal),
+          _cantidad(e),
+          if (e.numeros.isNotEmpty)
+            TextSpan(
+              text: ' · ${e.numeros}',
+              style: TextStyle(fontSize: 13, color: e.numerosApagados ? _muted : null),
+            ),
+        ])),
         _retiro(e),
       ],
     );

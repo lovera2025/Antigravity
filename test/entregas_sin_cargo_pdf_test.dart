@@ -133,4 +133,112 @@ void main() {
     expect(palabras.map((p) => p.texto).join(' '),
         contains('Todavía no se entregó nada sin cargo'));
   });
+
+  // ── Los arreglos de la revisión independiente del 20-nov-2026 ──────────────
+
+  test('7. la entrega que se volvió a dar no sale como válida: dice por qué no cuenta', () async {
+    final a = _alumno(1);
+    final caja = CajaDeEntregas.de(alumnos: [a], todos: [a], retiros: const {}, renglones: [
+      _entrega(a, ParteEntrega.generales, 0, 'Carla'),
+      _entrega(a, ParteEntrega.generales, 5, 'Sofi'),
+    ]);
+    final texto = (await _palabras(caja)).map((p) => p.texto).join(' ');
+    expect(texto, contains('NO CUENTA: se volvió a entregar el 20/11/2026 10:05 hs por Sofi'));
+    expect(texto, contains('Carla · 0 pulseras · 0 generales · 0 familias · 1 que no cuenta'));
+  });
+
+  test('2. las 8 juntas partidas: la persona suma lo suyo y el papel dice qué no cuenta',
+      () async {
+    final a = _alumno(1);
+    final caja = CajaDeEntregas.de(
+      alumnos: [a],
+      todos: [a],
+      retiros: {a.id: _fila(a, entregadoAt: _h(0))},
+      renglones: [_entrega(a, ParteEntrega.pulseras, 10, 'Carla')],
+    );
+    final texto = (await _palabras(caja)).map((p) => p.texto).join(' ');
+    expect(texto, contains('Marta · 0 pulseras · 5 generales · 1 familia'));
+    expect(texto,
+        contains('Pulseras VIP: NO CUENTA: se volvió a entregar el 20/11/2026 10:10 hs por Carla'));
+  });
+
+  test('3. la anulación de una entrega anterior va al final del papel, y no en el de una sola '
+      'persona', () async {
+    final a = _alumno(1);
+    final caja = CajaDeEntregas.de(
+      alumnos: [a],
+      todos: [a],
+      retiros: {a.id: _fila(a, entregadoAt: _h(20), anuladoAt: _h(10))},
+      renglones: const [],
+    );
+    final todo = (await _palabras(caja)).map((p) => p.texto).join(' ');
+    expect(todo, contains('Anuladas 1'));
+    expect(todo, contains('Anulaciones de una entrega anterior'));
+    expect(todo, contains('Anulación de una entrega anterior, por Jefe: se equivocó de familia'));
+    final suyo = (await _palabras(caja, soloDe: 'Marta')).map((p) => p.texto).join(' ');
+    expect(suyo, isNot(contains('Anulaciones de una entrega anterior')));
+  });
+
+  test('4. lo de una familia hoy de baja va marcado, con la línea arriba', () async {
+    final a = _alumno(1);
+    final baja = ContratoAlumno(
+      id: _alumno(2).id,
+      eventoId: _evento,
+      nombreAlumno: '[BAJA] APELLIDO2, NOMBRE',
+      cantidadAcompanantes: 2,
+      montoTotalPactado: 300000,
+      saldoDeudor: 0,
+      totalCuotas: 9,
+      cuotasPagadas: 9,
+      numeroMesa: MesasExtraUtils.formatearAsignacionMesas([12]),
+      createdAt: DateTime(2026, 2, 1),
+    );
+    final caja = CajaDeEntregas.de(alumnos: [a], todos: [a, baja], retiros: const {}, renglones: [
+      _entrega(baja, ParteEntrega.pulseras, 0, 'Carla'),
+    ]);
+    final texto = (await _palabras(caja)).map((p) => p.texto).join(' ');
+    expect(texto, contains('APELLIDO2, NOMBRE (hoy de baja)'));
+    expect(texto,
+        contains('Incluye 3 pulseras de 1 familia hoy de baja (APELLIDO2, NOMBRE): arriba no cuentan.'));
+  });
+
+  test('8. "Impreso el" sale con la hora de Argentina (antes salía 3 horas antes)', () async {
+    String enArgentina(DateTime instante) {
+      final a = instante.toUtc().subtract(const Duration(hours: 3));
+      String d(int n) => n.toString().padLeft(2, '0');
+      return '${d(a.day)}/${d(a.month)}/${a.year} ${d(a.hour)}:${d(a.minute)} hs';
+    }
+
+    final antes = enArgentina(DateTime.now());
+    final bytes = await EntregasSinCargoPdf.construir(caja: _caja(1), fiesta: 'PUERTO VIEJO');
+    final despues = enArgentina(DateTime.now());
+    final texto = palabrasDelPdf(bytes).map((p) => p.texto).join(' ');
+    expect(
+      texto.contains('Impreso el $antes') || texto.contains('Impreso el $despues'),
+      isTrue,
+      reason: 'esperaba "Impreso el $antes" en: ${texto.substring(0, 120)}',
+    );
+  });
 }
+
+/// La fila de una entrega de las 8 juntas hecha con una 6.9.x, por Marta.
+EntradasRetiro _fila(ContratoAlumno a, {required DateTime entregadoAt, DateTime? anuladoAt}) =>
+    EntradasRetiro(
+      id: 'f${a.id.substring(1)}',
+      contratoAlumnoId: a.id,
+      estado: EstadoRetiro.entregado,
+      vip: 3,
+      generales: 5,
+      tramos: const [TramoTalonario(1001, 1005)],
+      menores10: 0,
+      parentesco: ParentescoRetiro.padre,
+      retiroNombre: 'PADRE, UNO',
+      escribioEnPlanilla: true,
+      entregadoPor: 'Marta',
+      entregadoAt: entregadoAt,
+      anuladoPor: anuladoAt == null ? null : 'Jefe',
+      anuladoAt: anuladoAt,
+      anuladoMotivo: anuladoAt == null ? null : 'se equivocó de familia',
+      createdAt: entregadoAt,
+      updatedAt: entregadoAt,
+    );

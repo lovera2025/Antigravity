@@ -14,7 +14,7 @@ import '../../barra/cuentas/cobro_barra.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../barra/widgets/cobrar_hoja.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
-import '../../common/services/pdf_service.dart';
+import '../../common/services/imprimir_planilla_de_entrega.dart';
 import '../../common/utils/quien_opera.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/repositories/contratos_repository.dart';
@@ -879,7 +879,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// las generales llegan y se entregan en tandas distintas).
   Future<void> _imprimirPlanilla(ParteEntrega material, bool blancoYNegro) async {
     try {
-      await PdfService.generarPlanillaEntrega(
+      await ref.read(imprimirPlanillaDeEntregaProvider)(
         widget.evento,
         _alumnos,
         material: material,

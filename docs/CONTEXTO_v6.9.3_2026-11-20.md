@@ -26,9 +26,97 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 - **La caja de entregas en el cierre: programada y probada, guardada al cortar este chat** (pedido del usuario el
   20-nov; maqueta `docs/maqueta_entregas_en_el_cierre_2026-11-20.html`, que aprobó con la **tabla por persona**:
   "si son muchos en simultáneo, conviene"). Ver "La caja de entregas", abajo.
-- **Plan general de la 6.9.3: 95 %; el 100 % es publicar con él.**
+- **Los 8 arreglos de la revisión de la caja de entregas: programados y probados (20-nov, noche)**, con el plan
+  aprobado `C:\Users\lover\.claude\plans\sigamos-happy-cocke.md`. Antes de programar, un workflow de solo lectura
+  diseñó cada arreglo y un verificador intentó romperlo; el usuario vio cómo quedaba en una maqueta (hoy contra con
+  los arreglos) y **eligió que lo entregado a familias hoy de baja vaya en el TOTAL** ("la tabla suma justo"), con
+  una línea que dice cuánto es. Lo hecho, en "Los arreglos del 20-nov (noche)", abajo. **El usuario cortó acá**
+  ("hacé hasta ventana de prueba y planilla sin la carpeta y ahí guardá contexto"): del plan quedan los pasos de
+  "Lo que falta".
+- **Plan general de la 6.9.3: 96 %; el 100 % es publicar con él.**
 
 ### Lo que falta, en orden
+
+1. **El arreglo 9, de paso (chico):** `anularParte` (`eventos/services/entregar_parte.dart`) calcula la hora de la
+   anulación con `horaDelRenglon` sin mirar las copias de la fila que va a escribir. Con una fila "entregado" cuya
+   anulación está a la misma hora o después que la entrega (una 6.9.x atrasada), la copia queda a
+   `anulado_at + 1 ms` y la anulación cae **en el mismo milisegundo**: se ordenan por id, al azar, y la mitad de las
+   veces se relee "siguen figurando entregadas" (CambioAlgo: "algo cambió, probá de nuevo"). Arreglo: armar las
+   copias, correr `ahora` a después de cada `copia.createdAt` y volver a armar las copias con ese `ahora`. Test en
+   `test/entregar_parte_test.dart`: la anulación queda **siempre** después de cada copia (no depende del id).
+2. **Las roturas:** ya están escritas en `tool/roturas_6.9.3.txt` (la 21 y la 22 reescritas, de la 24 a la 34
+   nuevas), **sin correr**: `bash tool/romper_una_regla.sh tool/roturas_6.9.3.txt` (todas tienen que decir "el test
+   FALLA"). Sumar la del arreglo 9.
+3. **La suite entera** (`bash tool/suite_por_tandas.sh`), si cambió algo después de la del 20-nov a la noche.
+4. **Una revisión independiente del cambio** (workflow: buscar fallas + verificador adversarial; el usuario tiene
+   ultracode prendido), y arreglar lo confirmado.
+5. **Las muestras de la caja** (`tool/venta_entradas_muestra_test.dart` → `build/muestras_6.9.3/`) con los casos
+   nuevos: las 8 juntas partidas, NO CUENTA, la familia hoy de baja, la anulación de una entrega anterior y el
+   TOTAL de familias con la nota. Mirarlas y mandárselas (todavía no vio la caja programada, solo maquetas).
+6. **El recorrido con el mouse** en `tool/venta_entradas_prueba.dart` (Carla entrega → CIERRE DE CAJA del jefe →
+   ENTRADAS → IMPRIMIR, y PLANILLA de VENDER), con capturas. **Pide el permiso de computer-use: avisarle al celular
+   y esperarlo.** `python -I tool/huella_de_la_base.py` antes y después (tiene que dar IGUAL): desde el 20-nov la
+   ventana ya no escribe en la carpeta de PDF ni con IMPRIMIR de la caja ni con PLANILLA.
+7. **Que mire las capturas** de VENDER y de la caja de entregas, y diga si algo no le gusta.
+8. **Preguntarle** por lo visto de paso en otros papeles ("Emitido:" 3 horas antes, la fecha de Finanzas de
+   madrugada): `docs/pendientes/horas-corridas-en-otros-papeles.md`. No se tocó: son de cobros y mora.
+9. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"). Todo va en la misma 6.9.3, sin SQL
+   nuevo.
+
+### Los arreglos del 20-nov (noche)
+
+Lo que pidió la revisión independiente (la lista de abajo, "Lo que pidió la revisión"), programado así:
+
+- **La historia de cada parte** (`entrega_por_partes.dart`): `HistoriaDeLaEntrega.de(retiro:, renglones:)` da, por
+  parte, todas las novedades (`NovedadDeLaParte`: momento, acción, renglón o fila) en el orden en que decide
+  `EstadoDeLaEntrega`, con las mismas reglas (reflejos, relojes corridos). **No decide nada: lo último de cada
+  historia es lo que dice el estado** (un test lo compara en 10 casos). Se sacaron a funciones `_validos`,
+  `_novedadesDe` y `_NovedadesDeLaFila.leer` (que además devuelve la hora cruda de la anulación de la fila y si es
+  reflejo); los 95 tests de la entrega pasaron sin tocarlos. `EstadoDeLaEntrega.algoRecibido` (alguna parte con
+  cantidad) y `ResumenPorPartes.familiasConUnaSolaParte` (**required**, contado familia por familia).
+- **La caja** (`caja_de_entregas.dart`, reescrita): cada entrega lleva `lasPulseras`/`lasGenerales`
+  (`ComoQuedoLaParte`: sigue, **anulada** con hora/quién/motivo, o **reemplazada**: otra entrega de la misma parte
+  vino después, con hora y quién). Sale de la historia: si le sigue una anulación, anulada; si le sigue otra
+  entrega, "NO CUENTA". La entrega de las 8 juntas de la fila va con las partes donde quedó su novedad (las dos, una
+  o ninguna). **El recorte:** en cada parte, si lo primero que sigue a la entrega de la fila (saltando anulaciones)
+  es su copia (`kCopiaDeLaFila`, mismo `entregadoPor`, cantidad y `retiroNombre`), esa novedad de la fila se saca de
+  la historia de la caja (caso M1: con relojes, la fila volvía a su hora y aparecía dos veces). `EntregaDeLaCaja.estado(hora)`
+  es lo único que leen la pantalla y el papel (`LineaDeLaEntrega` con `TonoDeLaLinea`).
+- **Las anulaciones** se cuentan **por acto** (lo que se anuló junto, misma hora y mismo quién: las dos partes, o
+  las copias de una anulación de la fila, una por parte, es **una**) más la que guarda la fila de una 6.9.x, salvo
+  que sea reflejo o tenga su copia (`_esCopiaDeLaAnulacion`: el id de las copias a su propia hora, quién y motivo, a
+  la hora de la fila o después). La que no tumba ninguna entrega de la lista va a `anulacionesAnteriores` y se ve
+  en el recuadro "ANULACIONES DE UNA ENTREGA ANTERIOR" (y al final del papel, sin `soloDe`).
+- **Los totales** (`pulserasDeLasFilas`, `generalesDeLasFilas`, `familiasConAlgo`; las bajas en `pulserasDeBaja`,
+  `generalesDeBaja`, `familiasDeBaja`, `textoDeLasBajas`; `familiasEnDosFilas` y `notaDeLasFamilias`). **La
+  conciliación**, en cada caso: filas − bajas = la tarjeta de arriba (pulseras, generales, y familias =
+  `familiasConTodo + familiasConUnaSolaParte`). Una familia cuenta solo si lo que cuenta tiene cantidad (las 8
+  juntas de una familia de 8 o más llevan generales 0).
+- **La pantalla** (`entregas_del_cierre.dart`): TOTAL de familias con la clave `cierre_entregas_total_familias`,
+  debajo `cierre_entregas_bajas` y `cierre_entregas_nota_familias`; en el detalle, "Qué" y "Cant." con `Text.rich`
+  (partida, se tacha solo la parte que no cuenta: "~~3~~ + 5"), "· hoy de baja", ANULADA en rojo en lugar de quién
+  retiró (como antes) y **NO CUENTA en naranja debajo de quién retiró, que sigue a la vista en gris** (ese material
+  salió y el jefe tiene que saber quién lo tiene); el recuadro `cierre_entregas_anulaciones_anteriores`.
+- **El papel** (`entregas_sin_cargo_pdf.dart`): lo mismo en la celda (con `AltoLibre`), "(hoy de baja)", la línea
+  de las bajas en el encabezado, "· N que no cuentan" en el título de cada persona, la tabla de anulaciones
+  anteriores al final, y **"Impreso el" con `ArTime.nowUtc()`** (salía 3 horas antes; `generada` es un instante).
+- **La ventana de prueba y la planilla** (arreglo 6): `PapelesDeLaPrueba` reemplaza `imprimirEntregasSinCargoProvider`
+  y el provider nuevo **`imprimirPlanillaDeEntregaProvider`** (`common/services/imprimir_planilla_de_entrega.dart`),
+  que ahora usan PLANILLA de VENDER y la impresora de la entrega en lugar de llamar a `PdfService` directo; guardan
+  en `build/venta_entradas_prueba` (`entregasSinCargo`, `planillas`). `entradas_prueba.dart` y
+  `operadores_prueba.dart` reemplazan la planilla por una que no sale. `test/arneses_sin_base_test.dart`: toda
+  ventana que muestre el cierre o la entrega reemplaza su papel (`reemplazosDelCierre(` cuenta solo como llamada) y
+  ninguna nombra `PdfService.generarEntregasSinCargo` ni `generarPlanillaEntrega`; `test/venta_entradas_prueba_test.dart`
+  comprueba que IMPRIMIR del cierre queda en la prueba (antes de tocar, que el provider no sea el de la app).
+- **Probado:** `test/caja_de_entregas_test.dart` (42: los 10 de antes, 11 de conciliación, 10 del contrato de la
+  historia y 11 de los arreglos), `test/entregas_del_cierre_test.dart` y `test/entregas_sin_cargo_pdf_test.dart` (20),
+  `test/arneses_sin_base_test.dart` y `test/venta_entradas_prueba_test.dart` (24), los de la entrega (95), y la suite
+  entera el 20-nov a la noche (ver "Cómo se probó"). **Sin correr: las roturas.**
+- **Quedó en `docs/pendientes/`:** `anular-pisa-anulacion-de-la-6.9.x.md` (anular con esta versión pisa la anulación
+  vieja de la fila: se pierde de la historia, lo que cuenta no cambia) y `horas-corridas-en-otros-papeles.md`
+  (preguntarle).
+
+### Lo que pidió la revisión (20-nov, hecho a la noche)
 
 1. **Arreglar lo que confirmó la revisión independiente de la caja de entregas** (20-nov, terminó después del commit
    `8d62895`; dos miradas y un verificador que intentó refutar cada hallazgo). **8 reales**, cada uno con su test
@@ -59,15 +147,6 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
       daba `ArTime.nowAr()`. Usar `ArTime.nowUtc()` y dejar escrito que `generada` es un instante.
 
    Descartado: ninguno de los 9 hallazgos (los dos de la pantalla repetían 1 y 4).
-2. **El recorrido con el mouse de la caja de entregas** en `tool/venta_entradas_prueba.dart` (CIERRE DE CAJA del
-   jefe → ENTRADAS, después de entregar desde la tablet de Carla), con capturas para mandarle. **Necesita el permiso
-   de computer-use: avisarle al celular y esperarlo** (memoria `avisar-cuando-lo-necesito`). La huella de la base
-   antes y después (`python -I tool/huella_de_la_base.py`).
-3. **Mandarle la muestra de la caja de entregas** (`build/muestras_6.9.3/Entradas_16_cierre_por_sector.png`, `_17_…
-   celular.png` y `Entregas_sin_cargo.pdf`): todavía no la vio programada, solo la maqueta.
-4. **Que mire las capturas** de VENDER y de la caja de entregas, y diga si algo no le gusta.
-5. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"). La caja de entregas va en la misma
-   6.9.3, sin SQL.
 
 ### La línea "Todo subido" (`952900a`)
 

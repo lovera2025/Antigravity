@@ -112,21 +112,87 @@ test/linea_de_subida_entradas_test.dart
   int get total => ventas + entregas + otros;
   int get total => ventas;
 ---
-21. la caja de entregas cuenta también lo anulado
+21. la caja de entregas cuenta también lo anulado (reescrita el 20-nov: ahora sale de la historia de cada parte)
 lib/features/eventos/services/caja_de_entregas.dart
 test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart
-        final vigente = hoy.entregada &&
-        final vigente = true || hoy.entregada &&
+        if (i == hist.length - 1) return const ComoQuedoLaParte.vigente();
+        return const ComoQuedoLaParte.vigente();
 ---
-22. la caja de entregas repite la fila que es el reflejo de un renglón
+22. la caja de entregas repite la fila de la 6.9.x junto a sus copias (reescrita el 20-nov: el recorte de la historia)
 lib/features/eventos/services/caja_de_entregas.dart
 test/caja_de_entregas_test.dart
-      if (entregadoAt != null && !esReflejo) {
-      if (entregadoAt != null) {
+      if (!esSuCopia) return hist;
+      return hist;
 ---
 23. el cierre de ENTRADAS no muestra la caja de entregas
 lib/features/cierre_caja/widgets/sector_entradas.dart
 test/cierre_por_sector_test.dart
             EntregasDelCierre(fiesta: fiesta, isDark: isDark),
             const SizedBox.shrink(),
+---
+24. el TOTAL de familias cuenta dos veces a la familia que recibió cada parte de otra persona
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart
+          if (e.cuentaAlgo) e.alumnoId,
+          if (e.cuentaAlgo) '${e.alumnoId}|${e.quien}',
+---
+25. las generales de las 8 juntas de una 6.9.x siguen a las pulseras
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart test/entregas_sin_cargo_pdf_test.dart
+  int get generalesQueCuentan => generalesVigentes ? generales : 0;
+  int get generalesQueCuentan => pulserasVigentes ? generales : 0;
+---
+26. la anulación de una 6.9.x que después volvió a entregar no se cuenta
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart test/entregas_sin_cargo_pdf_test.dart
+      if (f != null && enLaFila != null && !h.anulacionEsReflejo) {
+      if (f != null && enLaFila != null && !h.anulacionEsReflejo && !f.entregado) {
+---
+27. la anulación de la fila ya copiada a un renglón se cuenta dos veces
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart
+        cuentaLaDeLaFila = suCopia == null;
+        cuentaLaDeLaFila = true;
+---
+28. las copias de una anulación (una por parte) se cuentan como dos anulaciones
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart
+              '${r.createdAt.toUtc().toIso8601String()}|${(r.hechoPor ?? '').trim()}',
+              r.id,
+---
+29. lo de las familias hoy de baja no se dice
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart test/entregas_sin_cargo_pdf_test.dart
+          if (e.deBaja && e.cuentaAlgo) e.alumnoId: e.familia,
+          if (false) e.alumnoId: e.familia,
+---
+30. "con una sola parte" se resta y da negativo
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart
+  int get conUnaSolaParte => resumen.familiasConUnaSolaParte;
+  int get conUnaSolaParte => resumen.familiasConPulseras + resumen.familiasConGenerales - 2 * resumen.familiasConTodo;
+---
+31. la entrega que se volvió a dar sale como válida, sin decir por qué no cuenta
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart test/entregas_sin_cargo_pdf_test.dart
+      return 'NO CUENTA: se volvió a entregar el ${hora(reemplazadaAt!)} por $reemplazadaPor';
+      return null;
+---
+32. "Impreso el" del papel de entregas sale 3 horas antes
+lib/features/common/services/entregas_sin_cargo_pdf.dart
+test/entregas_sin_cargo_pdf_test.dart
+    final cuando = ArTime.formatFechaHora(generada ?? ArTime.nowUtc());
+    final cuando = ArTime.formatFechaHora(generada ?? ArTime.nowAr());
+---
+33. la ventana de la venta deja el papel de la caja de entregas en la carpeta del programa (la regla de texto)
+tool/venta_entradas_prueba.dart
+test/arneses_sin_base_test.dart
+        imprimirEntregasSinCargoProvider.overrideWithValue(
+        imprimirEntregasSinCargoProviderSinReemplazo.overrideWithValue(
+---
+34. la ventana de la venta deja el papel de la caja de entregas en la carpeta del programa (el test de la ventana)
+tool/venta_entradas_prueba.dart
+test/venta_entradas_prueba_test.dart
+        imprimirEntregasSinCargoProvider.overrideWithValue(
+        if (false) imprimirEntregasSinCargoProvider.overrideWithValue(
 ---

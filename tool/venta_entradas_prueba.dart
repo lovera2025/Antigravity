@@ -46,12 +46,13 @@
 // - la caja de cuotas: LA CAJA COBRA, arriba del jefe (o COBRAR en su entrega), le
 //   cobra a una familia todo lo que debe, como si pagara en la caja de otra PC, y les
 //   llega a los dos lados (con o sin internet);
-// - los papeles de la venta (el comprobante, el historial y el cierre) son los de la
-//   app, pero quedan en build/venta_entradas_prueba y se abren con el visor, sin el menú
-//   de la app (que los dejaría en la carpeta del programa);
+// - los papeles de la venta (el comprobante, el historial y el cierre), el de la caja
+//   de entregas (IMPRIMIR en el cierre de caja → ENTRADAS) y la planilla de entrega
+//   (PLANILLA de VENDER y la impresora de la entrega) son los de la app, pero quedan en
+//   build/venta_entradas_prueba y se abren con el visor, sin el menú de la app (que los
+//   dejaría en la carpeta del programa);
 // - COBROS, en el cierre de caja, muestra un día fijo;
-// - no usar el ícono de la impresora de la entrega ni los PDF de COBROS: salen por el
-//   camino de la app, a la carpeta del programa.
+// - no usar los PDF de COBROS: salen por el camino de la app, a la carpeta del programa.
 
 import 'dart:async';
 import 'dart:io';
@@ -74,9 +75,12 @@ import 'package:arguello_events/features/caja_sesiones/models/operador_caja.dart
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/cierre_caja/cierre_caja_screen.dart';
+import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/cierre_caja/providers/cierre_caja_provider.dart';
 import 'package:arguello_events/features/common/providers/admin_provider.dart';
 import 'package:arguello_events/features/common/providers/user_role_provider.dart';
+import 'package:arguello_events/features/common/services/entregas_sin_cargo_pdf.dart';
+import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/utils/subir_ya.dart';
 import 'package:arguello_events/features/common/widgets/operational_sync_coordinator.dart';
@@ -440,6 +444,12 @@ class PapelesDeLaPrueba {
   final comprobantes = <DatosDelComprobante>[];
   final cierres = <DatosDelCierreDeEntradas>[];
   final historiales = <DatosDelHistorial>[];
+
+  /// Cada IMPRIMIR de la caja de entregas: de quién (null, todo).
+  final entregasSinCargo = <String?>[];
+
+  /// Cada planilla de entrega, por material.
+  final planillas = <ParteEntrega>[];
   final archivos = <String>[];
 
   Future<void> _guardar(String lado, String nombre, Future<List<int>> Function() armar) async {
@@ -494,6 +504,50 @@ class PapelesDeLaPrueba {
             ),
           );
         }),
+        // IMPRIMIR de la caja de entregas, en el cierre de caja → ENTRADAS.
+        imprimirEntregasSinCargoProvider.overrideWithValue(
+          (caja, {required fiesta, fechaFiesta, soloDe}) async {
+            entregasSinCargo.add(soloDe);
+            final quien = soloDe == null
+                ? ''
+                : '_${soloDe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_')}';
+            await _guardar(lado, 'Entregas_sin_cargo$quien', () async {
+              final letras = await PdfService.fuentesOutfit();
+              return EntregasSinCargoPdf.construir(
+                caja: caja,
+                fiesta: fiesta,
+                fechaFiesta: fechaFiesta,
+                soloDe: soloDe,
+                regular: letras?.$1,
+                negrita: letras?.$2,
+              );
+            });
+          },
+        ),
+        // PLANILLA de VENDER y la impresora de la entrega.
+        imprimirPlanillaDeEntregaProvider.overrideWithValue(
+          (evento, alumnos,
+              {required material,
+              required retiros,
+              renglones = const [],
+              required deudas,
+              blancoYNegro = false}) async {
+            planillas.add(material);
+            await _guardar(
+              lado,
+              'Planilla_de_entrega_${material.clave}',
+              () => PdfService.construirPlanillaEntregaPdf(
+                evento,
+                alumnos,
+                material: material,
+                retiros: retiros,
+                renglones: renglones,
+                deudas: deudas,
+                blancoYNegro: blancoYNegro,
+              ),
+            );
+          },
+        ),
       ];
 }
 

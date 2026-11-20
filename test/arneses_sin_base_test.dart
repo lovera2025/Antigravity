@@ -136,6 +136,43 @@ void main() {
     expect(faltan, isEmpty, reason: 'Sin reemplazar: $faltan');
   });
 
+  test('el papel de la caja de entregas y la planilla de entrega no van a la carpeta del '
+      'programa', () {
+    // Revisión del 20-nov-2026: la ventana de la venta de entradas dejaba los dos
+    // en Documentos\Junior Eventos con IMPRIMIR y PLANILLA.
+    final faltan = <String>[];
+    for (final ruta in ventanas) {
+      final n = _nombre(ruta);
+      final s = _leer(ruta);
+      // `reemplazosDelCierre(` solo cuenta como llamada de verdad, no nombrado
+      // en un comentario.
+      final conLosDelCierre =
+          RegExp(r'(overrides:\s*|\.\.\.)reemplazosDelCierre\(').hasMatch(s);
+      if (s.contains('CierreCajaScreen(') &&
+          !conLosDelCierre &&
+          !s.contains('imprimirEntregasSinCargoProvider.overrideWith')) {
+        faltan.add('$n: imprimirEntregasSinCargoProvider');
+      }
+      final muestraLaEntrega = [
+        'VenderEntradasScreen',
+        'RetiroEntradasScreen',
+        'EntradasHomeScreen(',
+      ].any(s.contains);
+      if (muestraLaEntrega && !s.contains('imprimirPlanillaDeEntregaProvider.overrideWith')) {
+        faltan.add('$n: imprimirPlanillaDeEntregaProvider');
+      }
+      // Un reemplazo que llama al camino de la app escribe igual en la carpeta.
+      for (final directo in [
+        'PdfService.generarEntregasSinCargo',
+        'PdfService.generarPlanillaEntrega',
+      ]) {
+        if (s.contains(directo)) faltan.add('$n: llama a $directo');
+      }
+    }
+    expect(faltan, isEmpty,
+        reason: 'Estas ventanas escriben en la carpeta de PDF del programa: $faltan');
+  });
+
   test('las de la barra en el navegador son del navegador', () {
     for (final n in _barraEnLaWeb) {
       expect(_leer('tool/$n'), contains('enLaWebProvider.overrideWithValue(true)'),

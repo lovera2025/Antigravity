@@ -114,6 +114,12 @@ class EstadoDeLaEntrega {
   /// Alguna parte entregada.
   bool get algoEntregado => pulseras.entregada || generales.entregada;
 
+  /// Se llevó algo: alguna parte entregada **con cantidad** (las generales en
+  /// 0 de una familia de 8 o más con cena no son nada que se llevó).
+  bool get algoRecibido =>
+      (pulseras.entregada && pulseras.cantidad > 0) ||
+      (generales.entregada && generales.cantidad > 0);
+
   EstadoDeUnaParte parte(ParteEntrega p) =>
       p == ParteEntrega.pulseras ? pulseras : generales;
 
@@ -125,10 +131,7 @@ class EstadoDeLaEntrega {
     required List<EntregaEntradas> renglones,
     required EntradasDeAlumno entradas,
   }) {
-    final validos = [
-      for (final r in renglones)
-        if (r.parte != null && r.accion != null) r,
-    ]..sort(EntregaEntradas.enOrden);
+    final validos = _validos(renglones);
     final deLaFila = _NovedadesDeLaFila.de(retiro, validos);
     return EstadoDeLaEntrega(
       pulseras: _parte(
@@ -160,6 +163,26 @@ class EstadoDeLaEntrega {
         entradas: RetiroEntradas.entradasDe(alumno),
       );
 
+  /// Los renglones que esta versión sabe leer (con una parte y una acción que
+  /// conoce), en su orden.
+  static List<EntregaEntradas> _validos(Iterable<EntregaEntradas> renglones) => [
+        for (final r in renglones)
+          if (r.parte != null && r.accion != null) r,
+      ]..sort(EntregaEntradas.enOrden);
+
+  /// Las novedades de [p], en el orden en que se decide: las de la fila
+  /// ([deLaFila], que valen para las dos partes) y los renglones de [p].
+  static List<_Novedad> _novedadesDe(
+    ParteEntrega p,
+    List<EntregaEntradas> renglones,
+    List<_Novedad> deLaFila,
+  ) =>
+      <_Novedad>[
+        ...deLaFila,
+        for (final r in renglones)
+          if (r.parte == p) _Novedad.deRenglon(r),
+      ]..sort(_Novedad.enOrden);
+
   static EstadoDeUnaParte _parte(
     ParteEntrega p,
     int leToca,
@@ -167,11 +190,7 @@ class EstadoDeLaEntrega {
     List<_Novedad> deLaFila,
     EntradasRetiro? retiro,
   ) {
-    final novedades = <_Novedad>[
-      ...deLaFila,
-      for (final r in renglones)
-        if (r.parte == p) _Novedad.deRenglon(r),
-    ]..sort(_Novedad.enOrden);
+    final novedades = _novedadesDe(p, renglones, deLaFila);
     if (novedades.isEmpty) return EstadoDeUnaParte(parte: p, leToca: leToca);
     final ultima = novedades.last;
     final r = ultima.renglon;
@@ -279,8 +298,22 @@ class _NovedadesDeLaFila {
   ///   después, por renglones), y una entrega de una 6.9.x va un milisegundo
   ///   antes de la anulación que la refleja (la parte que no se anuló sigue
   ///   entregada).
-  static List<_Novedad> de(EntradasRetiro? f, List<EntregaEntradas> renglones) {
-    if (f == null) return const [];
+  static List<_Novedad> de(EntradasRetiro? f, List<EntregaEntradas> renglones) =>
+      leer(f, renglones).novedades;
+
+  /// Lo mismo que [de], y además **la anulación que guarda la fila tal cual**
+  /// (`anulado_at`; si la fila dice "anulado" sin esa hora, su `updated_at`,
+  /// como la lee el estado) y si es el reflejo de un renglón de anulación a la
+  /// misma hora. Las novedades pueden no traerla: una anulación anterior a una
+  /// entrega que volvió a escribir la fila no es lo último de nada, pero pasó.
+  static ({
+    List<_Novedad> novedades,
+    DateTime? anulacionEnLaFila,
+    bool anulacionEsReflejo,
+  }) leer(EntradasRetiro? f, List<EntregaEntradas> renglones) {
+    if (f == null) {
+      return (novedades: const [], anulacionEnLaFila: null, anulacionEsReflejo: false);
+    }
     bool esReflejo(DateTime momento, QueSeHizo accion) => renglones.any(
           (r) => r.accion == accion && r.createdAt.isAtSameMomentAs(momento),
         );
@@ -313,10 +346,85 @@ class _NovedadesDeLaFila {
         }
       }
     }
-    return [
-      if (entrega != null) _Novedad(entrega, QueSeHizo.entrega, null),
-      if (anulacion != null) _Novedad(anulacion, QueSeHizo.anulacion, null),
-    ];
+    return (
+      novedades: [
+        if (entrega != null) _Novedad(entrega, QueSeHizo.entrega, null),
+        if (anulacion != null) _Novedad(anulacion, QueSeHizo.anulacion, null),
+      ],
+      anulacionEnLaFila: anulacionOriginal,
+      anulacionEsReflejo: anulacionEsReflejo,
+    );
+  }
+}
+
+/// Una novedad de una parte de la entrega, para quien tiene que **listar** lo
+/// que pasó (la caja de entregas del cierre de caja): un renglón de
+/// `entradas_entregas`, o lo que dice la fila de `entradas_retiro`.
+class NovedadDeLaParte {
+  /// La hora con la que cuenta. La de una novedad de la fila puede estar
+  /// corrida un milisegundo de la que anotó la fila (relojes distintos: ver
+  /// `_NovedadesDeLaFila`).
+  final DateTime momento;
+  final QueSeHizo accion;
+
+  /// El renglón; null si es la fila de `entradas_retiro`.
+  final EntregaEntradas? renglon;
+
+  const NovedadDeLaParte({
+    required this.momento,
+    required this.accion,
+    this.renglon,
+  });
+
+  bool get deLaFila => renglon == null;
+  bool get esEntrega => accion == QueSeHizo.entrega;
+  bool get esAnulacion => accion == QueSeHizo.anulacion;
+}
+
+/// Todo lo que pasó con cada parte de la entrega de un egresado, en el orden en
+/// que lo decide [EstadoDeLaEntrega], con las mismas reglas (los reflejos, los
+/// relojes distintos, la fila que vale para las dos partes). **No decide nada:
+/// lo último de cada historia es lo que dice el estado** (lo vigila
+/// `test/caja_de_entregas_test.dart`). Sirve para listar cada entrega y decir
+/// qué pasó después con ella.
+class HistoriaDeLaEntrega {
+  final List<NovedadDeLaParte> pulseras;
+  final List<NovedadDeLaParte> generales;
+
+  /// La anulación que guarda la fila tal cual (aunque no sea lo último de
+  /// ninguna parte), o null.
+  final DateTime? anulacionEnLaFila;
+
+  /// Esa anulación es el reflejo de un renglón de anulación a la misma hora
+  /// (la escribió esta versión): lo que pasó lo dice el renglón.
+  final bool anulacionEsReflejo;
+
+  const HistoriaDeLaEntrega({
+    required this.pulseras,
+    required this.generales,
+    this.anulacionEnLaFila,
+    this.anulacionEsReflejo = false,
+  });
+
+  List<NovedadDeLaParte> parte(ParteEntrega p) =>
+      p == ParteEntrega.pulseras ? pulseras : generales;
+
+  static HistoriaDeLaEntrega de({
+    EntradasRetiro? retiro,
+    required Iterable<EntregaEntradas> renglones,
+  }) {
+    final validos = EstadoDeLaEntrega._validos(renglones);
+    final fila = _NovedadesDeLaFila.leer(retiro, validos);
+    List<NovedadDeLaParte> historia(ParteEntrega p) => [
+          for (final n in EstadoDeLaEntrega._novedadesDe(p, validos, fila.novedades))
+            NovedadDeLaParte(momento: n.momento, accion: n.accion, renglon: n.renglon),
+        ];
+    return HistoriaDeLaEntrega(
+      pulseras: historia(ParteEntrega.pulseras),
+      generales: historia(ParteEntrega.generales),
+      anulacionEnLaFila: fila.anulacionEnLaFila,
+      anulacionEsReflejo: fila.anulacionEsReflejo,
+    );
   }
 }
 
@@ -328,6 +436,12 @@ class ResumenPorPartes {
   final int familiasConTodo;
   final int familiasConPulseras;
   final int familiasConGenerales;
+
+  /// Las familias que recibieron algo (una parte, con cantidad) y les falta
+  /// la otra. **Se cuenta familia por familia**: restar las que tienen todo
+  /// daba negativo con una familia de 8 o más con cena, que no lleva generales
+  /// (revisión del 20-nov-2026).
+  final int familiasConUnaSolaParte;
 
   /// Lo que le corresponde a todas las familias (lo que tiene que llegar).
   final int pulserasTotales;
@@ -347,6 +461,7 @@ class ResumenPorPartes {
     required this.familiasConTodo,
     required this.familiasConPulseras,
     required this.familiasConGenerales,
+    required this.familiasConUnaSolaParte,
     required this.pulserasTotales,
     required this.generalesTotales,
     required this.pulserasEntregadas,
@@ -369,6 +484,7 @@ class ResumenPorPartes {
   }) {
     final porAlumno = EntregaEntradas.porAlumno(renglones);
     var familias = 0, conTodo = 0, conPulseras = 0, conGenerales = 0;
+    var conUnaSola = 0;
     var pulserasTotales = 0, generalesTotales = 0;
     var pulserasEntregadas = 0, generalesEntregadas = 0;
     var conDeuda = 0;
@@ -393,13 +509,18 @@ class ResumenPorPartes {
         conGenerales++;
         generalesEntregadas += e.generales.cantidad;
       }
-      if (e.todoEntregado) conTodo++;
+      if (e.todoEntregado) {
+        conTodo++;
+      } else if (e.algoRecibido) {
+        conUnaSola++;
+      }
     }
     return ResumenPorPartes(
       familias: familias,
       familiasConTodo: conTodo,
       familiasConPulseras: conPulseras,
       familiasConGenerales: conGenerales,
+      familiasConUnaSolaParte: conUnaSola,
       pulserasTotales: pulserasTotales,
       generalesTotales: generalesTotales,
       pulserasEntregadas: pulserasEntregadas,

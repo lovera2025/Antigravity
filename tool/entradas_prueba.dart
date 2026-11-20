@@ -26,6 +26,7 @@ import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
+import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
 import 'package:arguello_events/features/common/utils/currency_extensions.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
 
@@ -82,6 +83,15 @@ class _PruebaState extends State<_Prueba> {
     _c = ProviderContainer(overrides: [
       ..._e.reemplazos(),
       ..._venta.reemplazos,
+      // La planilla de entrega no va a la carpeta de PDF del programa: acá no sale.
+      imprimirPlanillaDeEntregaProvider.overrideWithValue(
+        (evento, alumnos,
+                {required material,
+                required retiros,
+                renglones = const [],
+                required deudas,
+                blancoYNegro = false}) async {},
+      ),
       fiestasQueVienenProvider.overrideWith((ref) async => [fiestaDeLaEntrega]),
     ]);
     unawaited(_c.read(appRoleProvider.notifier).entrarComoEntradas(

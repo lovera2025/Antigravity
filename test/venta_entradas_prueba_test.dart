@@ -17,6 +17,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
+import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
+import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
@@ -364,6 +367,21 @@ void main() {
       tester.widget<Text>(find.byKey(Key('cierre_entradas_diferencia_${caja.id}'))).data,
       'Justo',
     );
+  });
+
+  testWidgets('IMPRIMIR de la caja de entregas queda en la prueba: no va a la carpeta del '
+      'programa', (tester) async {
+    await abrir(tester);
+    // Antes de tocar nada: el papel no es el de la app (ese escribiría en la
+    // carpeta de verdad, también en `flutter test`).
+    expect(lados.jefe.read(imprimirEntregasSinCargoProvider),
+        isNot(same(PdfService.generarEntregasSinCargo)));
+    expect(lados.carla.read(imprimirPlanillaDeEntregaProvider),
+        isNot(same(PdfService.generarPlanillaEntrega)));
+    await tocar(tester, 'prueba_jefe_cierre');
+    await tocar(tester, 'cierre_sector_entradas');
+    await tocar(tester, 'cierre_entregas_imprimir');
+    expect(lados.papeles.entregasSinCargo, [null]);
   });
 
   testWidgets('con MODO JEFE en NO, PRECIOS, VENTAS y VENDER se apagan, y el cierre '

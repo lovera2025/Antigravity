@@ -732,10 +732,23 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81
   sin otra cuenta al lado (`ResumenPorPartes`, `EstadoDeLaEntrega`). **Toda prueba que monte el cierre de ENTRADAS
   reemplaza `cajaDeEntregasDeLaFiestaProvider`** (`reemplazosDelCierre`): si no, leería la base del equipo. Sin
   contar material (descartado por ahora).
-- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: **arreglar los 8 hallazgos
-  de la revisión de la caja de entregas** (los totales, las 8 juntas parte por parte, las anulaciones de la 6.9.x, las
-  bajas, la hora del papel, y que la ventana de prueba no escriba en la carpeta de PDF del programa), su recorrido
-  con el mouse (con el permiso del usuario), mandarle las muestras y publicar con él.
+  - **Los 8 arreglos de su revisión, hechos el 20-nov a la noche** (detalle en "Los arreglos del 20-nov (noche)" del
+    CONTEXTO). Qué pasó con cada entrega sale de **`HistoriaDeLaEntrega`** (`entrega_por_partes.dart`): las mismas
+    novedades y el mismo orden que `EstadoDeLaEntrega`, **lo último de cada historia es lo que dice el estado**. Cada
+    entrega lleva cómo quedó cada parte (`ComoQuedoLaParte`: sigue, anulada, o "NO CUENTA: se volvió a entregar"), y
+    la pantalla y el papel leen solo `EntregaDeLaCaja.estado`. Las anulaciones se cuentan por acto (misma hora y
+    quién) y las que no van al lado de una entrega se ven en "Anulaciones de una entrega anterior".
+  - **Lo de familias hoy de baja va en las filas y el TOTAL** (decisión del usuario: "la tabla suma justo"), con una
+    línea que dice cuánto es. **La conciliación** (los tests): filas − bajas = la tarjeta de arriba, también las
+    familias (`familiasConTodo + familiasConUnaSolaParte`).
+  - **La planilla de entrega pasa por `imprimirPlanillaDeEntregaProvider`** (VENDER y la impresora de la entrega):
+    las ventanas de prueba la reemplazan, igual que `imprimirEntregasSinCargoProvider`; `test/arneses_sin_base_test.dart`
+    falla si una ventana con el cierre o la entrega no lo hace.
+- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: el arreglo 9 (anular después de
+  las copias de la fila, chico), correr las roturas ya escritas (21, 22 y 24 a 34 de `tool/roturas_6.9.3.txt`), una
+  revisión independiente, las muestras de la caja, el recorrido con el mouse (con el permiso del usuario), que mire las
+  capturas, preguntarle por "Emitido:" 3 horas antes en otros papeles (`docs/pendientes/horas-corridas-en-otros-papeles.md`)
+  y publicar con él.
 - **No usar PRECIOS nuevo ni entregar por partes hasta que todas las PCs y las tablets tengan la 6.9.3**: una 6.9.x
   ve una entrega a medias como "Pendiente" y junta los talonarios.
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v82**: la v81 es de la entrega en dos partes.

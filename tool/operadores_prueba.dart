@@ -18,6 +18,7 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/caja_sesiones/widgets/operadores_caja_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
+import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
 import 'package:arguello_events/models/evento.dart';
 
 import '../test/helpers/entradas_en_memoria.dart';
@@ -61,6 +62,15 @@ void main() {
       ...prueba.reemplazos,
       // La venta de entradas en memoria: nada de la base de la PC (6.9.0).
       ...EntradasEnMemoria().reemplazos,
+      // La planilla de entrega no va a la carpeta de PDF del programa: acá no sale.
+      imprimirPlanillaDeEntregaProvider.overrideWithValue(
+        (evento, alumnos,
+                {required material,
+                required retiros,
+                renglones = const [],
+                required deudas,
+                blancoYNegro = false}) async {},
+      ),
       fiestasQueVienenProvider.overrideWith(
         (ref) async => [
           for (final (id, nombre, dia) in [
