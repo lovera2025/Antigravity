@@ -1,0 +1,196 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entregas en el cierre</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --app:#f1efe9; --card:#f7f5f0; --borde:#d9d4c7; --gris:#77736b; --texto:#1c1b18; --dorado:#b8941f; --dorado-suave:#efe3b8;
+  --verde:#2e7d32; --rojo:#d64532; --efectivo:#00a383; --transf:#6c63ff; --naranja:#c46a12;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;padding:18px 16px 48px}
+h1{font-weight:700;font-size:25px;margin:0}
+p{margin:0}
+.wrap{max-width:1140px;margin:0 auto;display:grid;gap:14px}
+.sub{color:var(--tinta2);font-size:14.5px;max-width:880px}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;font-size:14.5px;display:grid;gap:4px}
+.seg{display:inline-flex;border:1.5px solid var(--linea);border-radius:999px;overflow:hidden;justify-self:start}
+.seg button{border:0;background:transparent;color:var(--tinta);font:inherit;font-weight:600;padding:7px 16px;cursor:pointer}
+.seg button.on{background:var(--primario);color:#fff}
+
+/* la app */
+.app{background:var(--app);color:var(--texto);border-radius:18px;border:1px solid var(--borde);padding:16px;display:grid;gap:12px;align-content:start;margin:0 auto;width:100%;max-width:1100px;transition:max-width .2s}
+.app.cel{max-width:390px}
+.barra{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.barra .t{font-weight:800;letter-spacing:.06em;font-size:16px;flex:1}
+.tabs{display:flex;gap:6px}
+.tab{border:1.5px solid var(--borde);border-radius:999px;padding:6px 14px;font-weight:700;font-size:13px;letter-spacing:.05em;background:transparent;color:var(--texto)}
+.tab.on{background:var(--dorado-suave);border-color:var(--dorado)}
+.fiesta{border:1.5px solid var(--dorado-suave);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--card)}
+.fiesta .k{font-size:11px;letter-spacing:.1em;font-weight:800;color:var(--dorado)}
+.fiesta .n{font-weight:800;font-size:18px}
+.fiesta .d{font-size:13px;color:var(--gris)}
+.b{border:1.5px solid var(--dorado);background:transparent;color:var(--dorado);border-radius:999px;padding:8px 16px;font:inherit;font-weight:800;font-size:13px;letter-spacing:.05em;cursor:pointer}
+.b.lleno{background:var(--dorado);color:#fff}
+.gris{color:var(--gris);font-size:13px}
+.tabla{border:1px solid var(--borde);border-radius:14px;overflow:hidden;background:var(--card)}
+.tabla table{width:100%;border-collapse:collapse;font-size:14px}
+.tabla th{font-size:11px;letter-spacing:.1em;color:var(--gris);font-weight:700;text-align:right;padding:9px 12px}
+.tabla th:first-child,.tabla td:first-child{text-align:left}
+.tabla td{padding:10px 12px;text-align:right;border-top:1px solid var(--borde);font-variant-numeric:tabular-nums}
+.tabla tr.total td{border-top:2px solid var(--dorado);font-weight:800}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:#efe9da}
+.tabla tr.fila.abierta td{background:var(--dorado-suave)}
+.ef{color:var(--efectivo);font-weight:700}.tr{color:var(--transf);font-weight:700}.rojo{color:var(--rojo);font-weight:700}.verde{color:var(--verde);font-weight:700}
+.kpis{display:flex;flex-wrap:wrap;gap:10px}
+.kpi{background:var(--card);border:1px solid var(--borde);border-radius:14px;padding:9px 14px;min-width:170px}
+.kpi .t{font-size:11px;letter-spacing:.1em;font-weight:700;color:var(--gris)}
+.kpi .v{font-size:21px;font-weight:800}
+.kpi .s{font-size:12.5px;color:var(--gris)}
+.titulo-sec{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+.titulo-sec h3{margin:0;font-size:15px;letter-spacing:.08em;font-weight:800;flex:1}
+.nueva{font-size:11px;font-weight:800;letter-spacing:.06em;background:#dfe9ff;color:#2f4fa8;border-radius:999px;padding:2px 9px}
+.detalle{border:1px solid var(--borde);border-radius:14px;background:#fff;padding:10px 12px;display:grid;gap:4px}
+.detalle h4{margin:0 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ren{display:grid;grid-template-columns:120px 1.3fr 1fr .6fr 1.6fr 1.2fr;gap:8px;padding:7px 4px;border-top:1px solid var(--borde);font-size:13.5px;align-items:baseline}
+.ren.cab{border-top:0;font-size:11px;letter-spacing:.1em;color:var(--gris);font-weight:700}
+.ren .h{color:var(--gris);font-variant-numeric:tabular-nums}
+.ren.anul{color:var(--gris)}
+.ren.anul .q{text-decoration:line-through}
+.chip{font-size:11.5px;font-weight:800;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.chip.v{background:#e3f1e4;color:var(--verde)}
+.chip.r{background:#fbe3df;color:var(--rojo)}
+.chip.a{background:#eef0f3;color:#4b5563}
+.app.cel .ren{grid-template-columns:1fr;gap:1px;padding:8px 4px}
+.app.cel .ren.cab{display:none}
+.app.cel .ren .h::after{content:" ·"}
+.app.cel .tabla table{font-size:13px}
+.app.cel .tabla th,.app.cel .tabla td{padding:8px 7px}
+.app.cel .col-ult{display:none}
+.hoja{background:#fff;color:#111;border:1px solid #ccc;border-radius:6px;padding:18px 22px;font-size:12px;max-width:620px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.hoja h5{margin:0;font-size:15px}
+.hoja table{width:100%;border-collapse:collapse;margin-top:8px}
+.hoja td,.hoja th{border-bottom:1px solid #ddd;padding:3px 4px;text-align:left}
+.hoja th{font-size:10px;letter-spacing:.08em;color:#555}
+.oculto{display:none}
+</style></head><body>
+<div class="wrap">
+  <h1>La caja de entregas, en el cierre de caja</h1>
+  <p class="sub">Maqueta para mirar, con datos inventados: <b>Cierre de caja → ENTRADAS</b>, en modo jefe. Arriba queda
+    lo de siempre (las cajas de venta) y abajo lo nuevo: <b>ENTREGAS SIN CARGO</b>, por quién entregó. Tocá una fila
+    para ver cada entrega, y probá IMPRIMIR. Solo para mirar: anular sigue en ENTRADAS de la fiesta.</p>
+  <div class="seg" role="group" aria-label="Ancho">
+    <button class="on" data-ancho="pc">En la PC</button><button data-ancho="cel">En el celular</button>
+  </div>
+
+  <div class="app" id="app">
+    <div class="barra"><span class="t">CIERRE DE CAJA</span>
+      <div class="tabs"><span class="tab">COBROS</span><span class="tab">BARRA</span><span class="tab on">ENTRADAS</span></div></div>
+
+    <div class="fiesta"><div style="flex:1;min-width:0"><div class="k">LA FIESTA</div><div class="n">PUERTO VIEJO</div>
+      <div class="d">viernes 4 de diciembre · la próxima</div></div><button class="b">CAMBIAR DE FIESTA</button></div>
+
+    <p class="gris">Lo de siempre: las cajas de venta.</p>
+    <div class="tabla"><table>
+      <tr><th>CAJA</th><th>EFECTIVO</th><th>TRANSF.</th><th>VENDIDAS</th><th>CONTÓ</th><th>DIFERENCIA</th></tr>
+      <tr><td><b>Carla · abierta</b></td><td class="ef">$ 60.000</td><td class="tr">$ 20.000</td><td>12</td><td>—</td><td class="gris">abierta</td></tr>
+      <tr><td><b>Maxi</b></td><td class="ef">$ 10.000</td><td class="tr">$ 20.000</td><td>3</td><td>$ 12.500</td><td class="rojo">Faltan $ 500</td></tr>
+    </table></div>
+
+    <div class="titulo-sec"><h3>ENTREGAS SIN CARGO</h3><span class="nueva">NUEVO</span>
+      <button class="b" id="imprimir">IMPRIMIR</button></div>
+    <p class="gris">Las pulseras VIP con cena y las generales que completan la mesa del contrato. No pasan por ninguna
+      caja de plata: acá se ve quién las dio. Van por fiesta, con el día de cada una.</p>
+
+    <div class="kpis">
+      <div class="kpi"><div class="t">PULSERAS VIP</div><div class="v">12 de 17</div><div class="s">faltan 5</div></div>
+      <div class="kpi"><div class="t">GENERALES</div><div class="v">31 de 55</div><div class="s">faltan 24</div></div>
+      <div class="kpi"><div class="t">FAMILIAS CON TODO</div><div class="v">4 de 9</div><div class="s">2 con una sola parte</div></div>
+      <div class="kpi"><div class="t">ANULADAS</div><div class="v">1</div><div class="s">por el jefe, con motivo</div></div>
+    </div>
+
+    <div class="tabla"><table id="tabla-entregas">
+      <tr><th>QUIÉN ENTREGÓ</th><th>PULSERAS</th><th>GENERALES</th><th>FAMILIAS</th><th class="col-ult">LA ÚLTIMA</th></tr>
+      <tr class="fila" data-quien="carla"><td><b>Carla</b> <span class="gris">· tablet</span></td><td>7</td><td>10</td><td>3</td><td class="col-ult gris">20/11 11:20</td></tr>
+      <tr class="fila" data-quien="maxi"><td><b>Maxi</b> <span class="gris">· tablet</span></td><td>4</td><td>14</td><td>2</td><td class="col-ult gris">19/11 19:40</td></tr>
+      <tr class="fila" data-quien="oficina"><td><b>Oficina</b> <span class="gris">· las 8 juntas (6.9.x)</span></td><td>1</td><td>7</td><td>1</td><td class="col-ult gris">07/11 15:00</td></tr>
+      <tr class="total"><td>TOTAL</td><td>12</td><td>31</td><td>6</td><td class="col-ult"></td></tr>
+    </table></div>
+
+    <div class="detalle oculto" id="det-carla">
+      <h4>Carla · lo que entregó <span class="chip v">7 pulseras · 10 generales</span></h4>
+      <div class="ren cab"><span>CUÁNDO</span><span>FAMILIA</span><span>QUÉ</span><span>CANT.</span><span>QUIÉN RETIRÓ</span><span>NÚMEROS</span></div>
+      <div class="ren"><span class="h">20/11 10:02</span><span><b>ACOSTA, LUCÍA</b></span><span class="q">Pulseras VIP</span><span>3</span><span>Madre · MARTA ACOSTA</span><span class="gris">—</span></div>
+      <div class="ren"><span class="h">20/11 10:04</span><span><b>ACOSTA, LUCÍA</b></span><span class="q">Generales</span><span>5</span><span>Padre · RUBÉN ACOSTA</span><span>del 5001 al 5005</span></div>
+      <div class="ren anul"><span class="h">20/11 10:30</span><span><b>ACOSTA, LUCÍA</b></span><span class="q">Generales</span><span>5</span><span><span class="chip r">ANULADA</span> por Jefe: se anotaron mal los números</span><span class="gris">liberados</span></div>
+      <div class="ren"><span class="h">20/11 10:41</span><span><b>ACOSTA, LUCÍA</b></span><span class="q">Generales</span><span>5</span><span>Padre · RUBÉN ACOSTA</span><span>del 5101 al 5105</span></div>
+      <div class="ren"><span class="h">20/11 11:15</span><span><b>HERRERA, LUCAS</b></span><span class="q">Pulseras VIP</span><span>4</span><span>Egresado · LUCAS HERRERA</span><span class="gris">—</span></div>
+      <div class="ren"><span class="h">20/11 11:20</span><span><b>IBARRA, CAMILA</b></span><span class="q">Generales</span><span>5</span><span>Otra persona · TÍA ROSA (autorización firmada)</span><span class="gris">sin número</span></div>
+    </div>
+    <div class="detalle oculto" id="det-maxi">
+      <h4>Maxi · lo que entregó <span class="chip v">4 pulseras · 14 generales</span></h4>
+      <div class="ren cab"><span>CUÁNDO</span><span>FAMILIA</span><span>QUÉ</span><span>CANT.</span><span>QUIÉN RETIRÓ</span><span>NÚMEROS</span></div>
+      <div class="ren"><span class="h">19/11 19:31</span><span><b>LÓPEZ, SOFÍA</b></span><span class="q">Pulseras VIP</span><span>1</span><span>Egresada · SOFÍA LÓPEZ</span><span class="gris">—</span></div>
+      <div class="ren"><span class="h">19/11 19:32</span><span><b>LÓPEZ, SOFÍA</b></span><span class="q">Generales</span><span>7</span><span>Egresada · SOFÍA LÓPEZ</span><span>del 4001 al 4007</span></div>
+      <div class="ren"><span class="h">19/11 19:40</span><span><b>FERREYRA, MÍA</b></span><span class="q">Pulseras VIP</span><span>3</span><span>Madre · ANA FERREYRA</span><span class="gris">—</span></div>
+      <div class="ren"><span class="h">19/11 19:40</span><span><b>FERREYRA, MÍA</b></span><span class="q">Generales</span><span>7</span><span>Madre · ANA FERREYRA</span><span>del 4010 al 4016</span></div>
+    </div>
+    <div class="detalle oculto" id="det-oficina">
+      <h4>Oficina · antes de la 6.9.3 <span class="chip a">las 8 juntas</span></h4>
+      <div class="ren cab"><span>CUÁNDO</span><span>FAMILIA</span><span>QUÉ</span><span>CANT.</span><span>QUIÉN RETIRÓ</span><span>NÚMEROS</span></div>
+      <div class="ren"><span class="h">07/11 15:00</span><span><b>GÓMEZ, ANA</b></span><span class="q">Pulseras y generales</span><span>1 + 7</span><span>Madre · ANA GÓMEZ</span><span>del 1001 al 1007</span></div>
+    </div>
+
+    <div class="detalle oculto" id="hoja-wrap">
+      <h4>Así sale IMPRIMIR <span class="chip a">A4 · una hoja por quién entregó, o todo junto</span></h4>
+      <div class="hoja">
+        <h5>Entregas sin cargo · PUERTO VIEJO · 04/12/2026</h5>
+        <div>Impreso el 20/11/2026 12:10 · Pulseras 12 de 17 · Generales 31 de 55 · Anuladas 1</div>
+        <table>
+          <tr><th>CUÁNDO</th><th>QUIÉN ENTREGÓ</th><th>FAMILIA</th><th>QUÉ</th><th>CANT.</th><th>RETIRÓ</th><th>NÚMEROS</th></tr>
+          <tr><td>19/11 19:31</td><td>Maxi</td><td>LÓPEZ, SOFÍA</td><td>Pulseras</td><td>1</td><td>Egresada</td><td>—</td></tr>
+          <tr><td>19/11 19:32</td><td>Maxi</td><td>LÓPEZ, SOFÍA</td><td>Generales</td><td>7</td><td>Egresada</td><td>4001–4007</td></tr>
+          <tr><td>20/11 10:02</td><td>Carla</td><td>ACOSTA, LUCÍA</td><td>Pulseras</td><td>3</td><td>Madre</td><td>—</td></tr>
+          <tr><td>20/11 10:30</td><td>Jefe</td><td>ACOSTA, LUCÍA</td><td>Generales</td><td>ANULADA</td><td colspan="2">se anotaron mal los números</td></tr>
+          <tr><td colspan="7" style="color:#777">… una fila por entrega, sin plata</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="nota"><b>Qué hace y qué no</b>
+    <span>• Sale de lo que ya se guarda (las entregas por partes y las de las 8 juntas de antes): <b>sin SQL ni tabla nueva</b>.</span>
+    <span>• Solo mirar e imprimir. <b>Anular</b> sigue siendo solo del jefe, desde ENTRADAS de la fiesta.</span>
+    <span>• No cuenta material: lo de contar las pulseras a ciegas quedó descartado por ahora.</span>
+    <span>• Lo ve quien ve el cierre de caja (modo jefe y la encargada). Sin plata: las entregas son sin cargo.</span>
+  </div>
+</div>
+<script>
+(function(){
+  var app=document.getElementById('app');
+  document.querySelectorAll('[data-ancho]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-ancho]').forEach(function(x){x.classList.toggle('on',x===b)});
+      app.classList.toggle('cel',b.dataset.ancho==='cel');
+    });
+  });
+  document.querySelectorAll('tr.fila').forEach(function(tr){
+    tr.addEventListener('click',function(){
+      var id='det-'+tr.dataset.quien, det=document.getElementById(id), abrir=det.classList.contains('oculto');
+      document.querySelectorAll('.detalle').forEach(function(d){if(d.id!=='hoja-wrap')d.classList.add('oculto')});
+      document.querySelectorAll('tr.fila').forEach(function(x){x.classList.remove('abierta')});
+      if(abrir){det.classList.remove('oculto');tr.classList.add('abierta')}
+    });
+  });
+  document.getElementById('imprimir').addEventListener('click',function(){
+    document.getElementById('hoja-wrap').classList.toggle('oculto');
+  });
+  var primera=document.querySelector('tr.fila'); if(primera) primera.click();
+})();
+</script>
+</body></html>

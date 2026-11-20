@@ -13,27 +13,78 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 
 ## Para retomar en otro chat
 
-### Dónde quedó
+### Dónde quedó (20-nov-2026, mediodía)
 
-- **Programado entero** (los pasos 1 a 5 del plan): los dos talonarios, PRECIOS nuevo, "VENDER le vende solo lo
-  pagado entero", la entrega en dos partes (tabla `entradas_entregas`, v81) y el inicio con un solo VENDER y VENDER
-  entero (lista con filtro, total de la fiesta, GRATIS en dos renglones, A PAGAR por origen, la caja una vez, la
-  planilla por material).
-- **La sesión de la madrugada se cortó a las 4:27 con VENDER sin guardar en git.** El 20-nov a la mañana se revisó
-  (compilaba, todo lo del plan estaba hecho, nada a medias) y se probó: ver "Cómo se probó", abajo.
-
-- **Probada entera el 20-nov a la mañana** (ver "Cómo se probó") y guardada en git (`436adec`). Se le mandaron las
-  14 capturas del recorrido (`build/capturas_6.9.3/01_…` a `14_…`, fuera de git). **Plan general de la 6.9.3: 95 %;
-  el 100 % es publicar con él.**
+- **VENDER y la entrega en dos partes: programados, probados y guardados** (`436adec`; los pasos 1 a 5 del plan: los
+  dos talonarios, PRECIOS nuevo, "VENDER le vende solo lo pagado entero", la entrega en dos partes con la tabla
+  `entradas_entregas` y la v81, y VENDER entero). La sesión de la madrugada se había cortado a las 4:27 con VENDER sin
+  guardar; el 20-nov a la mañana se revisó y se probó entero (ver "Cómo se probó"). Se le mandaron las **14 capturas
+  del recorrido** (`build/capturas_6.9.3/01_…` a `14_…`, fuera de git).
+- **"Todo subido" de VENDER: hecho y guardado** (`952900a`). La línea de arriba contaba solo las ventas y decía "Todo
+  subido" con una entrega sin subir (lo vio el recorrido; el usuario: "si sube, que suba de verdad"). Ver "La línea
+  'Todo subido'", abajo.
+- **La caja de entregas en el cierre: programada y probada, guardada al cortar este chat** (pedido del usuario el
+  20-nov; maqueta `docs/maqueta_entregas_en_el_cierre_2026-11-20.html`, que aprobó con la **tabla por persona**:
+  "si son muchos en simultáneo, conviene"). Ver "La caja de entregas", abajo.
+- **Plan general de la 6.9.3: 95 %; el 100 % es publicar con él.**
 
 ### Lo que falta, en orden
 
-1. **Que el usuario mire las capturas** y diga si algo no le gusta.
-2. **Decidir una cosa que se vio en el recorrido** (no es un error de la versión): la línea de arriba de VENDER
-   ("Todo subido" / "N ventas subiendo") cuenta solo las ventas. Una entrega hecha sin internet no aparece ahí: la
-   avisa el cartel "Entregado, pero todavía no subió" en el momento, pero después la línea dice "Todo subido". Se
-   le preguntó si sumarla.
-3. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar").
+1. **La revisión independiente de la caja de entregas** (un workflow, `wf_8b3faca9-ade`) corría al cortar el chat.
+   Si su resultado no quedó anotado acá, volver a correrla (las mismas dos miradas: la cuenta contra las reglas de
+   la entrega, y la pantalla, el papel y que ninguna prueba lea la base de verdad, con un verificador que intenta
+   refutar cada hallazgo) y arreglar lo que se confirme, con su test.
+2. **El recorrido con el mouse de la caja de entregas** en `tool/venta_entradas_prueba.dart` (CIERRE DE CAJA del
+   jefe → ENTRADAS, después de entregar desde la tablet de Carla), con capturas para mandarle. **Necesita el permiso
+   de computer-use: avisarle al celular y esperarlo** (memoria `avisar-cuando-lo-necesito`). La huella de la base
+   antes y después (`python -I tool/huella_de_la_base.py`).
+3. **Mandarle la muestra de la caja de entregas** (`build/muestras_6.9.3/Entradas_16_cierre_por_sector.png`, `_17_…
+   celular.png` y `Entregas_sin_cargo.pdf`): todavía no la vio programada, solo la maqueta.
+4. **Que mire las capturas** de VENDER y de la caja de entregas, y diga si algo no le gusta.
+5. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"). La caja de entregas va en la misma
+   6.9.3, sin SQL.
+
+### La línea "Todo subido" (`952900a`)
+
+- Cuenta **las ventas, las entregas y los cambios de la caja** que esperan subir (`PendientesDeEntradas`,
+  `cuentas/linea_de_subida.dart`): "Sin internet · 1 venta, 1 entrega y 1 cambio por subir"; "Todo subido" solo sin
+  nada en la cola.
+- Las entregas van **por familia** (`EntradasEntregasRepository.familiasSinSubir`: las dos partes y la fila de la
+  entrega son una sola); los cambios, `EntradasDeLaCaja.cambiosSinSubir` (cajas, anulaciones, verificaciones, precios).
+- Se vuelve a contar al guardar y con cada `pendingStream` del motor.
+- Probado con sus tests, 3 roturas (18 a 20 de `tool/roturas_6.9.3.txt`) y una revisión independiente: de 5
+  hallazgos, 1 real (la ventana de prueba no lo mostraba; arreglado con `_PartesDeUnLado`).
+- Ojo: **en la nube de verdad las entregas no pueden subir hasta correr el SQL de `entradas_entregas`** al publicar;
+  hasta entonces la línea dice que hay entregas por subir, y es correcto.
+
+### La caja de entregas (Cierre de caja → ENTRADAS)
+
+- **Qué eligió el usuario:** ver el detalle de lo entregado sin cargo, **sin contar material** (lo de contar a ciegas
+  quedó descartado por ahora), en el cierre de caja, con **una tabla por quién entregó**. Lo puede entregar también el
+  operario de caja desde la oficina (la fiesta → ENTRADAS): queda con su nombre y aparece en su renglón.
+- **La cuenta** (`eventos/services/caja_de_entregas.dart`, pura): `CajaDeEntregas.de(alumnos, todos, retiros,
+  renglones)`. Lo que tiene que llegar y lo entregado sale de `ResumenPorPartes`; si cada entrega sigue en pie, de
+  `EstadoDeLaEntrega` (las mismas reglas, también relojes y 6.9.x). Agrupa por quién la anotó (`hechoPor`; vacío →
+  "Sin nombre"). Cada entrega: hora, familia, parte (o "las 8 juntas" de una 6.9.x), cantidad, quién retiró,
+  números, y si se anuló, cuándo, quién y por qué. Las copias de la fila (`kCopiaDeLaFila`) son la entrega de las 8
+  juntas; la fila de la 6.9.x se lista solo si no es el reflejo de un renglón. Lo de las bajas se ve pero no cuenta en
+  lo que tiene que llegar.
+- **La pantalla** (`cierre_caja/widgets/entregas_del_cierre.dart`), debajo de las cajas de venta, **siempre**
+  (aunque no haya cajas ni precio): ENTREGAS SIN CARGO, cuatro números (pulseras, generales, familias con todo,
+  anuladas), la tabla por persona con el total, y al tocar a una, su detalle (en el celular, renglones apilados).
+  IMPRIMIR (todo) e IMPRIMIR LO DE … (solo esa persona). Solo para mirar: anular sigue en ENTRADAS de la fiesta.
+- **El papel** (`common/services/entregas_sin_cargo_pdf.dart`, `PdfService.generarEntregasSinCargo`): A4 parado, por
+  persona, sin plata, con las tablas como hijas directas del `MultiPage`.
+- **Los datos**: `cajaDeEntregasDeLaFiestaProvider` (`cierre_caja/providers/caja_de_entregas_provider.dart`), que se
+  relee con lo que baja y se descarta al dejar de mirarla; `imprimirEntregasSinCargoProvider` para que las pruebas no
+  abran nada. **Toda prueba que monte el cierre de ENTRADAS reemplaza ese provider** (`reemplazosDelCierre` lo hace;
+  `cajaDeEntregasVacia`).
+- **Probado:** `test/caja_de_entregas_test.dart` (10: por persona, anulación, 8 juntas, copias, 6.9.x atrasada, bajas,
+  sin nombre), `test/entregas_del_cierre_test.dart` (5: la tabla, el detalle, IMPRIMIR, vacío, celular),
+  `test/entregas_sin_cargo_pdf_test.dart` (5: lo que dice, nada fuera de la hoja, solo una persona, 120 familias en
+  varias hojas, vacío), `test/cierre_por_sector_test.dart` (aparece aunque no haya precio) y 3 roturas (21 a 23).
+  Muestras en `build/muestras_6.9.3/`. **La suite entera, con todo esto: 5.753 tests, ninguno falla.** **Sin SQL ni
+  migración.**
 
 ### Lo que no se probó
 
@@ -43,6 +94,8 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 - **Una PC con la 6.9.2 leyendo una entrega a medias**: probado en memoria (la fila de `entradas_retiro` se escribe
   solo con las dos partes y una 6.9.x la lee "Retiró"), no con el programa viejo instalado.
 - La impresora y la tablet física.
+- **La caja de entregas con el mouse** (falta el recorrido; ver "Lo que falta"). En la ventana de prueba la entrega por
+  partes es una memoria compartida entre la tablet y la PC: lo de cada equipo sin internet se prueba con los tests.
 
 ## Lo que lleva
 

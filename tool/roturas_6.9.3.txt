@@ -112,3 +112,21 @@ test/linea_de_subida_entradas_test.dart
   int get total => ventas + entregas + otros;
   int get total => ventas;
 ---
+21. la caja de entregas cuenta también lo anulado
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart test/entregas_del_cierre_test.dart
+        final vigente = hoy.entregada &&
+        final vigente = true || hoy.entregada &&
+---
+22. la caja de entregas repite la fila que es el reflejo de un renglón
+lib/features/eventos/services/caja_de_entregas.dart
+test/caja_de_entregas_test.dart
+      if (entregadoAt != null && !esReflejo) {
+      if (entregadoAt != null) {
+---
+23. el cierre de ENTRADAS no muestra la caja de entregas
+lib/features/cierre_caja/widgets/sector_entradas.dart
+test/cierre_por_sector_test.dart
+            EntregasDelCierre(fiesta: fiesta, isDark: isDark),
+            const SizedBox.shrink(),
+---

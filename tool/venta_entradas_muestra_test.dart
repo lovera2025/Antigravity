@@ -26,7 +26,9 @@
 //     uno de 2.200, impresas por tandas;
 //   • Entradas_12 a 15: CERRAR CAJA (contar a ciegas, confirmar, el cierre, y en
 //     el celular) y Cierre_de_caja_entradas.pdf, su papel;
-//   • Entradas_16 y 17: ENTRADAS en el cierre de caja (en la PC y en el celular);
+//   • Entradas_16 y 17: ENTRADAS en el cierre de caja (en la PC y en el celular),
+//     con ENTREGAS SIN CARGO debajo (la caja de entregas, 20-nov-2026), y
+//     Entregas_sin_cargo.pdf, su IMPRIMIR;
 //   • Entradas_18 y 19: la entrega con lo vendido a la vista, y el cartel de una
 //     familia que debe su mesa adicional (desde el 20-nov-2026 lo de esa mesa
 //     espera el pago: ya no ofrece VENDERLE ESAS ENTRADAS).
@@ -89,7 +91,10 @@ import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repo
 import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/entrega_entradas.dart';
+import 'package:arguello_events/features/common/services/entregas_sin_cargo_pdf.dart';
+import 'package:arguello_events/features/eventos/services/caja_de_entregas.dart';
 
 import '../test/helpers/entradas_en_memoria.dart';
 import '../test/helpers/entrega_en_memoria.dart';
@@ -978,15 +983,59 @@ void main() {
     await guardar(tester, clave, 'Entradas_15_cerrada_celular.png');
   });
 
+  /// Lo entregado sin cargo para la caja de entregas del cierre: Carla dio las
+  /// pulseras y las generales de LÓPEZ (las generales, dos veces: el jefe anuló
+  /// la primera) y Maxi las pulseras de PÉREZ; GÓMEZ retiró las 8 juntas con la
+  /// 6.9.x.
+  void entregasDeLaNoche(EntregaEnMemoria e) {
+    DateTime h(int dia, int hora, int minuto) => DateTime.utc(2026, 11, dia, hora, minuto);
+    EntregaEntradas entrega(String alumno, ParteEntrega parte, int cantidad, DateTime at,
+            String quien, String nombre, {List<TramoTalonario> tramos = const []}) =>
+        EntregaEntradas.entrega(
+          contratoAlumnoId: alumno,
+          eventoId: idFiestaEntrega,
+          parte: parte,
+          cantidad: cantidad,
+          tramos: tramos,
+          parentesco: ParentescoRetiro.madre,
+          nombre: nombre,
+          escribioEnPlanilla: true,
+          hechoPor: quien,
+          deviceId: 'tablet-1',
+          ahora: at,
+        );
+    e.partes.renglones.addAll([
+      entrega(EntregaEnMemoria.idLopez, ParteEntrega.pulseras, 1, h(19, 22, 31), 'Carla',
+          'SOFÍA LÓPEZ'),
+      entrega(EntregaEnMemoria.idLopez, ParteEntrega.generales, 7, h(20, 13, 2), 'Carla',
+          'SOFÍA LÓPEZ', tramos: const [TramoTalonario(4001, 4007)]),
+      EntregaEntradas.anulacion(
+        contratoAlumnoId: EntregaEnMemoria.idLopez,
+        eventoId: idFiestaEntrega,
+        parte: ParteEntrega.generales,
+        cantidad: 0,
+        motivo: 'se anotaron mal los números',
+        hechoPor: 'Jefe',
+        deviceId: 'pc-1',
+        ahora: h(20, 13, 30),
+      ),
+      entrega(EntregaEnMemoria.idLopez, ParteEntrega.generales, 7, h(20, 13, 41), 'Carla',
+          'SOFÍA LÓPEZ', tramos: const [TramoTalonario(4101, 4107)]),
+      entrega(EntregaEnMemoria.idPerez, ParteEntrega.pulseras, 1, h(20, 14, 5), 'Maxi',
+          'JUAN PÉREZ'),
+    ]);
+  }
+
   for (final (nombre, tamano) in [
-    ('Entradas_16_cierre_por_sector.png', const Size(1100, 640)),
-    ('Entradas_17_cierre_por_sector_celular.png', const Size(390, 900)),
+    ('Entradas_16_cierre_por_sector.png', const Size(1100, 1350)),
+    ('Entradas_17_cierre_por_sector_celular.png', const Size(390, 2300)),
   ]) {
     testWidgets('ENTRADAS en el cierre de caja · $nombre', (tester) async {
       final (clave, _, _, _) = await montar(
         tester,
         jefe: true,
         tamano: tamano,
+        preparar: entregasDeLaNoche,
         extra: [
           eventosDeLaBarraProvider.overrideWith((ref) async => [fiestaDeLaEntrega]),
           relojDelJefeProvider.overrideWithValue(() => DateTime(2026, 11, 30, 12)),
@@ -1011,6 +1060,30 @@ void main() {
       await guardar(tester, clave, nombre);
     });
   }
+
+  test('Entregas_sin_cargo.pdf: IMPRIMIR de la caja de entregas', () async {
+    final e = EntregaEnMemoria();
+    entregasDeLaNoche(e);
+    final todos = e.contratos.alumnos;
+    final caja = CajaDeEntregas.de(
+      alumnos: todos,
+      todos: todos,
+      retiros: e.entregas.filas,
+      renglones: e.partes.renglones,
+    );
+    final fuentes = await PdfService.fuentesOutfit();
+    final bytes = await EntregasSinCargoPdf.construir(
+      caja: caja,
+      fiesta: 'PUERTO VIEJO',
+      fechaFiesta: DateTime(2026, 12, 4),
+      regular: fuentes?.$1,
+      negrita: fuentes?.$2,
+      generada: DateTime.utc(2026, 11, 20, 15, 10),
+    );
+    final archivo = File('$carpeta${Platform.pathSeparator}Entregas_sin_cargo.pdf')
+      ..writeAsBytesSync(bytes);
+    print('── PDF en: ${archivo.path}');
+  });
 
   testWidgets('la entrega con lo vendido a la vista', (tester) async {
     final (clave, _, _, _) = await montar(

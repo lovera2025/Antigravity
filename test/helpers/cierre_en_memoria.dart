@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/cierre_caja/models/turno_caja.dart';
+import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/cierre_caja/providers/cierre_caja_provider.dart';
 import 'package:arguello_events/features/common/providers/admin_provider.dart';
+import 'package:arguello_events/features/eventos/services/caja_de_entregas.dart';
 
 import 'entradas_en_memoria.dart';
 import 'noche_de_barra.dart';
@@ -51,15 +53,32 @@ class CierreDePrueba extends CierreCajaNotifier {
   Future<void> aplicarRestriccionOperativa() async {}
 }
 
+/// La caja de entregas sin nada entregado: la de una fiesta sin alumnos.
+final cajaDeEntregasVacia = CajaDeEntregas.de(
+  alumnos: const [],
+  todos: const [],
+  retiros: const {},
+  renglones: const [],
+);
+
 /// Todo lo que el cierre necesita, con la barra de [noche] y el reloj fijo la mañana
 /// siguiente a TÉCNICA PINAROLI. La venta de entradas va siempre en memoria ([entradas],
-/// o una vacía): sin eso, la pestaña ENTRADAS leería la base de verdad del equipo.
+/// o una vacía): sin eso, la pestaña ENTRADAS leería la base de verdad del equipo. Lo
+/// mismo la caja de entregas ([entregas], por fiesta; si no, vacía).
 List<Override> reemplazosDelCierre(
   NocheDeBarra noche, {
   bool modoJefe = true,
   EntradasEnMemoria? entradas,
+  CajaDeEntregas Function(String eventoId)? entregas,
+  ImprimirEntregasSinCargo? imprimir,
 }) =>
     [
+      cajaDeEntregasDeLaFiestaProvider.overrideWith(
+        (ref, eventoId) async => entregas?.call(eventoId) ?? cajaDeEntregasVacia,
+      ),
+      imprimirEntregasSinCargoProvider.overrideWithValue(
+        imprimir ?? (caja, {required fiesta, fechaFiesta, soloDe}) async {},
+      ),
       ...(entradas ?? EntradasEnMemoria()).reemplazos,
       ...noche.operadores.reemplazos,
       ...noche.prueba.reemplazos,

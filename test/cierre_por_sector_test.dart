@@ -10,6 +10,7 @@ import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/cierre_caja/cierre_caja_screen.dart';
+import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/cierre_caja/services/sector_del_cierre.dart';
 import 'package:arguello_events/features/cierre_caja/widgets/sector_barra.dart';
 import 'package:arguello_events/features/cierre_caja/widgets/sector_entradas.dart';
@@ -179,6 +180,8 @@ void main() {
           if (enLaWeb) entradasEnEsteEquipoProvider.overrideWithValue(false),
           barraDelJefeProvider.overrideWithValue(prueba.barra),
           relojDelJefeProvider.overrideWithValue(() => hoy),
+          // La caja de entregas, vacía: sin esto leería la base del equipo.
+          cajaDeEntregasDeLaFiestaProvider.overrideWith((ref, id) async => cajaDeEntregasVacia),
         ],
         child: const MaterialApp(
           home: Scaffold(
@@ -234,6 +237,10 @@ void main() {
       expect(texto(tester, 'cierre_entradas_fiesta'), 'TÉCNICA PINAROLI');
       expect(texto(tester, 'cierre_entradas_sin_precio'),
           'Esta fiesta todavía no tiene precio de entrada: se pone en ENTRADAS → PRECIOS.');
+      // La caja de entregas va igual: lo sin cargo no necesita caja ni precio
+      // (20-nov-2026).
+      expect(find.byKey(const Key('cierre_entregas')), findsOneWidget);
+      expect(find.byKey(const Key('cierre_entregas_vacio')), findsOneWidget);
     });
 
     // Revisión del 15-nov: con la lista de BARRA podía abrir en un particular.

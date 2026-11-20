@@ -723,6 +723,17 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81
   material. **Lo que baja con VENDER ocupado se relee al terminar** (`_hayQueReleer`).
 - Probado: la suite entera (5.724), `test/entregar_parte_en_la_base_test.dart` contra SQLite de verdad, las roturas
   de `tool/roturas_6.9.3.txt` (16 de 16), una revisión independiente (5 arreglados) y el recorrido con el mouse.
+- **"Todo subido" de VENDER es que no queda nada** (`952900a`): la línea cuenta ventas, entregas (por familia,
+  `familiasSinSubir`) y cambios de la caja (`cambiosSinSubir`) con `PendientesDeEntradas`. Una escritura nueva de la
+  venta o de la entrega tiene que entrar en alguna de las tres cuentas.
+- **La caja de entregas** (pedido del usuario el 20-nov, en la misma 6.9.3, sin SQL): en Cierre de caja → ENTRADAS,
+  debajo de las cajas de venta y siempre, lo entregado sin cargo **por quién lo entregó**, con el detalle de cada
+  entrega, las anuladas e IMPRIMIR en A4. La cuenta es `CajaDeEntregas` (`eventos/services/caja_de_entregas.dart`),
+  sin otra cuenta al lado (`ResumenPorPartes`, `EstadoDeLaEntrega`). **Toda prueba que monte el cierre de ENTRADAS
+  reemplaza `cajaDeEntregasDeLaFiestaProvider`** (`reemplazosDelCierre`): si no, leería la base del equipo. Sin
+  contar material (descartado por ahora).
+- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: la revisión de la caja de
+  entregas, su recorrido con el mouse (con el permiso del usuario), mandarle las muestras y publicar con él.
 - **No usar PRECIOS nuevo ni entregar por partes hasta que todas las PCs y las tablets tengan la 6.9.3**: una 6.9.x
   ve una entrega a medias como "Pendiente" y junta los talonarios.
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v82**: la v81 es de la entrega en dos partes.

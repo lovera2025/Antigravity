@@ -7,6 +7,7 @@ import '../../barra/providers/barra_providers.dart' show eventosDeLaBarraProvide
 import '../../barra/services/fiestas_del_jefe.dart';
 import '../../entradas/cuentas/cierre_de_entradas.dart';
 import '../../entradas/providers/entradas_providers.dart';
+import 'entregas_del_cierre.dart';
 import 'estilo_del_sector.dart';
 
 /// Las fiestas de ENTRADAS en el cierre de caja: **solo los eventos masivos**,
@@ -100,6 +101,10 @@ class SectorEntradasDelCierre extends ConsumerWidget {
                         ))
                   : _Resumen(datos: d, isDark: isDark),
             ),
+            // La caja de entregas (20-nov-2026): lo sin cargo no necesita caja
+            // ni precio, así que va siempre, aunque no haya cajas de venta.
+            const SizedBox(height: 22),
+            EntregasDelCierre(fiesta: fiesta, isDark: isDark),
           ],
         );
       },

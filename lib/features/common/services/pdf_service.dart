@@ -49,6 +49,8 @@ import '../../plano/services/plano_de_la_fiesta.dart';
 import '../utils/currency_extensions.dart';
 import 'ajuste_pdf.dart';
 import 'planilla_entrega_pdf.dart';
+import 'entregas_sin_cargo_pdf.dart';
+import '../../eventos/services/caja_de_entregas.dart';
 import 'planilla_sorteo_pdf.dart';
 import 'plano_pdf.dart';
 import 'presupuesto_pdf_sections.dart';
@@ -4478,6 +4480,35 @@ class PdfService {
       negrita: fuentes?.$2,
       generada: generada,
     );
+  }
+
+  /// El papel de la caja de entregas (Cierre de caja → ENTRADAS): lo entregado
+  /// sin cargo, por quién (20-nov-2026). [soloDe]: una sola persona.
+  static Future<void> generarEntregasSinCargo(
+    CajaDeEntregas caja, {
+    required String fiesta,
+    DateTime? fechaFiesta,
+    String? soloDe,
+  }) async {
+    final fuentes = await _fuentesOutfit();
+    final bytes = await EntregasSinCargoPdf.construir(
+      caja: caja,
+      fiesta: fiesta,
+      fechaFiesta: fechaFiesta,
+      soloDe: soloDe,
+      regular: fuentes?.$1,
+      negrita: fuentes?.$2,
+    );
+    final safeName = fiesta.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final quien = soloDe == null
+        ? ''
+        : '_${soloDe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_')}';
+    final nombre = 'Entregas_sin_cargo_$safeName$quien.pdf';
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, nombre);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombre);
+    }
   }
 
   /// La planilla de entrega de [material]: una por material, porque cada uno
