@@ -617,7 +617,7 @@ class EntregarParte {
     }
     final equipo = await _puertos.equipo();
     final reescribe = retiro?.entregado ?? false;
-    final copias = reescribe
+    List<EntregaEntradas> copiar() => reescribe
         ? EntregaPorPartes.copiasDeLaFila(
             alumno: a,
             retiro: retiro,
@@ -626,6 +626,20 @@ class EntregarParte {
             ahora: ahora,
           )
         : const <EntregaEntradas>[];
+    var copias = copiar();
+    // La anulación va también después de cada copia de la fila (arreglo 9,
+    // 20-nov-2026): la copia lleva la hora que el estado le da a la fila, y con
+    // una 6.9.x atrasada esa hora es un milisegundo después de su anulación, la
+    // misma que da `horaDelRenglon`. En el mismo milisegundo se ordenan por id, y
+    // la mitad de las veces la parte seguía figurando entregada.
+    var corrida = false;
+    for (final c in copias) {
+      if (!ahora.isAfter(c.createdAt)) {
+        ahora = c.createdAt.toUtc().add(const Duration(milliseconds: 1));
+        corrida = true;
+      }
+    }
+    if (corrida) copias = copiar();
     final anulaciones = [
       for (final p in aAnular)
         EntregaEntradas.anulacion(

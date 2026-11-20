@@ -196,3 +196,9 @@ test/venta_entradas_prueba_test.dart
         imprimirEntregasSinCargoProvider.overrideWithValue(
         if (false) imprimirEntregasSinCargoProvider.overrideWithValue(
 ---
+35. al anular, la anulación cae en el mismo milisegundo que la copia de la fila (arreglo 9)
+lib/features/eventos/services/entregar_parte.dart
+test/entregar_parte_test.dart
+      if (!ahora.isAfter(c.createdAt)) {
+      if (false && !ahora.isAfter(c.createdAt)) {
+---

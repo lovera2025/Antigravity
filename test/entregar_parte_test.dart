@@ -472,6 +472,101 @@ void main() {
       expect(estadoEn(tablet).algoEntregado, isFalse);
     });
 
+    // Arreglo 9 (20-nov-2026): una 6.9.x atrasada volvió a entregar después de
+    // una anulación, así que la fila dice "entregado" con un `anulado_at` más
+    // nuevo que la entrega, y el estado pone esa entrega un milisegundo después
+    // de la anulación. Al anular desde un equipo con la hora de antes de esa
+    // anulación, la anulación caía en el mismo milisegundo que la copia de la
+    // fila: se ordenaban por id, y la mitad de las veces la parte seguía
+    // figurando entregada.
+    test('la anulación queda después de las copias de la fila aunque la 6.9.x '
+        'haya vuelto a entregar con la hora atrasada', () async {
+      final alumnos = [
+        for (var i = 0; i < 6; i++)
+          _alumno(
+            id: 'c0000000-0000-4000-8000-00000000010$i',
+            nombre: 'ALUMNO $i, UNO',
+            mesas: [20 + i],
+          ),
+      ];
+      final oficina = EquipoDeEntrega(
+        nombre: 'pc-oficina',
+        nube: nube,
+        reloj: RelojCorrido(DateTime.utc(2026, 11, 20, 18, 8)),
+        alumnos: alumnos,
+        pagos: _pagos(alumnos),
+      );
+      for (final a in alumnos) {
+        final entregada = RetiroEntradas.nuevaEntrega(
+          alumno: a,
+          entradas: RetiroEntradas.entradasDe(a),
+          tramos: const [],
+          menores10: 0,
+          parentesco: ParentescoRetiro.padre,
+          nombre: 'PADRE, UNO',
+          quien: 'Marta',
+          ahora: DateTime.utc(2026, 11, 20, 18),
+        );
+        final anulada = RetiroEntradas.anular(
+          entregada,
+          motivo: 'se equivocó de familia',
+          quien: 'Jefe',
+          ahora: DateTime.utc(2026, 11, 20, 18, 10),
+        );
+        // La tablet con la 6.9.x, cinco minutos atrasada, la vuelve a entregar.
+        nube.retiros[a.id] = RetiroEntradas.nuevaEntrega(
+          alumno: a,
+          entradas: RetiroEntradas.entradasDe(a),
+          tramos: const [],
+          menores10: 0,
+          parentesco: ParentescoRetiro.madre,
+          nombre: 'MADRE, UNA',
+          quien: 'Marta',
+          ahora: DateTime.utc(2026, 11, 20, 18, 5),
+          anterior: anulada,
+        );
+      }
+      oficina.bajar();
+
+      for (final a in alumnos) {
+        expect(
+          EstadoDeLaEntrega.deAlumno(
+            a,
+            retiro: oficina.retiros[a.id],
+            renglones: oficina.renglonesDe(a.id),
+          ).todoEntregado,
+          isTrue,
+        );
+        final r = await EntregarParte(oficina).anularParte(
+          eventoId: _evento,
+          contratoAlumnoId: a.id,
+          partes: {ParteEntrega.pulseras},
+          motivo: 'se anotaron mal los números',
+          quien: 'Jefe',
+          esJefe: true,
+        );
+        expect(r, isA<Anulada>(), reason: a.nombreAlumno);
+        final renglones = nube.renglonesDe(a.id);
+        final copias = renglones
+            .where((x) => x.motivo == EntregaEntradas.kCopiaDeLaFila)
+            .toList();
+        expect(copias, hasLength(2), reason: a.nombreAlumno);
+        final anulacion = renglones.singleWhere((x) => x.esAnulacion);
+        for (final c in copias) {
+          expect(anulacion.createdAt.isAfter(c.createdAt), isTrue,
+              reason: '${a.nombreAlumno}: la anulación va después de la copia '
+                  'de ${c.parteClave}, no en el mismo milisegundo');
+        }
+        final e = EstadoDeLaEntrega.deAlumno(
+          a,
+          retiro: nube.retiros[a.id],
+          renglones: renglones,
+        );
+        expect(e.pulseras.entregada, isFalse, reason: a.nombreAlumno);
+        expect(e.generales.entregada, isTrue, reason: a.nombreAlumno);
+      }
+    });
+
     test('si al releer la parte no quedó entregada, no dice que salió bien',
         () async {
       // Mientras la PC sube, baja una anulación de otro equipo con la hora más
