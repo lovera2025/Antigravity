@@ -111,7 +111,7 @@ Lo que pidió la revisión independiente (la lista de abajo, "Lo que pidió la r
 - **Probado:** `test/caja_de_entregas_test.dart` (42: los 10 de antes, 11 de conciliación, 10 del contrato de la
   historia y 11 de los arreglos), `test/entregas_del_cierre_test.dart` y `test/entregas_sin_cargo_pdf_test.dart` (20),
   `test/arneses_sin_base_test.dart` y `test/venta_entradas_prueba_test.dart` (24), los de la entrega (95), y la suite
-  entera el 20-nov a la noche (ver "Cómo se probó"). **Sin correr: las roturas.**
+  entera el 20-nov a la noche: **5.797 tests, ninguno falla**. **Sin correr: las roturas.**
 - **Quedó en `docs/pendientes/`:** `anular-pisa-anulacion-de-la-6.9.x.md` (anular con esta versión pisa la anulación
   vieja de la fila: se pierde de la historia, lo que cuenta no cambia) y `horas-corridas-en-otros-papeles.md`
   (preguntarle).
