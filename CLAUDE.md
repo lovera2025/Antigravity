@@ -732,8 +732,10 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81
   sin otra cuenta al lado (`ResumenPorPartes`, `EstadoDeLaEntrega`). **Toda prueba que monte el cierre de ENTRADAS
   reemplaza `cajaDeEntregasDeLaFiestaProvider`** (`reemplazosDelCierre`): si no, leería la base del equipo. Sin
   contar material (descartado por ahora).
-- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: la revisión de la caja de
-  entregas, su recorrido con el mouse (con el permiso del usuario), mandarle las muestras y publicar con él.
+- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: **arreglar los 8 hallazgos
+  de la revisión de la caja de entregas** (los totales, las 8 juntas parte por parte, las anulaciones de la 6.9.x, las
+  bajas, la hora del papel, y que la ventana de prueba no escriba en la carpeta de PDF del programa), su recorrido
+  con el mouse (con el permiso del usuario), mandarle las muestras y publicar con él.
 - **No usar PRECIOS nuevo ni entregar por partes hasta que todas las PCs y las tablets tengan la 6.9.3**: una 6.9.x
   ve una entrega a medias como "Pendiente" y junta los talonarios.
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v82**: la v81 es de la entrega en dos partes.

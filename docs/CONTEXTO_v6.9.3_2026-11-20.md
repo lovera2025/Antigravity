@@ -30,10 +30,35 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 
 ### Lo que falta, en orden
 
-1. **La revisión independiente de la caja de entregas** (un workflow, `wf_8b3faca9-ade`) corría al cortar el chat.
-   Si su resultado no quedó anotado acá, volver a correrla (las mismas dos miradas: la cuenta contra las reglas de
-   la entrega, y la pantalla, el papel y que ninguna prueba lea la base de verdad, con un verificador que intenta
-   refutar cada hallazgo) y arreglar lo que se confirme, con su test.
+1. **Arreglar lo que confirmó la revisión independiente de la caja de entregas** (20-nov, terminó después del commit
+   `8d62895`; dos miradas y un verificador que intentó refutar cada hallazgo). **8 reales**, cada uno con su test
+   (que falle sin el arreglo) y, si se puede, su rotura en `tool/roturas_6.9.3.txt`:
+   1. **El TOTAL de FAMILIAS de la tabla suma dos veces** a la familia que recibió cada parte de una persona distinta
+      (lo normal: cada material llega en su tanda). Agregar `familiasConAlgo` en `CajaDeEntregas` (alumnoId
+      distintos con algo vigente) y usarlo en el TOTAL, con la clave `cierre_entregas_total_familias`.
+   2. **La entrada de "las 8 juntas" de una 6.9.x mira solo las pulseras para saber si sigue**: si una parte sale de
+      la fila y la otra de un renglón (relojes distintos, o una tablet sin internet), lo de las personas no suma lo de
+      `ResumenPorPartes`. Separar `pulserasVigentes` y `generalesVigentes` (`parte.deLaFila && parte.entregada`), que
+      `_persona` sume cada material con lo suyo, y tachar solo la parte que ya no sigue.
+   3. **Una anulación de una 6.9.x desaparece** cuando después se volvió a entregar (la fila queda "entregado" con su
+      `anuladoAt`). Contarla siempre que `f.anuladoAt != null` y no haya un renglón de anulación con la misma hora
+      (reflejo o copia), y mostrar "Anulación de una entrega anterior" con hora, quién y motivo.
+   4. **El TOTAL suma lo entregado a familias hoy de baja y la tarjeta de arriba no**: marcar la baja en
+      `EntregaDeLaCaja`, dejar lo de las bajas fuera del TOTAL y decirlo en una línea debajo ("incluye N pulseras de
+      familias hoy de baja", o "fuera del total").
+   5. **"N con una sola parte" puede dar negativo** (familias de 8 o más con cena no llevan generales): contarlo por
+      familia, `algoEntregado && !todoEntregado`, en vez de restar.
+   6. **La ventana de prueba `tool/venta_entradas_prueba.dart` escribe en la carpeta de PDF del programa instalado**
+      si se toca IMPRIMIR en la caja de entregas: reemplazar `imprimirEntregasSinCargoProvider` en `PapelesDeLaPrueba`
+      (que guarde en la carpeta de la prueba, como los otros papeles) y sumar a `test/arneses_sin_base_test.dart` que
+      toda ventana con el cierre lo reemplace. **Antes del recorrido con el mouse.**
+   7. **Una entrega que quedó sin efecto sin anulación** (otra entrega de la misma parte después, dos equipos sin
+      internet) sale tachada sin motivo en la pantalla, y en el papel como válida: agregar `reemplazadaAt` y
+      `reemplazadaPor` y mostrar "NO CUENTA: se volvió a entregar el … por …" en la pantalla y en el PDF.
+   8. **"Impreso el" del PDF sale 3 horas antes**: `ArTime.formatFechaHora` ya pasa a la hora de Argentina y se le
+      daba `ArTime.nowAr()`. Usar `ArTime.nowUtc()` y dejar escrito que `generada` es un instante.
+
+   Descartado: ninguno de los 9 hallazgos (los dos de la pantalla repetían 1 y 4).
 2. **El recorrido con el mouse de la caja de entregas** en `tool/venta_entradas_prueba.dart` (CIERRE DE CAJA del
    jefe → ENTRADAS, después de entregar desde la tablet de Carla), con capturas para mandarle. **Necesita el permiso
    de computer-use: avisarle al celular y esperarlo** (memoria `avisar-cuando-lo-necesito`). La huella de la base
