@@ -35,10 +35,14 @@ class PedidoDeEntradas {
   /// Las de los lugares adicionales de esa familia.
   final LugaresDeLaFamilia lugares;
 
-  /// Cuántas de sus lugares adicionales lleva (nunca más de las que le quedan).
+  /// Cuántas de sus lugares adicionales lleva con el descuento (nunca más de
+  /// las que le quedan pagas).
   final int deLugar;
 
-  /// Cuántas sueltas lleva, al precio de hoy.
+  /// Cuántas sueltas lleva, al precio de hoy. **En una venta de familia son
+  /// las de lo que agregó después del sorteo, sin descuento**, con el tope de
+  /// las que le quedan pagas (`LugaresDeLaFamilia.quedanSinDescuento`): las
+  /// entradas para otra gente van por "Alguien de afuera".
   final int sueltas;
 
   /// El descuento a mano sobre las sueltas, de 0 a 100. Viene en 0.
@@ -131,10 +135,15 @@ class PedidoDeEntradas {
         ocupados: ocupados ?? this.ocupados,
       );
 
-  /// Compra una familia de la fiesta. **Viene con todas las de sus lugares
-  /// adicionales que le quedan**; quien vende baja la cantidad si lleva menos.
-  PedidoDeEntradas paraLaFamilia(String id, LugaresDeLaFamilia lugares) =>
-      _con(familiaId: id, lugares: lugares, deLugar: lugares.quedan);
+  /// Compra una familia de la fiesta. **Viene con todo lo que le queda de lo
+  /// pago**: las de sus lugares con descuento y las sin descuento (sueltas);
+  /// quien vende baja la cantidad si lleva menos.
+  PedidoDeEntradas paraLaFamilia(String id, LugaresDeLaFamilia lugares) => _con(
+        familiaId: id,
+        lugares: lugares,
+        deLugar: lugares.quedan,
+        sueltas: lugares.quedanSinDescuento,
+      );
 
   /// Compra alguien de afuera: sin entradas de lugares adicionales.
   PedidoDeEntradas paraAlguienDeAfuera() =>
@@ -144,7 +153,13 @@ class PedidoDeEntradas {
   PedidoDeEntradas conDeLugar(int n) =>
       _con(deLugar: familiaId == null ? 0 : n.clamp(0, lugares.quedan));
 
-  PedidoDeEntradas conSueltas(int n) => _con(sueltas: max(0, n));
+  /// A alguien de afuera, las que quiera. A una familia, **no más de las que
+  /// le quedan sin descuento**: lo de más queda en el tope.
+  PedidoDeEntradas conSueltas(int n) => _con(
+        sueltas: familiaId == null
+            ? max(0, n)
+            : n.clamp(0, lugares.quedanSinDescuento),
+      );
 
   /// Lo negativo queda en 0; más de 100, en 100.
   PedidoDeEntradas conDescuento(double pct) =>
@@ -180,8 +195,20 @@ class PedidoDeEntradas {
   int get deLugarQueVan =>
       familiaId == null ? 0 : deLugar.clamp(0, lugares.quedan);
 
+  /// Las sueltas que de verdad van: a una familia, con el tope de las que le
+  /// quedan sin descuento (la segunda llave, por si un pedido llega armado de
+  /// otra forma).
+  int get sueltasQueVan => familiaId == null
+      ? max(0, sueltas)
+      : sueltas.clamp(0, lugares.quedanSinDescuento);
+
   /// Los renglones de la venta, con el nombre y el precio de este momento.
   /// Vacío sin precio o sin entradas.
+  ///
+  /// Lo sin descuento de una familia va como suelta, **al precio del día**
+  /// (la anticipada mientras rige; si no, la General), igual que lo vende la
+  /// 6.9.x: sin marca nueva en la venta. Lo con descuento va sobre la General
+  /// (`valor_entrada`), nunca sobre la anticipada.
   List<RenglonEntradas> get renglones {
     final c = config;
     final deHoy = precioDeHoy;
@@ -194,12 +221,12 @@ class PedidoDeEntradas {
           descuentoPct: c.descuentoLugaresPct,
           cantidad: deLugarQueVan,
         ),
-      if (sueltas > 0)
+      if (sueltasQueVan > 0)
         RenglonEntradas.suelta(
           nombre: rigeLaAnticipada ? nombreAnticipada : nombreSuelta,
           precioLista: deHoy,
           descuentoPct: descuentoQueVa,
-          cantidad: sueltas,
+          cantidad: sueltasQueVan,
         ),
     ];
   }
@@ -244,6 +271,12 @@ class PedidoDeEntradas {
   String? get falta {
     if (!tienePrecio) {
       return 'El jefe todavía no puso el precio de la entrada de esta fiesta';
+    }
+    // La familia va arriba de quien compra: si no tiene nada pago para
+    // comprar, eso es lo primero que hay que saber.
+    if (familiaId != null) {
+      final nada = lugares.porQueNoSeVende;
+      if (nada != null) return nada;
     }
     final palabras =
         comprador.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;

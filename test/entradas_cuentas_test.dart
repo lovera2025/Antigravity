@@ -10,6 +10,7 @@ import 'package:arguello_events/features/entradas/cuentas/lugares_de_la_familia.
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/cuentas/precio_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
+import 'package:arguello_events/features/eventos/services/lugares_pagos.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
@@ -78,6 +79,34 @@ ContratoAlumno _alumno({
       numeroMesa: MesasExtraUtils.formatearAsignacionMesas(
           [for (var i = 0; i <= extras; i++) 12 + i]),
       createdAt: DateTime(2026, 2, 1),
+    );
+
+/// Los pagos de [a] con todo pago: la base, sus mesas adicionales y sus sillas.
+List<Map<String, dynamic>> _todoPago(ContratoAlumno a) => [
+      {'concepto': 'Cuota Base (9/9)', 'monto': 300000.0, 'monto_gross': 300000.0, 'anulado': 0},
+      if (a.mesaExtraPrecio > 0)
+        {'concepto': 'Mesa Extra 1', 'monto': a.mesaExtraPrecio, 'monto_gross': a.mesaExtraPrecio, 'anulado': 0},
+      if (a.sillasExtraPrecioTotal > 0)
+        {
+          'concepto': 'Sillas extra',
+          'monto': a.sillasExtraPrecioTotal,
+          'monto_gross': a.sillasExtraPrecioTotal,
+          'anulado': 0,
+        },
+    ];
+
+/// Lo de [a] con todo pago (el detalle de lo pago a medias está en
+/// `test/lugares_pagos_test.dart`).
+LugaresDeLaFamilia _lugaresDe(
+  ContratoAlumno a, {
+  required List<VentaEntradas> ventas,
+  List<AnulacionEntradas> anulaciones = const [],
+}) =>
+    LugaresDeLaFamilia.de(
+      a,
+      ventas: ventas,
+      anulaciones: anulaciones,
+      aPagar: APagarDeLaFamilia.de(a, pagos: _todoPago(a)),
     );
 
 /// Una venta ya hecha de [deLugar] entradas de lugares y [sueltas] sueltas.
@@ -235,11 +264,7 @@ void main() {
     final alumno = _alumno(extras: 1, sillas: 6);
 
     test('14 que le corresponden y 3 compradas: le quedan 11', () {
-      final l = LugaresDeLaFamilia.de(
-        alumno,
-        ventas: [_vendida(deLugar: 3)],
-        anulaciones: const [],
-      );
+      final l = _lugaresDe(alumno, ventas: [_vendida(deLugar: 3)]);
       expect(l.leCorresponden, 14);
       expect(l.compradas, 3);
       expect(l.quedan, 11);
@@ -247,7 +272,7 @@ void main() {
 
     test('una venta anulada las devuelve', () {
       final v = _vendida(deLugar: 3);
-      final l = LugaresDeLaFamilia.de(
+      final l = _lugaresDe(
         alumno,
         ventas: [v, _vendida(deLugar: 2)],
         anulaciones: [_anulada(v, devueltas: false)],
@@ -257,25 +282,24 @@ void main() {
     });
 
     test('no cuentan las sueltas, ni las de otra familia, ni las de afuera', () {
-      final l = LugaresDeLaFamilia.de(
+      final l = _lugaresDe(
         alumno,
         ventas: [
           _vendida(sueltas: 4),
           _vendida(familia: _otraFamilia, deLugar: 5),
           _vendida(familia: null, sueltas: 2),
         ],
-        anulaciones: const [],
       );
       expect(l.compradas, 0);
       expect(l.quedan, 14);
+      expect(l.sueltasCompradas, 4, reason: 'las sueltas a su nombre van aparte');
     });
 
     test('nunca quedan menos de cero', () {
       // Le sacaron las sillas después de comprar.
-      final l = LugaresDeLaFamilia.de(
+      final l = _lugaresDe(
         _alumno(extras: 0, sillas: 2),
         ventas: [_vendida(deLugar: 5)],
-        anulaciones: const [],
       );
       expect(l.leCorresponden, 2);
       expect(l.quedan, 0);
@@ -298,11 +322,7 @@ void main() {
     });
 
     test('no se le venden más de las que le quedan', () {
-      final l = LugaresDeLaFamilia.de(
-        alumno,
-        ventas: [_vendida(deLugar: 3)],
-        anulaciones: const [],
-      );
+      final l = _lugaresDe(alumno, ventas: [_vendida(deLugar: 3)]);
       final p = _pedido().conSueltas(0).paraLaFamilia(_familia, l);
       expect(p.deLugar, 11, reason: 'viene con todas las que le quedan');
       expect(p.conDeLugar(20).deLugar, 11);
@@ -315,7 +335,15 @@ void main() {
   });
 
   group('lo que decide VENDER', () {
-    final lugares = const LugaresDeLaFamilia(leCorresponden: 14, compradas: 3);
+    // 14 con descuento (3 compradas) y 2 sin descuento, todo pago: a la familia
+    // se le venden las 11 y las 2 (sueltas, al precio del día).
+    const lugares = LugaresDeLaFamilia(
+      leCorresponden: 14,
+      pagas: 14,
+      compradas: 3,
+      sinDescuento: 2,
+      pagasSinDescuento: 2,
+    );
 
     test('los renglones, con su nombre y el precio de ese momento', () {
       final p = _pedido().paraLaFamilia(_familia, lugares).conDeLugar(8);
@@ -470,8 +498,15 @@ void main() {
 
     test('una familia, con sus números del talonario', () {
       final p = _pedido()
-          .paraLaFamilia(_familia,
-              const LugaresDeLaFamilia(leCorresponden: 14, compradas: 3))
+          .paraLaFamilia(
+              _familia,
+              const LugaresDeLaFamilia(
+                leCorresponden: 14,
+                pagas: 14,
+                compradas: 3,
+                sinDescuento: 2,
+                pagasSinDescuento: 2,
+              ))
           .conDeLugar(8)
           .conDni(' 30111222 ')
           .conTramos(const [TramoTalonario(1043, 1050), TramoTalonario(1101, 1102)]);
@@ -646,8 +681,15 @@ void main() {
 
     test('al repositorio va lo mismo que arma el pedido', () async {
       final p = _pedido(config: _config(recargo: 5))
-          .paraLaFamilia(_familia,
-              const LugaresDeLaFamilia(leCorresponden: 4, compradas: 0))
+          .paraLaFamilia(
+              _familia,
+              const LugaresDeLaFamilia(
+                leCorresponden: 4,
+                pagas: 4,
+                compradas: 0,
+                sinDescuento: 2,
+                pagasSinDescuento: 2,
+              ))
           .conTramos(const [TramoTalonario(10, 15)]);
       final caja = _caja();
       final cobro = p.cobroPor(MedioBarra.mixto).conEfectivoDelMixto(10000);
