@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maqueta · Entradas para rendir</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+  /* la app, con el tema claro (el que usa el programa) */
+  --app:#f2f0eb; --card:#fbfbf9; --gris:#616161; --texto:#1c1b17; --dorado:#d4af37; --m3:#6d5e0f; --m3suave:#efe3b4;
+  --verde:#388e3c; --rojo:#d32f2f; --naranja:#ef6c00; --azul:#1565c0;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark } }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45}
+main{max-width:1060px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:24px;font-weight:800;margin:0 0 4px}
+.sub{color:var(--tinta2);margin:0 0 6px}
+.aviso{background:var(--primario-suave);border-radius:12px;padding:9px 13px;margin:8px 0 14px;font-weight:600}
+.pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 10px}
+.paso{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:8px 10px;text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.paso.on{border-color:var(--primario);box-shadow:0 0 0 2px var(--primario) inset}
+.paso .n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--primario);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center}
+.paso b{display:block;font-size:14px;line-height:1.2}.paso small{color:var(--tinta2);font-size:12px;line-height:1.2;display:block}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;margin:0 0 12px}
+.nota p{margin:0 0 4px}.donde{color:var(--tinta2);font-size:13.5px;margin:0}
+.donde b{color:var(--tinta)}
+.pregunta{border:2px solid var(--dorado);background:rgba(212,175,55,.12);border-radius:12px;padding:8px 12px;margin:8px 0 0;font-weight:600}
+.mirar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 8px;font-size:13.5px;color:var(--tinta2)}
+.mirar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;color:var(--tinta);font-weight:600}
+.marco{margin:0 auto;transition:max-width .2s}
+/* ───── la app ───── */
+.app{background:var(--app);color:var(--texto);border-radius:20px;padding:14px 16px 18px;border:1px solid rgba(0,0,0,.12);font-size:14px}
+.barraApp{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;min-height:44px}
+.barraApp .tit{flex:1;min-width:160px;font-weight:900;font-size:18px;letter-spacing:.05em;line-height:1.15}
+.barraApp .tit small{display:block;font-weight:400;font-size:13px;letter-spacing:0}
+.b{font:inherit;font-weight:700;font-size:13px;border-radius:999px;padding:8px 16px;border:1px solid #7e775f;background:transparent;color:var(--m3);cursor:pointer;white-space:nowrap}
+.b.lleno{background:var(--m3);border-color:var(--m3);color:#fff}
+.b.verde{background:var(--verde);border-color:var(--verde);color:#fff}
+.b.rojo{background:#ff5252;border-color:#ff5252;color:#fff}
+.b.texto{border-color:transparent}
+.b.chico{padding:5px 11px;font-size:12px}
+.b:disabled,.b.apagado{opacity:.38;cursor:not-allowed}
+.motivo{font-size:12px;color:var(--gris);font-style:italic}
+.card{background:var(--card);border:1px solid rgba(0,0,0,.05);border-radius:24px;padding:12px 16px;margin:0 0 10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:0 0 10px}
+.kpi{background:rgba(158,158,158,.08);border:1px solid rgba(0,0,0,.05);border-radius:24px;padding:10px 12px}
+.kpi .t{font-size:12px;color:var(--gris)}.kpi .v{font-size:20px;font-weight:800}.kpi .s{font-size:12px;color:var(--gris)}
+.seg{display:inline-flex;border:1px solid #7e775f;border-radius:999px;overflow:hidden;flex-wrap:wrap}
+.seg button{font:inherit;font-weight:600;font-size:13px;background:transparent;border:0;border-left:1px solid #7e775f;padding:8px 16px;cursor:pointer;color:var(--texto)}
+.seg button:first-child{border-left:0}.seg button.on{background:var(--m3suave)}
+.campo{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--gris);flex:1;min-width:140px}
+.campo input{font:inherit;font-size:15px;color:var(--texto);background:rgba(0,0,0,.02);border:1px solid rgba(0,0,0,.12);border-radius:20px;padding:10px 16px;width:100%}
+.campo input:focus{outline:1.5px solid var(--dorado)}
+.campo input[readonly]{background:rgba(0,0,0,.05);color:var(--gris)}
+.fila{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.grupo{margin:0 0 12px}.rot{font-size:12.5px;color:var(--gris);margin:0 0 5px;font-weight:600}
+.mas{display:inline-flex;align-items:center;gap:8px}
+.mas button{width:32px;height:32px;border-radius:50%;border:1px solid #7e775f;background:transparent;font:inherit;font-size:18px;font-weight:700;color:var(--m3);cursor:pointer}
+.mas b{min-width:26px;text-align:center;font-size:17px}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid rgba(212,175,55,.5);padding:10px 0 4px;font-weight:800;gap:10px;flex-wrap:wrap}
+.total .v{font-size:24px}
+.err{color:var(--rojo);font-size:12.5px;font-weight:600}
+.chip{display:inline-flex;gap:5px;align-items:center;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.chip.v{background:rgba(56,142,60,.12);color:var(--verde)}.chip.r{background:rgba(211,47,47,.12);color:var(--rojo)}
+.chip.n{background:rgba(239,108,0,.12);color:var(--naranja)}.chip.g{background:rgba(84,110,122,.12);color:#546e7a}
+.chip.a{background:rgba(21,101,192,.1);color:var(--azul)}.chip.o{background:rgba(212,175,55,.22);color:#7a610e}
+.tabla{width:100%;border-collapse:collapse;font-size:13px}
+.tabla th{font-size:10.5px;letter-spacing:.06em;font-weight:800;color:var(--gris);text-align:left;padding:7px 8px;white-space:nowrap}
+.tabla td{padding:8px;text-align:left;font-weight:600;border-top:1px solid rgba(0,0,0,.08)}
+.tabla td.d,.tabla th.d{text-align:right}
+.tabla tr.anulada td{text-decoration:line-through;color:#9e9e9e}.tabla tr.anulada td.no{text-decoration:none}
+.scrollx{overflow-x:auto}
+.nuevo{outline:2px dashed var(--dorado);outline-offset:3px;border-radius:12px}
+.tag{display:inline-block;background:var(--dorado);color:#16130a;font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 6px;letter-spacing:.04em;vertical-align:middle}
+.velo{background:rgba(0,0,0,.4);border-radius:18px;padding:22px 12px;display:flex;justify-content:center;margin-top:10px}
+.dialogo{background:var(--card);border-radius:28px;padding:18px 20px;width:100%;max-width:520px}
+.dialogo h3{margin:0 0 10px;font-size:18px;font-weight:800}
+.papel{background:#fff;color:#111;border:1px solid #bbb;border-radius:4px;max-width:560px;margin:0 auto 12px;padding:16px 22px;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.papel h4{margin:0;font-size:15px;letter-spacing:.04em}.papel .lin{display:flex;justify-content:space-between;gap:10px;padding:2px 0;flex-wrap:wrap}
+.papel hr{border:0;border-top:1px solid #999;margin:8px 0}
+.papel .corte{border-top:2px dashed #999;margin:14px -22px;position:relative}
+.papel .firma{display:flex;gap:30px;margin-top:26px;flex-wrap:wrap}.papel .firma div{flex:1;min-width:150px;border-top:1px solid #333;padding-top:3px;font-size:11.5px;text-align:center}
+.banda{border-radius:10px;padding:9px 12px;font-weight:700;display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 8px}
+.banda.v{background:rgba(56,142,60,.1);border:1px solid rgba(56,142,60,.6);color:var(--verde)}
+.banda.n{background:rgba(239,108,0,.08);border:1px solid rgba(239,108,0,.5);color:var(--naranja)}
+.banda.o{background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.7);color:#6d5a10}
+.banda .q{flex:1;min-width:150px}
+.persona{border-top:1px solid rgba(0,0,0,.08);padding:10px 0}
+.persona .cab{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;cursor:pointer}
+.persona .cab .q{flex:1;min-width:180px}.persona .cab .q b{font-weight:800}
+.persona .num{font-size:12.5px;color:var(--gris)}
+.persona .det{margin:8px 0 0 0;padding:10px 12px;background:rgba(0,0,0,.03);border-radius:16px}
+.res{list-style:none;margin:6px 0 0;padding:0;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden}
+.res li{padding:8px 14px;border-top:1px solid rgba(0,0,0,.06);cursor:pointer}.res li:first-child{border-top:0}
+.res li:hover,.res li.on{background:var(--m3suave)}
+.gris{color:var(--gris)}.oro{color:#9a7b12}.rojo{color:var(--rojo)}
+.relleno{background:repeating-linear-gradient(135deg,rgba(0,0,0,.035) 0 10px,transparent 10px 20px);border:1px dashed rgba(0,0,0,.15);border-radius:16px;padding:14px;color:var(--gris);font-size:13px;text-align:center}
+.mov{display:flex;flex-wrap:wrap;gap:4px 10px;padding:6px 0;border-top:1px solid rgba(0,0,0,.06);font-size:13px}
+.mov:first-child{border-top:0}.mov .h{color:var(--gris);min-width:120px}.mov.anulado{text-decoration:line-through;color:#9e9e9e}
+</style></head><body><main>
+<h1>Entradas para rendir</h1>
+<p class="sub">Así quedaría, pantalla por pantalla. Lo marcado con línea punteada dorada y la etiqueta <span class="tag">NUEVO</span> es lo que se agrega; lo demás es el programa como está hoy (en gris rayado, lo que no cambia).</p>
+<p class="aviso">Es un recorrido, no opciones para elegir: nueve lugares del mismo programa. Se puede tocar todo, y lo que hacés en un paso se ve en los siguientes. Los nombres, los números y los precios ($ 8.000 la anticipada, $ 10.000 la general) son de ejemplo: el precio de verdad es el que el jefe carga en PRECIOS.</p>
+<div class="mirar">
+  <span>Mirar como:</span>
+  <label><input type="radio" name="quien" value="jefe" checked> El jefe, en modo jefe</label>
+  <label><input type="radio" name="quien" value="jefeSin"> El jefe, sin modo jefe</label>
+  <label><input type="radio" name="quien" value="carla"> Carla (tablet, con “Vende entradas”)</label>
+</div>
+<div class="mirar">
+  <span>En:</span>
+  <label><input type="radio" name="ancho" value="pc" checked> PC</label>
+  <label><input type="radio" name="ancho" value="tab"> Tablet</label>
+  <label><input type="radio" name="ancho" value="cel"> Celular</label>
+  <label><input type="checkbox" id="antic" checked> Hoy todavía rige la anticipada</label>
+</div>
+<nav class="pasos" id="pasos"></nav>
+<div class="nota" id="nota"></div>
+<div class="marco" id="marco"><section id="pantalla"></section></div>
+</main>
+<script>
+const PASOS = [
+  {t:'El botón', s:'PARA RENDIR, en ENTRADAS', donde:'La fiesta → <b>ENTRADAS</b> → <b>PARA RENDIR</b>, al lado de VENTAS (solo el jefe, en modo jefe)',
+   nota:'Un botón nuevo en ENTRADAS de la fiesta. Sin modo jefe se ve apagado, con el motivo. Carla no lo tiene: lo suyo es el aviso de VENDER (paso 5).'},
+  {t:'Quién tiene entradas', s:'la lista del jefe', donde:'ENTRADAS → <b>PARA RENDIR</b>',
+   nota:'Arriba, cuántas faltan rendir y hasta cuánta plata. Abajo, una persona por renglón: tocala para ver qué se llevó, qué rindió y qué devolvió. <b>“Faltan hasta”</b> es lo máximo que podría deber: puede devolver entradas. Probá “Ver la lista vacía”.'},
+  {t:'Dar entradas', s:'a un alumno o a alguien de afuera', donde:'PARA RENDIR → <b>DAR ENTRADAS PARA RENDIR</b>',
+   nota:'Si es un alumno, se elige de la lista de la fiesta; si no, se escribe quién se las lleva. <b>Los números del talonario son obligatorios</b> y quedan reservados para esa persona. <b>El precio no se escribe</b>: es el de PRECIOS de hoy y queda fijo. Solo entradas: sin pulseras. Probá escribir “1205” en Del.'},
+  {t:'La constancia', s:'el papel que firma', donde:'Sale al confirmar DAR; se reimprime desde PARA RENDIR → CONSTANCIA',
+   nota:'Media hoja, dos copias: una se la lleva quien vende y la otra queda en la oficina, firmada.'},
+  {t:'El aviso en VENDER', s:'y los números frenados', donde:'La tablet de Carla → ENTRADAS → la fiesta → <b>VENDER</b>',
+   nota:'Arriba de VENDER, solo si alguien tiene entradas sin rendir. <b>Sin plata a la vista</b>: Carla sigue contando su caja a ciegas. Y si en una venta común escribe un número que está en manos de alguien, la app lo frena.'},
+  {t:'Rendir', s:'vendió, devuelve y se cobra', donde:'VENDER → aviso → <b>RENDIR</b>',
+   nota:'Se busca a la persona, se pone cuántas vendió y cuántas devuelve. Los números de lo que devuelve vienen propuestos. Lo vendido se cobra con la hoja de siempre y <b>queda como una venta de la caja de Carla</b>: sale en su cierre. Se puede rendir de a partes; si solo devuelve, no hace falta la caja abierta.'},
+  {t:'El comprobante', s:'de la rendición', donde:'Sale al confirmar el cobro; se reimprime desde VENTAS',
+   nota:'El mismo comprobante de media hoja de la venta, con otro título: dice quién rinde, quién recibió y cómo quedó lo que se llevó. No habla de pulseras.'},
+  {t:'En VENTAS', s:'la rendición y su anulación', donde:'VENDER → <b>VENTAS</b> (el jefe: la fiesta → ENTRADAS → VENTAS)',
+   nota:'La rendición es una venta más, marcada “RENDICIÓN”. <b>La plata se anula acá, y solo acá</b> (solo el jefe): las entradas vuelven a quedar a cargo de esa persona para rendir.'},
+  {t:'No volvieron', s:'las que no se rinden nunca', donde:'PARA RENDIR → la persona → <b>NO VOLVIERON</b> (solo el jefe)',
+   nota:'Si alguna entrada no vuelve ni se paga, el jefe la marca con el motivo. No entra plata, esos números quedan anulados para siempre y la lista dice cuánto valían. Si después la paga, se rinde como vendida.'},
+];
+const FIESTA = 'Instituto San Lorenzo · Promoción 2026', FECHA = '04/12/2026';
+const PRECIOS = {anticipada:8000, general:10000, hasta:'28/11/2026'};
+const ALUMNOS = [
+  {nombre:'GÓMEZ, LUCÍA', div:'6° A'}, {nombre:'GÓMEZ, PABLO', div:'6° B'}, {nombre:'FERREYRA, SOL', div:'6° B'},
+  {nombre:'RUIZ, MARTA', div:'6° A'}, {nombre:'ACOSTA, LUCAS', div:'6° C'}, {nombre:'BENÍTEZ, ROCÍO', div:'6° C'},
+];
+const S = {
+  paso:0, quien:'jefe', ancho:'pc', antic:true, vacia:false, abierta:1,
+  dar:{tipo:'afuera', buscar:'', alumno:null, nombre:'', contacto:'', cant:20, del:'1276', nota:'', sinPrecio:false, confirmando:false},
+  talonario:'1205',
+  rend:{bloque:1, buscar:'', vendio:15, devuelve:5, del:'', caja:true, medio:null, recibe:'', recargo:false},
+  anulando:null, motivoAnular:'',
+  nv:{bloque:4, cant:2, numeros:'', motivo:''},
+  ultimaConstancia:1, ultimaRendicion:null, nroVenta:10,
+  bloques:[
+    {id:1, persona:'PÉREZ, JUAN', tipo:'afuera', contacto:'351 555-0101', cant:20, del:1201, fecha:'lun 16/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe', movs:[]},
+    {id:2, persona:'GÓMEZ, LUCÍA', tipo:'alumno', div:'6° A', cant:10, del:1221, fecha:'mar 17/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe',
+      movs:[{q:'vendio', cant:6, cuando:'mié 18/11 18:20', quien:'Carla', venta:4}, {q:'vendio', cant:4, cuando:'jue 19/11 10:05', quien:'Carla', venta:6}]},
+    {id:3, persona:'SOSA, DIEGO', tipo:'afuera', contacto:'DNI 30.111.222', cant:15, del:1231, fecha:'mar 17/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe',
+      movs:[{q:'vendio', cant:8, cuando:'mié 18/11 11:40', quien:'Carla', venta:5}, {q:'devolvio', cant:5, numeros:[1239,1243], cuando:'mié 18/11 11:40', quien:'Carla'},
+            {q:'no_volvieron', cant:2, numeros:[1244,1245], cuando:'jue 19/11 09:15', quien:'Jefe', motivo:'Dice que las perdió'}]},
+    {id:4, persona:'MOLINA, CARLOS', tipo:'afuera', contacto:'', cant:10, del:1246, fecha:'mié 18/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe', movs:[]},
+    {id:5, persona:'FERREYRA, SOL', tipo:'alumno', div:'6° B', cant:8, del:1256, fecha:'mié 18/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe',
+      movs:[{q:'vendio', cant:2, cuando:'jue 19/11 17:02', quien:'Carla', venta:3}]},
+    {id:6, persona:'RUIZ, MARTA', tipo:'alumno', div:'6° A', cant:12, del:1264, fecha:'jue 19/11', precio:8000, nombrePrecio:'Entrada anticipada', dio:'Jefe',
+      movs:[{q:'vendio', cant:8, cuando:'jue 19/11 19:30', quien:'Carla', venta:8}, {q:'vendio', cant:6, cuando:'jue 19/11 19:31', quien:'Romi (otra tablet, sin internet)', venta:9}]},
+  ],
+  ventas:[
+    {n:1, hora:'mié 18/11 10:12', comprador:'PÉREZ, ANA', cant:4, total:32000, medio:'Efectivo', quien:'Carla'},
+    {n:2, hora:'mié 18/11 10:40', comprador:'RUIZ, MARTA (familia)', cant:8, total:40000, medio:'Transferencia', quien:'Carla'},
+    {n:3, hora:'jue 19/11 17:02', comprador:'FERREYRA, SOL', cant:2, total:16000, medio:'Efectivo', quien:'Carla', rinde:5},
+    {n:4, hora:'mié 18/11 18:20', comprador:'GÓMEZ, LUCÍA', cant:6, total:48000, medio:'Efectivo', quien:'Carla', rinde:2},
+    {n:5, hora:'mié 18/11 11:40', comprador:'SOSA, DIEGO', cant:8, total:64000, medio:'Mixto', quien:'Carla', rinde:3},
+    {n:6, hora:'jue 19/11 10:05', comprador:'GÓMEZ, LUCÍA', cant:4, total:32000, medio:'Transferencia', quien:'Carla', rinde:2},
+    {n:8, hora:'jue 19/11 19:30', comprador:'RUIZ, MARTA', cant:8, total:64000, medio:'Efectivo', quien:'Carla', rinde:6},
+    {n:9, hora:'jue 19/11 19:31', comprador:'RUIZ, MARTA', cant:6, total:48000, medio:'Efectivo', quien:'Romi', rinde:6},
+  ],
+};
+const $ = s => document.querySelector(s);
+const fmt = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+const num = s => { const n = parseInt(String(s).replace(/\D/g,''),10); return isNaN(n) ? 0 : n; };
+const N = '<span class="tag">NUEVO</span>';
+const esJefe = () => S.quien === 'jefe';
+const cel = () => S.ancho === 'cel';
+const tramo = (a,b) => a === b ? `${a}` : `${a} al ${b}`;
+const sinAcentos = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+const precioHoy = () => S.antic ? {p:PRECIOS.anticipada, n:'Entrada anticipada'} : {p:PRECIOS.general, n:'Entrada general'};
+const bloque = id => S.bloques.find(b => b.id === id);
+const ventaAnulada = n => { const v = S.ventas.find(x => x.n === n); return !!(v && v.anulada); };
+
+function cuenta(b){
+  let v = 0, d = 0, nv = 0;
+  for (const m of b.movs){
+    if (m.anulado) continue;
+    if (m.q === 'vendio' && !ventaAnulada(m.venta)) v += m.cant;
+    else if (m.q === 'devolvio') d += m.cant;
+    else if (m.q === 'no_volvieron') nv += m.cant;
+  }
+  const sin = b.cant - v - d - nv;
+  return {v, d, nv, sin:Math.max(0, sin), demas:sin < 0 ? -sin : 0, falta:Math.max(0, sin) * b.precio, noVolvio:nv * b.precio};
+}
+// Los números que todavía tiene: el bloque menos lo devuelto y lo que no volvió (con números).
+function tiene(b){
+  const fuera = new Set();
+  for (const m of b.movs){ if (m.anulado || !m.numeros) continue;
+    if (m.q === 'devolvio' || m.q === 'no_volvieron') for (let x = m.numeros[0]; x <= m.numeros[1]; x++) fuera.add(x); }
+  const out = []; for (let x = b.del; x < b.del + b.cant; x++) if (!fuera.has(x)) out.push(x);
+  return out;
+}
+function ocupados(){ // los números que nadie más puede vender
+  const out = [];
+  for (const b of S.bloques){ const t = tiene(b); const d = new Set();
+    for (const m of b.movs) if (!m.anulado && m.q === 'devolvio' && m.numeros) for (let x = m.numeros[0]; x <= m.numeros[1]; x++) d.add(x);
+    out.push({b, nums:[...Array(b.cant).keys()].map(i => b.del + i).filter(x => !d.has(x))}); }
+  return out;
+}
+function quienTiene(n){ for (const o of ocupados()) if (o.nums.includes(n)) return o.b; return null; }
+const VENDIDAS = [[1048,1051,'PÉREZ, ANA'],[1052,1059,'RUIZ, MARTA']];
+function errDar(){
+  const d = S.dar;
+  if (d.sinPrecio) return 'El jefe todavía no puso el precio de la entrada de esta fiesta (PRECIOS).';
+  if (d.tipo === 'alumno' && !d.alumno) return 'Elegí al alumno de la lista.';
+  if (d.tipo === 'afuera' && d.nombre.trim().split(/\s+/).filter(Boolean).length < 2) return 'Escribí nombre y apellido de quien se las lleva.';
+  if (d.cant < 1) return 'Elegí cuántas entradas se lleva.';
+  if (!d.del) return 'Escribí el primer número del talonario: son obligatorios.';
+  const del = num(d.del), hasta = del + d.cant - 1;
+  if (del < 1) return 'Los números del talonario empiezan en 1.';
+  for (let x = del; x <= hasta; x++){
+    const b = quienTiene(x); if (b) return `El ${x} ya se le dio a ${b.persona} (para rendir) (${tramo(b.del, b.del + b.cant - 1)}).`;
+    for (const [a, z, q] of VENDIDAS) if (x >= a && x <= z) return `El ${x} ya se le vendió a ${q} (${tramo(a, z)}).`;
+  }
+  return null;
+}
+function errRend(){
+  const r = S.rend, b = bloque(r.bloque); if (!b) return 'Elegí a la persona.';
+  const c = cuenta(b);
+  if (r.vendio + r.devuelve < 1) return 'Poné cuántas vendió o cuántas devuelve.';
+  if (r.vendio + r.devuelve > c.sin) return `Le quedan ${c.sin}: no puede rendir ${r.vendio + r.devuelve}.`;
+  if (r.devuelve > 0){
+    const del = num(r.del || propuesto(b, r.devuelve)), t = tiene(b);
+    for (let x = del; x < del + r.devuelve; x++){
+      if (x < b.del || x >= b.del + b.cant) return `El ${x} no es de las que se llevó (${tramo(b.del, b.del + b.cant - 1)}).`;
+      if (!t.includes(x)) return `El ${x} ya lo devolvió.`;
+    }
+  }
+  if (r.vendio > 0 && !r.caja) return 'Para cobrar lo vendido, abrí la caja.';
+  return null;
+}
+function propuesto(b, n){ const t = tiene(b); return n > 0 && t.length >= n ? String(t[t.length - n]) : ''; }
+
+// ───── pantallas ─────
+function barraEntradas(){
+  const on = esJefe();
+  const btn = S.quien === 'carla' ? '' : `<span class="nuevo" style="display:inline-flex;flex-direction:column;align-items:center">
+      <button class="b ${on ? 'lleno' : 'apagado'}" ${on ? 'onclick="ir(1)"' : 'disabled'}>PARA RENDIR</button>
+      ${on ? '' : '<span class="motivo">Solo en modo jefe</span>'}</span>`;
+  return `<div class="barraApp"><button class="b texto">←</button>
+    <div class="tit">ENTRADAS<small>${FIESTA} · ${FECHA}</small></div>
+    <div class="fila"><button class="b">PRECIOS</button><button class="b">VENDER</button><button class="b">VENTAS</button>${btn}</div></div>`;
+}
+function soloJefe(que){
+  return `<div class="card"><p style="margin:0 0 8px"><b>${que} es solo del jefe, en modo jefe.</b></p>
+    <p class="gris" style="margin:0">${S.quien === 'carla' ? 'Carla no llega a esta pantalla: no tiene el botón PARA RENDIR.' : 'Sin modo jefe, el botón PARA RENDIR se ve apagado, con el motivo.'} Elegí “El jefe, en modo jefe” arriba para verla.</p></div>`;
+}
+function p0(){
+  return `<div class="app">${barraEntradas()}
+    ${S.quien === 'carla' ? '<div class="banda o"><span class="q">En la tablet de Carla, ENTRADAS de la fiesta sigue como hoy: sin PARA RENDIR. A ella le aparece el aviso en VENDER (paso 5).</span></div>' : ''}
+    <div class="relleno">La entrega sin cargo de la fiesta, como hoy (la lista de alumnos, el filtro, ENTREGAR)</div></div>`;
+}
+function filaPersona(b){
+  const c = cuenta(b), abierta = S.abierta === b.id;
+  const quien = b.tipo === 'alumno' ? `<span class="chip a">alumno · ${b.div}</span>` : '<span class="chip g">de afuera</span>';
+  const estado = c.demas ? `<span class="chip r">rindió de más: revisar</span>`
+    : c.sin === 0 ? `<span class="chip v">✓ rindió todo</span>` : `<span class="chip o">sin rendir ${c.sin}</span>`;
+  const plata = c.sin ? `<span class="oro" style="font-weight:800">faltan hasta ${fmt(c.falta)}</span>` : '';
+  const det = abierta ? detalle(b, c) : '';
+  return `<div class="persona"><div class="cab" onclick="S.abierta=${abierta ? 'null' : b.id};pintar()">
+      <div class="q"><b>${b.persona}</b> ${quien}<div class="num">se llevó ${b.cant} el ${b.fecha} · ${tramo(b.del, b.del + b.cant - 1)} · ${fmt(b.precio)} c/u (${b.nombrePrecio.toLowerCase()}, fijo)</div>
+        <div class="num">vendió ${c.v} · devolvió ${c.d}${c.nv ? ` · <span class="rojo">no volvieron ${c.nv}</span>` : ''}</div></div>
+      ${estado} ${plata} <span class="gris">${abierta ? '▲' : '▼'}</span></div>${det}</div>`;
+}
+function textoMov(m, b){
+  const anul = m.q === 'vendio' && ventaAnulada(m.venta);
+  const nums = m.numeros ? ' · ' + tramo(m.numeros[0], m.numeros[1]) : '';
+  const q = m.q === 'vendio' ? `Vendió ${m.cant} · ${fmt(m.cant * b.precio)} · venta N° ${String(m.venta).padStart(4,'0')}${anul ? ' (anulada en VENTAS)' : ''}`
+    : m.q === 'devolvio' ? `Devolvió ${m.cant}${nums}`
+    : `No volvieron ${m.cant}${nums} · “${m.motivo}”`;
+  return `<div class="mov ${anul || m.anulado ? 'anulado' : ''}"><span class="h">${m.cuando}</span><span style="flex:1;min-width:160px">${q}</span><span class="gris">${m.quien}</span></div>`;
+}
+function detalle(b, c){
+  const movs = b.movs.length ? b.movs.map(m => textoMov(m, b)).join('') : '<div class="gris">Todavía no rindió nada.</div>';
+  const anularOk = b.movs.length === 0;
+  return `<div class="det">
+    <div class="mov"><span class="h">${b.fecha}</span><span style="flex:1;min-width:160px">Se llevó ${b.cant} · ${tramo(b.del, b.del + b.cant - 1)} · sin pulseras${b.contacto ? ' · ' + b.contacto : ''}</span><span class="gris">${b.dio}</span></div>
+    ${movs}
+    <div class="fila" style="margin-top:8px">
+      <button class="b chico" onclick="S.ultimaConstancia=${b.id};ir(3)">CONSTANCIA</button>
+      <button class="b chico" ${c.sin ? `onclick="S.nv.bloque=${b.id};S.nv.cant=Math.min(2,${c.sin});ir(8)"` : 'disabled'}>NO VOLVIERON</button>
+      <span style="display:inline-flex;flex-direction:column"><button class="b chico rojo ${anularOk ? '' : 'apagado'}" ${anularOk ? '' : 'disabled'}>ANULAR</button>
+      ${anularOk ? '' : '<span class="motivo">Ya rindió algo: anulá cada movimiento (la plata, en VENTAS)</span>'}</span>
+    </div></div>`;
+}
+function p1(){
+  if (!esJefe()) return `<div class="app">${barraEntradas()}${soloJefe('PARA RENDIR')}</div>`;
+  const bs = S.vacia ? [] : S.bloques;
+  let sin = 0, falta = 0, nv = 0, nvPlata = 0, personas = 0; const avisos = [];
+  for (const b of bs){ const c = cuenta(b); sin += c.sin; falta += c.falta; nv += c.nv; nvPlata += c.noVolvio; if (c.sin) personas++;
+    if (c.demas) avisos.push(`${b.persona} rindió ${b.cant + c.demas} de ${b.cant}: dos rendiciones desde dos equipos sin internet. Revisá en VENTAS y anulá la que sobra.`); }
+  const lista = bs.length ? [...bs].sort((a, b) => cuenta(b).sin - cuenta(a).sin).map(filaPersona).join('')
+    : '<p class="gris" style="text-align:center;margin:18px 0">Nadie tiene entradas para rendir.</p>';
+  return `<div class="app nuevo"><div class="barraApp"><button class="b texto" onclick="ir(0)">←</button>
+      <div class="tit">PARA RENDIR ${N}<small>${FIESTA}</small></div>
+      <button class="b lleno" onclick="ir(2)">DAR ENTRADAS PARA RENDIR</button></div>
+    <div class="kpis"><div class="kpi"><div class="t">Sin rendir</div><div class="v">${sin}</div><div class="s">entradas · ${personas} ${personas === 1 ? 'persona' : 'personas'}</div></div>
+      <div class="kpi"><div class="t">Faltan hasta</div><div class="v">${fmt(falta)}</div><div class="s">si no devuelven ninguna</div></div>
+      <div class="kpi"><div class="t">No volvieron</div><div class="v">${nv}</div><div class="s">${fmt(nvPlata)}</div></div></div>
+    ${avisos.map(a => `<div class="banda n"><span class="q">⚠ ${a}</span></div>`).join('')}
+    <div class="card">${lista}</div>
+    <label class="gris" style="font-size:12.5px"><input type="checkbox" ${S.vacia ? 'checked' : ''} onchange="S.vacia=this.checked;pintar()"> Ver la lista vacía</label></div>`;
+}
+function p2(){
+  if (!esJefe()) return `<div class="app">${barraEntradas()}${soloJefe('Dar entradas para rendir')}</div>`;
+  const d = S.dar, ph = precioHoy(), e = errDar(), del = num(d.del), hasta = del ? del + d.cant - 1 : '';
+  const res = d.buscar.trim().length >= 2 ? ALUMNOS.filter(a => sinAcentos(a.nombre).includes(sinAcentos(d.buscar.trim()))) : [];
+  const quien = d.tipo === 'alumno'
+    ? `<div class="campo"><span>Buscar alumno de la fiesta</span><input id="dBuscar" value="${d.buscar}" placeholder="Escribí el apellido" oninput="S.dar.buscar=this.value;S.dar.alumno=null;pintar()"></div>
+       ${d.alumno ? `<div class="banda v" style="margin-top:6px"><span class="q">${d.alumno.nombre} · ${d.alumno.div}</span><button class="b chico texto" onclick="S.dar.alumno=null;pintar()">CAMBIAR</button></div>`
+         : res.length ? `<ul class="res">${res.map((a, i) => `<li onclick="S.dar.alumno=ALUMNOS.find(x=>x.nombre==='${a.nombre}');S.dar.buscar='${a.nombre}';pintar()">${a.nombre} <span class="gris">· ${a.div}</span></li>`).join('')}</ul>`
+         : `<p class="gris" style="font-size:12.5px;margin:4px 0 0">Probá “GOM”.</p>`}`
+    : `<div class="fila"><div class="campo"><span>Nombre y apellido de quien se las lleva</span><input id="dNombre" value="${d.nombre}" placeholder="PÉREZ, JUAN" oninput="S.dar.nombre=this.value;pintar()"></div>
+       <div class="campo"><span>Contacto (opcional): teléfono o DNI</span><input id="dContacto" value="${d.contacto}" oninput="S.dar.contacto=this.value;pintar()"></div></div>`;
+  const conf = d.confirmando ? `<div class="velo"><div class="dialogo"><h3>¿Dar ${d.cant} entradas?</h3>
+      <p style="margin:0 0 6px">A <b>${d.tipo === 'alumno' ? d.alumno.nombre : d.nombre.trim().toUpperCase()}</b>, del <b>${tramo(del, hasta)}</b>, a <b>${fmt(ph.p)}</b> cada una (${ph.n.toLowerCase()}, queda fijo).</p>
+      <p style="margin:0 0 12px" class="gris">Si las vende todas, rinde ${fmt(ph.p * d.cant)}. Las que no venda, las devuelve. Sin pulseras.</p>
+      <div class="fila" style="justify-content:flex-end"><button class="b texto" onclick="S.dar.confirmando=false;pintar()">VOLVER</button><button class="b lleno" onclick="darYa()">DAR ${d.cant} ENTRADAS</button></div></div></div>` : '';
+  return `<div class="app"><div class="velo" style="margin-top:0"><div class="dialogo nuevo">
+    <h3>Dar entradas para rendir ${N}</h3>
+    <div class="grupo"><div class="seg"><button class="${d.tipo === 'alumno' ? 'on' : ''}" onclick="S.dar.tipo='alumno';pintar()">Un alumno de la fiesta</button><button class="${d.tipo === 'afuera' ? 'on' : ''}" onclick="S.dar.tipo='afuera';pintar()">Alguien de afuera</button></div></div>
+    <div class="grupo">${quien}</div>
+    <div class="grupo"><div class="rot">Cuántas</div><div class="mas"><button onclick="S.dar.cant=Math.max(1,S.dar.cant-1);pintar()">−</button><b>${d.cant}</b><button onclick="S.dar.cant++;pintar()">+</button></div></div>
+    <div class="grupo"><div class="rot">Números del talonario (obligatorios)</div><div class="fila">
+      <div class="campo"><span>Del</span><input id="dDel" value="${d.del}" inputmode="numeric" oninput="S.dar.del=this.value;pintar()"></div>
+      <div class="campo"><span>Al</span><input value="${hasta}" readonly></div></div></div>
+    <div class="grupo"><div class="banda o"><span class="q">${d.sinPrecio ? 'Sin precio: el jefe lo carga en PRECIOS.' : `A ${fmt(ph.p)} cada una · ${ph.n} · el precio de hoy (PRECIOS), <b>queda fijo</b>`}</span></div>
+      <div class="gris" style="font-size:12.5px">Se lleva solo las entradas: <b>sin pulseras</b>. Rinde toda la plata.</div></div>
+    <div class="grupo"><div class="campo"><span>Nota (opcional)</span><input id="dNota" value="${d.nota}" oninput="S.dar.nota=this.value;pintar()"></div></div>
+    ${e ? `<p class="err">${e}</p>` : ''}
+    <div class="fila" style="justify-content:flex-end"><button class="b texto" onclick="ir(1)">CANCELAR</button>
+      <button class="b lleno ${e ? 'apagado' : ''}" ${e ? 'disabled' : 'onclick="S.dar.confirmando=true;pintar()"'}>DAR ${d.cant} ENTRADAS</button></div>
+    <label class="gris" style="font-size:12px;display:block;margin-top:10px"><input type="checkbox" ${d.sinPrecio ? 'checked' : ''} onchange="S.dar.sinPrecio=this.checked;pintar()"> Probar: la fiesta todavía no tiene precio</label>
+    </div></div>${conf}</div>`;
+}
+function darYa(){
+  const d = S.dar, ph = precioHoy(), id = Math.max(...S.bloques.map(b => b.id)) + 1;
+  S.bloques.push({id, persona:d.tipo === 'alumno' ? d.alumno.nombre : d.nombre.trim().toUpperCase(), tipo:d.tipo, div:d.alumno ? d.alumno.div : null,
+    contacto:d.contacto.trim(), cant:d.cant, del:num(d.del), fecha:'vie 20/11', precio:ph.p, nombrePrecio:ph.n, dio:'Jefe', movs:[]});
+  S.ultimaConstancia = id; S.abierta = id;
+  d.confirmando = false; d.del = String(num(d.del) + d.cant); d.nombre = ''; d.contacto = ''; d.alumno = null; d.buscar = ''; d.nota = '';
+  ir(3);
+}
+function p3(){
+  const b = bloque(S.ultimaConstancia) || S.bloques[0], c = cuenta(b);
+  const copia = para => `<h4>ENTRADAS PARA RENDIR</h4><div class="lin"><span>${FIESTA} · fiesta del ${FECHA}</span><b>${para}</b></div><hr>
+    <div class="lin"><span>Se lleva:</span><b>${b.persona} (${b.tipo === 'alumno' ? 'alumno de la fiesta, ' + b.div : 'de afuera'})</b></div>
+    ${b.contacto ? `<div class="lin"><span>Contacto:</span><span>${b.contacto}</span></div>` : ''}
+    <div class="lin"><span>Entradas:</span><b>${b.cant} ${b.nombrePrecio === 'Entrada anticipada' ? 'anticipadas' : 'generales'} · del ${tramo(b.del, b.del + b.cant - 1)}</b></div>
+    <div class="lin"><span>Pulseras:</span><span>no se lleva</span></div>
+    <div class="lin"><span>Precio:</span><span>${fmt(b.precio)} cada una (precio del ${b.fecha.split(' ')[1]}, queda fijo)</span></div>
+    <hr><p style="margin:4px 0">Si las vende todas, rinde <b>${fmt(b.precio * b.cant)}</b>. Las que no venda, las devuelve. Rinde toda la plata.</p>
+    ${c.v + c.d + c.nv ? `<p style="margin:4px 0"><b>Hoy:</b> vendió ${c.v} · devolvió ${c.d}${c.nv ? ' · no volvieron ' + c.nv : ''} · le quedan ${c.sin}</p>` : ''}
+    <div class="lin"><span>Se las dio: ${b.dio} · el ${b.fecha}</span></div>
+    <div class="firma"><div>Firma de quien se las lleva</div><div>Aclaración</div></div>`;
+  return `<div class="nuevo" style="padding:6px">${N} <span class="gris" style="font-size:13px">Media hoja A4: arriba una copia, abajo la otra.</span>
+    <div class="papel" style="margin-top:8px">${copia('PARA QUIEN LAS LLEVA')}<div class="corte"></div>${copia('PARA LA OFICINA')}</div></div>`;
+}
+function hayAviso(){ return S.bloques.filter(b => cuenta(b).sin > 0).length; }
+function p4(){
+  const n = hayAviso(), t = num(S.talonario), b = t ? quienTiene(t) : null;
+  return `<div class="app"><div class="barraApp"><button class="b texto">←</button><div class="tit">VENDER<small>${FIESTA} · caja de ${S.quien === 'carla' ? 'Carla' : 'Jefe'} abierta</small></div><button class="b">VENTAS</button><button class="b">CERRAR CAJA</button></div>
+    <div class="relleno" style="margin-bottom:8px">“Todo subido” y lo de la caja, como hoy</div>
+    ${n ? `<div class="banda o nuevo"><span class="q">Entradas para rendir: ${n} ${n === 1 ? 'persona' : 'personas'} ${N}</span><button class="b lleno chico" onclick="ir(5)">RENDIR</button></div>`
+      : '<p class="gris">(Si nadie tiene entradas sin rendir, el aviso no aparece.)</p>'}
+    <div class="relleno" style="margin:8px 0">La lista de la fiesta con su filtro, GRATIS y A PAGAR, como hoy</div>
+    <div class="card"><div class="rot">Una venta común: números del talonario (opcionales)</div>
+      <div class="fila"><div class="campo"><span>Del</span><input id="tal" value="${S.talonario}" inputmode="numeric" oninput="S.talonario=this.value;pintar()"></div><div class="campo"><span>Al</span><input value="${t ? t + 1 : ''}" readonly></div></div>
+      ${b ? `<p class="err nuevo" style="padding:4px 8px">El ${t} ya se le dio a ${b.persona} (para rendir) (${tramo(b.del, b.del + b.cant - 1)}).</p>` : '<p class="gris" style="font-size:12.5px">Probá 1205 o 1250.</p>'}
+    </div></div>`;
+}
+function p5(){
+  const r = S.rend, b = bloque(r.bloque), c = b ? cuenta(b) : null;
+  const conSin = S.bloques.filter(x => cuenta(x).sin > 0);
+  const filtro = sinAcentos(r.buscar.trim());
+  const lista = conSin.filter(x => !filtro || sinAcentos(x.persona).includes(filtro));
+  if (b && !r.del && r.devuelve) r.del = propuesto(b, r.devuelve);
+  const e = errRend(), del = num(r.del);
+  const cobrar = b ? r.vendio * b.precio : 0;
+  const nota = b && !S.antic && b.nombrePrecio === 'Entrada anticipada'
+    ? `<div class="banda o"><span class="q">Se las llevó con la anticipada: rinde a ${fmt(b.precio)} aunque hoy rija la general (${fmt(PRECIOS.general)}).</span></div>` : '';
+  const tarjeta = b ? `<div class="card" style="background:rgba(212,175,55,.08)"><b>${b.persona}</b> ${b.tipo === 'alumno' ? `<span class="chip a">alumno · ${b.div}</span>` : '<span class="chip g">de afuera</span>'}
+      <div class="num gris">se llevó ${b.cant} el ${b.fecha} · ${tramo(b.del, b.del + b.cant - 1)} · ${b.nombrePrecio} · <b>le quedan ${c.sin}</b></div></div>` : '';
+  const pie = !b ? '' : r.vendio > 0
+    ? (r.caja ? `<div class="total"><span>A cobrar: ${r.vendio} × ${fmt(b.precio)}</span><span class="v">${fmt(cobrar)}</span></div>
+        <div class="fila" style="justify-content:flex-end">${['EFECTIVO','TRANSFERENCIA','MIXTO'].map(m => `<button class="b ${e ? 'apagado' : 'lleno'}" ${e ? 'disabled' : `onclick="S.rend.medio='${m}';pintar()"`}>${m}</button>`).join('')}</div>`
+      : `<div class="banda n"><span class="q">Para cobrar lo vendido, abrí la caja.</span><button class="b chico lleno" onclick="S.rend.caja=true;pintar()">ABRIR LA CAJA</button></div>`)
+    : `<div class="fila" style="justify-content:flex-end"><button class="b ${e ? 'apagado' : 'lleno'}" ${e ? 'disabled' : 'onclick="rendirYa(\'\')"'}>GUARDAR LA DEVOLUCIÓN</button></div>`;
+  const hoja = r.medio ? `<div class="velo"><div class="dialogo"><h3>Cobrar ${fmt(cobrar)} · ${r.medio.toLowerCase()}</h3>
+      <p class="gris" style="margin:0 0 8px">La hoja del cobro de siempre.</p>
+      ${r.medio !== 'TRANSFERENCIA' ? `<div class="campo" style="margin-bottom:8px"><span>Recibe</span><input id="rRecibe" value="${r.recibe}" inputmode="numeric" oninput="S.rend.recibe=this.value;pintar()"></div>
+        ${num(r.recibe) > cobrar ? `<p style="margin:0 0 8px">Vuelto: <b>${fmt(num(r.recibe) - cobrar)}</b></p>` : ''}` : ''}
+      <label class="gris" style="font-size:12.5px;display:block;margin-bottom:10px"><input type="checkbox" ${r.recargo ? 'checked' : ''} onchange="S.rend.recargo=this.checked;pintar()"> Recargo por transferencia (viene apagado)</label>
+      <div class="fila" style="justify-content:flex-end"><button class="b texto" onclick="S.rend.medio=null;pintar()">VOLVER</button><button class="b verde" onclick="rendirYa(S.rend.medio)">CONFIRMAR</button></div></div></div>` : '';
+  return `<div class="app"><div class="velo" style="margin-top:0"><div class="dialogo nuevo">
+    <h3>Rendir entradas ${N}</h3>
+    <div class="campo grupo"><span>Buscar a quien rinde</span><input id="rBuscar" value="${r.buscar}" placeholder="Apellido" oninput="S.rend.buscar=this.value;pintar()"></div>
+    ${lista.length ? `<ul class="res grupo">${lista.map(x => `<li class="${x.id === r.bloque ? 'on' : ''}" onclick="S.rend.bloque=${x.id};S.rend.vendio=0;S.rend.devuelve=0;S.rend.del='';S.rend.medio=null;pintar()">${x.persona} <span class="gris">· le quedan ${cuenta(x).sin}</span></li>`).join('')}</ul>` : '<p class="gris">Nadie con ese nombre tiene entradas sin rendir.</p>'}
+    ${tarjeta}${nota}
+    ${b ? `<div class="fila grupo">
+      <div><div class="rot">Vendió</div><div class="mas"><button onclick="S.rend.vendio=Math.max(0,S.rend.vendio-1);pintar()">−</button><b>${r.vendio}</b><button onclick="S.rend.vendio++;pintar()">+</button></div></div>
+      <div><div class="rot">Devuelve sin vender</div><div class="mas"><button onclick="S.rend.devuelve=Math.max(0,S.rend.devuelve-1);S.rend.del='';pintar()">−</button><b>${r.devuelve}</b><button onclick="S.rend.devuelve++;S.rend.del='';pintar()">+</button></div></div>
+      <div><div class="rot">Le quedan</div><b style="font-size:17px">${Math.max(0, c.sin - r.vendio - r.devuelve)}</b></div></div>
+      ${r.devuelve ? `<div class="grupo"><div class="rot">Números de las que devuelve (vienen propuestos)</div><div class="fila">
+        <div class="campo"><span>Del</span><input id="rDel" value="${r.del}" inputmode="numeric" oninput="S.rend.del=this.value;pintar()"></div>
+        <div class="campo"><span>Al</span><input value="${del ? del + r.devuelve - 1 : ''}" readonly></div></div></div>` : ''}
+      ${e ? `<p class="err">${e}</p>` : ''}${pie}` : ''}
+    <label class="gris" style="font-size:12px;display:block;margin-top:10px"><input type="checkbox" ${r.caja ? '' : 'checked'} onchange="S.rend.caja=!this.checked;pintar()"> Probar: la caja está cerrada</label>
+    </div></div>${hoja}</div>`;
+}
+function rendirYa(medio){
+  const r = S.rend, b = bloque(r.bloque), cuando = 'vie 20/11 ' + (10 + S.nroVenta) + ':00', quien = S.quien === 'carla' ? 'Carla' : 'Jefe';
+  const rend = {bloque:b.id, vendio:r.vendio, devuelve:r.devuelve, numeros:null, venta:null, medio, quien, antes:cuenta(b)};
+  if (r.vendio > 0){ const n = S.nroVenta++; rend.venta = n;
+    S.ventas.push({n, hora:cuando, comprador:b.persona, cant:r.vendio, total:r.vendio * b.precio, medio:medio[0] + medio.slice(1).toLowerCase(), quien, rinde:b.id});
+    b.movs.push({q:'vendio', cant:r.vendio, cuando, quien, venta:n}); }
+  if (r.devuelve > 0){ const del = num(r.del); rend.numeros = [del, del + r.devuelve - 1];
+    b.movs.push({q:'devolvio', cant:r.devuelve, numeros:rend.numeros, cuando, quien}); }
+  rend.despues = cuenta(b); S.ultimaRendicion = rend;
+  r.medio = null; r.recibe = ''; r.vendio = 0; r.devuelve = 0; r.del = '';
+  ir(rend.venta ? 6 : 1);
+}
+function p6(){
+  const u = S.ultimaRendicion || {bloque:1, vendio:15, devuelve:5, numeros:[1216,1220], venta:10, medio:'EFECTIVO', quien:'Carla', ejemplo:true};
+  const b = bloque(u.bloque), quedan = u.despues ? u.despues.sin : Math.max(0, cuenta(b).sin - u.vendio - u.devuelve);
+  return `<div class="nuevo" style="padding:6px">${N} <span class="gris" style="font-size:13px">${u.ejemplo ? 'Ejemplo: Juan vendió 15 y devolvió 5. Hacé una rendición en el paso 6 y se ve la tuya.' : 'La rendición que acabás de hacer.'}</span>
+    <div class="papel" style="margin-top:8px"><h4>RENDICIÓN DE ENTRADAS · N° ${String(u.venta).padStart(4,'0')}</h4>
+    <div class="lin"><span>${FIESTA} · fiesta del ${FECHA}</span><span>20/11/2026</span></div><hr>
+    <div class="lin"><span>Recibió:</span><b>${u.quien}</b></div>
+    <div class="lin"><span>Rinde:</span><b>${b.persona}</b></div>
+    <div class="lin"><span>Se llevó:</span><span>${b.cant} (${tramo(b.del, b.del + b.cant - 1)}) el ${b.fecha}</span></div>
+    <div class="lin"><span>Ahora:</span><span>vendió ${u.vendio}${u.devuelve ? ` · devolvió ${u.devuelve} (${tramo(u.numeros[0], u.numeros[1])})` : ''} · le quedan ${quedan}</span></div><hr>
+    <div class="lin"><span>${u.vendio} × ${b.nombrePrecio.toLowerCase()} · para rendir (${fmt(b.precio)}, precio fijo)</span><b>${fmt(u.vendio * b.precio)}</b></div>
+    <div class="lin"><span>Pagó en ${u.medio.toLowerCase()}</span><b>TOTAL ${fmt(u.vendio * b.precio)}</b></div></div>
+    <p class="pregunta">Una pregunta para vos: quien le compra una entrada a ${b.persona.split(',')[1] ? b.persona.split(',')[1].trim() : b.persona}, ¿dónde recibe la pulsera? Hoy el programa no tiene un paso para eso, y no lo agrego si no lo pedís.</p></div>`;
+}
+function p7(){
+  const jefe = esJefe(), conPlata = S.quien !== 'carla';
+  const filas = [...S.ventas].sort((a, b) => b.n - a.n).map(v => {
+    const ren = v.rinde ? `<span class="chip o nuevo">RENDICIÓN</span>` : '';
+    const anular = jefe && !v.anulada ? `<button class="b chico rojo" onclick="S.anulando=${v.n};S.motivoAnular='';pintar()">ANULAR</button>`
+      : v.anulada ? '<span class="chip r">ANULADA</span>' : '<span class="motivo">anular: solo el jefe</span>';
+    return cel() ? `<div class="persona ${v.anulada ? 'gris' : ''}"><div class="cab"><div class="q"><b>N° ${String(v.n).padStart(4,'0')} · ${v.comprador}</b>
+        <div class="num">${v.hora} · ${v.cant} entradas${conPlata ? ' · ' + fmt(v.total) : ''} · ${v.medio} · ${v.quien}</div>${ren}</div>${anular}</div></div>`
+      : `<tr class="${v.anulada ? 'anulada' : ''}"><td>${String(v.n).padStart(4,'0')}</td><td>${v.hora}</td><td>${v.comprador} ${ren}</td><td class="d">${v.cant}</td>${conPlata ? `<td class="d">${fmt(v.total)}</td>` : ''}<td>${v.medio}</td><td>${v.quien}</td><td class="no">${anular}</td></tr>`;
+  }).join('');
+  const v = S.ventas.find(x => x.n === S.anulando);
+  const dlg = v ? `<div class="velo"><div class="dialogo"><h3>Anular la venta N° ${String(v.n).padStart(4,'0')}</h3>
+      ${v.rinde ? `<p class="nuevo" style="margin:0 0 10px;padding:6px">${N} Es una rendición: <b>las ${v.cant} vuelven a quedar a cargo de ${bloque(v.rinde).persona} para rendir.</b> No se pregunta si devolvieron las entradas.</p>`
+        : '<p style="margin:0 0 10px">¿Devolvieron las entradas y pulseras? <span class="seg"><button class="on">Sí</button><button>No</button></span></p>'}
+      <div class="campo grupo"><span>Motivo (obligatorio)</span><input id="aMotivo" value="${S.motivoAnular}" oninput="S.motivoAnular=this.value;pintar()"></div>
+      <div class="fila" style="justify-content:flex-end"><button class="b texto" onclick="S.anulando=null;pintar()">VOLVER</button>
+      <button class="b rojo ${S.motivoAnular.trim() ? '' : 'apagado'}" ${S.motivoAnular.trim() ? 'onclick="anularYa()"' : 'disabled'}>ANULAR</button></div></div></div>` : '';
+  return `<div class="app"><div class="barraApp"><button class="b texto">←</button><div class="tit">VENTAS<small>${FIESTA}${S.quien === 'carla' ? ' · las de la caja de Carla, sin sumas de plata' : ''}</small></div></div>
+    <div class="card">${cel() ? filas : `<div class="scrollx"><table class="tabla"><tr><th>N°</th><th>Cuándo</th><th>Compra / rinde</th><th class="d">Cant.</th>${conPlata ? '<th class="d">Total</th>' : ''}<th>Medio</th><th>Cobró</th><th></th></tr>${filas}</table></div>`}</div>${dlg}</div>`;
+}
+function anularYa(){
+  const v = S.ventas.find(x => x.n === S.anulando); v.anulada = true; S.anulando = null;
+  if (v.rinde){ S.abierta = v.rinde; }
+  pintar();
+}
+function p8(){
+  if (!esJefe()) return `<div class="app">${barraEntradas()}${soloJefe('NO VOLVIERON')}</div>`;
+  const n = S.nv, b = bloque(n.bloque), c = cuenta(b);
+  const ok = n.cant >= 1 && n.cant <= c.sin && n.motivo.trim();
+  return `<div class="app"><div class="velo" style="margin-top:0"><div class="dialogo nuevo"><h3>No volvieron ${N}</h3>
+    <p style="margin:0 0 10px"><b>${b.persona}</b> · le quedan ${c.sin} de ${b.cant} (${tramo(b.del, b.del + b.cant - 1)}) · ${fmt(b.precio)} c/u</p>
+    <div class="grupo"><div class="rot">Cuántas no volvieron</div><div class="mas"><button onclick="S.nv.cant=Math.max(1,S.nv.cant-1);pintar()">−</button><b>${n.cant}</b><button onclick="S.nv.cant=Math.min(${c.sin},S.nv.cant+1);pintar()">+</button></div></div>
+    <div class="campo grupo"><span>Números (opcional)</span><input id="nNum" value="${n.numeros}" placeholder="por ejemplo 1254 al 1255" oninput="S.nv.numeros=this.value;pintar()"></div>
+    <div class="campo grupo"><span>Motivo (obligatorio)</span><input id="nMot" value="${n.motivo}" placeholder="por ejemplo: dice que las perdió" oninput="S.nv.motivo=this.value;pintar()"></div>
+    <div class="banda n"><span class="q">No entra plata. Esos números quedan anulados para siempre, y la lista dice que valían ${fmt(n.cant * b.precio)}.</span></div>
+    <div class="fila" style="justify-content:flex-end"><button class="b texto" onclick="ir(1)">CANCELAR</button>
+      <button class="b rojo ${ok ? '' : 'apagado'}" ${ok ? 'onclick="noVolvieronYa()"' : 'disabled'}>MARCAR ${n.cant} QUE NO VOLVIERON</button></div></div></div></div>`;
+}
+function noVolvieronYa(){
+  const n = S.nv, b = bloque(n.bloque); const m = n.numeros.match(/(\d+)\D+(\d+)/) || n.numeros.match(/(\d+)/);
+  b.movs.push({q:'no_volvieron', cant:n.cant, numeros:m ? [num(m[1]), num(m[2] || m[1])] : null, cuando:'vie 20/11 12:00', quien:'Jefe', motivo:n.motivo.trim()});
+  n.motivo = ''; n.numeros = ''; S.abierta = b.id; ir(1);
+}
+// ───── el marco ─────
+const PANTALLAS = [p0, p1, p2, p3, p4, p5, p6, p7, p8];
+function ir(i){ S.paso = i; pintar(); window.scrollTo({top:document.getElementById('nota').offsetTop - 10, behavior:'smooth'}); }
+function pintar(){
+  const act = document.activeElement, id = act && act.id, pos = act && act.selectionStart;
+  $('#pasos').innerHTML = PASOS.map((p, i) => `<button class="paso ${i === S.paso ? 'on' : ''}" onclick="ir(${i})"><span class="n">${i + 1}</span><span><b>${p.t}</b><small>${p.s}</small></span></button>`).join('');
+  const p = PASOS[S.paso];
+  $('#nota').innerHTML = `<p>${p.nota}</p><p class="donde">Dónde: ${p.donde}</p>`;
+  $('#marco').style.maxWidth = {pc:'1000px', tab:'768px', cel:'390px'}[S.ancho];
+  $('#pantalla').innerHTML = PANTALLAS[S.paso]();
+  if (id){ const el = document.getElementById(id); if (el){ el.focus(); try { el.setSelectionRange(pos, pos); } catch(e){} } }
+}
+document.querySelectorAll('input[name=quien]').forEach(r => r.onchange = () => { S.quien = r.value; pintar(); });
+document.querySelectorAll('input[name=ancho]').forEach(r => r.onchange = () => { S.ancho = r.value; pintar(); });
+$('#antic').onchange = e => { S.antic = e.target.checked; pintar(); };
+// Se puede abrir directo en un paso: …html#paso=6&quien=carla&ancho=cel
+const H = new URLSearchParams(location.hash.slice(1));
+if (H.get('paso')) S.paso = Math.min(8, Math.max(0, num(H.get('paso')) - 1));
+if (['jefe','jefeSin','carla'].includes(H.get('quien'))) S.quien = H.get('quien');
+if (['pc','tab','cel'].includes(H.get('ancho'))) S.ancho = H.get('ancho');
+if (H.get('abierta')) S.abierta = num(H.get('abierta'));
+if (H.get('medio')) S.rend.medio = H.get('medio').toUpperCase();
+if (H.get('confirmar')) { S.dar.nombre = 'LÓPEZ, ANA'; S.dar.confirmando = true; }
+document.querySelectorAll('input[name=quien]').forEach(r => r.checked = r.value === S.quien);
+document.querySelectorAll('input[name=ancho]').forEach(r => r.checked = r.value === S.ancho);
+pintar();
+</script>
+</body></html>
