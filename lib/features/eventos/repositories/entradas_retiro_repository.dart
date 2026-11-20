@@ -39,20 +39,24 @@ class EntradasRetiroRepository {
   /// entrega completada) o si todavía no llegó.
   Future<void> guardar(EntradasRetiro retiro) async {
     final db = await LocalDatabase.instance;
-    await db.transaction((txn) async {
-      await txn.insert(
-        'entradas_retiro',
-        retiro.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      await SyncQueue.enqueue(
-        executor: txn,
-        tabla: 'entradas_retiro',
-        operacion: SyncOperation.insert,
-        registroId: retiro.id,
-        payload: retiro.toMap(),
-      );
-    });
+    await db.transaction((txn) => guardarEn(txn, retiro));
+  }
+
+  /// Lo mismo, dentro de una transacción que ya está abierta: la entrega en dos
+  /// partes (`EntregarParte`) guarda su renglón y la fila completa juntos.
+  Future<void> guardarEn(DatabaseExecutor txn, EntradasRetiro retiro) async {
+    await txn.insert(
+      'entradas_retiro',
+      retiro.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await SyncQueue.enqueue(
+      executor: txn,
+      tabla: 'entradas_retiro',
+      operacion: SyncOperation.insert,
+      registroId: retiro.id,
+      payload: retiro.toMap(),
+    );
   }
 
   /// Lo que dice la nube del retiro de este alumno, justo antes de entregar:

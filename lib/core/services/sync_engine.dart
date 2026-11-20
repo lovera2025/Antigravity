@@ -453,6 +453,7 @@ class SyncEngine {
     'entradas_ventas': 'updated_at',
     'entradas_anulaciones': 'updated_at',
     'entradas_verificaciones': 'updated_at',
+    'entradas_entregas': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1604,6 +1605,9 @@ class SyncEngine {
     // de seguridad si el aviso no llega.
     'entradas_retiro',
     'sillas_reparto',
+    // La entrega en dos partes (v81): cada parte que entrega un equipo, el otro
+    // tiene que verla en segundos para no entregarla de nuevo.
+    'entradas_entregas',
     // La mora congelada cambia lo que se cobra: la otra PC tiene que verla en
     // segundos, como un cobro (6.2.1).
     'mora_congelada',
@@ -2080,6 +2084,11 @@ class SyncEngine {
       if (table == 'entradas_ventas') return 4;
       if (table == 'entradas_anulaciones') return 5;
       if (table == 'entradas_verificaciones') return 5;
+      // La entrega en dos partes (v81) cuelga del alumno, como la fila de
+      // `entradas_retiro`: el contrato sube antes. Con la misma prioridad que esa
+      // fila, sube en el orden en que se encoló: la entrega encola el renglón
+      // antes que la fila, que es su reflejo.
+      if (table == 'entradas_entregas') return 4;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -2444,6 +2453,7 @@ class SyncEngine {
       _pullTable(db, 'entradas_ventas', 'updated_at'),
       _pullTable(db, 'entradas_anulaciones', 'updated_at'),
       _pullTable(db, 'entradas_verificaciones', 'updated_at'),
+      _pullTable(db, 'entradas_entregas', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2966,6 +2976,10 @@ class SyncEngine {
     'entradas_anulaciones',
     'entradas_verificaciones',
     'entradas_retiro',
+    // La entrega en dos partes (v81): la tablet entrega sin internet una parte
+    // que otro equipo pudo haber dado, y los números de las generales ya
+    // entregadas no se repiten.
+    'entradas_entregas',
     // El registro de sorteos (17-nov-2026): de ahí sale qué tenía cada familia
     // al sorteo, que decide qué entradas van con descuento y cuáles enteras.
     // Sin esto la tablet que vende sin internet le daría el descuento a todo.
@@ -3692,6 +3706,29 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v81, la entrega en dos partes: exactamente las de
+      // `EntregaEntradas.toMap()` y las del SQL (`test/sync_tablas_v81_test.dart`
+      // las compara).
+      'entradas_entregas': [
+        'id',
+        'contrato_alumno_id',
+        'evento_id',
+        'parte',
+        'accion',
+        'cantidad',
+        'tramos',
+        'menores_10',
+        'parentesco',
+        'retiro_nombre',
+        'otra_persona_motivo',
+        'autorizacion_firmada',
+        'escribio_en_planilla',
+        'motivo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -3867,6 +3904,8 @@ class SyncEngine {
     'entradas_anulaciones': 'solo se agregan filas',
     'entradas_verificaciones':
         'una fila por venta con id fijo: destildar la actualiza, no se borra',
+    'entradas_entregas':
+        'solo se agregan renglones: anular una parte es otro renglón',
   };
 
   /// Para los tests: las tablas que se revisan.

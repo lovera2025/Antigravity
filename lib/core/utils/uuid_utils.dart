@@ -130,6 +130,18 @@ class UuidUtils {
   static String entradasVerificacionId(String ventaId) =>
       _uuidDe('entradas_verificaciones_v1|$ventaId');
 
+  /// PK de un renglón de `entradas_entregas` (v81) que copia lo que decía la
+  /// fila de `entradas_retiro` antes de reescribirla: un alumno, una parte, una
+  /// acción y su momento. Si dos equipos copian lo mismo, es el mismo renglón.
+  /// (Los demás renglones llevan un UUID nuevo: cada entrega es otra.)
+  static String entradasEntregaCopiaId(
+    String contratoAlumnoId,
+    String parte,
+    String accion,
+    String momento,
+  ) =>
+      _uuidDe('entradas_entregas_copia_v1|$contratoAlumnoId|$parte|$accion|$momento');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));
