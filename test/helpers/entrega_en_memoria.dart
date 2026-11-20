@@ -124,6 +124,12 @@ class PartesEnMemoria extends EntradasEntregasRepository {
 
   final renglones = <EntregaEntradas>[];
 
+  /// Las familias con algo de su entrega que "espera subir".
+  int sinSubir = 0;
+
+  @override
+  Future<int> familiasSinSubir() async => sinSubir;
+
   List<EntregaEntradas> de(String alumnoId) => [
         for (final r in renglones)
           if (r.contratoAlumnoId == alumnoId) r,

@@ -94,3 +94,21 @@ test/entrega_por_partes_test.dart
           anulacion = entregaOriginal.add(unMs);
           entrega = null;
 ---
+18. la línea de VENDER no cuenta las entregas sin subir
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+      entregas: await ref.read(entradasEntregasRepositoryProvider).familiasSinSubir(),
+      entregas: 0,
+---
+19. la línea de VENDER no cuenta la caja ni las anulaciones sin subir
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+      otros: await entradas.cambiosSinSubir(),
+      otros: 0,
+---
+20. "Todo subido" mirando solo las ventas
+lib/features/entradas/cuentas/linea_de_subida.dart
+test/linea_de_subida_entradas_test.dart
+  int get total => ventas + entregas + otros;
+  int get total => ventas;
+---

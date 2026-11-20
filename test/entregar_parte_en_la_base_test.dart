@@ -311,6 +311,25 @@ void main() {
         reason: 'completar la fila no agrega renglones');
   });
 
+  // Pedido del usuario (20-nov-2026, "si sube, que suba de verdad"): la línea de
+  // VENDER decía "Todo subido" con una entrega sin subir.
+  test('lo que espera subir se cuenta por familia: las dos partes y la fila son '
+      'una sola entrega, y al subir no queda nada', () async {
+    expect(await tablet.entregas.familiasSinSubir(), 0);
+    tablet.hayInternet = false;
+    await entregar(_pulseras());
+    expect(await tablet.entregas.familiasSinSubir(), 1);
+    await entregar(_generales());
+    expect(await tablet.entregas.familiasSinSubir(), 1, reason: 'la misma familia');
+    tablet.hayInternet = true;
+    await EntregarParte(tablet).completarLaFila(eventoId: _evento, contratoAlumnoId: _ana.id);
+    expect(await tablet.cola('entradas_retiro'), hasLength(1));
+    expect(await tablet.entregas.familiasSinSubir(), 1, reason: 'con la fila, igual una');
+    // Sube todo (lo que hace el motor): la cola queda vacía.
+    await db.delete('_sync_queue');
+    expect(await tablet.entregas.familiasSinSubir(), 0);
+  });
+
   test('las generales sin número también quedan bien guardadas', () async {
     await entregar(_pulseras());
     final r = await entregar(_generales()) as Entregada;

@@ -351,6 +351,21 @@ class EntradasLocal implements EntradasDeLaCaja, EntradasDelJefe {
     }
   }
 
+  @override
+  Future<int> cambiosSinSubir() async {
+    try {
+      final db = await _abrir();
+      final filas = await db.rawQuery(
+        'SELECT COUNT(DISTINCT tabla || registro_id) AS n FROM _sync_queue '
+        'WHERE tabla IN (?, ?, ?, ?)',
+        [tablaCajas, tablaAnulaciones, tablaVerificaciones, tablaConfig],
+      );
+      return (filas.first['n'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   // ── Las anulaciones ────────────────────────────────────────────────────────
 
   @override

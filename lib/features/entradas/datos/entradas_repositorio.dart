@@ -95,6 +95,11 @@ abstract interface class EntradasDeLaCaja implements EntradasDeLaFiesta {
 
   /// Cuántas ventas de este equipo esperan subir a la nube.
   Future<int> ventasSinSubir();
+
+  /// Lo demás de la venta de este equipo que espera subir: cajas que se
+  /// abrieron o cerraron, anulaciones, verificaciones y precios (20-nov-2026:
+  /// la línea de VENDER decía "Todo subido" con la caja cerrada sin subir).
+  Future<int> cambiosSinSubir();
 }
 
 /// Lo que hace el jefe con la venta de entradas: el precio, anular y "Pago

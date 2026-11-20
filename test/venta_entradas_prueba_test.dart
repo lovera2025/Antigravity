@@ -300,12 +300,13 @@ void main() {
     await asentar(tester);
     expect(enElJefe('0 vendidas de 24'), findsOneWidget);
 
-    // Carla, en VENDER: la línea lo dice.
+    // Carla, en VENDER: la línea lo dice, con la caja que abrió sin internet
+    // (20-nov-2026: "Todo subido" es que no queda nada, no solo las ventas).
     await tocar(tester, 'vender_$idFiestaEntrega');
     await asentar(tester);
     expect(
       texto(tester, 'vender_linea_texto'),
-      'Caja abierta · Carla · Sin internet · 1 venta por subir',
+      'Caja abierta · Carla · Sin internet · 1 venta y 1 cambio por subir',
     );
 
     await tocar(tester, 'prueba_internet');
@@ -313,6 +314,32 @@ void main() {
     expect(lados.hayInternet, isTrue);
     expect(lados.tablet.pendientes, isEmpty);
     expect(enElJefe('3 vendidas de 24'), findsOneWidget);
+    expect(texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
+  });
+
+  // Revisión del 20-nov-2026 ("si sube, que suba de verdad"): una entrega hecha sin
+  // internet también cuenta en la línea, y en la ventana de prueba se tiene que ver.
+  testWidgets('sin internet, una entrega queda "por subir" en la línea; al volver, '
+      '"Todo subido"', (tester) async {
+    await abrir(tester, alto: 1400);
+    await entrarAVender(tester);
+    await tocar(tester, 'prueba_internet');
+    expect(lados.hayInternet, isFalse);
+    await elegir(tester, _acosta);
+    await entregarParte(tester, ParteEntrega.pulseras, nombre: 'Marta Acosta');
+    // Sin internet pregunta antes de seguir.
+    await tester.tap(find.text('SEGUIR'));
+    await asentar(tester);
+    if (find.text('ENTENDIDO').evaluate().isNotEmpty) {
+      await tester.tap(find.text('ENTENDIDO'));
+      await asentar(tester);
+    }
+    expect(texto(tester, 'vender_linea_texto'), contains('1 entrega'));
+    expect(texto(tester, 'vender_linea_texto'), contains('Sin internet'));
+
+    await tocar(tester, 'prueba_internet');
+    await asentar(tester);
+    expect(lados.hayInternet, isTrue);
     expect(texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
   });
 

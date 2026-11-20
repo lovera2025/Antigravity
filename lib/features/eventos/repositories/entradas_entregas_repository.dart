@@ -91,6 +91,32 @@ class EntradasEntregasRepository {
     return EntregaEntradas.porAlumno(renglones);
   }
 
+  /// Cuántas familias tienen algo de su entrega esperando subir desde este
+  /// equipo: un renglón de `entradas_entregas` o la fila de `entradas_retiro`.
+  /// Va por familia, no por renglón: una entrega que completó las dos partes
+  /// encola el renglón y la fila, y es una sola entrega. Para la línea de VENDER
+  /// (20-nov-2026: decía "Todo subido" con una entrega sin subir). Si no se
+  /// puede contar, 0.
+  Future<int> familiasSinSubir() async {
+    try {
+      final db = await _abrir();
+      final filas = await db.rawQuery('''
+        SELECT COUNT(DISTINCT alumno) AS n FROM (
+          SELECT e.contrato_alumno_id AS alumno FROM _sync_queue q
+            JOIN $tabla e ON e.id = q.registro_id
+            WHERE q.tabla = '$tabla'
+          UNION
+          SELECT r.contrato_alumno_id AS alumno FROM _sync_queue q
+            JOIN entradas_retiro r ON r.id = q.registro_id
+            WHERE q.tabla = 'entradas_retiro'
+        )
+      ''');
+      return (filas.first['n'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Los renglones de una fiesta, del más viejo al más nuevo.
   Future<List<EntregaEntradas>> delEvento(String eventoId) async {
     final db = await _abrir();

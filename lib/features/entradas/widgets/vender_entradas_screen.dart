@@ -105,7 +105,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   Map<String, List<EntregaEntradas>> _renglones = {};
   List<VentaEntradas> _ventas = [];
   List<AnulacionEntradas> _anulaciones = [];
-  int _sinSubir = 0;
+  /// Lo de este equipo que espera subir: ventas, entregas y cambios de la caja.
+  PendientesDeEntradas _sinSubir = PendientesDeEntradas.nada;
 
   /// Cada alumno de la lista, con lo que se ve de él ya contado.
   Map<String, AlumnoDeVender> _info = {};
@@ -217,11 +218,23 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// Solo lo que espera subir, para la línea de arriba: no relee nada más.
   Future<void> _contarSinSubir() async {
     try {
-      final n = await ref.read(entradasDeLaCajaProvider).ventasSinSubir();
+      final n = await _pendientes();
       if (mounted && n != _sinSubir) setState(() => _sinSubir = n);
     } catch (_) {
       // Si no se puede contar, queda lo último que se contó.
     }
+  }
+
+  /// Todo lo de este equipo que espera subir, no solo las ventas: **"Todo
+  /// subido" es que no queda nada** (pedido del usuario, 20-nov-2026: con una
+  /// entrega hecha sin internet en la cola, decía "Todo subido").
+  Future<PendientesDeEntradas> _pendientes() async {
+    final entradas = ref.read(entradasDeLaCajaProvider);
+    return PendientesDeEntradas(
+      ventas: await entradas.ventasSinSubir(),
+      entregas: await ref.read(entradasEntregasRepositoryProvider).familiasSinSubir(),
+      otros: await entradas.cambiosSinSubir(),
+    );
   }
 
   @override
@@ -293,7 +306,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         eventoId: id,
         operadorId: _quienVende.id,
       );
-      final sinSubir = await entradas.ventasSinSubir();
+      final sinSubir = await _pendientes();
       // Lo que cada familia tenía al sorteo: el descuento es solo para eso.
       // Solo se lee: la venta no escribe el registro.
       final foto = await ref.read(fotoDeLosLugaresProvider)(id);
@@ -1045,7 +1058,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       builder: (context, snap) {
         final linea = lineaDeSubidaDeEntradas(
           hayInternet: snap.data == AppConnectivity.online,
-          sinSubir: _sinSubir,
+          pendientes: _sinSubir,
         );
         final sinCaja = _caja == null;
         final color = linea.atencion || sinCaja

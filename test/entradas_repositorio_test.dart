@@ -133,6 +133,10 @@ void main() {
       expect(caja.cambioInicial, 5000);
       expect(caja.deviceId, 'pc-1');
       expect((await cola('entradas_cajas')).single['registro_id'], caja.id);
+      // La línea de VENDER lo cuenta como un cambio, no como una venta
+      // (20-nov-2026: "Todo subido" tiene que ser que no queda nada).
+      expect(await entradas.cambiosSinSubir(), 1);
+      expect(await entradas.ventasSinSubir(), 0);
     });
 
     test('tocar VENDER dos veces retoma la misma: no abre otra', () async {
@@ -225,6 +229,7 @@ void main() {
       expect(una.deviceId, 'pc-1');
       expect(await cola('entradas_ventas'), hasLength(2));
       expect(await entradas.ventasSinSubir(), 2);
+      expect(await entradas.cambiosSinSubir(), 1, reason: 'la caja que se abrió');
       expect([for (final v in await entradas.ventasDeLaCaja(caja.id)) v.numero], [1, 2]);
     });
 

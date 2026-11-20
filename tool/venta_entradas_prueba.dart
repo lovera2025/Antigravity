@@ -89,14 +89,18 @@ import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dar
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entradas_entregas_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entregar_parte_de_la_app.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/services/cobro_abono_acumulado.dart';
+import 'package:arguello_events/features/eventos/services/entregar_parte.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import '../test/helpers/barra_en_memoria.dart';
@@ -154,6 +158,12 @@ class EntradasDeUnEquipo extends EntradasEnMemoria {
   /// Las horas de verdad (la venta en memoria trae una fija).
   @override
   DateTime reloj() => DateTime.now().toUtc();
+
+  /// Lo que no es una venta y espera subir (la caja, una anulación, los precios):
+  /// la línea de VENDER lo cuenta como "cambios".
+  @override
+  Future<int> cambiosSinSubir() async =>
+      pendientes.where((p) => p.tabla != 'entradas_ventas').length;
 
   Future<T> _sube<T extends Object>(String tabla, Future<T> Function() escribir) async {
     final antes = escrituras;
@@ -304,6 +314,10 @@ class LadoDeLaVenta {
   final MotorDePrueba motor;
   late final ProviderContainer c;
 
+  /// Las familias con una entrega hecha en este equipo sin internet: la línea de
+  /// VENDER las cuenta ("1 entrega por subir") hasta VOLVER EL INTERNET.
+  final entregasSinSubir = <String>{};
+
   /// Lo que en la app hace el motor al bajar algo nuevo: avisa por
   /// `cambiosBajadosStream` (VENDER, VENTAS y la entrega releen) y el coordinador sube
   /// la revisión (el cierre de caja, el inicio de Entradas).
@@ -367,7 +381,17 @@ class NubeDeLaPrueba {
   /// Una entrega sin cargo que subió: el otro la baja. Las entregas viven en memoria y
   /// se comparten, así que lo único que cruza es el aviso.
   bool entregaSubio(LadoDeLaVenta desde, String tabla) {
-    if (!hayInternet) return false;
+    if (!hayInternet) {
+      // Lo que se acaba de guardar es el último renglón: esa familia queda por subir.
+      final renglones = desde.c.read(entradasEntregasRepositoryProvider) as _PartesDeUnLado;
+      final ultimo = renglones.ultimo;
+      if (tabla == EntradasEntregasRepository.tabla && ultimo != null) {
+        desde.entregasSinSubir.add(ultimo.contratoAlumnoId);
+        desde.motor.pendiente.add(desde.entregasSinSubir.length);
+        cambios.value++;
+      }
+      return false;
+    }
     _otro(desde).bajo({tabla});
     return true;
   }
@@ -379,6 +403,13 @@ class NubeDeLaPrueba {
     for (final lado in [tablet, pc]) {
       final subio = _subir(lado);
       if (subio.isNotEmpty) lado.bajo(subio);
+      // Las entregas que quedaron sin subir: suben y el otro las baja.
+      if (lado.entregasSinSubir.isNotEmpty) {
+        lado.entregasSinSubir.clear();
+        lado.motor.pendiente.add(0);
+        _otro(lado).bajo({EntradasEntregasRepository.tabla});
+        cambios.value++;
+      }
     }
   }
 }
@@ -609,9 +640,15 @@ Future<LadosDeLaVenta> armarLados({
         contratosRepositoryProvider.overrideWithValue(entrega.contratos),
         entradasRetiroRepositoryProvider.overrideWithValue(entrega.entregas),
         // La entrega por partes (pulseras y generales), en memoria y compartida:
-        // al subir, avisa al otro lado como las demás entregas.
-        ...entrega.reemplazosDeLasPartes(
-          alSubir: (tabla) => nube.entregaSubio(lado, tabla),
+        // al subir, avisa al otro lado como las demás entregas. Lo que cada lado
+        // tiene sin subir es suyo (la línea de VENDER lo cuenta).
+        entradasEntregasRepositoryProvider.overrideWithValue(
+          _PartesDeUnLado(entrega.partes, lado),
+        ),
+        entregarParteProvider.overrideWithValue(
+          EntregarParte(
+            PuertosEnMemoria(entrega, alSubir: (tabla) => nube.entregaSubio(lado, tabla)),
+          ),
         ),
         // El registro de sorteos: de ahí sale a qué lugares les va el descuento.
         sorteosMesasRepositoryProvider.overrideWithValue(entrega.sorteos),
@@ -1263,4 +1300,31 @@ class _BarraDeArriba extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Los renglones de la entrega, compartidos entre los dos lados, con lo que **este
+/// lado** tiene sin subir: la línea de VENDER dice "1 entrega por subir" mientras no
+/// vuelve el internet (revisión del 20-nov-2026: en la ventana de prueba no se veía).
+class _PartesDeUnLado extends EntradasEntregasRepository {
+  _PartesDeUnLado(this.partes, this.lado)
+      : super(null, abrir: () => throw StateError('la prueba no abre la base'));
+
+  final PartesEnMemoria partes;
+  final LadoDeLaVenta lado;
+
+  EntregaEntradas? get ultimo => partes.renglones.isEmpty ? null : partes.renglones.last;
+
+  @override
+  Future<int> familiasSinSubir() async => lado.entregasSinSubir.length;
+
+  @override
+  Future<Map<String, List<EntregaEntradas>>> deContratos(List<String> ids) =>
+      partes.deContratos(ids);
+
+  @override
+  Future<List<EntregaEntradas>> delEvento(String eventoId) => partes.delEvento(eventoId);
+
+  @override
+  Future<List<EntregaEntradas>> traerDeLaNube(String contratoAlumnoId) =>
+      partes.traerDeLaNube(contratoAlumnoId);
 }

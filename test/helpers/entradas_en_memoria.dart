@@ -32,6 +32,9 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
   /// Las ventas de este equipo que "esperan subir".
   int sinSubir = 0;
 
+  /// Lo demás de la venta que "espera subir" (cajas, anulaciones).
+  int cambiosPendientes = 0;
+
   /// Con esto prendido, todo lo que escribe tira: la base no anda.
   bool falla = false;
 
@@ -101,6 +104,9 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
 
   @override
   Future<int> ventasSinSubir() async => sinSubir;
+
+  @override
+  Future<int> cambiosSinSubir() async => cambiosPendientes;
 
   // ── El jefe ────────────────────────────────────────────────────────────────
 

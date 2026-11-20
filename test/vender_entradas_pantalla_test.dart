@@ -1566,6 +1566,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(_texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
     });
+
+    // Pedido del usuario (20-nov-2026, "si sube, que suba de verdad"): con una
+    // entrega hecha sin internet todavía en la cola, decía "Todo subido".
+    testWidgets('una entrega sin subir también cuenta: "Todo subido" solo sin nada en '
+        'la cola', (tester) async {
+      final m = await _montar(tester);
+      m.e.conexion.cambiar(AppConnectivity.offline);
+      await _elegir(tester, _lopez);
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      await tester.tap(find.text('SEGUIR'));
+      await tester.pumpAndSettle();
+      // Quedó en la cola (lo que contaría la base).
+      m.e.partes.sinSubir = 1;
+      m.e.motor.pendiente.add(1);
+      await tester.pumpAndSettle();
+      if (find.text('ENTENDIDO').evaluate().isNotEmpty) {
+        await tester.tap(find.text('ENTENDIDO'));
+        await tester.pumpAndSettle();
+      }
+      expect(_texto(tester, 'vender_linea_texto'),
+          'Caja abierta · Carla · Sin internet · 1 entrega por subir');
+      // Vuelve internet y sube: la línea lo dice sola.
+      m.e.conexion.cambiar(AppConnectivity.online);
+      m.e.partes.sinSubir = 0;
+      m.e.motor.pendiente.add(0);
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
+    });
+
+    testWidgets('la caja cerrada o una anulación sin subir también: "1 cambio"',
+        (tester) async {
+      final m = await _montar(tester);
+      m.entradas.sinSubir = 2;
+      m.entradas.cambiosPendientes = 1;
+      m.e.partes.sinSubir = 1;
+      m.e.motor.pendiente.add(4);
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'vender_linea_texto'),
+          'Caja abierta · Carla · 2 ventas, 1 entrega y 1 cambio subiendo');
+    });
   });
 
   group('VENTAS, desde la barra de VENDER', () {
