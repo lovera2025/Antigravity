@@ -93,12 +93,11 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   Map<String, DeudaAlumno> _deudas = {};
   Map<String, EntradasRetiro> _retiros = {};
 
-  /// La venta de entradas de la fiesta (6.9.0): lo vendido y lo anulado, para
-  /// mostrar cuántas del 50 % compró cada familia y para que la entrega no dé un
-  /// número ya vendido. [_ventaAndando]: la fiesta tiene precio y este equipo
-  /// tiene la base (en la web, no).
-  List<VentaEntradas> _ventas = [];
-  List<AnulacionEntradas> _anulaciones = [];
+  /// La venta de entradas de la fiesta (6.9.0): cuántas del 50 % compró cada
+  /// familia. Los números vendidos no frenan la entrega: son el talonario de
+  /// las anticipadas, otro que el de las generales (20-nov).
+  /// [_ventaAndando]: la fiesta tiene precio y este equipo tiene la base (en la
+  /// web, no).
   Map<String, int> _compradas = {};
   bool _ventaAndando = false;
 
@@ -214,8 +213,6 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         _todos = todos;
         _deudas = deudas;
         _retiros = retiros;
-        _ventas = venta.ventas;
-        _anulaciones = venta.anulaciones;
         _compradas = compradasPorFamilia(venta.ventas, venta.anulaciones);
         _ventaAndando = venta.andando;
         _descuentoPct = venta.descuentoPct;
@@ -264,14 +261,12 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     }
   }
 
-  /// Los números que ya tienen dueño, salvo los de [alumnoId]: los entregados
-  /// sin cargo y los vendidos (una venta anulada con las entradas devueltas los
-  /// libera). Es el `deOtros` de la entrega: no deja dar un número vendido.
+  /// Los números de las generales que ya se entregaron sin cargo, salvo los de
+  /// [alumnoId]. Es el `deOtros` de la entrega: no mira lo vendido, que es el
+  /// talonario de las anticipadas (20-nov).
   Map<String, List<TramoTalonario>> _ocupadosPara(String alumnoId) =>
-      NumerosDeEntradas.ocupados(
-        entregados: RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: alumnoId),
-        ventas: _ventas,
-        anulaciones: _anulaciones,
+      NumerosDeEntradas.ocupadosDeLaEntrega(
+        RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: alumnoId),
       );
 
   /// Con las cuentas recién leídas (de esta PC, o bajadas cuando la otra cobró):

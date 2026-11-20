@@ -150,7 +150,10 @@ void main() {
       expect(deTodos.repetidos, hasLength(1));
     });
 
-    test('también avisa el número que está en una venta y en una entrega', () async {
+    // Hasta la 6.9.2 esto avisaba "El 100 está en una venta (PEREZ, ANA) y en
+    // una entrega (ALUMNO, UNO)". Cambió a propósito el 20-nov: lo vendido es
+    // el talonario de las anticipadas y lo entregado, el de las generales.
+    test('el número que está en una venta y en una entrega no es un repetido', () async {
       final h = HistorialDeEntradas.de(
         cajas: await n.entradas.cajas(_fiesta),
         ventas: [n.v1],
@@ -159,8 +162,26 @@ void main() {
           'ALUMNO, UNO': [TramoTalonario(95, 100)],
         },
       );
-      expect(h.repetidos.single.texto,
-          'El 100 está en una venta (PEREZ, ANA) y en una entrega (ALUMNO, UNO): revisar.');
+      expect(h.repetidos, isEmpty);
+    });
+
+    test('el número que está en dos entregas se avisa aparte, después de los de las ventas',
+        () async {
+      final h = HistorialDeEntradas.de(
+        cajas: await n.entradas.cajas(_fiesta),
+        ventas: await n.entradas.ventas(_fiesta),
+        anulaciones: await n.entradas.anulaciones(_fiesta),
+        entregados: const {
+          'ALUMNO, UNO': [TramoTalonario(95, 100)],
+          'ALUMNO, DOS': [TramoTalonario(100, 106)],
+        },
+      );
+      expect([for (final r in h.repetidosDeLaVenta) r.texto],
+          ['El 203 está en dos ventas (RUIZ, MARTA y LEDESMA, JUAN): revisar.']);
+      expect([for (final r in h.repetidosDeLaEntrega) r.texto],
+          ['El 100 está en dos entregas (ALUMNO, UNO y ALUMNO, DOS): revisar.']);
+      expect([for (final r in h.repetidos) r.numero], [203, 100],
+          reason: 'lo que se muestra: primero las ventas, después las entregas');
     });
 
     test('sin ventas da todo en cero', () {
@@ -214,6 +235,23 @@ void main() {
       ]) {
         expect(palabras, contains(esperada), reason: 'falta "$esperada"');
       }
+    });
+
+    test('los números repetidos en dos entregas también salen en el papel', () async {
+      final h = HistorialDeEntradas.de(
+        cajas: await n.entradas.cajas(_fiesta),
+        ventas: await n.entradas.ventas(_fiesta),
+        anulaciones: await n.entradas.anulaciones(_fiesta),
+        entregados: const {
+          'ALUMNO, UNO': [TramoTalonario(95, 100)],
+          'ALUMNO, DOS': [TramoTalonario(100, 106)],
+        },
+      );
+      final palabras = [for (final p in palabrasDelPdf(await pdf(h))) p.texto];
+      expect(palabras.where((p) => p == 'revisar.').length, 2,
+          reason: 'el de las ventas y el de las entregas');
+      expect(palabras, contains('entregas'));
+      expect(palabras, contains('DOS):'));
     });
 
     // Con un recargo, lo vendido y lo cobrado no dan lo mismo: así se ve que

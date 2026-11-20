@@ -123,6 +123,8 @@ class _VentasDeEntradasScreenState
         ventas: await entradas.ventas(id),
         anulaciones: await entradas.anulaciones(id),
         verificaciones: await entradas.verificaciones(id),
+        // Las entregas sin cargo se comparan solo entre ellas (el talonario de
+        // las generales): nunca con lo vendido, que es el de las anticipadas.
         entregados: RetiroEntradas.tramosDeOtros(alumnos, retiros, salvo: ''),
         soloDeLaCaja: _soloDeLaCaja,
       );

@@ -17,7 +17,6 @@ import '../../common/utils/quien_opera.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/repositories/contratos_repository.dart';
-import '../../eventos/repositories/entradas_retiro_repository.dart';
 import '../../eventos/repositories/sorteos_mesas_repository.dart';
 import '../../eventos/services/lugares_al_sorteo.dart';
 import '../../eventos/services/retiro_entradas.dart';
@@ -67,12 +66,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   ConfigEntradas? _config;
   CajaEntradas? _caja;
   List<ContratoAlumno> _alumnos = [];
-  /// Todos los alumnos de la fiesta, **también los de baja temporal**: sus
-  /// números entregados siguen teniendo dueño (revisión del 15-nov). La lista
-  /// que se ve deja afuera las bajas; los números ocupados, no.
-  List<ContratoAlumno> _todos = [];
   Map<String, DeudaAlumno> _deudas = {};
-  Map<String, EntradasRetiro> _retiros = {};
   List<VentaEntradas> _ventas = [];
   List<AnulacionEntradas> _anulaciones = [];
   int _sinSubir = 0;
@@ -114,7 +108,6 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     'entradas_config',
     'entradas_ventas',
     'entradas_anulaciones',
-    'entradas_retiro',
     'contratos_alumnos',
     // El sorteo (o el jefe, al aceptar la lista de PRECIOS) anota qué tenía
     // cada familia: cambia a quién le va el descuento.
@@ -195,9 +188,6 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         if (alumno != null) pagos.putIfAbsent(alumno, () => []).add(p);
       }
       final mora = await repo.sumMoraCobradaHistorialPorContratos(ids);
-      final retiros = await ref
-          .read(entradasRetiroRepositoryProvider)
-          .obtenerPorContratoIds([for (final a in todos) a.id]);
       final deudas = {
         for (final a in alumnos)
           a.id: RetiroEntradas.deudaDe(
@@ -223,9 +213,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _foto = foto;
         _config = config;
         _alumnos = alumnos;
-        _todos = todos;
         _deudas = deudas;
-        _retiros = retiros;
         _ventas = ventas;
         _anulaciones = anulaciones;
         _caja = caja;
@@ -309,12 +297,11 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   String get _alPorciento =>
       alPorcientoQuePaga(_config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares);
 
-  /// Los números que ya tienen dueño: lo entregado sin cargo y lo vendido.
-  Map<String, List<TramoTalonario>> get _ocupados => NumerosDeEntradas.ocupados(
-        entregados: RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: ''),
-        ventas: _ventas,
-        anulaciones: _anulaciones,
-      );
+  /// Los números de las anticipadas que ya tienen dueño: solo lo vendido. Lo
+  /// entregado sin cargo es otro talonario (el de las generales de los
+  /// alumnos) y no frena una venta (20-nov).
+  Map<String, List<TramoTalonario>> get _ocupados =>
+      NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones);
 
   /// El pedido sin los números: de acá sale cuántas entradas son.
   PedidoDeEntradas get _sinNumeros {

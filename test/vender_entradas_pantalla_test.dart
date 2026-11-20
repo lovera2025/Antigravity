@@ -309,14 +309,39 @@ void main() {
       expect(_falta(tester), isNull);
     });
 
-    testWidgets('no pueden repetir uno ya entregado sin cargo', (tester) async {
-      await _montar(tester);
+    // Hasta la 6.9.2 este número no se vendía ("El 1006 ya se le dio a GÓMEZ,
+    // ANA"). Cambió a propósito el 20-nov: lo que se vende sale del talonario
+    // de las anticipadas, y lo entregado sin cargo es otro.
+    testWidgets('pueden repetir uno ya entregado sin cargo: es otro talonario',
+        (tester) async {
+      final m = await _montar(tester);
       await _aAlguienDeAfuera(tester);
       await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
       await _poner(tester, 'vender_del', '1006');
-      expect(_falta(tester), 'El 1006 ya se le dio a GÓMEZ, ANA (1001 al 1007).');
+      expect(_falta(tester), isNull, reason: 'GÓMEZ, ANA tiene del 1001 al 1007 entregados');
+      expect(_apagado(tester, 'vender_efectivo'), isFalse);
+      await _tocar(tester, 'vender_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas.single.numeros, '1006-1007');
+    });
+
+    testWidgets('no pueden repetir uno ya vendido', (tester) async {
+      final m = await _montar(tester);
+      await _aAlguienDeAfuera(tester);
+      await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
+      await _poner(tester, 'vender_del', '3000');
+      await _tocar(tester, 'vender_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas.single.numeros, '3000-3001');
+
+      await _aAlguienDeAfuera(tester);
+      await _poner(tester, 'vender_comprador', 'RUIZ MARTA');
+      await _poner(tester, 'vender_del', '3001');
+      expect(_falta(tester), 'El 3001 ya se le dio a GOMEZ CARLA (3000 al 3001).');
       expect(_apagado(tester, 'vender_efectivo'), isTrue);
-      await _poner(tester, 'vender_del', '1008');
+      await _poner(tester, 'vender_del', '3002');
       expect(_falta(tester), isNull);
     });
 

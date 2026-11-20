@@ -51,7 +51,9 @@ class PedidoDeEntradas {
   /// Los números del talonario. Vacío: no se anotaron (son opcionales).
   final List<TramoTalonario> tramos;
 
-  /// Los números que ya tienen dueño (`NumerosDeEntradas.ocupados`).
+  /// Los números de las anticipadas que ya tienen dueño
+  /// (`NumerosDeEntradas.ocupadosDeLaVenta`): lo entregado sin cargo es otro
+  /// talonario.
   final Map<String, List<TramoTalonario>> ocupados;
 
   const PedidoDeEntradas._({

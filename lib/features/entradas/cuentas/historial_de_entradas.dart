@@ -51,7 +51,7 @@ class VentaDelHistorial {
 
 /// El historial de ventas de entradas de una fiesta (VENTAS, sección 8 del spec
 /// del 13-nov): cada venta con su anulación y su verificación, los totales y
-/// los números del talonario que quedaron repetidos.
+/// los números que quedaron repetidos, cada talonario por su lado.
 ///
 /// **Quien vende ve las de su caja; el jefe, todas las de la fiesta.** Lo
 /// decide quien lo arma, con [soloDeLaCaja].
@@ -62,16 +62,32 @@ class HistorialDeEntradas {
   /// Las cuentas de lo que se muestra (una caja, o toda la fiesta).
   final CierreDeEntradas totales;
 
-  /// Los números anotados dos veces. **Se buscan en toda la fiesta**, aunque
-  /// se mire una sola caja: el choque puede ser con la venta de otro equipo.
-  final List<NumeroRepetido> repetidos;
+  /// Los números de las anticipadas anotados en dos ventas. **Se buscan en
+  /// toda la fiesta**, aunque se mire una sola caja: el choque puede ser con la
+  /// venta de otro equipo.
+  final List<NumeroRepetido> repetidosDeLaVenta;
+
+  /// Los números de las generales anotados en dos entregas sin cargo. Van
+  /// aparte: **una venta y una entrega con el mismo número no se cruzan**, son
+  /// dos talonarios (20-nov). Se avisan acá porque es donde se miran los
+  /// repetidos; si no, dos entregas sin internet no se avisaban nunca.
+  final List<NumeroRepetido> repetidosDeLaEntrega;
 
   const HistorialDeEntradas({
     required this.ventas,
     required this.totales,
-    this.repetidos = const [],
+    this.repetidosDeLaVenta = const [],
+    this.repetidosDeLaEntrega = const [],
   });
 
+  /// Lo que se avisa en VENTAS y en el papel: primero los de las ventas,
+  /// después los de las entregas, cada grupo del número más bajo al más alto.
+  List<NumeroRepetido> get repetidos =>
+      [...repetidosDeLaVenta, ...repetidosDeLaEntrega];
+
+  /// [entregados]: los números de las generales de todas las entregas
+  /// vigentes (`RetiroEntradas.tramosDeOtros` con `salvo: ''`). Solo se
+  /// comparan entre sí, nunca con lo vendido.
   factory HistorialDeEntradas.de({
     required Iterable<CajaEntradas> cajas,
     required Iterable<VentaEntradas> ventas,
@@ -109,11 +125,9 @@ class HistorialDeEntradas {
               [for (final x in lista) x.venta],
               listaAnulaciones,
             ),
-      repetidos: NumerosDeEntradas.repetidos(
-        ventas: todas,
-        anulaciones: listaAnulaciones,
-        entregados: entregados,
-      ),
+      repetidosDeLaVenta:
+          NumerosDeEntradas.repetidosDeLaVenta(todas, listaAnulaciones),
+      repetidosDeLaEntrega: NumerosDeEntradas.repetidosDeLaEntrega(entregados),
     );
   }
 
