@@ -1,43 +1,37 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
+import '../../../models/entrega_entradas.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../common/utils/solo_jefe.dart';
+import '../../entradas/cuentas/lugares_de_la_familia.dart';
+import '../services/entrega_por_partes.dart';
+import '../services/entregar_parte.dart';
+import '../services/lugares_pagos.dart';
 import '../services/permisos_de_entrega.dart';
 import '../services/retiro_entradas.dart';
 import '../services/salon_mesas.dart';
+import 'formulario_entrega_parte.dart';
 
 /// Lo que eligió hacer quien atiende el mostrador.
 sealed class AccionEntrega {
   const AccionEntrega();
 }
 
-class EntregarEntradas extends AccionEntrega {
-  final List<TramoTalonario> tramos;
-  final int menores10;
-  final ParentescoRetiro parentesco;
-  final String nombre;
-  final String motivo;
-  final bool autorizacionFirmada;
-
-  const EntregarEntradas({
-    required this.tramos,
-    required this.menores10,
-    required this.parentesco,
-    required this.nombre,
-    required this.motivo,
-    required this.autorizacionFirmada,
-  });
+/// Entregar **una parte** (las pulseras o las generales), con lo que se eligió
+/// en su formulario. La pantalla lo guarda por `EntregarParte`.
+class EntregarUnaParte extends AccionEntrega {
+  final DatosDeLaParte datos;
+  const EntregarUnaParte(this.datos);
 }
 
+/// Anular [partes] (una o las dos), con [motivo]: solo el jefe.
 class AnularEntrega extends AccionEntrega {
+  final Set<ParteEntrega> partes;
   final String motivo;
-  const AnularEntrega(this.motivo);
+  const AnularEntrega(this.partes, this.motivo);
 }
 
 class IrACobrar extends AccionEntrega {
@@ -64,19 +58,23 @@ class EditarAlumno extends AccionEntrega {
   const EditarAlumno();
 }
 
-/// VENDERLE ESAS ENTRADAS (6.9.0): las del 50 % de esta familia, en VENDER con
-/// la familia ya elegida.
+/// VENDERLE ESAS ENTRADAS (6.9.0): las de sus lugares adicionales que ya están
+/// pagos, en VENDER con la familia ya elegida.
 class VenderAlCincuenta extends AccionEntrega {
   const VenderAlCincuenta();
 }
 
 /// Lo de la venta de entradas que la entrega muestra de una familia (6.9.0,
-/// sección 9.3 del spec del 13-nov): cuántas del 50 % ya compró y si quien
-/// atiende puede vendérselas. Sin esto (la fiesta sin precio, o en la web) la
-/// entrega se ve como siempre.
+/// sección 9.3 del spec del 13-nov): lo que ya compró de sus lugares
+/// adicionales, lo que todavía puede comprar y si quien atiende puede
+/// vendérselo. Sin esto (la fiesta sin precio, o en la web) la entrega se ve
+/// como siempre.
+///
+/// **Se le vende solo lo que ya está pago entero, cosa por cosa** (regla del
+/// usuario, 20-nov-2026): la cuenta es [LugaresDeLaFamilia], la misma de
+/// VENDER, con los pagos que la pantalla ya leyó (`APagarDeLaFamilia`).
 class VentaAlCincuenta {
-  /// Las de sus lugares adicionales que ya compró, en ventas que cuentan.
-  final int compradas;
+  final LugaresDeLaFamilia lugares;
 
   /// Si quien atiende tiene "Vende entradas" (o el modo jefe) en este equipo.
   final bool puedeVender;
@@ -85,29 +83,37 @@ class VentaAlCincuenta {
   final double descuentoPct;
 
   const VentaAlCincuenta({
-    required this.compradas,
+    required this.lugares,
     required this.puedeVender,
     this.descuentoPct = 50,
   });
 }
 
-/// El diálogo del mostrador para un egresado: lo que se le entrega, a quién y
-/// con qué números; por qué no se le puede entregar todavía; o lo que ya se
-/// llevó, con la opción de anularlo.
+/// El diálogo del mostrador para un egresado: lo que se le entrega sin cargo,
+/// **en dos partes** (20-nov-2026: las pulseras VIP con cena y las entradas
+/// generales llegan en tandas distintas), cada una con su ENTREGAR o su ✓; por
+/// qué no se le puede entregar todavía; lo que ya se llevó, con la opción de
+/// anularlo (solo el jefe); y lo de sus lugares adicionales.
+///
+/// **Las dos partes se entregan solo si la familia pagó todo su contrato**
+/// (cuotas, extras y mora, de los pagos: [bloqueo]). Si debe, no hay ENTREGAR:
+/// pasa por caja.
 ///
 /// No guarda nada: devuelve la [AccionEntrega] y la pantalla la aplica.
 ///
 /// [permisos] dice qué botones hay (cobrar, pasar a caja, editar, anular).
-/// Cuando [cuentaCambio] avisa con el diálogo mostrando un bloqueo (no el
+/// Cuando [cuentaCambio] avisa con el diálogo mostrando un bloqueo (no un
 /// formulario, que puede tener algo escrito), se cierra con [VolverAAbrir].
 Future<AccionEntrega?> mostrarEntregaEntradasDialog({
   required BuildContext context,
   required ContratoAlumno alumno,
   required EntradasDeAlumno entradas,
+  required EstadoDeLaEntrega estado,
   required DeudaAlumno deuda,
   required BloqueoRetiro bloqueo,
   required PermisosDeEntrega permisos,
   EntradasRetiro? retiro,
+  List<EntregaEntradas> renglones = const [],
   Map<String, List<TramoTalonario>> deOtros = const {},
   Listenable? cuentaCambio,
   VentaAlCincuenta? venta,
@@ -118,10 +124,12 @@ Future<AccionEntrega?> mostrarEntregaEntradasDialog({
       builder: (_) => _EntregaDialog(
         alumno: alumno,
         entradas: entradas,
+        estado: estado,
         deuda: deuda,
         bloqueo: bloqueo,
         permisos: permisos,
         retiro: retiro,
+        renglones: renglones,
         deOtros: deOtros,
         cuentaCambio: cuentaCambio,
         venta: venta,
@@ -131,10 +139,12 @@ Future<AccionEntrega?> mostrarEntregaEntradasDialog({
 class _EntregaDialog extends StatefulWidget {
   final ContratoAlumno alumno;
   final EntradasDeAlumno entradas;
+  final EstadoDeLaEntrega estado;
   final DeudaAlumno deuda;
   final BloqueoRetiro bloqueo;
   final PermisosDeEntrega permisos;
   final EntradasRetiro? retiro;
+  final List<EntregaEntradas> renglones;
   final Map<String, List<TramoTalonario>> deOtros;
   final Listenable? cuentaCambio;
   final VentaAlCincuenta? venta;
@@ -142,10 +152,12 @@ class _EntregaDialog extends StatefulWidget {
   const _EntregaDialog({
     required this.alumno,
     required this.entradas,
+    required this.estado,
     required this.deuda,
     required this.bloqueo,
     required this.permisos,
     required this.retiro,
+    required this.renglones,
     required this.deOtros,
     required this.cuentaCambio,
     required this.venta,
@@ -156,27 +168,22 @@ class _EntregaDialog extends StatefulWidget {
 }
 
 class _EntregaDialogState extends State<_EntregaDialog> {
-  final _desde1 = TextEditingController();
-  final _hasta1 = TextEditingController();
-  final _desde2 = TextEditingController();
-  final _nombre = TextEditingController();
-  final _motivo = TextEditingController();
   final _motivoAnular = TextEditingController();
-  bool _dosTramos = false;
-  int _menores = 0;
-  ParentescoRetiro? _parentesco;
-  bool _autorizacion = false;
-  bool _escribio = false;
+
+  /// La parte cuyo formulario está abierto (una a la vez), o null.
+  ParteEntrega? _abierta;
   bool _anulando = false;
-  String? _errorTramos;
-  Map<String, String> _errores = const {};
+  Set<ParteEntrega> _aAnular = const {};
   String? _errorAnular;
 
+  EstadoDeLaEntrega get _estado => widget.estado;
+
+  /// Le falta alguna parte y no se le puede entregar.
+  bool get _bloqueado =>
+      !_estado.todoEntregado && widget.bloqueo != BloqueoRetiro.ninguno;
+
   /// Lo que se ve es un bloqueo: no hay nada escrito que perder si se cierra solo.
-  bool get _muestraBloqueo {
-    final r = widget.retiro;
-    return !(r != null && r.entregado) && widget.bloqueo != BloqueoRetiro.ninguno;
-  }
+  bool get _muestraBloqueo => _bloqueado && _abierta == null;
 
   void _alCambiarLaCuenta() {
     if (mounted && _muestraBloqueo) Navigator.pop(context, const VolverAAbrir());
@@ -186,87 +193,18 @@ class _EntregaDialogState extends State<_EntregaDialog> {
   void initState() {
     super.initState();
     widget.cuentaCambio?.addListener(_alCambiarLaCuenta);
-    // Si tuvo una entrega anulada, se ofrece lo mismo para no volver a
-    // tipearlo. El tilde de la planilla no: esa persona tiene que volver a
-    // escribir su nombre.
-    final r = widget.retiro;
-    if (r != null && !r.entregado) {
-      _menores = r.menores10;
-      _parentesco = r.parentesco;
-      _nombre.text = r.retiroNombre ?? '';
-      _motivo.text = r.otraPersonaMotivo ?? '';
-      _autorizacion = r.autorizacionFirmada;
-      if (r.tramos.isNotEmpty) {
-        _desde1.text = '${r.tramos.first.desde}';
-        if (r.tramos.length > 1) {
-          _dosTramos = true;
-          _hasta1.text = '${r.tramos.first.hasta}';
-          _desde2.text = '${r.tramos[1].desde}';
-        }
-      }
-    }
   }
 
   @override
   void dispose() {
     widget.cuentaCambio?.removeListener(_alCambiarLaCuenta);
-    for (final c in [_desde1, _hasta1, _desde2, _nombre, _motivo, _motivoAnular]) {
-      c.dispose();
-    }
+    _motivoAnular.dispose();
     super.dispose();
   }
 
-  int get _generales => widget.entradas.generales;
-
-  /// Los tramos que salen de lo escrito, o `null` si falta un número.
-  List<TramoTalonario>? _tramos() {
-    if (_generales == 0) return const [];
-    final d1 = int.tryParse(_desde1.text.trim());
-    if (d1 == null) return null;
-    if (!_dosTramos) return [TramoTalonario(d1, d1 + _generales - 1)];
-    final h1 = int.tryParse(_hasta1.text.trim());
-    final d2 = int.tryParse(_desde2.text.trim());
-    if (h1 == null || d2 == null || h1 < d1) return null;
-    final resto = _generales - (h1 - d1 + 1);
-    if (resto <= 0) return [TramoTalonario(d1, h1)];
-    return [TramoTalonario(d1, h1), TramoTalonario(d2, d2 + resto - 1)];
-  }
-
-  void _confirmar() {
-    final tramos = _tramos();
-    final errorTramos = tramos == null
-        ? 'Escribí los números del talonario.'
-        : RetiroEntradas.errorTramos(
-            tramos: tramos,
-            generales: _generales,
-            deOtros: widget.deOtros,
-          );
-    final errores = RetiroEntradas.erroresQuienRetira(
-      parentesco: _parentesco,
-      nombre: _nombre.text,
-      motivo: _motivo.text,
-      autorizacionFirmada: _autorizacion,
-      escribioEnPlanilla: _escribio,
-    );
-    setState(() {
-      _errorTramos = errorTramos;
-      _errores = errores;
-    });
-    if (errorTramos != null || errores.isNotEmpty) return;
-    Navigator.pop(
-      context,
-      EntregarEntradas(
-        tramos: tramos!,
-        menores10: _menores,
-        parentesco: _parentesco!,
-        nombre: _nombre.text,
-        motivo: _motivo.text,
-        autorizacionFirmada: _autorizacion,
-      ),
-    );
-  }
-
   // ── Piezas ───────────────────────────────────────────────────────────────
+
+  TextStyle get _gris => TextStyle(fontSize: 12.5, color: Colors.grey.shade700);
 
   Widget _cartel(String titulo, String detalle, {required Color color}) =>
       Container(
@@ -282,11 +220,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           children: [
             Text(
               titulo,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: color),
             ),
             const SizedBox(height: 4),
             Text(detalle, style: const TextStyle(fontSize: 13, height: 1.35)),
@@ -294,7 +228,8 @@ class _EntregaDialogState extends State<_EntregaDialog> {
         ),
       );
 
-  Widget _marca(String texto, Color color, {IconData? icono}) => Container(
+  Widget _marca(String texto, Color color, {IconData? icono, Key? key}) => Container(
+        key: key,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
@@ -309,50 +244,9 @@ class _EntregaDialogState extends State<_EntregaDialog> {
             ],
             Text(
               texto,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color),
             ),
           ],
-        ),
-      );
-
-  Widget _error(String? texto) => texto == null
-      ? const SizedBox.shrink()
-      : Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            texto,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-        );
-
-  Widget _caja(String rotulo, String valor, String detalle) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.grey.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(rotulo, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-              Text(
-                valor,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-              ),
-              Text(
-                detalle,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-              ),
-            ],
-          ),
         ),
       );
 
@@ -363,63 +257,195 @@ class _EntregaDialogState extends State<_EntregaDialog> {
         border: const OutlineInputBorder(),
       );
 
-  Widget _numero(TextEditingController c, String etiqueta) => SizedBox(
-        width: 110,
-        child: TextField(
-          controller: c,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: _campo(etiqueta),
-          onChanged: (_) => setState(() => _errorTramos = null),
-        ),
+  // ── Las dos partes ─────────────────────────────────────────────────────
+
+  static String _titulo(ParteEntrega p) =>
+      p == ParteEntrega.pulseras ? 'Pulseras VIP con cena' : 'Entradas generales';
+
+  /// Qué se lleva en esta parte, en una línea.
+  String _detalle(ParteEntrega p, EstadoDeUnaParte e) {
+    if (p == ParteEntrega.generales) {
+      if (e.entregada) {
+        return e.tramos.isEmpty
+            ? 'Sin número'
+            : 'Del ${TramoTalonario.legible(e.tramos)}';
+      }
+      if (e.leToca <= 0) return 'No lleva: las 8 de la mesa son con cena.';
+      return 'Completan las 8 de la mesa del contrato.';
+    }
+    // Separados por un punto, como en VENDER: los nombres llevan coma
+    // ("APELLIDO, NOMBRE"), y con comas no se podía contar cuántas pulseras eran
+    // (revisión del 20-nov-2026).
+    return EntregaPorPartes.quienesVanConCena(
+      widget.alumno,
+      e.entregada ? e.cantidad : e.leToca,
+    );
+  }
+
+  Widget _parte(ParteEntrega p) {
+    final e = _estado.parte(p);
+    // La otra parte se llevó otra cuenta: entregar esta se pasaría de lo sin
+    // cargo. Lo revisa el jefe (la misma regla que `EntregarParte`).
+    final porLaOtra = EntregaPorPartes.frenoPorLaOtraParte(_estado, p);
+    final verde = Colors.green.shade700;
+    final cuantas = e.entregada ? e.cantidad : e.leToca;
+    final Widget derecha;
+    if (e.entregada) {
+      derecha = _marca(
+        '✓ Entregadas',
+        verde,
+        key: Key('entrega_hecha_${p.clave}'),
       );
-
-  // ── Contenidos ───────────────────────────────────────────────────────────
-
-  List<Widget> _yaRetiro(EntradasRetiro r) {
-    final hoy = widget.entradas;
-    final cambio = RetiroEntradas.cambioLaCuenta(r, hoy);
-    return [
-      _marca(
-        'Retiró el ${r.entregadoAt == null ? '-' : ArTime.formatFechaHora(r.entregadoAt!)}',
-        Colors.green.shade700,
-        icono: Icons.check_circle,
-      ),
-      const SizedBox(height: 10),
-      Text(
-        '${r.parentesco?.etiqueta ?? 'Quien retiró'}: ${r.retiroNombre ?? '-'}\n'
-        '${r.vip} VIP + '
-        '${r.generales == 0 ? 'sin generales' : 'generales del ${TramoTalonario.legible(r.tramos)}'}\n'
-        'Menores de 10: ${r.menores10}',
-        style: const TextStyle(fontSize: 14, height: 1.6),
-      ),
-      if (r.parentesco == ParentescoRetiro.otraPersona)
-        Text(
-          'Con autorización firmada. Motivo: ${r.otraPersonaMotivo ?? '-'}',
-          style: const TextStyle(fontSize: 13),
+    } else if (e.leToca <= 0) {
+      derecha = Text('No lleva', style: _gris);
+    } else if (_bloqueado || porLaOtra != null) {
+      derecha = _marca('Pendiente', Colors.blueGrey.shade600, icono: Icons.schedule);
+    } else if (_abierta == p) {
+      derecha = const SizedBox.shrink();
+    } else {
+      derecha = FilledButton(
+        key: Key('entrega_entregar_${p.clave}'),
+        // Una a la vez: si estaba abierta la otra, se cierra (no se guardó nada).
+        onPressed: () => setState(() => _abierta = p),
+        child: const Text('ENTREGAR'),
+      );
+    }
+    final anulada = !e.entregada && e.anulada;
+    return Container(
+      key: Key('entrega_parte_${p.clave}'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: e.entregada ? verde.withValues(alpha: 0.06) : null,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: e.entregada ? verde.withValues(alpha: 0.5) : Colors.grey.withValues(alpha: 0.35),
         ),
-      Text(
-        'Lo registró ${r.entregadoPor ?? '-'}. Escribió su nombre en la planilla.',
-        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
       ),
-      // Con la venta de entradas andando: las del 50 % se le pueden vender igual.
-      if (widget.venta != null) ..._alCincuenta(),
-      if (cambio) ...[
-        const SizedBox(height: 10),
-        _cartel(
-          'Cambió la cuenta después de entregar',
-          'Hoy le corresponden ${hoy.vip} VIP y ${hoy.generales} generales; se '
-              'llevó ${r.vip} VIP y ${r.generales} generales. Para darle lo que '
-              'falta, ${widget.permisos.anular ? 'anulá' : 'el jefe anula'} esta '
-              'entrega (motivo: qué cambió) y se vuelve a entregar con todos los '
-              'números.',
-          color: Colors.orange.shade800,
-        ),
-      ],
-      const SizedBox(height: 12),
-      // Anular es solo del jefe. Sin modo jefe se ve apagado, con el motivo: así
-      // quien entrega sabe que existe y a quién pedírselo.
-      if (!widget.permisos.anular)
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_titulo(p)} · $cuantas',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      _detalle(p, e),
+                      key: Key('entrega_detalle_${p.clave}'),
+                      style: _gris,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              derecha,
+            ],
+          ),
+          // Lo decía el formulario al abrirse, repitiendo el renglón: va acá,
+          // como en VENDER.
+          if (p == ParteEntrega.pulseras && !e.entregada && e.leToca - 1 > 2)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Tiene ${e.leToca - 1} acompañantes con cena (el máximo es 2): '
+                'confirmalo con el jefe.',
+                key: const Key('entrega_mas_de_dos'),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+            ),
+          if (e.entregada) ...[
+            const SizedBox(height: 4),
+            Text(
+              EntregaPorPartes.quienYCuando(e, fecha: ArTime.formatFechaHora),
+              key: Key('entrega_quien_${p.clave}'),
+              style: const TextStyle(fontSize: 13),
+            ),
+            if (p == ParteEntrega.pulseras && e.menores10 > 0)
+              Text('Menores de 10: ${e.menores10}', style: _gris),
+            if (e.parentesco == ParentescoRetiro.otraPersona)
+              Text(
+                'Con autorización firmada. Motivo: ${e.otraPersonaMotivo ?? '-'}',
+                style: _gris,
+              ),
+            if (e.cambioLaCuenta)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _cartel(
+                  'Cambió la cuenta después de entregar',
+                  'Hoy le corresponden ${e.leToca} y se llevó ${e.cantidad}. Para '
+                      'darle lo que falta, ${widget.permisos.anular ? 'anulá' : 'el jefe anula'} '
+                      'esta parte (motivo: qué cambió) y se vuelve a entregar.',
+                  color: Colors.orange.shade800,
+                ),
+              ),
+          ],
+          if (porLaOtra != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _cartel(
+                'Primero lo revisa el jefe',
+                porLaOtra,
+                color: Colors.orange.shade800,
+              ),
+            ),
+          if (anulada)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_textoAnulada(e), style: _gris),
+            ),
+          if (_abierta == p && !e.entregada && !_bloqueado && porLaOtra == null) ...[
+            const Divider(height: 20),
+            FormularioEntregaParte(
+              key: Key('formulario_${p.clave}'),
+              alumno: widget.alumno,
+              parte: p,
+              cantidad: e.leToca,
+              deOtros: p == ParteEntrega.generales ? widget.deOtros : const {},
+              antes: LoDeAntes.de(
+                parte: p,
+                estado: e,
+                retiro: widget.retiro,
+                renglones: widget.renglones,
+              ),
+              alConfirmar: (datos) => Navigator.pop(context, EntregarUnaParte(datos)),
+              alCancelar: () => setState(() => _abierta = null),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _textoAnulada(EstadoDeUnaParte e) =>
+      'Tuvo una entrega anulada'
+      '${e.anuladaAt == null ? '' : ' el ${ArTime.formatFechaHora(e.anuladaAt!)}'}'
+      '${(e.anuladaPor ?? '').isEmpty ? '' : ' por ${e.anuladaPor}'}'
+      '${(e.motivoAnulacion ?? '').isEmpty ? '' : ': ${e.motivoAnulacion}'}.';
+
+  // ── Anular (solo el jefe) ──────────────────────────────────────────────
+
+  List<Widget> _anular() {
+    final entregadas = [
+      for (final p in ParteEntrega.values)
+        if (_estado.parte(p).entregada) p,
+    ];
+    if (entregadas.isEmpty) return const [];
+    // Anular es solo del jefe. Sin modo jefe se ve apagado, con el motivo: así
+    // quien entrega sabe que existe y a quién pedírselo.
+    if (!widget.permisos.anular) {
+      return [
+        const SizedBox(height: 12),
         Row(
           children: [
             const OutlinedButton(
@@ -428,51 +454,96 @@ class _EntregaDialogState extends State<_EntregaDialog> {
               child: Text('ANULAR ENTREGA'),
             ),
             const SizedBox(width: 10),
-            Text(
-              kSoloEnModoJefe,
-              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-            ),
+            Expanded(child: Text(kSoloEnModoJefe, style: _gris)),
           ],
-        )
-      else if (!_anulando)
+        ),
+      ];
+    }
+    if (!_anulando) {
+      return [
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
-            onPressed: () => setState(() => _anulando = true),
+            key: const Key('entrega_anular'),
+            onPressed: () => setState(() {
+              _anulando = true;
+              _aAnular = entregadas.toSet();
+              _abierta = null;
+            }),
             icon: const Icon(Icons.undo),
             label: const Text('ANULAR ENTREGA'),
           ),
-        )
-      else ...[
-        TextField(
-          controller: _motivoAnular,
-          autofocus: true,
-          decoration: _campo('Por qué se anula', error: _errorAnular),
-          onChanged: (_) => setState(() => _errorAnular = null),
         ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton(
+      ];
+    }
+    return [
+      const SizedBox(height: 12),
+      Text('Qué se anula', style: _gris),
+      const SizedBox(height: 4),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final p in entregadas)
+            FilterChip(
+              key: Key('entrega_anular_${p.clave}'),
+              label: Text(_titulo(p)),
+              selected: _aAnular.contains(p),
+              onSelected: (si) => setState(() {
+                _aAnular = {..._aAnular}..remove(p);
+                if (si) _aAnular = {..._aAnular, p};
+                _errorAnular = null;
+              }),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _motivoAnular,
+        autofocus: true,
+        decoration: _campo('Por qué se anula', error: _errorAnular),
+        onChanged: (_) => setState(() => _errorAnular = null),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          TextButton(
+            onPressed: () => setState(() => _anulando = false),
+            child: const Text('NO ANULAR'),
+          ),
+          ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
             ),
             onPressed: () {
+              if (_aAnular.isEmpty) {
+                setState(() => _errorAnular = 'Elegí qué se anula.');
+                return;
+              }
               if (_motivoAnular.text.trim().isEmpty) {
                 setState(() => _errorAnular = 'Escribí el motivo.');
                 return;
               }
-              Navigator.pop(context, AnularEntrega(_motivoAnular.text));
+              Navigator.pop(context, AnularEntrega(_aAnular, _motivoAnular.text));
             },
-            child: const Text('CONFIRMAR ANULACIÓN'),
+            child: Text(
+              _aAnular.length == ParteEntrega.values.length
+                  ? 'CONFIRMAR ANULACIÓN DE TODO'
+                  : 'CONFIRMAR ANULACIÓN',
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ];
   }
 
-  List<Widget> _bloqueado() {
+  // ── Por qué no se le puede entregar ────────────────────────────────────
+
+  List<Widget> _bloqueo() {
     final a = widget.alumno;
     final d = widget.deuda;
     final e = widget.entradas;
@@ -486,8 +557,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
       case BloqueoRetiro.debe:
         cobrar = p.cobrarAca;
         final partes = [
-          if (d.saldoPagos > RetiroEntradas.margen ||
-              d.saldoFicha > RetiroEntradas.margen)
+          if (d.saldoPagos > RetiroEntradas.margen || d.saldoFicha > RetiroEntradas.margen)
             'cuotas y extras ${(d.saldoPagos > d.saldoFicha ? d.saldoPagos : d.saldoFicha).toCurrency()}',
           if (d.mora > RetiroEntradas.margen) 'mora ${d.mora.toCurrency()}',
         ];
@@ -495,7 +565,8 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           'Debe ${d.total.toCurrency()}',
           p.cobrarAca
               ? '${partes.join(' · ')}.\nHasta que pague todo no se entregan las '
-                  'entradas. Si trae un comprobante, primero cargá el pago en caja.'
+                  'pulseras ni las generales. Si trae un comprobante, primero '
+                  'cargá el pago en caja.'
               : '${partes.join(' · ')}.\nQue pase por caja a saldar todo; cuando '
                   'pague, la entrega se destraba sola.',
           color: Colors.red.shade700,
@@ -534,23 +605,11 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           color: Colors.orange.shade800,
         );
       case BloqueoRetiro.ninguno:
-        cartel = const SizedBox.shrink();
+        return const [];
     }
-    final anulada = widget.retiro;
     return [
       cartel,
-      // La deuda frena solo la entrega sin cargo: las del 50 % se le venden igual
-      // (con la venta de entradas andando).
-      if (widget.bloqueo == BloqueoRetiro.debe && widget.venta != null)
-        ..._alCincuenta(),
-      if (anulada != null && !anulada.entregado) ...[
-        const SizedBox(height: 8),
-        Text(
-          _textoAnulada(anulada),
-          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-        ),
-      ],
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -594,6 +653,8 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     ];
   }
 
+  // ── Lo de sus lugares adicionales (A PAGAR) ────────────────────────────
+
   /// "su mesa adicional", "sus 4 mesas adicionales y sus 2 sillas extra".
   static String _deDonde(ContratoAlumno a) {
     final mesas = SalonMesas.mesasExtra(a);
@@ -606,12 +667,33 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     ].join(' y ');
   }
 
+  /// Si se muestra lo de sus lugares adicionales: con lo sin cargo entregado,
+  /// sin nada que lo frene, o si solo debe (lo que ya pagó entero se le vende
+  /// igual, con la venta andando). Con las mesas mal cargadas no: la cuenta
+  /// puede estar mal. **La misma regla que VENDER**
+  /// (`APagarDeLaFamilia.seVendeCon`; revisión del 20-nov-2026).
+  bool get _muestraLosLugares =>
+      APagarDeLaFamilia.seVendeCon(
+        // Con `debe`, [widget.bloqueo] tapa los otros frenos (sin mesa, las
+        // mesas que no coinciden, no entran): se miran aparte, con el de la
+        // venta (revisión del 20-nov-2026).
+        widget.bloqueo == BloqueoRetiro.debe
+            ? RetiroEntradas.bloqueoDeLaVenta(widget.alumno, widget.deuda)
+            : widget.bloqueo,
+        todoEntregado: _estado.todoEntregado,
+      ) &&
+      (_estado.todoEntregado ||
+          widget.bloqueo != BloqueoRetiro.debe ||
+          widget.venta != null);
+
   /// Las entradas de la mesa adicional y las sillas extra: no van sin cargo, se
-  /// compran aparte al 50 %. Con la venta de entradas andando (6.9.0), debajo
-  /// cuántas ya compró y VENDERLE ESAS ENTRADAS, o quién se las vende.
+  /// compran aparte. Con la venta de entradas andando (6.9.0), debajo cuántas
+  /// ya compró, qué espera el pago y VENDERLE ESAS ENTRADAS, o quién se las
+  /// vende.
   ///
   /// **El descuento es solo para lo que ya tenía al sorteo** (17-nov-2026): lo
-  /// que agregó después paga la entrada entera, y se dice acá mismo.
+  /// que agregó después paga el precio del día, sin descuento, y se dice acá
+  /// mismo. **Se le vende solo lo que ya está pago entero** (20-nov-2026).
   List<Widget> _alCincuenta() {
     final a = widget.alumno;
     final e = widget.entradas;
@@ -619,8 +701,6 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     final venta = widget.venta;
     final con = e.conDescuento;
     final sin = e.sinDescuento;
-    final quedan = venta == null ? 0 : max(0, con - venta.compradas);
-    final gris = TextStyle(fontSize: 12.5, color: Colors.grey.shade700);
     final al = alPorcientoQuePaga(venta?.descuentoPct ?? 50);
     final todas = e.aComprar;
     final String texto;
@@ -631,15 +711,21 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     } else if (con == 0) {
       texto = '${todas == 1 ? 'La entrada' : 'Las $todas entradas'} '
           'de ${_deDonde(a)} no ${todas == 1 ? 'va' : 'van'} sin cargo. Lo agregó '
-          'después del sorteo: ${todas == 1 ? 'paga' : 'pagan'} la entrada entera.';
+          'después del sorteo: ${todas == 1 ? 'paga' : 'pagan'} el precio del día, '
+          'sin descuento.';
     } else {
       texto = 'Las $todas entradas de ${_deDonde(a)} no van sin cargo: $con '
           '${con == 1 ? 'se compra' : 'se compran'} aparte, $al, y $sin, de lo que '
-          'agregó después del sorteo, ${sin == 1 ? 'paga' : 'pagan'} la entrada '
-          'entera.';
+          'agregó después del sorteo, ${sin == 1 ? 'paga' : 'pagan'} el precio '
+          'del día, sin descuento.';
     }
+    final l = venta?.lugares;
+    final compradas = l == null ? 0 : l.compradas + l.sueltasCompradas;
+    final quedan = l?.quedanTodas ?? 0;
+    final esperan = l?.esperanElPago ?? 0;
+    final aConfirmar = l?.textoAConfirmar;
     return [
-      const SizedBox(height: 8),
+      const SizedBox(height: 12),
       Text(
         key: const Key('entrega_al_cincuenta'),
         texto,
@@ -649,7 +735,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           fontWeight: FontWeight.w600,
         ),
       ),
-      if (venta != null && con > 0) ...[
+      if (venta != null) ...[
         const SizedBox(height: 4),
         Wrap(
           spacing: 10,
@@ -658,11 +744,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           children: [
             Text(
               key: const Key('entrega_compro'),
-              venta.compradas == 0
-                  ? 'Todavía no compró ninguna.'
-                  : quedan == 0
-                      ? 'Ya compró ${venta.compradas == 1 ? 'la suya' : 'las ${venta.compradas}'}.'
-                      : 'Ya compró ${venta.compradas}: le ${quedan == 1 ? 'queda 1' : 'quedan $quedan'}.',
+              _loQueCompro(compradas: compradas, quedan: quedan, esperan: esperan),
               style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
             if (venta.puedeVender && quedan > 0)
@@ -673,245 +755,49 @@ class _EntregaDialogState extends State<_EntregaDialog> {
               ),
           ],
         ),
+        // Lo que espera el pago: "a confirmar", sin plata.
+        if (aConfirmar != null)
+          Text(
+            aConfirmar,
+            key: const Key('entrega_a_confirmar'),
+            style: TextStyle(fontSize: 12.5, color: Colors.orange.shade800),
+          ),
         if (!venta.puedeVender && quedan > 0)
           Text(
             'Se las vende quien tiene la caja de entradas.',
             key: const Key('entrega_se_las_vende'),
-            style: gris,
+            style: _gris,
           ),
       ],
     ];
   }
 
-  String _textoAnulada(EntradasRetiro r) =>
-      'Tuvo una entrega anulada'
-      '${r.anuladoAt == null ? '' : ' el ${ArTime.formatFechaHora(r.anuladoAt!)}'}'
-      '${r.anuladoPor == null ? '' : ' por ${r.anuladoPor}'}'
-      '${(r.anuladoMotivo ?? '').isEmpty ? '' : ': ${r.anuladoMotivo}'}.';
-
-  List<Widget> _formulario() {
-    final a = widget.alumno;
-    final e = widget.entradas;
-    final tramos = _tramos();
-    final acompanantes = [
-      for (final n in a.nombresAcompanantes)
-        if (n.trim().isNotEmpty) n.trim(),
-    ];
-    final cantidadAcomp = e.vip - 1;
-    final anulada = widget.retiro;
-    return [
-      _marca(
-        'Pagó todo: cuotas, extras y mora',
-        Colors.green.shade700,
-        icono: Icons.check_circle,
-      ),
-      if (anulada != null && !anulada.entregado) ...[
-        const SizedBox(height: 6),
-        Text(
-          '${_textoAnulada(anulada)} Se cargó lo de esa vez: revisalo.',
-          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-        ),
-      ],
-      const SizedBox(height: 12),
-      Row(
-        children: [
-          _caja(
-            'VIP con cena',
-            '${e.vip}',
-            cantidadAcomp == 0
-                ? 'solo el egresado'
-                : [
-                    'el egresado',
-                    ...acompanantes,
-                    if (acompanantes.length < cantidadAcomp)
-                      '${cantidadAcomp - acompanantes.length} sin nombre',
-                  ].join(', '),
-          ),
-          const SizedBox(width: 8),
-          _caja(
-            'Generales',
-            '${e.generales}',
-            'del talonario, con número',
-          ),
-        ],
-      ),
-      // Solo la mesa del contrato trae sus entradas sin cargo: las de la mesa
-      // adicional y las sillas extra no se entregan acá.
-      ..._alCincuenta(),
-      if (widget.permisos.editar)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: () => Navigator.pop(context, const EditarAlumno()),
-            child: const Text('Cambiar acompañantes'),
-          ),
-        ),
-      if (cantidadAcomp > 2)
-        Text(
-          'Tiene $cantidadAcomp acompañantes con cena (el máximo es 2): '
-          'confirmalo con el jefe.',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: Colors.orange.shade800,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      if (_generales > 0) ...[
-        const SizedBox(height: 6),
-        Text(
-          'Números del talonario',
-          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _numero(_desde1, 'Del'),
-            if (_dosTramos) _numero(_hasta1, 'Al'),
-            if (!_dosTramos)
-              Text(
-                tramos == null || tramos.isEmpty
-                    ? 'al …'
-                    : 'al ${tramos.first.hasta}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-          ],
-        ),
-        if (_dosTramos) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _numero(_desde2, 'Del'),
-              Text(
-                tramos != null && tramos.length > 1
-                    ? 'al ${tramos[1].hasta}'
-                    : 'al …',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ],
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: () => setState(() {
-              _dosTramos = !_dosTramos;
-              _errorTramos = null;
-            }),
-            child: Text(
-              _dosTramos
-                  ? 'Un solo tramo'
-                  : 'El talonario salta: dos tramos',
-            ),
-          ),
-        ),
-        _error(_errorTramos),
-      ],
-      const SizedBox(height: 6),
-      Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Menores de 10 (no llevan entrada)',
-              style: TextStyle(fontSize: 13.5),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Uno menos',
-            onPressed: _menores == 0 ? null : () => setState(() => _menores--),
-            icon: const Icon(Icons.remove_circle_outline),
-          ),
-          SizedBox(
-            width: 24,
-            child: Text(
-              '$_menores',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Uno más',
-            onPressed: () => setState(() => _menores++),
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-        ],
-      ),
-      const SizedBox(height: 6),
-      Text(
-        'Quién retira',
-        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-      ),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final p in ParentescoRetiro.values)
-            ChoiceChip(
-              label: Text(p.etiqueta),
-              selected: _parentesco == p,
-              onSelected: (_) => setState(() {
-                _parentesco = p;
-                _errores = const {};
-              }),
-            ),
-        ],
-      ),
-      _error(_errores['parentesco']),
-      const SizedBox(height: 10),
-      TextField(
-        controller: _nombre,
-        textCapitalization: TextCapitalization.words,
-        decoration: _campo(
-          'Nombre y apellido de quien retira',
-          error: _errores['nombre'],
-        ),
-      ),
-      if (_parentesco == ParentescoRetiro.otraPersona) ...[
-        const SizedBox(height: 10),
-        TextField(
-          controller: _motivo,
-          decoration: _campo(
-            'Motivo: por qué no viene un familiar directo',
-            error: _errores['motivo'],
-          ),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: _autorizacion,
-          onChanged: (v) => setState(() => _autorizacion = v ?? false),
-          title: const Text('Trajo la autorización firmada por la familia'),
-        ),
-        _error(_errores['autorizacion']),
-      ],
-      const SizedBox(height: 6),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        value: _escribio,
-        onChanged: (v) => setState(() => _escribio = v ?? false),
-        title: const Text(
-          'Escribió su nombre y apellido en la planilla de papel',
-        ),
-        subtitle: const Text('No se firma: se escribe el nombre.'),
-      ),
-      _error(_errores['planilla']),
-    ];
+  /// "Ya compró 3: le quedan 5." Si lo que le falta espera el pago, lo dice:
+  /// "Ya compró las 3." sonaba a que terminó, y le faltaban 5 de una mesa sin
+  /// pagar (revisión del 20-nov-2026).
+  static String _loQueCompro({
+    required int compradas,
+    required int quedan,
+    required int esperan,
+  }) {
+    if (compradas == 0) return 'Todavía no compró ninguna.';
+    if (quedan > 0) {
+      return 'Ya compró $compradas: le ${quedan == 1 ? 'queda 1' : 'quedan $quedan'}.';
+    }
+    if (esperan > 0) {
+      return 'Ya compró $compradas; ${esperan == 1 ? 'la otra espera' : 'las otras $esperan esperan'} '
+          'que se pague en caja.';
+    }
+    return 'Ya compró ${compradas == 1 ? 'la suya' : 'las $compradas'}.';
   }
 
   @override
   Widget build(BuildContext context) {
     final a = widget.alumno;
-    final r = widget.retiro;
-    final yaRetiro = r != null && r.entregado;
-    final bloqueado = !yaRetiro && widget.bloqueo != BloqueoRetiro.ninguno;
     final division = a.cursoDivision?.trim() ?? '';
     final mesa = SalonMesas.textoMesasPuerta(a) ?? 'sin mesa';
+    final verde = Colors.green.shade700;
+    final pulserasPendientes = _estado.pulseras.falta && !_bloqueado;
 
     return AlertDialog(
       title: Row(
@@ -944,27 +830,49 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: yaRetiro
-                ? _yaRetiro(r)
-                : bloqueado
-                    ? _bloqueado()
-                    : _formulario(),
+            children: [
+              if (_estado.todoEntregado)
+                _marca(
+                  '✓ Todo entregado',
+                  verde,
+                  icono: Icons.check_circle,
+                  key: const Key('entrega_todo_entregado'),
+                )
+              else if (_bloqueado)
+                ..._bloqueo()
+              else
+                _marca(
+                  'Pagó todo: cuotas, extras y mora',
+                  verde,
+                  icono: Icons.check_circle,
+                ),
+              const SizedBox(height: 10),
+              Text(
+                'Sin cargo, por el contrato',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              _parte(ParteEntrega.pulseras),
+              if (pulserasPendientes && widget.permisos.editar && _abierta == null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, const EditarAlumno()),
+                    child: const Text('Cambiar acompañantes'),
+                  ),
+                ),
+              _parte(ParteEntrega.generales),
+              ..._anular(),
+              // Solo la mesa del contrato trae sus entradas sin cargo: las de la
+              // mesa adicional y las sillas extra se compran aparte.
+              if (_muestraLosLugares) ..._alCincuenta(),
+            ],
           ),
         ),
       ),
-      actions: yaRetiro || bloqueado
-          ? null
-          : [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCELAR'),
-              ),
-              ElevatedButton.icon(
-                onPressed: _confirmar,
-                icon: const Icon(Icons.confirmation_number_outlined),
-                label: const Text('CONFIRMAR ENTREGA'),
-              ),
-            ],
     );
   }
 }

@@ -454,6 +454,127 @@ void main() {
       ));
       expect(e.algoEntregado, isFalse);
     });
+
+    // Revisión independiente del 20-nov-2026: con renglones y una 6.9.x de por
+    // medio, lo último del estado se tiraba la otra hora, y lo que hizo la
+    // 6.9.x podía no contar.
+    test('la tablet adelantada entregó las dos partes y una 6.9.x atrasada anuló '
+        'las 8: quedan las dos sin entregar', () {
+      // Tablet 2 minutos adelantada: pulseras 19:02, generales 20:02, y la fila
+      // completa como reflejo de las generales. A las 20:01 de su reloj, una
+      // PC con la 6.9.2 anula la fila entera.
+      final renglones = [
+        _entrega(ParteEntrega.pulseras, 3, _h(19, 2)),
+        _entrega(ParteEntrega.generales, 5, _h(20, 2)),
+      ];
+      final anulada = _filaVieja(
+        estado: EstadoRetiro.anulado,
+        entregadoAt: _h(20, 2),
+        anuladoAt: _h(20, 1),
+      );
+      final e = _estado(retiro: anulada, renglones: renglones);
+      expect(e.pulseras.falta, isTrue);
+      expect(e.generales.falta, isTrue, reason: 'la 6.9.x anuló las 8, también estas');
+      expect(e.algoEntregado, isFalse);
+
+      // Se vuelven a dar solo las pulseras: no está todo, y la fila no se toca.
+      final otraVez = _estado(
+        retiro: anulada,
+        renglones: [...renglones, _entrega(ParteEntrega.pulseras, 3, _h(20, 30))],
+      );
+      expect(otraVez.pulseras.entregada, isTrue);
+      expect(otraVez.todoEntregado, isFalse);
+      expect(EntregaPorPartes.filaParaPonerAlDia(retiro: anulada, estado: otraVez), isFalse);
+    });
+
+    test('esta versión anuló las pulseras y una 6.9.x atrasada volvió a entregar '
+        'las 8: quedan las dos entregadas', () {
+      // La 6.9.x entregó las 8 a las 10; esta versión anuló las pulseras a las
+      // 15 (con las copias de la fila y la fila anulada como reflejo); y una PC
+      // con la 6.9.2 y el reloj atrasado las vuelve a entregar a las 14:59.
+      final renglones = [
+        _entrega(ParteEntrega.pulseras, 3, _h(10)),
+        _entrega(ParteEntrega.generales, 5, _h(10)),
+        _anulacion(ParteEntrega.pulseras, _h(15)),
+      ];
+      final deNuevo = _filaVieja(
+        estado: EstadoRetiro.entregado,
+        entregadoAt: _h(14, 59),
+        anuladoAt: _h(15),
+      );
+      final e = _estado(retiro: deNuevo, renglones: renglones);
+      expect(e.pulseras.entregada, isTrue, reason: 'la 6.9.x las entregó después');
+      expect(e.generales.entregada, isTrue);
+      expect(e.todoEntregado, isTrue);
+      expect(EntregaPorPartes.filaParaPonerAlDia(retiro: deNuevo, estado: e), isFalse,
+          reason: 'la fila ya dice "entregado": no se reescribe como anulada');
+    });
+
+    test('una 6.9.x adelantada anuló y después esta versión volvió a entregar las '
+        'dos partes por renglones: quedan entregadas', () {
+      // La fila es el reflejo de las generales de las 20:06; la anulación de la
+      // 6.9.x quedó a las 20:10 (su reloj adelantado), aunque pasó antes.
+      final renglones = [
+        _entrega(ParteEntrega.pulseras, 3, _h(19)),
+        _entrega(ParteEntrega.generales, 5, _h(19, 1)),
+        _entrega(ParteEntrega.pulseras, 3, _h(20, 5)),
+        _entrega(ParteEntrega.generales, 5, _h(20, 6)),
+      ];
+      final fila = _filaVieja(
+        estado: EstadoRetiro.entregado,
+        entregadoAt: _h(20, 6),
+        anuladoAt: _h(20, 10),
+      );
+      final e = _estado(retiro: fila, renglones: renglones);
+      expect(e.pulseras.entregada, isTrue);
+      expect(e.generales.entregada, isTrue);
+      expect(e.todoEntregado, isTrue);
+    });
+  });
+
+  // Revisión independiente del 20-nov-2026: si cambian los acompañantes entre
+  // una parte y la otra, entre las dos se podían llevar 9 sin cargo.
+  group('la otra parte ya se entregó con otra cuenta', () {
+    final uno = _alumno(acompanantes: ['MAMÁ']);
+
+    test('6 generales con 1 acompañante; se suma otro: las 3 pulseras no se dan', () {
+      final e = _estado(
+        alumno: _dos,
+        renglones: [_entrega(ParteEntrega.generales, 6, _h(10))],
+      );
+      expect(e.generales.cambioLaCuenta, isTrue);
+      final freno = EntregaPorPartes.frenoPorLaOtraParte(e, ParteEntrega.pulseras);
+      expect(freno, isNotNull);
+      expect(freno, contains('se llevaría 9 sin cargo, y le corresponden 8'));
+      expect(freno, contains('Pedile al jefe'));
+    });
+
+    test('3 pulseras con 2 acompañantes; se saca uno: las 6 generales no se dan', () {
+      final e = _estado(
+        alumno: uno,
+        renglones: [_entrega(ParteEntrega.pulseras, 3, _h(10))],
+      );
+      expect(EntregaPorPartes.frenoPorLaOtraParte(e, ParteEntrega.generales), isNotNull);
+    });
+
+    test('si la otra se llevó de menos, esta se da: no se pasa de 8', () {
+      // 2 pulseras con 1 acompañante; se suma otro: VIP 3, generales 5.
+      final e = _estado(
+        alumno: _dos,
+        renglones: [_entrega(ParteEntrega.pulseras, 2, _h(10))],
+      );
+      expect(e.pulseras.cambioLaCuenta, isTrue);
+      expect(EntregaPorPartes.frenoPorLaOtraParte(e, ParteEntrega.generales), isNull);
+    });
+
+    test('con la cuenta igual no frena nada', () {
+      final e = _estado(
+        alumno: _dos,
+        renglones: [_entrega(ParteEntrega.pulseras, 3, _h(10))],
+      );
+      expect(EntregaPorPartes.frenoPorLaOtraParte(e, ParteEntrega.generales), isNull);
+      expect(EntregaPorPartes.frenoPorLaOtraParte(_estado(), ParteEntrega.pulseras), isNull);
+    });
   });
 
   group('las copias y la fila completa', () {

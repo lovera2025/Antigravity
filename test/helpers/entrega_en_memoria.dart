@@ -5,6 +5,7 @@
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
 import 'package:arguello_events/features/caja_sesiones/models/operador_caja.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
@@ -12,13 +13,18 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/common/providers/user_role_provider.dart';
 import 'package:arguello_events/features/common/utils/subir_ya.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entradas_entregas_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entregar_parte_de_la_app.dart';
 import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
+import 'package:arguello_events/features/eventos/services/entrega_por_partes.dart';
+import 'package:arguello_events/features/eventos/services/entregar_parte.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
@@ -109,6 +115,117 @@ class EntregasEnMemoria extends EntradasRetiroRepository {
   Future<EntradasRetiro?> traerDeLaNube(String contratoAlumnoId) async => null;
 }
 
+/// Los renglones de la entrega por partes (`entradas_entregas`), en memoria.
+/// **Sin este reemplazo, la entrega iría a leer la base de la PC.** Se escribe
+/// solo por [EntregarParte] (los [PuertosEnMemoria]): `agregar` no se usa.
+class PartesEnMemoria extends EntradasEntregasRepository {
+  PartesEnMemoria()
+      : super(null, abrir: () => throw StateError('la prueba no abre la base'));
+
+  final renglones = <EntregaEntradas>[];
+
+  List<EntregaEntradas> de(String alumnoId) => [
+        for (final r in renglones)
+          if (r.contratoAlumnoId == alumnoId) r,
+      ]..sort(EntregaEntradas.enOrden);
+
+  @override
+  Future<Map<String, List<EntregaEntradas>>> deContratos(List<String> ids) async =>
+      EntregaEntradas.porAlumno([
+        for (final r in renglones)
+          if (ids.contains(r.contratoAlumnoId)) r,
+      ]);
+
+  @override
+  Future<List<EntregaEntradas>> delEvento(String eventoId) async => [
+        for (final r in renglones)
+          if (r.eventoId == eventoId) r,
+      ]..sort(EntregaEntradas.enOrden);
+
+  @override
+  Future<List<EntregaEntradas>> traerDeLaNube(String contratoAlumnoId) async =>
+      de(contratoAlumnoId);
+}
+
+/// [EntregarParte] con lo de [EntregaEnMemoria]: los alumnos y sus pagos, las
+/// filas de `entradas_retiro` y los renglones, todo en memoria. "La nube" es lo
+/// mismo que tiene este equipo (no hay otro más nuevo), y sin conexión
+/// ([EntregaEnMemoria.conexion]) no se la puede mirar.
+class PuertosEnMemoria implements PuertosDeLaEntrega {
+  PuertosEnMemoria(this.e, {bool Function(String tabla)? alSubir})
+      : _alSubir = alSubir;
+
+  final EntregaEnMemoria e;
+  final bool Function(String tabla)? _alSubir;
+
+  @override
+  bool get hayInternet => e.conexion.currentStatus != AppConnectivity.offline;
+
+  @override
+  Future<LoDeLaNube> deLaNube(String contratoAlumnoId) async {
+    if (!hayInternet) throw StateError('sin internet');
+    if (e.nubeQueNoContesta > 0) {
+      e.nubeQueNoContesta--;
+      throw StateError('la nube no contesta');
+    }
+    return LoDeLaNube(
+      retiro: e.entregas.filas[contratoAlumnoId],
+      renglones: e.partes.de(contratoAlumnoId),
+    );
+  }
+
+  @override
+  Future<LoDeLaFiesta> leer(String eventoId) async => LoDeLaFiesta(
+        alumnos: [
+          for (final a in e.contratos.alumnos)
+            if (a.eventoId == eventoId) a,
+        ],
+        retiros: Map.of(e.entregas.filas),
+        renglones: List.of(e.partes.renglones),
+      );
+
+  @override
+  Future<CuentaDelAlumno> cuentaDe(ContratoAlumno alumno) async => CuentaDelAlumno(
+        pagos: [
+          for (final p in e.contratos.pagos)
+            if (p['contrato_alumno_id'] == alumno.id) p,
+        ],
+        moraCobradaHistorial: 0,
+      );
+
+  @override
+  Future<void> guardar(List<EntregaEntradas> renglones, {EntradasRetiro? retiro}) async {
+    for (final r in renglones) {
+      if (e.partes.renglones.any((x) => x.id == r.id)) continue;
+      e.partes.renglones.add(r);
+    }
+    if (retiro != null) {
+      e.entregas.filas[retiro.contratoAlumnoId] = retiro;
+      e.filasEscritas++;
+    }
+  }
+
+  @override
+  Future<bool> subir({
+    required List<String> renglones,
+    String? retiro,
+    required DateTime desde,
+  }) async {
+    final alSubir = _alSubir;
+    if (alSubir == null) return hayInternet;
+    var subio = true;
+    if (renglones.isNotEmpty) subio = alSubir(EntradasEntregasRepository.tabla) && subio;
+    if (retiro != null) subio = alSubir('entradas_retiro') && subio;
+    return subio;
+  }
+
+  @override
+  Future<String?> equipo() async => 'equipo-de-prueba';
+
+  @override
+  DateTime ahora() => e.ahora();
+}
+
 /// El registro de sorteos, en memoria: vacío salvo lo que la prueba le ponga.
 /// De acá sale lo que cada familia tenía al sorteo (`fotoDeLosLugaresProvider`):
 /// **sin este reemplazo, la entrega y VENDER irían a leer la base de la PC.**
@@ -173,6 +290,90 @@ class EntregaEnMemoria {
   late final contratos = ContratosDeLaEntrega(supabase);
   late final entregas = EntregasEnMemoria(supabase);
 
+  /// Los renglones de la entrega por partes (pulseras y generales).
+  final partes = PartesEnMemoria();
+
+  /// Cuántas veces se escribió una fila completa de `entradas_retiro`.
+  int filasEscritas = 0;
+
+  /// Cuántas de las próximas consultas a la nube no contestan, con internet
+  /// (la nube caída, o la tablet recién reconectada).
+  int nubeQueNoContesta = 0;
+
+  /// La hora de la entrega: avanza un minuto cada vez que se pide, desde el
+  /// 20-nov-2026 a las 10 (después de la entrega de GÓMEZ, del 7-nov).
+  DateTime _hora = DateTime.utc(2026, 11, 20, 13);
+  DateTime ahora() => _hora = _hora.add(const Duration(minutes: 1));
+
+  /// Los renglones de [alumnoId], del más viejo al más nuevo.
+  List<EntregaEntradas> renglonesDe(String alumnoId) => partes.de(alumnoId);
+
+  /// Cómo está la entrega de [alumnoId], por parte.
+  EstadoDeLaEntrega estadoDe(String alumnoId) {
+    final a = contratos.alumnos.firstWhere((x) => x.id == alumnoId);
+    return EstadoDeLaEntrega.deAlumno(
+      a,
+      retiro: entregas.filas[alumnoId],
+      renglones: partes.de(alumnoId),
+    );
+  }
+
+  /// Otro equipo le entregó [parte] a [alumnoId] a las [hora]: su renglón, con lo
+  /// que le corresponde, y sin tocar la fila de `entradas_retiro`.
+  EntregaEntradas entregadaEnOtroEquipo(
+    String alumnoId,
+    ParteEntrega parte,
+    DateTime hora,
+  ) {
+    final a = contratos.alumnos.firstWhere((x) => x.id == alumnoId);
+    final cuenta = RetiroEntradas.entradasDe(a);
+    final r = EntregaEntradas.entrega(
+      contratoAlumnoId: a.id,
+      eventoId: a.eventoId,
+      parte: parte,
+      cantidad: parte == ParteEntrega.pulseras ? cuenta.vip : cuenta.generales,
+      parentesco: ParentescoRetiro.madre,
+      nombre: 'MADRE, UNA',
+      escribioEnPlanilla: true,
+      hechoPor: 'Sofi',
+      deviceId: 'tablet-2',
+      ahora: hora,
+    );
+    partes.renglones.add(r);
+    return r;
+  }
+
+  /// El jefe anuló [parte] de [alumnoId] en otro equipo a las [hora], sin
+  /// tocar la fila de `entradas_retiro` (no la tenía todavía).
+  void anuladaEnOtroEquipo(
+    String alumnoId,
+    ParteEntrega parte,
+    DateTime hora, {
+    String motivo = 'eran de otro',
+  }) {
+    final a = contratos.alumnos.firstWhere((x) => x.id == alumnoId);
+    final cuenta = RetiroEntradas.entradasDe(a);
+    partes.renglones.add(EntregaEntradas.anulacion(
+      contratoAlumnoId: a.id,
+      eventoId: a.eventoId,
+      parte: parte,
+      cantidad: parte == ParteEntrega.pulseras ? cuenta.vip : cuenta.generales,
+      motivo: motivo,
+      hechoPor: 'Jefe',
+      deviceId: 'pc-jefe',
+      ahora: hora,
+    ));
+  }
+
+  /// La entrega por partes en memoria. [alSubir] (la tabla que sube) dice si
+  /// llegó a la nube; sin él, sube si hay conexión.
+  List<Override> reemplazosDeLasPartes({bool Function(String tabla)? alSubir}) => [
+        entradasEntregasRepositoryProvider.overrideWithValue(partes),
+        entregarParteProvider.overrideWithValue(
+          EntregarParte(PuertosEnMemoria(this, alSubir: alSubir)),
+        ),
+      ];
+
   /// El registro de sorteos de la fiesta: vacío (sin sorteo anotado, todo lo
   /// que se compra aparte va con descuento) salvo lo que la prueba agregue.
   final sorteos = SorteosEnMemoria();
@@ -215,6 +416,9 @@ class EntregaEnMemoria {
         supabaseProvider.overrideWithValue(supabase),
         contratosRepositoryProvider.overrideWithValue(contratos),
         entradasRetiroRepositoryProvider.overrideWithValue(entregas),
+        // Sin estos dos la pantalla abre la base, y en `flutter test` se queda
+        // esperando.
+        ...reemplazosDeLasPartes(),
         sorteosMesasRepositoryProvider.overrideWithValue(sorteos),
         syncEngineProvider.overrideWithValue(motor),
         subidaInmediataProvider.overrideWithValue(SubidaDePrueba(motor)),

@@ -8,20 +8,26 @@ import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
+import '../../../models/entrega_entradas.dart';
 import '../../../models/evento.dart';
 import '../../barra/cuentas/cobro_barra.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../barra/widgets/cobrar_hoja.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
+import '../../common/services/pdf_service.dart';
 import '../../common/utils/quien_opera.dart';
 import '../../common/utils/solo_jefe.dart';
-import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/repositories/contratos_repository.dart';
+import '../../eventos/repositories/entradas_entregas_repository.dart';
+import '../../eventos/repositories/entradas_retiro_repository.dart';
+import '../../eventos/repositories/entregar_parte_de_la_app.dart';
 import '../../eventos/repositories/sorteos_mesas_repository.dart';
-import '../../eventos/services/lugares_al_sorteo.dart';
+import '../../eventos/services/entrega_por_partes.dart';
+import '../../eventos/services/entregar_parte.dart';
 import '../../eventos/services/lugares_pagos.dart';
 import '../../eventos/services/retiro_entradas.dart';
 import '../../eventos/services/salon_mesas.dart';
+import '../../eventos/widgets/carteles_de_la_entrega.dart';
 import '../cuentas/linea_de_subida.dart';
 import '../cuentas/lugares_de_la_familia.dart';
 import '../cuentas/numeros_de_entradas.dart';
@@ -30,22 +36,43 @@ import '../datos/entradas_repositorio.dart';
 import '../pdf/comprobante_entradas_pdf.dart';
 import '../pdf/papeles_de_entradas.dart';
 import '../providers/entradas_providers.dart';
+import '../services/en_caja.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'abrir_caja_entradas_dialog.dart';
 import 'cerrar_caja_entradas_screen.dart';
+import 'vender_a_pagar.dart';
+import 'vender_gratis.dart';
+import 'vender_lista.dart';
 import 'ventas_de_entradas_screen.dart';
 
-/// VENDER: la pantalla de la caja de entradas de una fiesta (6.9.0, sección 7.3
-/// del spec del 13-nov). A una familia de la fiesta o a alguien de afuera.
+/// VENDER: la pantalla de quien vende entradas en una fiesta (6.9.0; rehecha
+/// el 20-nov-2026 con las maquetas que aprobó el usuario). **Quien tiene "Vende
+/// entradas" entra solo por acá**: es la única puerta de la fiesta.
 ///
-/// **No cobra cuotas ni toca la cuenta de ningún alumno**: del alumno solo lee
-/// (su mesa, cuántas entradas de sus lugares adicionales le quedan y si debe,
-/// para decirlo). Lo único que escribe es la venta, por
-/// `PedidoDeEntradas.guardarEn` (`test/venta_entradas_no_toca_test.dart`).
+/// - Arriba, la línea de la caja y **el total de la fiesta**: cuántas pulseras
+///   VIP y cuántas generales tienen que llegar, y cuántas se entregaron.
+/// - **Un alumno de la fiesta**: la lista a la vista, con el buscador y el
+///   filtro (abre en "Pagó todo: puede retirar"). Elegido, su tarjeta tiene:
+///   - **GRATIS · SE ENTREGA** ([BloqueGratis]): las 8 de la mesa del contrato,
+///     en dos partes (pulseras y generales), cada una cuando llega su material.
+///     **Solo a quien pagó todo su contrato** (cuotas, extras y mora, de los
+///     pagos: `RetiroEntradas.bloqueo`); quien debe va a la caja ("En caja", y
+///     "pagó todo: ya podés entregar" cuando el pago baja). Se guarda por
+///     `EntregarParte` ([_entregar]), sin caja ni precio.
+///   - **A PAGAR** ([LineasAPagar]): cada mesa adicional y las sillas extra,
+///     **solo lo que ya está pago entero**, con descuento lo que tenía al
+///     sorteo y al precio del día lo agregado después. Se cobra en esta caja.
+/// - **Alguien de afuera**: entradas al precio del día, como siempre.
+///
+/// **No cobra cuotas ni toca la cuenta de ningún alumno**: del alumno solo lee.
+/// Lo que escribe es la venta (`PedidoDeEntradas.guardarEn`) y la entrega
+/// (`EntregarParte`) (`test/venta_entradas_no_toca_test.dart`). **VENDER no
+/// anula entregas**: eso es del jefe, desde ENTRADAS de la fiesta.
 ///
 /// Las cuentas no están acá: el precio, lo que le queda a la familia, los
 /// números y por qué todavía no se puede confirmar los decide
-/// [PedidoDeEntradas].
+/// [PedidoDeEntradas]; qué está pago, [APagarDeLaFamilia]; quién puede
+/// retirar, `RetiroEntradas` y `EntregaPorPartes`.
 ///
 /// La llave es `puedeVenderEntradasProvider` (`test/solo_modo_jefe_test.dart`).
 class VenderEntradasScreen extends ConsumerStatefulWidget {
@@ -66,32 +93,50 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   String? _errorCarga;
   ConfigEntradas? _config;
   CajaEntradas? _caja;
+
+  /// Los alumnos de la fiesta, sin las bajas: los de la lista.
   List<ContratoAlumno> _alumnos = [];
+
+  /// Todos, **también los de baja temporal**: sus números entregados siguen
+  /// teniendo dueño.
+  List<ContratoAlumno> _todos = [];
   Map<String, DeudaAlumno> _deudas = {};
+  Map<String, EntradasRetiro> _retiros = {};
+  Map<String, List<EntregaEntradas>> _renglones = {};
   List<VentaEntradas> _ventas = [];
   List<AnulacionEntradas> _anulaciones = [];
   int _sinSubir = 0;
 
-  /// Lo que cada familia tenía al sorteo: el descuento es solo para eso. Solo
-  /// se lee (`fotoDeLosLugaresProvider`): la venta no escribe el registro.
-  FotoDeLosLugares _foto = FotoDeLosLugares.sinSorteo;
+  /// Cada alumno de la lista, con lo que se ve de él ya contado.
+  Map<String, AlumnoDeVender> _info = {};
 
-  /// Lo de cada familia que se compra aparte, cosa por cosa y con qué está
-  /// pago entero (20-nov-2026): se le vende solo eso. Sale de los pagos, que
-  /// se leen para la deuda; la cuenta está en `APagarDeLaFamilia`.
-  Map<String, APagarDeLaFamilia> _aPagar = {};
+  /// Pulseras y generales de toda la fiesta.
+  ResumenPorPartes? _resumen;
 
   // Lo que se está por vender.
-  late bool _aUnaFamilia = true;
+  bool _aUnaFamilia = true;
   late String? _familiaId = widget.familiaId;
+  FiltroDeVender _filtro = FiltroDeVender.puede;
 
-  /// Cuántas de sus lugares adicionales lleva. Null: todas las que le quedan.
-  int? _deLugar;
+  /// Cuántas lleva de cada línea de A PAGAR (por `claveDeLinea`). Sin la
+  /// clave: todas las que le quedan de esa línea.
+  final _cantidades = <String, int>{};
 
-  /// Cuántas sueltas lleva. Null: las que vienen (a una familia, todas las
-  /// que le quedan sin descuento; a alguien de afuera, ninguna).
+  /// Cuántas lleva alguien de afuera.
   int? _sueltas;
+
+  /// La parte de GRATIS cuyo formulario está abierto, o null.
+  ParteEntrega? _parteAbierta;
+
   bool _dosTramos = false;
+
+  /// Quien vende escribió el número del talonario: ya no se le propone otro.
+  bool _delTocado = false;
+
+  /// En "Del" vino propuesto el número que sigue al último que vendió esta
+  /// caja. Sin ventas con número (la primera de la caja), no hay propuesta y el
+  /// casillero viene vacío: el texto de abajo no dice que trae uno.
+  bool _hayPropuesta = false;
   final _busqueda = TextEditingController();
   final _comprador = TextEditingController();
   final _dni = TextEditingController();
@@ -101,7 +146,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   final _del2 = TextEditingController();
 
   bool _guardando = false;
+  bool _entregando = false;
   bool _pidiendoCaja = false;
+
+  /// La caja se pide **una vez**, al entrar. Si se vuelve sin abrirla, VENDER
+  /// se queda (lo sin cargo se entrega sin caja) y no vuelve a preguntar.
+  bool _cajaPreguntada = false;
 
   /// La pantalla de cerrar la caja está abierta encima: no se pide caja.
   bool _cerrandoCaja = false;
@@ -109,19 +159,40 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// La última venta guardada: su aviso queda arriba hasta la siguiente.
   VentaEntradas? _ultima;
   StreamSubscription<Set<String>>? _cambiosSub;
+  StreamSubscription<int>? _pendienteSub;
 
-  /// Lo que, si baja de otro equipo, cambia lo que se ve acá. Un cobro en la
-  /// caja cambia la cuenta del alumno, y con eso alcanza para volver a leer lo
-  /// que debe: acá no se nombra la tabla de los pagos.
+  /// Las familias a las que ya se les intentó poner al día la fila de
+  /// `entradas_retiro`, con cómo estaba lo suyo (`_firmaDeLaFila`). Si no se
+  /// pudo mirar la nube, se saca y se vuelve a intentar en la próxima lectura.
+  final _completadas = <String, String>{};
+
+  /// Lo que, si baja de otro equipo, cambia lo que se ve acá: el precio, lo
+  /// vendido, lo entregado, el sorteo y **lo que pagó cada familia** (con eso
+  /// se habilita lo de A PAGAR y se destraba lo sin cargo). La tabla de los
+  /// pagos no se nombra acá: viene en [tablasQueCambianLoPagado].
   static const _tablasQueMiro = {
     'entradas_config',
     'entradas_ventas',
     'entradas_anulaciones',
-    'contratos_alumnos',
+    'entradas_retiro',
+    'entradas_entregas',
     // El sorteo (o el jefe, al aceptar la lista de PRECIOS) anota qué tenía
     // cada familia: cambia a quién le va el descuento.
     'sorteos_mesas',
+    ...tablasQueCambianLoPagado,
   };
+
+  bool get _ocupado => _guardando || _entregando;
+
+  /// Algo bajó mientras se guardaba o se entregaba: se relee apenas termina
+  /// ([_releerSiQuedoPendiente]). Si no, un pago que bajaba con el cartel de la
+  /// entrega abierto se perdía hasta la próxima bajada, y "pagó todo: ya podés
+  /// entregar" no salía (revisión del 20-nov-2026).
+  bool _hayQueReleer = false;
+
+  void _releerSiQuedoPendiente() {
+    if (_hayQueReleer && mounted && !_ocupado) _cargar(silencioso: true);
+  }
 
   @override
   void initState() {
@@ -129,7 +200,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     _cargar();
     _cambiosSub =
         ref.read(syncEngineProvider).cambiosBajadosStream.listen((tablas) {
-      if (!_guardando && tablas.any(_tablasQueMiro.contains)) {
+      if (!tablas.any(_tablasQueMiro.contains)) return;
+      if (_ocupado) {
+        _hayQueReleer = true;
+      } else {
         _cargar(silencioso: true);
       }
     });
@@ -139,8 +213,6 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     _pendienteSub =
         ref.read(syncEngineProvider).pendingStream.listen((_) => _contarSinSubir());
   }
-
-  StreamSubscription<int>? _pendienteSub;
 
   /// Solo lo que espera subir, para la línea de arriba: no relee nada más.
   Future<void> _contarSinSubir() async {
@@ -182,6 +254,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   }
 
   Future<void> _cargar({bool silencioso = false}) async {
+    // Esta lectura ya trae lo que haya bajado.
+    _hayQueReleer = false;
     try {
       final id = widget.evento.id;
       final entradas = ref.read(entradasDeLaCajaProvider);
@@ -205,6 +279,14 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             moraCobradaHistorial: mora[a.id] ?? 0,
           ),
       };
+      // La entrega de todos, también de las bajas: sus números tienen dueño.
+      final idsDeTodos = [for (final a in todos) a.id];
+      final retiros = await ref
+          .read(entradasRetiroRepositoryProvider)
+          .obtenerPorContratoIds(idsDeTodos);
+      final renglones = await ref
+          .read(entradasEntregasRepositoryProvider)
+          .deContratos(idsDeTodos);
       final ventas = await entradas.ventas(id);
       final anulaciones = await entradas.anulaciones(id);
       final caja = await entradas.cajaAbierta(
@@ -212,38 +294,82 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         operadorId: _quienVende.id,
       );
       final sinSubir = await entradas.ventasSinSubir();
+      // Lo que cada familia tenía al sorteo: el descuento es solo para eso.
+      // Solo se lee: la venta no escribe el registro.
       final foto = await ref.read(fotoDeLosLugaresProvider)(id);
-      final aPagar = {
-        for (final a in alumnos)
-          a.id: APagarDeLaFamilia.de(
+      final info = <String, AlumnoDeVender>{};
+      for (final a in alumnos) {
+        final deuda = deudas[a.id]!;
+        final estado = EstadoDeLaEntrega.deAlumno(
+          a,
+          retiro: retiros[a.id],
+          renglones: renglones[a.id] ?? const [],
+        );
+        final aPagar = APagarDeLaFamilia.de(
+          a,
+          pagos: pagos[a.id] ?? const [],
+          foto: foto,
+        );
+        final bloqueo = RetiroEntradas.bloqueo(a, deuda);
+        info[a.id] = AlumnoDeVender(
+          alumno: a,
+          deuda: deuda,
+          bloqueo: bloqueo,
+          grupo: EntregaPorPartes.grupoDe(a, deuda: deuda, estado: estado),
+          estado: estado,
+          aPagar: aPagar,
+          // Con la cuenta para revisar no se le vende nada: la misma regla que
+          // el diálogo de la entrega (`APagarDeLaFamilia.porQueNoSeVendeCon`),
+          // con el bloqueo de la venta: la deuda no tapa los otros frenos.
+          lugares: LugaresDeLaFamilia.de(
             a,
-            pagos: pagos[a.id] ?? const [],
-            foto: foto,
+            ventas: ventas,
+            anulaciones: anulaciones,
+            aPagar: aPagar,
+            bloqueo: RetiroEntradas.bloqueoDeLaVenta(a, deuda),
+            todoEntregado: estado.todoEntregado,
           ),
-      };
+        );
+      }
+      final resumen = ResumenPorPartes.de(
+        alumnos: alumnos,
+        retiros: retiros,
+        renglones: [for (final l in renglones.values) ...l],
+        deudas: deudas,
+      );
       if (!mounted) return;
       setState(() {
         // La última venta anulada ya no es "guardada": se va su aviso verde.
         if (_ultima != null && anulaciones.any((a) => a.ventaId == _ultima!.id)) {
           _ultima = null;
         }
-        _foto = foto;
-        _aPagar = aPagar;
         _config = config;
         _alumnos = alumnos;
+        _todos = todos;
         _deudas = deudas;
+        _retiros = retiros;
+        _renglones = renglones;
         _ventas = ventas;
         _anulaciones = anulaciones;
         _caja = caja;
         _sinSubir = sinSubir;
+        _info = info;
+        _resumen = resumen;
         _cargando = false;
         _errorCarga = null;
+        _proponerNumero();
       });
-      // Sin caja abierta, VENDER la pide. Sin precio no: lo dice la pantalla.
+      _despuesDeLeer(deudas);
+      _completarLasFilas();
+      // Sin caja abierta, VENDER la pide **una vez**. Sin precio no: no hay
+      // nada que cobrar (lo sin cargo se entrega igual).
       if (caja == null &&
           (config?.tienePrecio ?? false) &&
+          ref.read(puedeVenderEntradasProvider) &&
+          !_cajaPreguntada &&
           !_pidiendoCaja &&
           !_cerrandoCaja) {
+        _cajaPreguntada = true;
         WidgetsBinding.instance.addPostFrameCallback((_) => _pedirCaja());
       }
     } catch (_) {
@@ -257,10 +383,87 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     }
   }
 
+  /// Con las cuentas recién leídas: quién de "En caja" ya pagó todo, con un
+  /// sonido corto la primera vez (como el mostrador).
+  void _despuesDeLeer(Map<String, DeudaAlumno> deudas) {
+    final recien =
+        ref.read(enCajaProvider(widget.evento.id).notifier).conDeudas(deudas);
+    if (recien.isNotEmpty) unawaited(SystemSound.play(SystemSoundType.alert));
+  }
+
+  /// Una familia cuya fila de `entradas_retiro` no dice lo mismo que sus
+  /// partes (`EntregaPorPartes.filaParaPonerAlDia`): tiene las dos partes y la
+  /// fila no dice "entregado" (cada parte la dio un equipo distinto y uno estaba
+  /// sin internet), o la fila dice "entregado" y el jefe anuló una parte. Con
+  /// internet se pone al día ahora, para que el plano, Recepción y una PC con
+  /// la 6.9.x vean lo mismo. Lo decide `EntregarParte.completarLaFila`, que
+  /// mira la nube antes. Una vez por familia mientras lo suyo no cambie, salvo
+  /// que no haya podido mirar la nube.
+  void _completarLasFilas() {
+    if (!ref.read(puedeVenderEntradasProvider)) return;
+    if (ref.read(connectivityServiceProvider).currentStatus ==
+        AppConnectivity.offline) {
+      return;
+    }
+    for (final a in _alumnos) {
+      final estado = _info[a.id]?.estado;
+      if (estado == null ||
+          !EntregaPorPartes.filaParaPonerAlDia(
+            retiro: _retiros[a.id],
+            estado: estado,
+          )) {
+        continue;
+      }
+      final firma = _firmaDeLaFila(a);
+      if (_completadas[a.id] == firma) continue;
+      _completadas[a.id] = firma;
+      unawaited(_completarLaFila(a));
+    }
+  }
+
+  /// Cómo está lo suyo: cuántos renglones tiene y cómo está su fila. Si cambia,
+  /// se vuelve a intentar.
+  String _firmaDeLaFila(ContratoAlumno a) {
+    final retiro = _retiros[a.id];
+    return '${(_renglones[a.id] ?? const <EntregaEntradas>[]).length}'
+        '|${retiro?.estado.name}|${retiro?.updatedAt.toIso8601String()}';
+  }
+
+  /// Pone al día la fila de [a]. Es automático (lo llama la lectura), así que
+  /// la llave va callada: sin el permiso de vender no se guarda nada, sin
+  /// cartel.
+  Future<void> _completarLaFila(ContratoAlumno a) async {
+    if (!ref.read(puedeVenderEntradasProvider)) return;
+    try {
+      final r = await ref.read(entregarParteProvider).completarLaFila(
+            eventoId: widget.evento.id,
+            contratoAlumnoId: a.id,
+          );
+      switch (r) {
+        case ResultadoDeLaFila.escrita:
+          if (mounted && !_ocupado) {
+            await _cargar(silencioso: true);
+          } else {
+            _hayQueReleer = true;
+          }
+        case ResultadoDeLaFila.sinNube:
+          // No se pudo mirar la nube: se vuelve a intentar en la próxima
+          // lectura (la tablet queda abierta toda la noche).
+          _completadas.remove(a.id);
+        case ResultadoDeLaFila.alDia:
+          break;
+      }
+    } catch (e) {
+      // Se vuelve a intentar en la próxima lectura.
+      _completadas.remove(a.id);
+      debugPrint('No se puso al día la fila de la entrega de ${a.nombreAlumno}: $e');
+    }
+  }
+
   // ── Las llaves ───────────────────────────────────────────────────────────
 
-  /// Sin el permiso de vender (o el modo jefe) no se abre una caja ni se
-  /// guarda una venta, aunque alguien llegue hasta acá.
+  /// Sin el permiso de vender (o el modo jefe) no se abre una caja, ni se
+  /// guarda una venta o una entrega, aunque alguien llegue hasta acá.
   bool _frenaSinPermiso() {
     if (ref.read(puedeVenderEntradasProvider)) return false;
     if (mounted) {
@@ -275,6 +478,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     if (!mounted || _pidiendoCaja || _caja != null) return;
     if (_frenaSinPermiso()) return;
     _pidiendoCaja = true;
+    _cajaPreguntada = true;
     final quien = _quienVende;
     final caja = await abrirCajaDeEntradas(
       context,
@@ -284,14 +488,14 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       operadorNombre: quien.nombre,
     );
     _pidiendoCaja = false;
-    if (!mounted) return;
-    if (caja != null) avisarQueCambioLaVenta(ref, widget.evento.id);
-    if (caja == null) {
-      // Volvió sin abrir: no hay nada que hacer en VENDER.
-      await Navigator.of(context).maybePop();
-      return;
-    }
-    setState(() => _caja = caja);
+    // Volvió sin abrirla: VENDER se queda (lo sin cargo se entrega sin caja) y
+    // A PAGAR ofrece ABRIR LA CAJA.
+    if (!mounted || caja == null) return;
+    avisarQueCambioLaVenta(ref, widget.evento.id);
+    setState(() {
+      _caja = caja;
+      _proponerNumero();
+    });
   }
 
   // ── Lo que se está por vender ────────────────────────────────────────────
@@ -304,17 +508,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     return null;
   }
 
-  /// Sin lo de A PAGAR leído todavía, nada está pago: no se le vende nada.
-  LugaresDeLaFamilia _lugaresDe(ContratoAlumno a) => LugaresDeLaFamilia.de(
-        a,
-        ventas: _ventas,
-        anulaciones: _anulaciones,
-        aPagar: _aPagar[a.id] ?? APagarDeLaFamilia.de(a, pagos: null, foto: _foto),
-      );
-
-  /// "al 50 %": lo que se paga con el descuento que el jefe puso en PRECIOS.
-  String get _alPorciento =>
-      alPorcientoQuePaga(_config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares);
+  /// El descuento de PRECIOS para lo que tenía al sorteo (viene en 50).
+  double get _descuentoPct =>
+      _config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares;
 
   /// Los números de las anticipadas que ya tienen dueño: solo lo vendido. Lo
   /// entregado sin cargo es otro talonario (el de las generales de los
@@ -322,7 +518,28 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   Map<String, List<TramoTalonario>> get _ocupados =>
       NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones);
 
+  /// Cuántas le quedan de cada línea de A PAGAR de [info], cuántas siguen "a
+  /// confirmar" y cuántas lleva.
+  ({List<int> quedan, List<int> aConfirmar, List<int> lleva}) _lineasDe(
+    AlumnoDeVender info,
+  ) {
+    final lineas = info.aPagar.lineas;
+    final (:quedan, :aConfirmar) = info.lugares.porLinea(lineas);
+    return (
+      quedan: quedan,
+      aConfirmar: aConfirmar,
+      lleva: [
+        for (var i = 0; i < lineas.length; i++)
+          (_cantidades[claveDeLinea(lineas[i])] ?? quedan[i]).clamp(0, quedan[i]),
+      ],
+    );
+  }
+
   /// El pedido sin los números: de acá sale cuántas entradas son.
+  ///
+  /// A una familia: lo de cada línea con descuento va a sus lugares adicionales
+  /// y lo sin descuento a las sueltas; **los topes y el porqué los pone
+  /// [PedidoDeEntradas]**. A una familia no se le pone descuento a mano.
   PedidoDeEntradas get _sinNumeros {
     var p = PedidoDeEntradas.nuevo(
       config: _config,
@@ -331,18 +548,29 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       ocupados: _ocupados,
     );
     final familia = _familia;
-    if (familia != null) {
-      final lugares = _lugaresDe(familia);
-      p = p.paraLaFamilia(familia.id, lugares);
-      final n = _deLugar;
-      if (n != null) p = p.conDeLugar(n);
+    final info = familia == null ? null : _info[familia.id];
+    if (familia != null && info != null) {
+      final lineas = info.aPagar.lineas;
+      final cuantas = _lineasDe(info).lleva;
+      var conDescuento = 0;
+      var sinDescuento = 0;
+      for (var i = 0; i < lineas.length; i++) {
+        if (lineas[i].conDescuento) {
+          conDescuento += cuantas[i];
+        } else {
+          sinDescuento += cuantas[i];
+        }
+      }
+      p = p
+          .paraLaFamilia(familia.id, info.lugares)
+          .conDeLugar(conDescuento)
+          .conSueltas(sinDescuento);
+    } else if (!_aUnaFamilia) {
+      p = p
+          .conSueltas(_sueltas ?? 0)
+          .conDescuento(double.tryParse(_descuento.text.replaceAll(',', '.')) ?? 0);
     }
-    final sueltas = _sueltas;
-    if (sueltas != null) p = p.conSueltas(sueltas);
-    return p
-        .conDescuento(double.tryParse(_descuento.text.replaceAll(',', '.')) ?? 0)
-        .conComprador(_comprador.text)
-        .conDni(_dni.text);
+    return p.conComprador(_comprador.text).conDni(_dni.text);
   }
 
   /// Los números escritos. Con un solo tramo, el "al" se calcula solo, como en
@@ -365,19 +593,38 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     return p.conTramos(_tramos(p.cantidad));
   }
 
+  /// Propone en "del" el número que sigue al último que vendió esta caja
+  /// (20-nov-2026), salvo que quien vende ya haya escrito o borrado algo.
+  void _proponerNumero() {
+    if (_delTocado || _dosTramos) return;
+    final caja = _caja;
+    final n = caja == null
+        ? null
+        : NumerosDeEntradas.siguienteDeLaCaja(caja.id, _ventas, _anulaciones);
+    _del.text = n?.toString() ?? '';
+    _hayPropuesta = n != null;
+  }
+
   void _elegirFamilia(String? id) => setState(() {
         _familiaId = id;
-        _deLugar = null;
-        _sueltas = null;
+        _cantidades.clear();
+        _parteAbierta = null;
         _busqueda.clear();
       });
 
+  /// Desde "En caja": abre la tarjeta de esa familia.
+  void _abrirLaFamilia(String id) {
+    _aUnaFamilia = true;
+    _elegirFamilia(id);
+  }
+
+  /// Después de una venta: la pantalla queda lista para la siguiente. La
+  /// familia elegida se queda (puede faltarle retirar lo sin cargo).
   void _limpiar() {
-    _familiaId = null;
-    _deLugar = null;
+    _cantidades.clear();
     _sueltas = null;
     _dosTramos = false;
-    _busqueda.clear();
+    _delTocado = false;
     _comprador.clear();
     _dni.clear();
     _descuento.text = '0';
@@ -386,13 +633,83 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     _del2.clear();
   }
 
+  // ── Entregar lo sin cargo ────────────────────────────────────────────────
+
+  /// Entrega una parte por `EntregarParte`, el único camino para guardar una
+  /// entrega: mira la nube, pregunta si no hay internet, relee y frena si algo
+  /// cambió. Acá solo se muestran los carteles, los mismos que la entrega de
+  /// ENTRADAS (`carteles_de_la_entrega.dart`).
+  Future<void> _entregar(ContratoAlumno alumno, DatosDeLaParte datos) async {
+    if (_frenaSinPermiso()) return;
+    if (_ocupado) return;
+    setState(() => _entregando = true);
+    try {
+      final r = await ref.read(entregarParteProvider).entregar(
+            eventoId: widget.evento.id,
+            contratoAlumnoId: alumno.id,
+            datos: datos,
+            quien: quienOpera(ref),
+            seguirSinInternet: () => seguirSinInternetEnLaEntrega(context, datos.parte),
+          );
+      if (!mounted) return;
+      // Si estaba en "En caja", ya está: se le entregó.
+      if (r is Entregada) {
+        ref.read(enCajaProvider(widget.evento.id).notifier).sacar(alumno.id);
+      }
+      // Sin internet y sin SEGUIR, el formulario queda con lo escrito.
+      if (r is! Cancelada) setState(() => _parteAbierta = null);
+      await _cargar(silencioso: true);
+      if (!mounted) return;
+      // Ya se guardó: mientras se lee el cartel, lo que baje se muestra.
+      setState(() => _entregando = false);
+      await mostrarComoTerminoLaEntrega(context, r, alumno: alumno, datos: datos);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se guardó la entrega. Probá de nuevo.')),
+        );
+      }
+    } finally {
+      if (mounted && _entregando) setState(() => _entregando = false);
+      _releerSiQuedoPendiente();
+    }
+  }
+
+  /// MANDAR A CAJA: la familia que debe va a pagar y queda en "En caja"; cuando
+  /// el pago baja, salta "pagó todo: ya podés entregar". Se vuelve a la lista.
+  void _mandarACaja(ContratoAlumno a) {
+    final deuda = _deudas[a.id];
+    if (deuda == null) return;
+    ref.read(enCajaProvider(widget.evento.id).notifier).mandar(a, deuda);
+    _elegirFamilia(null);
+  }
+
+  /// PASAR A CAJA: quien vende también tiene Cobros. La familia queda en "En
+  /// caja" y se va a la caja de cuotas sin volver a poner el PIN.
+  Future<void> _pasarACaja(ContratoAlumno a) async {
+    final app = ref.read(appRoleProvider);
+    if (!app.esEntradas || !app.permisos.cobros) return;
+    final deuda = _deudas[a.id];
+    if (deuda != null) {
+      ref.read(enCajaProvider(widget.evento.id).notifier).mandar(a, deuda);
+    }
+    final rol = ref.read(appRoleProvider.notifier);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    await rol.pasarACaja();
+  }
+
+  bool get _puedePasarACaja {
+    final app = ref.watch(appRoleProvider);
+    return app.esEntradas && app.permisos.cobros;
+  }
+
   // ── Cobrar y guardar ─────────────────────────────────────────────────────
 
   Future<void> _cobrar(MedioBarra medio) async {
     if (_frenaSinPermiso()) return;
     final caja = _caja;
     final pedido = _pedido;
-    if (caja == null || _guardando || pedido.falta != null) return;
+    if (caja == null || _ocupado || pedido.falta != null) return;
 
     final CobroBarra? cobro;
     if (pedido.esSinCargo) {
@@ -453,6 +770,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     if (!mounted) return;
     if (venta == null) {
       setState(() => _guardando = false);
+      _releerSiQuedoPendiente();
       return;
     }
     final guardada = venta;
@@ -544,6 +862,27 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     await _cargar(silencioso: true);
   }
 
+  /// La planilla de entrega en papel, **una por material** (las pulseras VIP y
+  /// las generales llegan y se entregan en tandas distintas).
+  Future<void> _imprimirPlanilla(ParteEntrega material, bool blancoYNegro) async {
+    try {
+      await PdfService.generarPlanillaEntrega(
+        widget.evento,
+        _alumnos,
+        material: material,
+        retiros: _retiros,
+        renglones: [for (final l in _renglones.values) ...l],
+        deudas: _deudas,
+        blancoYNegro: blancoYNegro,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo armar la planilla. Probá de nuevo.')),
+      );
+    }
+  }
+
   // ── Pantalla ─────────────────────────────────────────────────────────────
 
   @override
@@ -554,9 +893,18 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Vender entradas'),
+            // En un celular, corto: al lado van VENTAS y CERRAR CAJA.
+            Text(
+              MediaQuery.sizeOf(context).width < kVenderAngosto
+                  ? 'Vender'
+                  : 'Vender entradas',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             Text(
               _fiesta,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
             ),
           ],
@@ -565,12 +913,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           if (puede && _caja != null) ...[
             TextButton(
               key: const Key('vender_ventas'),
-              onPressed: _guardando ? null : _abrirVentas,
+              onPressed: _ocupado ? null : _abrirVentas,
               child: const Text('VENTAS'),
             ),
             TextButton(
               key: const Key('vender_cerrar'),
-              onPressed: _guardando ? null : _cerrarCaja,
+              onPressed: _ocupado ? null : _cerrarCaja,
               child: const Text('CERRAR CAJA'),
             ),
           ],
@@ -590,25 +938,75 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     );
   }
 
-  Widget _cuerpo() {
-    if (!(_config?.tienePrecio ?? false)) {
-      return const _Aviso(
-        clave: 'vender_sin_precio',
-        texto: kLaFiestaNoTienePrecio,
-        detalle: 'Sin precio no se abre la caja ni se vende. Se pone en '
-            'ENTRADAS → PRECIOS, en modo jefe.',
-      );
-    }
-    if (_caja == null) {
-      return Center(
-        child: FilledButton(
-          key: const Key('vender_abrir_caja'),
-          onPressed: _pedirCaja,
-          child: const Text('ABRIR LA CAJA'),
+  /// PLANILLA, al lado del total de la fiesta: la de entrega en papel, una por
+  /// material.
+  Widget _menuDeLaPlanilla() => PopupMenuButton<(ParteEntrega, bool)>(
+        key: const Key('vender_planilla'),
+        tooltip: 'Planilla de entrega',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.print_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 4),
+              Text(
+                'PLANILLA',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
         ),
+        onSelected: (e) => _imprimirPlanilla(e.$1, e.$2),
+        itemBuilder: (_) => [
+          for (final material in ParteEntrega.values)
+            for (final bn in const [true, false])
+              PopupMenuItem(
+                key: Key('vender_planilla_${material.clave}_${bn ? 'bn' : 'color'}'),
+                value: (material, bn),
+                child: Text(
+                  'Planilla de ${material == ParteEntrega.pulseras ? 'pulseras VIP' : 'generales'}'
+                  ' (${bn ? 'blanco y negro' : 'color'})',
+                ),
+              ),
+        ],
       );
+
+  bool get _tienePrecio => _config?.tienePrecio ?? false;
+
+  Widget _cuerpo() {
+    final familia = _familia;
+    final info = familia == null ? null : _info[familia.id];
+    final lista = <Widget>[];
+    if (_aUnaFamilia && info == null) {
+      final todos = [
+        for (final a in _alumnos)
+          if (_info[a.id] != null) _info[a.id]!,
+      ];
+      lista
+        ..add(FiltrosDeVender(
+          todos: todos,
+          filtro: _filtro,
+          busqueda: _busqueda,
+          alBuscar: () => setState(() {}),
+          alFiltrar: (f) => setState(() => _filtro = f),
+        ))
+        ..add(const SizedBox(height: 4));
+      final visibles = alumnosQueSeVen(todos, filtro: _filtro, busqueda: _busqueda.text);
+      for (var i = 0; i < visibles.length; i++) {
+        if (i > 0) lista.add(const Divider(height: 1));
+        final a = visibles[i];
+        lista.add(RenglonDeVender(
+          info: a,
+          descuentoPct: _descuentoPct,
+          alElegir: () => _elegirFamilia(a.id),
+        ));
+      }
     }
-    final p = _pedido;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 820),
@@ -616,32 +1014,27 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
             _linea(),
+            _totalDeLaFiesta(),
+            if (!_tienePrecio)
+              const _AvisoEnLinea(
+                clave: 'vender_sin_precio',
+                texto: kLaFiestaNoTienePrecio,
+                detalle: 'Hasta que lo ponga (ENTRADAS → PRECIOS, en modo jefe) no '
+                    'se vende. Lo sin cargo se entrega igual.',
+              ),
+            ..._enCajaArriba(),
             if (_ultima != null) _avisoDeGuardada(_ultima!),
-            _titulo('1 · ¿A quién?'),
+            const SizedBox(height: 10),
             _aQuien(),
-            _titulo('2 · Las entradas'),
-            _renglones(p),
-            _titulo('3 · Números del talonario (opcional)'),
-            _numeros(p),
-            const SizedBox(height: 12),
-            _total(p),
+            const SizedBox(height: 10),
+            if (_aUnaFamilia && info != null) _tarjeta(info),
+            ...lista,
+            if (!_aUnaFamilia) ..._afuera(),
           ],
         ),
       ),
     );
   }
-
-  Widget _titulo(String texto) => Padding(
-        padding: const EdgeInsets.only(top: 14, bottom: 6),
-        child: Text(
-          texto,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: Colors.grey.shade700,
-          ),
-        ),
-      );
 
   /// "Caja abierta · Romi · Todo subido".
   Widget _linea() {
@@ -654,8 +1047,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           hayInternet: snap.data == AppConnectivity.online,
           sinSubir: _sinSubir,
         );
-        final color =
-            linea.atencion ? Colors.orange.shade800 : Colors.green.shade700;
+        final sinCaja = _caja == null;
+        final color = linea.atencion || sinCaja
+            ? Colors.orange.shade800
+            : Colors.green.shade700;
         return Row(
           key: const Key('vender_linea'),
           children: [
@@ -663,8 +1058,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Caja abierta · ${_caja?.operadorNombre ?? _quienVende.nombre} · '
-                '${linea.texto}',
+                sinCaja
+                    ? 'Sin caja abierta · ${_quienVende.nombre} · ${linea.texto}'
+                    : 'Caja abierta · ${_caja?.operadorNombre ?? _quienVende.nombre} · '
+                        '${linea.texto}',
                 key: const Key('vender_linea_texto'),
                 style: TextStyle(
                   fontSize: 12.5,
@@ -679,6 +1076,134 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     );
   }
 
+  /// "Pulseras VIP: 24 (entregadas 3) · Generales: 40 (entregadas 0)": cuántas
+  /// tienen que llegar de cada material, y cuántas ya se dieron.
+  Widget _totalDeLaFiesta() {
+    final r = _resumen;
+    if (r == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.confirmation_number_outlined, size: 16, color: Colors.grey.shade700),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                    text: 'Total de la fiesta · ',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  TextSpan(text: r.texto),
+                ],
+              ),
+              key: const Key('vender_total_fiesta'),
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+            ),
+          ),
+          _menuDeLaPlanilla(),
+        ],
+      ),
+    );
+  }
+
+  /// Las familias que se mandaron a la caja: las que ya pagaron todo (con
+  /// ENTREGAR) y las que todavía deben.
+  List<Widget> _enCajaArriba() {
+    final enCaja = ref.watch(enCajaProvider(widget.evento.id));
+    if (enCaja.vacia) return const [];
+    final verde = Colors.green.shade700;
+    final ambar = Colors.orange.shade800;
+    final notifier = ref.read(enCajaProvider(widget.evento.id).notifier);
+    return [
+      for (final f in enCaja.pagaron)
+        Builder(builder: (context) {
+          final info = _info[f.alumnoId];
+          final libre = info != null && info.bloqueo == BloqueoRetiro.ninguno;
+          return Container(
+            key: Key('vender_pago_${f.alumnoId}'),
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            decoration: BoxDecoration(
+              color: verde.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: verde.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: verde),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    libre
+                        ? '${f.nombre} pagó todo: ya podés entregar'
+                        : '${f.nombre} pagó, pero todavía no se puede entregar: '
+                            'abrila para ver por qué',
+                    key: Key('vender_pago_texto_${f.alumnoId}'),
+                    style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+                  ),
+                ),
+                // En el celular el texto llegaba pegado al botón (muestras del
+                // 20-nov-2026).
+                const SizedBox(width: 8),
+                if (info != null)
+                  FilledButton(
+                    key: Key('vender_pago_abrir_${f.alumnoId}'),
+                    style: FilledButton.styleFrom(backgroundColor: verde),
+                    onPressed: _ocupado ? null : () => _abrirLaFamilia(f.alumnoId),
+                    child: Text(libre ? 'ENTREGAR' : 'ABRIR'),
+                  ),
+                IconButton(
+                  tooltip: 'Sacar el aviso',
+                  onPressed: () => notifier.sacar(f.alumnoId),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          );
+        }),
+      if (enCaja.esperando.isNotEmpty)
+        Container(
+          key: const Key('vender_en_caja'),
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: ambar.withValues(alpha: 0.6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'En caja: cuando paguen, avisa acá',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ambar),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final f in enCaja.esperando)
+                    InputChip(
+                      key: Key('vender_en_caja_${f.alumnoId}'),
+                      label: Text(
+                        f.pagoUnaParte
+                            ? '${f.nombre} · pagó una parte · faltan ${pesos(f.debe)}'
+                            : '${f.nombre} · debe ${pesos(f.debe)}',
+                      ),
+                      onPressed: () => _abrirLaFamilia(f.alumnoId),
+                      onDeleted: () => notifier.sacar(f.alumnoId),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+    ];
+  }
+
   Widget _avisoDeGuardada(VentaEntradas v) {
     final verde = Colors.green.shade700;
     return Container(
@@ -690,439 +1215,410 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         border: Border.all(color: verde.withValues(alpha: 0.6)),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          Icon(Icons.check_circle, color: verde),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Venta ${ComprobanteEntradasPdf.numero(v)} guardada · '
-              '${v.cantidad == 1 ? '1 entrada' : '${v.cantidad} entradas'} · '
-              '${pesos(v.cobrado)}',
-              style: TextStyle(fontWeight: FontWeight.w700, color: verde),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, color: verde),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Venta ${ComprobanteEntradasPdf.numero(v)} guardada · '
+                  '${v.cantidad == 1 ? '1 entrada' : '${v.cantidad} entradas'} · '
+                  '${pesos(v.cobrado)}',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            key: const Key('vender_ver_comprobante'),
-            onPressed: () =>
-                _abrirComprobante(_datosDelComprobante(v, copia: true)),
-            child: const Text('VER EL COMPROBANTE'),
-          ),
-          IconButton(
-            tooltip: 'Sacar el aviso',
-            icon: const Icon(Icons.close),
-            onPressed: () => setState(() => _ultima = null),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                key: const Key('vender_ver_comprobante'),
+                onPressed: () =>
+                    _abrirComprobante(_datosDelComprobante(v, copia: true)),
+                child: const Text('VER EL COMPROBANTE'),
+              ),
+              IconButton(
+                tooltip: 'Sacar el aviso',
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => _ultima = null),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _aQuien() {
-    final familia = _familia;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SegmentedButton<bool>(
-          key: const Key('vender_a_quien'),
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: true, label: Text('Una familia de la fiesta')),
-            ButtonSegment(value: false, label: Text('Alguien de afuera')),
-          ],
-          selected: {_aUnaFamilia},
-          onSelectionChanged: (s) => setState(() {
-            _aUnaFamilia = s.first;
-            _deLugar = null;
-            _sueltas = null;
-          }),
-        ),
-        const SizedBox(height: 8),
-        if (_aUnaFamilia && familia == null) _buscador(),
-        if (familia != null) _tarjetaDeLaFamilia(familia),
-        const SizedBox(height: 8),
-        LayoutBuilder(
-          builder: (context, caja) {
-            final comprador = TextField(
-              key: const Key('vender_comprador'),
-              controller: _comprador,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'Nombre y apellido de quien compra',
-              ),
-              onChanged: (_) => setState(() {}),
-            );
-            final dni = TextField(
-              key: const Key('vender_dni'),
-              controller: _dni,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'DNI (opcional)'),
-            );
-            // En un celular, uno debajo del otro: lado a lado los rótulos
-            // no entran.
-            if (caja.maxWidth < _angosto) {
-              return Column(
-                children: [comprador, const SizedBox(height: 8), dni],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: comprador),
-                const SizedBox(width: 10),
-                Expanded(flex: 2, child: dni),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
+  Widget _aQuien() => SegmentedButton<bool>(
+        key: const Key('vender_a_quien'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: true, label: Text('Un alumno de la fiesta')),
+          ButtonSegment(value: false, label: Text('Alguien de afuera')),
+        ],
+        selected: {_aUnaFamilia},
+        onSelectionChanged: (s) => setState(() {
+          _aUnaFamilia = s.first;
+          _cantidades.clear();
+          _sueltas = null;
+          _parteAbierta = null;
+        }),
+      );
 
-  /// Por debajo de este ancho, la pantalla se acomoda como en un celular.
-  static const _angosto = 560.0;
+  // ── La tarjeta del alumno ────────────────────────────────────────────────
 
-  Widget _buscador() {
-    final q = _busqueda.text.trim();
-    final visibles = q.isEmpty
-        ? const <ContratoAlumno>[]
-        : _alumnos
-            .where((a) => coincideTextoBusqueda([a.nombreAlumno], q))
-            .take(6)
-            .toList();
-    final compradas = compradasPorFamilia(_ventas, _anulaciones);
-    return Column(
-      children: [
-        TextField(
-          key: const Key('vender_buscar'),
-          controller: _busqueda,
-          decoration: InputDecoration(
-            hintText: 'Apellido o nombre del egresado',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: q.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Borrar',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => setState(_busqueda.clear),
-                  ),
-          ),
-          onChanged: (_) => setState(() {}),
-        ),
-        if (q.isNotEmpty && visibles.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('Nadie con ese nombre.'),
-          ),
-        for (final a in visibles)
-          ListTile(
-            key: Key('vender_familia_${a.id}'),
-            dense: true,
-            title: Text(
-              a.nombreAlumno.trim(),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: Text(_resumenDe(a, compradas[a.id] ?? 0)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _elegirFamilia(a.id),
-          ),
-      ],
-    );
-  }
-
-  /// "6° A · mesa 14 y 15 · 14 al 50 % (compró 3)".
-  String _resumenDe(ContratoAlumno a, int compro) {
-    final division = (a.cursoDivision ?? '').trim();
-    final mesa = SalonMesas.textoMesasPuerta(a) ?? 'sin mesa';
-    final e = RetiroEntradas.entradasDe(a, foto: _foto);
-    return [
-      if (division.isNotEmpty) division,
-      'mesa $mesa',
-      if (e.conDescuento > 0) '${e.conDescuento} $_alPorciento (compró $compro)',
-      if (e.sinDescuento > 0) '${e.sinDescuento} sin descuento',
-    ].join(' · ');
-  }
-
-  Widget _tarjetaDeLaFamilia(ContratoAlumno a) {
-    final lugares = _lugaresDe(a);
-    final deuda = _deudas[a.id];
-    final division = (a.cursoDivision ?? '').trim();
-    final mesa = SalonMesas.textoMesasPuerta(a) ?? 'sin mesa';
-    final cadaUna = _sinNumeros.precioDeLugar;
-    final gris = Colors.grey.shade700;
+  Widget _tarjeta(AlumnoDeVender info) {
+    final a = info.alumno;
+    final chip = info.chip;
+    final enCaja = ref.watch(enCajaProvider(widget.evento.id)).contiene(a.id);
     return Card(
       key: const Key('vender_familia_elegida'),
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 6, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text.rich(
-                    TextSpan(
-                      children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text.rich(
                         TextSpan(
-                          text: a.nombreAlumno.trim(),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          children: [
+                            TextSpan(
+                              text: a.nombreAlumno.trim(),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            TextSpan(
+                              text: ' · ${info.divisionYMesa}',
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                          ],
                         ),
-                        TextSpan(
-                          text: ' · ${division.isEmpty ? '' : '$division · '}mesa $mesa',
-                          style: TextStyle(color: gris),
-                        ),
-                      ],
-                    ),
+                        key: const Key('vender_familia_nombre'),
+                      ),
+                      ChipDeVender(
+                        chip.texto,
+                        key: const Key('vender_familia_estado'),
+                        color: chip.color,
+                        icono: chip.icono,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    lugares.leCorresponden == 0
-                        ? lugares.sinDescuento > 0
-                            ? 'Sus lugares adicionales los agregó después del '
-                                'sorteo: no llevan el descuento.'
-                            : 'No tiene mesa adicional ni sillas extra: no '
-                                'tiene entradas para comprar.'
-                        : lugares.quedan == 0
-                            ? lugares.compradas >= lugares.leCorresponden
-                                ? 'Ya compró todas las de sus lugares adicionales '
-                                    '(${lugares.compradas}).'
-                                : 'De sus lugares adicionales no le queda nada '
-                                    'pago para comprar (le corresponden '
-                                    '${lugares.leCorresponden}, compró '
-                                    '${lugares.compradas}).'
-                            : 'Le quedan ${lugares.quedan} '
-                                '${lugares.quedan == 1 ? 'entrada' : 'entradas'} de sus '
-                                'lugares adicionales, a ${pesos(cadaUna ?? 0)} cada una '
-                                '(le corresponden ${lugares.leCorresponden}, compró '
-                                '${lugares.compradas}).',
-                    key: const Key('vender_le_quedan'),
-                  ),
-                  if (lugares.sinDescuento > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        'Agregó ${lugares.sinDescuento} '
-                        '${lugares.sinDescuento == 1 ? 'lugar' : 'lugares'} después '
-                        'del sorteo: ${lugares.sinDescuento == 1 ? 'esa entrada va' : 'esas entradas van'} '
-                        'al precio de hoy, sin el descuento. Le '
-                        '${lugares.quedanSinDescuento == 1 ? 'queda 1' : 'quedan ${lugares.quedanSinDescuento}'}.',
-                        key: const Key('vender_sin_descuento'),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  // Lo que no está pago entero no se vende (20-nov-2026).
-                  if (lugares.textoAConfirmar != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        lugares.textoAConfirmar!,
-                        key: const Key('vender_a_confirmar'),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange.shade800,
-                        ),
-                      ),
-                    ),
-                  if (deuda != null && !deuda.pagoTodo)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        'Debe ${pesos(deuda.total)} del contrato: se salda en '
-                        'caja. Se le vende solo lo que ya está pago entero.',
-                        key: const Key('vender_debe'),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange.shade800,
-                        ),
-                      ),
-                    ),
-                ],
+                ),
+                TextButton(
+                  key: const Key('vender_cambiar_familia'),
+                  onPressed: _ocupado ? null : () => _elegirFamilia(null),
+                  child: const Text('CAMBIAR'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            BloqueGratis(
+              alumno: a,
+              estado: info.estado,
+              deuda: info.deuda,
+              bloqueo: info.bloqueo,
+              abierta: _parteAbierta,
+              ocupado: _ocupado,
+              deOtros: EntregaPorPartes.numerosDeOtros(
+                _todos,
+                _retiros,
+                [for (final l in _renglones.values) ...l],
+                salvo: a.id,
               ),
+              retiro: _retiros[a.id],
+              renglones: _renglones[a.id] ?? const [],
+              enCaja: enCaja,
+              puedePasarACaja: _puedePasarACaja,
+              alAbrir: (p) => setState(() => _parteAbierta = p),
+              alCancelar: () => setState(() => _parteAbierta = null),
+              alConfirmar: (datos) => _entregar(a, datos),
+              alMandarACaja: () => _mandarACaja(a),
+              alPasarACaja: () => _pasarACaja(a),
             ),
-            TextButton(
-              key: const Key('vender_cambiar_familia'),
-              onPressed: () => _elegirFamilia(null),
-              child: const Text('CAMBIAR'),
-            ),
+            const SizedBox(height: 12),
+            _aPagar(info),
           ],
         ),
       ),
     );
   }
 
-  Widget _renglones(PedidoDeEntradas p) {
-    final familia = _familia;
-    final lugares = familia == null ? null : _lugaresDe(familia);
+  /// A PAGAR: lo de su mesa adicional y sus sillas extra que ya pagó entero,
+  /// con su precio, y el cobro.
+  Widget _aPagar(AlumnoDeVender info) {
     final gris = Colors.grey.shade700;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (lugares != null && lugares.quedan > 0) ...[
-          const Divider(height: 1),
-          _renglon(
-            titulo: 'Entradas de sus lugares adicionales',
-            detalle: '${pesos(p.precioDeLugar ?? 0)} c/u · tope ${lugares.quedan}',
-            cantidad: p.deLugarQueVan,
-            clave: 'vender_lugar',
-            alCambiar: (n) => setState(
-              () => _deLugar = n.clamp(0, lugares.quedan),
-            ),
-            subtotal: p.deLugarQueVan * (p.precioDeLugar ?? 0),
-          ),
-        ],
-        // A una familia, las sueltas son lo que agregó después del sorteo, con
-        // su tope: sin nada de eso pago, el renglón no está.
-        if (lugares == null || lugares.quedanSinDescuento > 0) ...[
-          const Divider(height: 1),
-          _renglon(
-            titulo: lugares != null
-                ? 'Sin descuento: lo agregado después del sorteo'
-                : p.rigeLaAnticipada
-                    ? 'Entradas (anticipada)'
-                    : 'Entradas',
-            detalle: (p.descuentoQueVa > 0
-                    ? '${pesos(p.precioDeHoy ?? 0)} c/u · con el descuento, '
-                        '${pesos(RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa))}'
-                    : '${pesos(p.precioDeHoy ?? 0)} c/u') +
-                (lugares != null ? ' · tope ${lugares.quedanSinDescuento}' : ''),
-            cantidad: p.sueltasQueVan,
-            clave: 'vender_sueltas',
-            alCambiar: (n) => setState(() => _sueltas = n < 0 ? 0 : n),
-            subtotal: p.sueltasQueVan *
-                RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa),
-            antes: SizedBox(
-              width: 120,
-              child: Tooltip(
-                message: p.puedeDescontar
-                    ? 'Descuento a mano sobre estas entradas'
-                    : kSoloEnModoJefe,
-                child: TextField(
-                  key: const Key('vender_descuento'),
-                  controller: _descuento,
-                  enabled: p.puedeDescontar,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Descuento',
-                    suffixText: '%',
-                    isDense: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
+    final lineas = info.aPagar.lineas;
+    final hijos = <Widget>[
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'A PAGAR',
+              key: Key('vender_a_pagar_titulo'),
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
               ),
             ),
           ),
-          if (!p.puedeDescontar)
-            Text(
-              'El descuento a mano: $kSoloEnModoJefe, o si el jefe lo permite en '
-              'PRECIOS.',
-              key: const Key('vender_descuento_motivo'),
-              style: TextStyle(fontSize: 12, color: gris),
-            ),
+          Text('Se cobra en esta caja', style: TextStyle(fontSize: 12.5, color: gris)),
         ],
-      ],
+      ),
+    ];
+    if (lineas.isEmpty) {
+      hijos.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          'Nada: no tiene mesa adicional ni sillas extra.',
+          key: const Key('vender_nada_a_pagar'),
+          style: TextStyle(color: gris),
+        ),
+      ));
+    } else if (!_tienePrecio) {
+      hijos.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text('$kLaFiestaNoTienePrecio.', style: TextStyle(color: gris)),
+      ));
+    } else {
+      final p = _pedido;
+      final cuentas = _lineasDe(info);
+      // Con la cuenta para revisar (la misma regla que el diálogo de la
+      // entrega), las líneas se ven apagadas y no se vende nada: el porqué va
+      // abajo, sin quién compra ni cobro.
+      final frenadas = info.lugares.frenada != null;
+      hijos.add(LineasAPagar(
+        aPagar: info.aPagar,
+        quedan: cuentas.quedan,
+        aConfirmar: cuentas.aConfirmar,
+        cantidades: cuentas.lleva,
+        alCambiar: (i, n) =>
+            setState(() => _cantidades[claveDeLinea(lineas[i])] = n),
+        precioConDescuento: p.precioDeLugar ?? 0,
+        precioEntero: _config?.valorEntrada ?? 0,
+        precioDelDia: p.precioDeHoy ?? 0,
+        rigeLaAnticipada: p.rigeLaAnticipada,
+        descuentoPct: _descuentoPct,
+        frenadas: frenadas,
+      ));
+      // Cada línea ya dice "Ya compró las de esta línea": abajo no se repite
+      // (revisión del 20-nov-2026).
+      final todasDicenYaCompro = !frenadas &&
+          lineas.any((l) => l.entradas > 0) &&
+          [
+            for (var i = 0; i < lineas.length; i++)
+              lineas[i].entradas <= 0 ||
+                  (cuentas.quedan[i] <= 0 && cuentas.aConfirmar[i] <= 0),
+          ].every((b) => b);
+      final porQueNo = info.lugares.porQueNoSeVende;
+      if (porQueNo != null) {
+        // Sin nada para comprar hoy no se pide quién compra ni se cobra. Lo que
+        // espera el pago ya lo dice cada línea ("A confirmar: falta pagarla en
+        // caja"): no se repite abajo.
+        if (porQueNo != info.lugares.textoAConfirmar && !todasDicenYaCompro) {
+          hijos.add(Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              porQueNo,
+              key: const Key('vender_a_pagar_motivo'),
+              style: TextStyle(fontWeight: FontWeight.w600, color: gris),
+            ),
+          ));
+        }
+      } else {
+        hijos.addAll([
+          const Divider(height: 20),
+          _quienCompra(),
+          const SizedBox(height: 12),
+          _talonario(p),
+          const SizedBox(height: 12),
+          _total(p),
+        ]);
+      }
+    }
+    return Container(
+      key: const Key('vender_a_pagar'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0x80D4AF37)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: hijos,
+      ),
     );
   }
 
-  Widget _renglon({
-    required String titulo,
-    required String detalle,
-    required int cantidad,
-    required String clave,
-    required ValueChanged<int> alCambiar,
-    required double subtotal,
-    Widget? antes,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: LayoutBuilder(
-          builder: (context, caja) {
-            final nombre = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(detalle, style: TextStyle(color: Colors.grey.shade700)),
-              ],
+  // ── Alguien de afuera ────────────────────────────────────────────────────
+
+  List<Widget> _afuera() {
+    if (!_tienePrecio) return const [];
+    final p = _pedido;
+    return [
+      _quienCompra(),
+      const SizedBox(height: 8),
+      const Divider(height: 1),
+      _renglonDeAfuera(p),
+      if (!p.puedeDescontar)
+        Text(
+          'El descuento a mano: $kSoloEnModoJefe, o si el jefe lo permite en '
+          'PRECIOS.',
+          key: const Key('vender_descuento_motivo'),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+      const SizedBox(height: 12),
+      _talonario(p),
+      const SizedBox(height: 12),
+      _total(p),
+    ];
+  }
+
+  Widget _quienCompra() => LayoutBuilder(
+        builder: (context, caja) {
+          final angosto = caja.maxWidth < kVenderAngosto;
+          final comprador = TextField(
+            key: const Key('vender_comprador'),
+            controller: _comprador,
+            textCapitalization: TextCapitalization.characters,
+            // En un celular el rótulo largo se cortaba ("…de quien co…", muestras
+            // del 20-nov): va corto, y lo que se pide abajo, como ayuda.
+            decoration: InputDecoration(
+              labelText: angosto ? 'Quien compra' : 'Nombre y apellido de quien compra',
+              hintText: angosto ? 'Nombre y apellido' : null,
+            ),
+            onChanged: (_) => setState(() {}),
+          );
+          final dni = TextField(
+            key: const Key('vender_dni'),
+            controller: _dni,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(labelText: 'DNI (opcional)'),
+          );
+          // En un celular, uno debajo del otro: lado a lado los rótulos no
+          // entran.
+          if (angosto) {
+            return Column(
+              children: [comprador, const SizedBox(height: 8), dni],
             );
-            final controles = _controlesDelRenglon(
-              cantidad: cantidad,
-              clave: clave,
-              alCambiar: alCambiar,
-              subtotal: subtotal,
-              antes: antes,
-            );
-            // En la PC, el nombre a la izquierda y la cantidad y el subtotal
-            // contra el borde derecho, uno debajo del otro. En un celular, los
-            // controles debajo del nombre.
-            if (caja.maxWidth < _angosto) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [nombre, const SizedBox(height: 6), controles],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(child: nombre),
-                const SizedBox(width: 12),
-                controles,
-              ],
-            );
-          },
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: comprador),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: dni),
+            ],
+          );
+        },
+      );
+
+  /// Las entradas de alguien de afuera: al precio del día, con el descuento a
+  /// mano si se puede.
+  Widget _renglonDeAfuera(PedidoDeEntradas p) {
+    final titulo = p.rigeLaAnticipada ? 'Entradas (anticipada)' : 'Entradas';
+    final detalle = p.descuentoQueVa > 0
+        ? '${pesos(p.precioDeHoy ?? 0)} c/u · con el descuento, '
+            '${pesos(RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa))}'
+        : '${pesos(p.precioDeHoy ?? 0)} c/u';
+    final descuento = SizedBox(
+        width: 120,
+        child: Tooltip(
+          message: p.puedeDescontar
+              ? 'Descuento a mano sobre estas entradas'
+              : kSoloEnModoJefe,
+          child: TextField(
+            key: const Key('vender_descuento'),
+            controller: _descuento,
+            enabled: p.puedeDescontar,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Descuento',
+              suffixText: '%',
+              isDense: true,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
         ),
       );
+    // En un celular el descuento va en su propio renglón: al lado de la
+    // cantidad y el subtotal, en 360 px se salía del ancho (revisión del
+    // 20-nov-2026).
+    ControlDeCantidad controles({required bool conDescuento}) => ControlDeCantidad(
+          clave: 'vender_sueltas',
+          cantidad: p.sueltasQueVan,
+          subtotal: p.sueltasQueVan *
+              RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa),
+          alCambiar: (n) => setState(() => _sueltas = n < 0 ? 0 : n),
+          antes: conDescuento ? descuento : null,
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: LayoutBuilder(
+        builder: (context, caja) {
+          final nombre = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(detalle, style: TextStyle(color: Colors.grey.shade700)),
+            ],
+          );
+          // En la PC, el nombre a la izquierda y la cantidad y el subtotal
+          // contra el borde derecho. En un celular, los controles debajo.
+          if (caja.maxWidth < kVenderAngosto) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nombre,
+                const SizedBox(height: 6),
+                Align(alignment: Alignment.centerLeft, child: descuento),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: controles(conDescuento: false),
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: nombre),
+              const SizedBox(width: 12),
+              controles(conDescuento: true),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-  Widget _controlesDelRenglon({
-    required int cantidad,
-    required String clave,
-    required ValueChanged<int> alCambiar,
-    required double subtotal,
-    Widget? antes,
-  }) =>
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          if (antes != null) ...[antes, const SizedBox(width: 12)],
-          IconButton(
-            key: Key('${clave}_menos'),
-            tooltip: 'Una menos',
-            onPressed: cantidad <= 0 ? null : () => alCambiar(cantidad - 1),
-            icon: const Icon(Icons.remove_circle_outline),
-          ),
-          SizedBox(
-            width: 34,
-            child: Text(
-              '$cantidad',
-              key: Key('${clave}_cantidad'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-            ),
-          ),
-          IconButton(
-            key: Key('${clave}_mas'),
-            tooltip: 'Una más',
-            onPressed: () => alCambiar(cantidad + 1),
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-          SizedBox(
-            width: 96,
-            child: Text(
-              pesos(subtotal),
-              key: Key('${clave}_subtotal'),
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      );
+  // ── El talonario y el total ──────────────────────────────────────────────
 
-  Widget _numeros(PedidoDeEntradas p) {
+  /// El talonario de las anticipadas: todo lo que se vende sale de ahí. Viene
+  /// propuesto el número que sigue al último que vendió esta caja; se puede
+  /// cambiar o borrar (sin número se vende igual).
+  Widget _talonario(PedidoDeEntradas p) {
     Widget campo(String clave, TextEditingController c, String rotulo) =>
         SizedBox(
           width: 120,
@@ -1132,7 +1628,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(labelText: rotulo, isDense: true),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _delTocado = true),
           ),
         );
     final tramos = p.tramos;
@@ -1147,9 +1643,27 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       key: const Key('vender_al_calculado'),
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
     );
+    final n = p.cantidad;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          n > 0
+              ? 'Talonario de las anticipadas · ${n == 1 ? 'la que paga' : 'las $n que paga'}'
+              : 'Talonario de las anticipadas',
+          key: const Key('vender_talonario_titulo'),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        Text(
+          _hayPropuesta
+              ? 'Opcional. Viene el número que sigue al último que vendió esta '
+                  'caja: se puede cambiar o borrar.'
+              : 'Opcional: escribí el primer número de las anticipadas que '
+                  'entregás.',
+          key: const Key('vender_talonario_ayuda'),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 12,
           runSpacing: 8,
@@ -1166,6 +1680,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
               key: const Key('vender_dos_tramos'),
               onPressed: () => setState(() {
                 _dosTramos = !_dosTramos;
+                _delTocado = true;
                 _al.clear();
                 _del2.clear();
               }),
@@ -1181,17 +1696,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   Widget _total(PedidoDeEntradas p) {
     final falta = p.falta;
-    final apagado = falta != null || _guardando;
-    Widget boton(String clave, String texto, MedioBarra medio) => Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: FilledButton(
-              key: Key(clave),
-              onPressed: apagado ? null : () => _cobrar(medio),
-              child: Text(texto),
-            ),
-          ),
-        );
+    final apagado = falta != null || _ocupado;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1201,7 +1706,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           children: [
             Expanded(
               child: Text(
-                'Total · ${p.cantidad == 1 ? '1 entrada' : '${p.cantidad} entradas'}',
+                'Total a pagar · ${p.cantidad == 1 ? '1 entrada' : '${p.cantidad} entradas'}',
                 key: const Key('vender_cantidad'),
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
@@ -1213,25 +1718,34 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             ),
           ],
         ),
-        SizedBox(
-          height: 26,
-          child: falta == null
-              ? null
-              : Text(
-                  falta,
-                  key: const Key('vender_falta'),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    // Con la pantalla recién limpia es una guía, no un error:
-                    // en rojo, justo después de una venta, asusta.
-                    color: p.cantidad == 0 && _comprador.text.trim().isEmpty
-                        ? Colors.grey.shade700
-                        : Theme.of(context).colorScheme.error,
-                  ),
-                ),
-        ),
-        if (p.esSinCargo)
+        if (falta != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 6),
+            child: Text(
+              falta,
+              key: const Key('vender_falta'),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                // Mientras falta quién compra es una guía, no un error: en rojo,
+                // apenas se elige una familia (que viene con sus entradas
+                // cargadas) o justo después de una venta, asusta.
+                color: _comprador.text.trim().isEmpty
+                    ? Colors.grey.shade700
+                    : Theme.of(context).colorScheme.error,
+              ),
+            ),
+          )
+        else
+          const SizedBox(height: 8),
+        if (_caja == null)
+          FilledButton.icon(
+            key: const Key('vender_abrir_caja'),
+            onPressed: _ocupado ? null : _pedirCaja,
+            icon: const Icon(Icons.point_of_sale),
+            label: const Text('ABRIR LA CAJA'),
+          )
+        else if (p.esSinCargo)
           FilledButton(
             key: const Key('vender_sin_cargo'),
             onPressed: apagado ? null : () => _cobrar(MedioBarra.efectivo),
@@ -1245,20 +1759,21 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                 ('vender_transferencia', 'TRANSFERENCIA', MedioBarra.transferencia),
                 ('vender_mixto', 'MIXTO', MedioBarra.mixto),
               ];
+              Widget boton(String clave, String texto, MedioBarra medio) => FilledButton(
+                    key: Key(clave),
+                    onPressed: apagado ? null : () => _cobrar(medio),
+                    child: Text(texto),
+                  );
               // En un celular, uno debajo del otro: lado a lado
               // "TRANSFERENCIA" no entra y se parte en dos renglones.
-              if (caja.maxWidth < _angosto) {
+              if (caja.maxWidth < kVenderAngosto) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final (clave, texto, medio) in medios)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: FilledButton(
-                          key: Key(clave),
-                          onPressed: apagado ? null : () => _cobrar(medio),
-                          child: Text(texto),
-                        ),
+                        child: boton(clave, texto, medio),
                       ),
                   ],
                 );
@@ -1266,7 +1781,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
               return Row(
                 children: [
                   for (final (clave, texto, medio) in medios)
-                    boton(clave, texto, medio),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: boton(clave, texto, medio),
+                      ),
+                    ),
                 ],
               );
             },
@@ -1276,32 +1796,57 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   }
 }
 
+/// Un aviso a pantalla entera: sin permiso, o si no se pudo leer.
 class _Aviso extends StatelessWidget {
   final String clave;
   final String texto;
-  final String? detalle;
 
-  const _Aviso({required this.clave, required this.texto, this.detalle});
+  const _Aviso({required this.clave, required this.texto});
 
   @override
   Widget build(BuildContext context) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                texto,
-                key: Key(clave),
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-              ),
-              if (detalle != null) ...[
-                const SizedBox(height: 8),
-                Text(detalle!, textAlign: TextAlign.center),
-              ],
-            ],
+          child: Text(
+            texto,
+            key: Key(clave),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           ),
         ),
       );
+}
+
+/// Un aviso en la pantalla, arriba: la fiesta sin precio.
+class _AvisoEnLinea extends StatelessWidget {
+  final String clave;
+  final String texto;
+  final String detalle;
+
+  const _AvisoEnLinea({required this.clave, required this.texto, required this.detalle});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.amber.shade900;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        border: Border.all(color: Colors.amber.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            texto,
+            key: Key(clave),
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
+          Text(detalle, style: TextStyle(color: color)),
+        ],
+      ),
+    );
+  }
 }

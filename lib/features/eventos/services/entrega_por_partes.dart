@@ -5,6 +5,7 @@ import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
 import '../../../models/entrega_entradas.dart';
 import 'retiro_entradas.dart';
+import 'salon_mesas.dart';
 
 /// Cómo está una parte de la entrega sin cargo de un egresado: las pulseras VIP
 /// o las generales.
@@ -262,27 +263,59 @@ class _NovedadesDeLaFila {
   /// Lo que dice la fila: su entrega (`entregado_at`) y su anulación
   /// (`anulado_at`), en el orden que dice su estado, sin los reflejos de un
   /// renglón de la misma acción a la misma hora.
+  ///
+  /// **Con relojes que no coinciden** (las dos horas al revés de lo que dice
+  /// el estado; revisión del 20-nov-2026), lo que el estado da como último va
+  /// después de la otra, y cómo depende de quién lo hizo:
+  /// - **lo hizo una 6.9.x** (no es reflejo de un renglón): ese equipo vio la
+  ///   fila como estaba, así que va **un milisegundo después de la otra hora**.
+  ///   Si no, una anulación de las 8 juntas desde una 6.9.x con el reloj
+  ///   atrasado dejaba entregadas las generales de un renglón posterior, y una
+  ///   entrega de las 8 desde una 6.9.x atrasada quedaba antes de la anulación
+  ///   de una parte;
+  /// - **es el reflejo de un renglón** (lo escribió esta versión): lo que pasó
+  ///   lo dicen los renglones, con su orden. Una anulación anterior en el
+  ///   estado pero no en la hora no cuenta (las partes se volvieron a entregar
+  ///   después, por renglones), y una entrega de una 6.9.x va un milisegundo
+  ///   antes de la anulación que la refleja (la parte que no se anuló sigue
+  ///   entregada).
   static List<_Novedad> de(EntradasRetiro? f, List<EntregaEntradas> renglones) {
     if (f == null) return const [];
-    var entrega = f.entregadoAt;
-    var anulacion = f.anuladoAt;
-    if (f.entregado) {
-      entrega ??= f.updatedAt;
-      // El estado dice que lo último fue la entrega: una anulación que no es
-      // anterior (relojes de dos equipos que no coinciden) ya no cuenta.
-      if (anulacion != null && !anulacion.isBefore(entrega)) anulacion = null;
-    } else {
-      anulacion ??= f.updatedAt;
-      if (entrega != null && !entrega.isBefore(anulacion)) entrega = null;
-    }
     bool esReflejo(DateTime momento, QueSeHizo accion) => renglones.any(
           (r) => r.accion == accion && r.createdAt.isAtSameMomentAs(momento),
         );
+    const unMs = Duration(milliseconds: 1);
+    final entregaOriginal = f.entregado ? (f.entregadoAt ?? f.updatedAt) : f.entregadoAt;
+    final anulacionOriginal =
+        f.entregado ? f.anuladoAt : (f.anuladoAt ?? f.updatedAt);
+    final entregaEsReflejo =
+        entregaOriginal != null && esReflejo(entregaOriginal, QueSeHizo.entrega);
+    final anulacionEsReflejo = anulacionOriginal != null &&
+        esReflejo(anulacionOriginal, QueSeHizo.anulacion);
+    DateTime? entrega = entregaEsReflejo ? null : entregaOriginal;
+    DateTime? anulacion = anulacionEsReflejo ? null : anulacionOriginal;
+    if (f.entregado) {
+      // El estado dice que lo último fue la entrega.
+      if (anulacionOriginal != null && !anulacionOriginal.isBefore(entregaOriginal!)) {
+        if (entregaEsReflejo) {
+          anulacion = null;
+        } else {
+          entrega = anulacionOriginal.add(unMs);
+        }
+      }
+    } else {
+      // El estado dice que lo último fue la anulación.
+      if (entregaOriginal != null && !entregaOriginal.isBefore(anulacionOriginal!)) {
+        if (anulacionEsReflejo) {
+          if (entrega != null) entrega = anulacionOriginal.subtract(unMs);
+        } else {
+          anulacion = entregaOriginal.add(unMs);
+        }
+      }
+    }
     return [
-      if (entrega != null && !esReflejo(entrega, QueSeHizo.entrega))
-        _Novedad(entrega, QueSeHizo.entrega, null),
-      if (anulacion != null && !esReflejo(anulacion, QueSeHizo.anulacion))
-        _Novedad(anulacion, QueSeHizo.anulacion, null),
+      if (entrega != null) _Novedad(entrega, QueSeHizo.entrega, null),
+      if (anulacion != null) _Novedad(anulacion, QueSeHizo.anulacion, null),
     ];
   }
 }
@@ -304,6 +337,11 @@ class ResumenPorPartes {
   final int pulserasEntregadas;
   final int generalesEntregadas;
 
+  /// Las familias a las que les falta alguna parte y no se les puede entregar
+  /// por la plata: deben, o la ficha y los pagos no coinciden. Solo si se
+  /// pasaron sus deudas.
+  final int conDeuda;
+
   const ResumenPorPartes({
     required this.familias,
     required this.familiasConTodo,
@@ -313,18 +351,27 @@ class ResumenPorPartes {
     required this.generalesTotales,
     required this.pulserasEntregadas,
     required this.generalesEntregadas,
+    this.conDeuda = 0,
   });
 
+  /// "Pulseras VIP: 24 (entregadas 3) · Generales: 40 (entregadas 0)": cuántas
+  /// tienen que llegar de cada material y cuántas ya se dieron.
+  String get texto => 'Pulseras VIP: $pulserasTotales (entregadas $pulserasEntregadas)'
+      ' · Generales: $generalesTotales (entregadas $generalesEntregadas)';
+
   /// [alumnos]: los que se cuentan (sin las bajas: eso lo decide quien llama).
+  /// [deudas]: lo que debe cada uno (`RetiroEntradas.deudaDe`), para [conDeuda].
   static ResumenPorPartes de({
     required Iterable<ContratoAlumno> alumnos,
     required Map<String, EntradasRetiro> retiros,
     required Iterable<EntregaEntradas> renglones,
+    Map<String, DeudaAlumno> deudas = const {},
   }) {
     final porAlumno = EntregaEntradas.porAlumno(renglones);
     var familias = 0, conTodo = 0, conPulseras = 0, conGenerales = 0;
     var pulserasTotales = 0, generalesTotales = 0;
     var pulserasEntregadas = 0, generalesEntregadas = 0;
+    var conDeuda = 0;
     for (final a in alumnos) {
       familias++;
       final e = EstadoDeLaEntrega.deAlumno(
@@ -332,6 +379,10 @@ class ResumenPorPartes {
         retiro: retiros[a.id],
         renglones: porAlumno[a.id] ?? const [],
       );
+      final d = deudas[a.id];
+      if (!e.todoEntregado && d != null && (!d.pagoTodo || d.noCoincide)) {
+        conDeuda++;
+      }
       pulserasTotales += max(0, e.pulseras.leToca);
       generalesTotales += max(0, e.generales.leToca);
       if (e.pulseras.entregada) {
@@ -353,8 +404,57 @@ class ResumenPorPartes {
       generalesTotales: generalesTotales,
       pulserasEntregadas: pulserasEntregadas,
       generalesEntregadas: generalesEntregadas,
+      conDeuda: conDeuda,
     );
   }
+}
+
+/// Un renglón de la planilla de entrega en papel, **de un material**: la de las
+/// pulseras VIP o la de las generales (20-nov-2026: cada una llega en su tanda
+/// y se entrega con su planilla). Lo que la app ya sabe va impreso; el nombre
+/// de quien retira queda siempre en blanco, porque lo escribe esa persona (no
+/// se firma).
+class FilaPlanillaEntrega {
+  final String alumnoId;
+  final String egresado;
+  final String mesa;
+  final ParteEntrega material;
+
+  /// Cuántas: las que se llevó si ya retiró; si no, las que le corresponden.
+  final int cantidad;
+
+  /// Las generales: los números si ya retiró ("1043 al 1047"), "-" si se
+  /// llevó sin número, vacío si no retiró. En las pulseras, vacío.
+  final String delAl;
+
+  /// Las pulseras: los menores de 10 si ya retiró; vacío si no.
+  final String menores;
+
+  /// El parentesco si ya retiró; vacío si no.
+  final String parentesco;
+
+  /// Por qué no se puede entregar ("Debe: no entregar"), o `null`.
+  final String? noEntregar;
+
+  final bool entregado;
+
+  /// No le toca nada de este material: las generales de quien tiene 8 o más con
+  /// cena.
+  final bool noLleva;
+
+  const FilaPlanillaEntrega({
+    required this.alumnoId,
+    required this.egresado,
+    required this.mesa,
+    required this.material,
+    required this.cantidad,
+    required this.delAl,
+    required this.menores,
+    required this.parentesco,
+    required this.noEntregar,
+    required this.entregado,
+    this.noLleva = false,
+  });
 }
 
 /// En qué grupo del filtro de VENDER va cada alumno.
@@ -456,6 +556,212 @@ class EntregaPorPartes {
 
   /// "las pulseras VIP con cena" o "las entradas generales".
   static String nombreDe(ParteEntrega p) => 'las ${p.nombre}';
+
+  /// Por qué **no se entrega [parte] ahora**, porque la otra ya se entregó con
+  /// otra cuenta y entre las dos se llevaría más sin cargo de lo que le
+  /// corresponde; o null si se puede. Revisión del 20-nov-2026: con 1
+  /// acompañante se le daban las 6 generales, se sumaba otro acompañante y
+  /// después se le daban 3 pulseras: 9 sin cargo para una mesa de 8 (y al
+  /// revés, sacando un acompañante después de las pulseras).
+  ///
+  /// Si la otra se llevó de menos, esta se entrega igual (no se pasa del
+  /// total). **La misma regla en el servicio que guarda (`EntregarParte`) y en
+  /// las dos pantallas** (GRATIS de VENDER y el diálogo de la entrega).
+  static String? frenoPorLaOtraParte(EstadoDeLaEntrega estado, ParteEntrega parte) {
+    final esta = estado.parte(parte);
+    final otra = estado.parte(
+      parte == ParteEntrega.pulseras ? ParteEntrega.generales : ParteEntrega.pulseras,
+    );
+    if (esta.entregada || !otra.entregada) return null;
+    final sinCargo = esta.leToca + otra.leToca;
+    if (esta.leToca + otra.cantidad <= sinCargo) return null;
+    return 'Ya se le entregaron ${otra.parte.cuantas(otra.cantidad)} con otra '
+        'cuenta (hoy le corresponden ${otra.leToca}): entre las dos se llevaría '
+        '${esta.leToca + otra.cantidad} sin cargo, y le corresponden $sinCargo. '
+        'Pedile al jefe que lo revise desde ENTRADAS de la fiesta.';
+  }
+
+  /// "El egresado · PÉREZ, ANA · PÉREZ, LUIS · 1 sin nombre": quiénes van con
+  /// cena en [cuantas] pulseras de [a] (el egresado y sus acompañantes).
+  /// **Separados por un punto, nunca por coma**: los nombres llevan coma
+  /// ("APELLIDO, NOMBRE"), y con comas no se podía contar cuántas pulseras eran
+  /// ni quién faltaba (revisión del 20-nov-2026). La usan VENDER y el diálogo de
+  /// la entrega, así dicen lo mismo.
+  static String quienesVanConCena(ContratoAlumno a, int cuantas) {
+    final acompanantes = [
+      for (final n in a.nombresAcompanantes)
+        if (n.trim().isNotEmpty) n.trim(),
+    ];
+    final otros = cuantas - 1;
+    if (otros <= 0) return 'Solo el egresado';
+    final sinNombre = otros - acompanantes.length;
+    return [
+      'El egresado',
+      ...acompanantes.take(otros),
+      if (sinNombre > 0) '$sinNombre sin nombre',
+    ].join(' · ');
+  }
+
+  /// La fila de `entradas_retiro` de [retiro] no dice lo mismo que las partes
+  /// ([estado]) y hay que ponerla al día (`EntregarParte.completarLaFila`, con
+  /// internet y mirando la nube antes). Pasa de dos maneras:
+  /// - **falta la fila**: la familia tiene las dos partes y la fila no dice
+  ///   "entregado" (cada parte la dio un equipo distinto y uno estaba sin
+  ///   internet);
+  /// - **la fila quedó vieja**: dice "entregado" pero una parte está anulada
+  ///   por un renglón ([filaConLaAnulacion]). Pasa si el jefe anuló una parte
+  ///   mientras otro equipo escribía la fila completa, o sin internet, antes de
+  ///   bajarla (revisión del 20-nov-2026).
+  ///
+  /// Lo que lee la fila sola (el PLANO, una PC con la 6.9.x, la planilla vieja)
+  /// tiene que ver lo mismo que dicen los renglones.
+  static bool filaParaPonerAlDia({
+    EntradasRetiro? retiro,
+    required EstadoDeLaEntrega estado,
+  }) {
+    if (retiro?.entregado ?? false) {
+      return filaConLaAnulacion(retiro: retiro!, estado: estado) != null;
+    }
+    return estado.todoEntregado &&
+        ParteEntrega.values.any(
+          (p) => estado.parte(p).entregada && !estado.parte(p).deLaFila,
+        );
+  }
+
+  /// La fila de `entradas_retiro` anulada, cuando dice "entregado" y una parte
+  /// está anulada por un renglón (y no se volvió a entregar). Es **el reflejo**
+  /// de esa anulación: con su misma hora, quién y motivo ("Solo las pulseras VIP
+  /// con cena: …" si queda la otra parte), como la escribe `anularParte`. Así una
+  /// PC con la 6.9.x, el plano y la planilla vieja dejan de ver "Retiró", y esta
+  /// versión sigue leyendo cada parte por sus renglones: la anulación de la fila
+  /// es la del renglón, no otra, y no tapa la otra parte.
+  ///
+  /// Null si la fila no dice "entregado" o si no falta ninguna parte anulada
+  /// (una parte que falta porque cambió la cuenta no es una anulación: esa fila
+  /// no se toca).
+  ///
+  /// Antes de escribirla van las copias de lo que dependía de la fila
+  /// ([copiasDeLaFila]): una parte entregada de una sola vez (la 6.9.x) no se
+  /// pierde.
+  ///
+  /// [ahora]: cuándo se escribe (su `updated_at`; la hora de la anulación es la
+  /// del renglón). Sin él, la de la anulación.
+  static EntradasRetiro? filaConLaAnulacion({
+    required EntradasRetiro retiro,
+    required EstadoDeLaEntrega estado,
+    DateTime? ahora,
+  }) {
+    if (!retiro.entregado) return null;
+    final anuladas = [
+      for (final p in ParteEntrega.values)
+        if (estado.parte(p).falta &&
+            estado.parte(p).anulada &&
+            !estado.parte(p).deLaFila)
+          estado.parte(p),
+    ]..sort((a, b) => a.anuladaAt!.compareTo(b.anuladaAt!));
+    if (anuladas.isEmpty) return null;
+    final ultima = anuladas.last;
+    final motivo = (ultima.motivoAnulacion ?? '').trim();
+    final queSeAnulo = anuladas.length == ParteEntrega.values.length
+        ? motivo
+        : (motivo.isEmpty
+            ? 'Solo ${nombreDe(ultima.parte)}'
+            : 'Solo ${nombreDe(ultima.parte)}: $motivo');
+    final f = RetiroEntradas.anular(
+      retiro,
+      motivo: queSeAnulo,
+      quien: ultima.anuladaPor ?? '',
+      ahora: ultima.anuladaAt!,
+    );
+    if (ahora == null || !ahora.isAfter(f.updatedAt)) return f;
+    return EntradasRetiro(
+      id: f.id,
+      contratoAlumnoId: f.contratoAlumnoId,
+      estado: f.estado,
+      vip: f.vip,
+      generales: f.generales,
+      tramos: f.tramos,
+      menores10: f.menores10,
+      parentesco: f.parentesco,
+      retiroNombre: f.retiroNombre,
+      otraPersonaMotivo: f.otraPersonaMotivo,
+      autorizacionFirmada: f.autorizacionFirmada,
+      escribioEnPlanilla: f.escribioEnPlanilla,
+      entregadoPor: f.entregadoPor,
+      entregadoAt: f.entregadoAt,
+      anuladoPor: f.anuladoPor,
+      anuladoAt: f.anuladoAt,
+      anuladoMotivo: f.anuladoMotivo,
+      createdAt: f.createdAt,
+      updatedAt: ahora,
+    );
+  }
+
+  /// El renglón de [a] en la planilla de [material]: lo que le corresponde (o
+  /// lo que se llevó, si ya retiró esa parte), y por qué no se le puede
+  /// entregar si no se puede (`RetiroEntradas.textoBloqueo`).
+  static FilaPlanillaEntrega filaPlanilla(
+    ContratoAlumno a, {
+    required ParteEntrega material,
+    EntradasRetiro? retiro,
+    List<EntregaEntradas> renglones = const [],
+    required DeudaAlumno deuda,
+  }) {
+    final e = EstadoDeLaEntrega.deAlumno(a, retiro: retiro, renglones: renglones)
+        .parte(material);
+    final noLleva = !e.entregada && e.leToca <= 0;
+    final generales = material == ParteEntrega.generales;
+    return FilaPlanillaEntrega(
+      alumnoId: a.id,
+      egresado: a.nombreAlumno.trim(),
+      mesa: SalonMesas.textoMesasPuerta(a) ?? '-',
+      material: material,
+      cantidad: e.entregada ? e.cantidad : max(0, e.leToca),
+      delAl: !generales || !e.entregada
+          ? ''
+          : (e.tramos.isEmpty ? '-' : TramoTalonario.legible(e.tramos)),
+      menores: !generales && e.entregada ? '${e.menores10}' : '',
+      parentesco: e.entregada ? e.parentesco?.etiqueta ?? '' : '',
+      noEntregar: e.entregada || noLleva
+          ? null
+          : RetiroEntradas.textoBloqueo(RetiroEntradas.bloqueo(a, deuda)),
+      entregado: e.entregada,
+      noLleva: noLleva,
+    );
+  }
+
+  /// La hora que lleva un renglón nuevo de [parte]: la de [ahora] o, si este
+  /// equipo ya conoce una novedad de esa parte más nueva, **un milisegundo
+  /// después de esa novedad**. Las novedades son los renglones de esa parte y
+  /// lo que dice la fila de `entradas_retiro` (que vale para las dos).
+  ///
+  /// **Cada equipo tiene su reloj** (revisión del 20-nov-2026): una tablet con
+  /// la hora atrasada que vuelve a entregar algo que el jefe anuló desde la PC
+  /// anotaba su entrega *antes* que la anulación, y la entrega no contaba. Así
+  /// lo que se anota acá queda siempre después de lo que este equipo ya vio.
+  static DateTime horaDelRenglon({
+    required ParteEntrega parte,
+    EntradasRetiro? retiro,
+    required Iterable<EntregaEntradas> renglones,
+    required DateTime ahora,
+  }) {
+    var hora = ahora.toUtc();
+    void despuesDe(DateTime? momento) {
+      if (momento == null) return;
+      final siguiente = momento.toUtc().add(const Duration(milliseconds: 1));
+      if (siguiente.isAfter(hora)) hora = siguiente;
+    }
+
+    for (final r in renglones) {
+      if (r.parte == parte) despuesDe(r.createdAt);
+    }
+    if (retiro != null) {
+      despuesDe(retiro.entregadoAt);
+      despuesDe(retiro.anuladoAt);
+      despuesDe(retiro.updatedAt);
+    }
+    return hora;
+  }
 
   /// "MADRE PÉREZ, ANA, el 20/11/2026 15:30 hs (lo registró Carla)", con lo que
   /// se sabe. [fecha] da el formato de la fecha (`ArTime.formatFechaHora`).

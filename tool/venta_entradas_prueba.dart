@@ -17,16 +17,35 @@
 //   (la entrega de la oficina, con PRECIOS, VENTAS y VENDER) y CIERRE DE CAJA (COBROS ·
 //   BARRA · ENTRADAS).
 //
-// La noche arranca así: PUERTO VIEJO con precio (la entrada $ 10.000, la anticipada
-// $ 8.000 hasta el 28-nov, los lugares al 50 %); Carla todavía sin caja; la caja de Maxi
-// (otra tablet) ya cerrada, con $ 500 de menos; PÉREZ, JUAN con 8 lugares al 50 % y
-// ninguna comprada; GÓMEZ, ANA ya retiró las suyas (1001 a 1007). Con
-// `--dart-define=ventas=muchas`, la caja de Maxi trae 700 ventas más (para ver el
+// Desde el 20-nov-2026 Carla, que tiene "Vende entradas", ve **un solo botón por fiesta,
+// VENDER**: adentro entrega lo sin cargo en dos partes (las pulseras VIP con cena y las
+// generales, solo a quien pagó todo su contrato) y vende A PAGAR (cada mesa adicional y
+// silla extra que ya está paga entera) y al público, del talonario de las anticipadas.
+//
+// La noche arranca así: PUERTO VIEJO con precio (la General $ 10.000, la ANTICIPADA
+// $ 8.000 hasta el 28-nov, los lugares al 50 %), ya sorteada y con lo que cada familia
+// tenía anotado; Carla todavía sin caja; la caja de Maxi (otra tablet) ya cerrada, con
+// $ 500 de menos. Las familias, una de cada caso ([sumarLaNoche]):
+// - ACOSTA, LUCÍA pagó todo: 2 acompañantes y una mesa adicional paga (8 con 50 %);
+// - BENÍTEZ, TOMÁS debe una cuota, pero su mesa adicional está paga: no retira lo sin
+//   cargo y sí compra lo de su mesa;
+// - DÍAZ, NICOLÁS debe solo la mora;
+// - PÉREZ, JUAN debe su mesa adicional: "a confirmar";
+// - FERREYRA, MÍA agregó una silla después del sorteo y la pagó: 1 sin descuento, al
+//   precio del día;
+// - HERRERA, LUCAS tiene 3 acompañantes (el aviso del máximo);
+// - IBARRA, CAMILA tiene 2 acompañantes, uno sin nombre;
+// - LÓPEZ, SOFÍA, sin mesa adicional ni sillas;
+// - GÓMEZ, ANA ya retiró las suyas con la 6.9.x (las 8 juntas, 1001 a 1007).
+// Con `--dart-define=ventas=muchas`, la caja de Maxi trae 700 ventas más (para ver el
 // cartel Todo junto · Por hojas de IMPRIMIR HISTORIAL).
 //
 // Lo que no es como en la app:
 // - las entregas sin cargo se comparten al instante entre los dos lados (con o sin
 //   internet); lo que va y viene con la subida es la venta de entradas;
+// - la caja de cuotas: LA CAJA COBRA, arriba del jefe (o COBRAR en su entrega), le
+//   cobra a una familia todo lo que debe, como si pagara en la caja de otra PC, y les
+//   llega a los dos lados (con o sin internet);
 // - los papeles de la venta (el comprobante, el historial y el cierre) son los de la
 //   app, pero quedan en build/venta_entradas_prueba y se abren con el visor, sin el menú
 //   de la app (que los dejaría en la carpeta del programa);
@@ -48,6 +67,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/cuentas/pesos.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/models/operador_caja.dart';
@@ -72,7 +92,12 @@ import 'package:arguello_events/features/eventos/repositories/contratos_reposito
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
+import 'package:arguello_events/features/eventos/services/cobro_abono_acumulado.dart';
+import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
+import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import '../test/helpers/barra_en_memoria.dart';
 import '../test/helpers/cierre_en_memoria.dart' show CierreDePrueba, ModoJefeDelCierre;
@@ -486,6 +511,64 @@ class LadosDeLaVenta {
         const PermisosEfectivos(entradas: true, vendeEntradas: true),
       );
 
+  List<Map<String, dynamic>> _pagosDe(String alumnoId) => [
+        for (final p in entrega.contratos.pagos)
+          if (p['contrato_alumno_id'] == alumnoId) p,
+      ];
+
+  /// Lo que debe [alumnoId] de su contrato, con la misma cuenta que la entrega
+  /// (`RetiroEntradas.deudaDe`).
+  DeudaAlumno deudaDe(String alumnoId) => RetiroEntradas.deudaDe(
+        entrega.contratos.alumnos.firstWhere((a) => a.id == alumnoId),
+        pagos: _pagosDe(alumnoId),
+        moraCobradaHistorial: 0,
+      );
+
+  /// Las familias que deben algo de su contrato: las que LA CAJA COBRA ofrece.
+  List<ContratoAlumno> get familiasQueDeben => [
+        for (final a in entrega.contratos.alumnos)
+          if (!deudaDe(a.id).pagoTodo) a,
+      ];
+
+  /// LA CAJA COBRA: la caja de cuotas (otra PC) le cobra a [alumnoId] todo lo
+  /// que debe, como lo haría el cobro de la app: un pago por lo que falta de la
+  /// base, de la mesa adicional y de las sillas, y la mora; la ficha queda en
+  /// cero. Los dos lados lo bajan (como el pulso), así VENDER destraba lo sin
+  /// cargo y habilita lo de A PAGAR solo, y en "En caja" salta "pagó todo".
+  /// Devuelve lo cobrado.
+  double cobrarTodo(String alumnoId) {
+    final alumnos = entrega.contratos.alumnos;
+    final i = alumnos.indexWhere((a) => a.id == alumnoId);
+    final a = alumnos[i];
+    final pagos = _pagosDe(alumnoId);
+    final base = a.montoTotalPactado - a.mesaExtraPrecio - a.sillasExtraPrecioTotal;
+    final faltan = <String, double>{
+      'Cuota Base (9/9)': base - grossHistoricoClaseCobro(pagos, CobroConceptoClase.base),
+      'Mesa Extra 1':
+          a.mesaExtraPrecio - grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
+      'Sillas extra (1/1)': a.sillasExtraPrecioTotal -
+          grossHistoricoClaseCobro(pagos, CobroConceptoClase.sillas),
+    };
+    var cobrado = a.moraPendienteTracked;
+    for (final MapEntry(key: concepto, value: monto) in faltan.entries) {
+      if (monto <= RetiroEntradas.margen) continue;
+      entrega.contratos.pagos.add(pagoDeLaEntrega(alumnoId, monto, concepto));
+      cobrado += monto;
+    }
+    alumnos[i] = a.copyWith(
+      saldoDeudor: 0,
+      cuotasPagadas: a.totalCuotas,
+      mesaExtraCuotasPagadas: a.mesaExtraCuotas,
+      sillasExtraCuotasPagadas: a.sillasExtraCuotas,
+      moraPendienteTracked: 0,
+    );
+    for (final lado in [nube.tablet, nube.pc]) {
+      lado.bajo({'pagos_contrato_alumno', 'contratos_alumnos'});
+    }
+    nube.cambios.value++;
+    return cobrado;
+  }
+
   void dispose() {
     carla.dispose();
     jefe.dispose();
@@ -503,6 +586,7 @@ Future<LadosDeLaVenta> armarLados({
   PapelesDeLaPrueba? papeles,
 }) async {
   final entrega = EntregaEnMemoria();
+  sumarLaNoche(entrega);
   final carla = entrega.operador(vende: true);
   final losPapeles = papeles ?? PapelesDeLaPrueba();
   final tablet = EntradasDeUnEquipo(equipo: 'tablet-carla');
@@ -524,6 +608,11 @@ Future<LadosDeLaVenta> armarLados({
         supabaseProvider.overrideWithValue(entrega.supabase),
         contratosRepositoryProvider.overrideWithValue(entrega.contratos),
         entradasRetiroRepositoryProvider.overrideWithValue(entrega.entregas),
+        // La entrega por partes (pulseras y generales), en memoria y compartida:
+        // al subir, avisa al otro lado como las demás entregas.
+        ...entrega.reemplazosDeLasPartes(
+          alSubir: (tabla) => nube.entregaSubio(lado, tabla),
+        ),
         // El registro de sorteos: de ahí sale a qué lugares les va el descuento.
         sorteosMesasRepositoryProvider.overrideWithValue(entrega.sorteos),
         syncEngineProvider.overrideWithValue(lado.motor),
@@ -580,6 +669,163 @@ Future<LadosDeLaVenta> armarLados({
     operadora: carla,
     cajaDeMaxi: cajaDeMaxi,
   );
+}
+
+// ── Las familias de la noche ────────────────────────────────────────────────
+
+/// Las familias que [sumarLaNoche] agrega a las tres de `EntregaEnMemoria`
+/// (PÉREZ, LÓPEZ y GÓMEZ): una de cada caso. Nombres inventados.
+abstract final class NocheDeLaVenta {
+  /// Pagó todo: 2 acompañantes con nombre y una mesa adicional paga.
+  static const acosta = 'a0000000-0000-4000-8000-000000000401';
+
+  /// Debe una cuota de la base ($ 33.333), con la mesa adicional paga.
+  static const benitez = 'a0000000-0000-4000-8000-000000000402';
+
+  /// Debe solo la mora ($ 12.500).
+  static const diaz = 'a0000000-0000-4000-8000-000000000403';
+
+  /// Agregó una silla extra después del sorteo, y la pagó.
+  static const ferreyra = 'a0000000-0000-4000-8000-000000000404';
+
+  /// 3 acompañantes (el máximo es 2).
+  static const herrera = 'a0000000-0000-4000-8000-000000000405';
+
+  /// 2 acompañantes, uno sin nombre.
+  static const ibarra = 'a0000000-0000-4000-8000-000000000406';
+
+  /// Cuándo se sorteó PUERTO VIEJO.
+  static final sorteoEl = DateTime.utc(2026, 11, 11, 0, 30);
+}
+
+/// Una familia más de PUERTO VIEJO: la base de $ 300.000 ([basePagada] de eso
+/// pagado), [extras] mesas adicionales de $ 70.000 y [sillas] sillas extra de
+/// $ 8.000, las dos pagas enteras, y [mora] de mora. La ficha dice lo mismo que
+/// los pagos.
+ContratoAlumno _familia(
+  EntregaEnMemoria e, {
+  required String id,
+  required String nombre,
+  required List<int> mesas,
+  String division = '5° B',
+  int extras = 0,
+  int sillas = 0,
+  int acompanantes = 0,
+  List<String> nombres = const [],
+  double basePagada = 300000,
+  double mora = 0,
+}) {
+  final total = 300000 + 70000.0 * extras + 8000.0 * sillas;
+  final pagado = basePagada + 70000.0 * extras + 8000.0 * sillas;
+  final a = ContratoAlumno(
+    id: id,
+    eventoId: idFiestaEntrega,
+    nombreAlumno: nombre,
+    cantidadAcompanantes: acompanantes,
+    nombresAcompanantes: nombres,
+    montoTotalPactado: total,
+    saldoDeudor: total - pagado,
+    // Como en las pruebas de VENDER: con las 9 marcadas la deuda de la base no
+    // genera mora, así "debe una cuota" y "debe solo mora" quedan separados.
+    totalCuotas: 9,
+    cuotasPagadas: 9,
+    mesaExtraPrecio: 70000.0 * extras,
+    mesaExtraCantidad: extras,
+    mesaExtraCuotas: 1,
+    mesaExtraCuotasPagadas: extras > 0 ? 1 : 0,
+    sillasExtraCantidad: sillas,
+    sillasExtraPrecioTotal: 8000.0 * sillas,
+    sillasExtraCuotas: 1,
+    sillasExtraCuotasPagadas: sillas > 0 ? 1 : 0,
+    moraPendienteTracked: mora,
+    numeroMesa: MesasExtraUtils.formatearAsignacionMesas(mesas),
+    cursoDivision: division,
+    createdAt: DateTime(2026, 2, 1),
+  );
+  e.contratos.alumnos.add(a);
+  e.contratos.pagos.add(pagoDeLaEntrega(id, basePagada, 'Cuota Base (9/9)'));
+  if (extras > 0) {
+    e.contratos.pagos.add(pagoDeLaEntrega(id, 70000.0 * extras, 'Mesa Extra 1'));
+  }
+  if (sillas > 0) {
+    e.contratos.pagos.add(pagoDeLaEntrega(id, 8000.0 * sillas, 'Sillas extra (1/1)'));
+  }
+  return a;
+}
+
+/// La noche de la ventana (y de las muestras): a las tres familias de
+/// `EntregaEnMemoria` les suma una de cada caso ([NocheDeLaVenta]) y el sorteo de
+/// PUERTO VIEJO, con lo que cada familia tenía cargado: de ahí sale qué va con
+/// el descuento de PRECIOS y qué al precio del día.
+void sumarLaNoche(EntregaEnMemoria e) {
+  _familia(
+    e,
+    id: NocheDeLaVenta.acosta,
+    nombre: 'ACOSTA, LUCÍA',
+    mesas: const [16, 17],
+    extras: 1,
+    acompanantes: 2,
+    nombres: const ['ACOSTA, MARTA', 'ACOSTA, RUBÉN'],
+  );
+  _familia(
+    e,
+    id: NocheDeLaVenta.benitez,
+    nombre: 'BENÍTEZ, TOMÁS',
+    mesas: const [18, 19],
+    extras: 1,
+    acompanantes: 1,
+    nombres: const ['BENÍTEZ, CLARA'],
+    basePagada: 266667,
+  );
+  _familia(
+    e,
+    id: NocheDeLaVenta.diaz,
+    nombre: 'DÍAZ, NICOLÁS',
+    mesas: const [20],
+    mora: 12500,
+  );
+  _familia(
+    e,
+    id: NocheDeLaVenta.ferreyra,
+    nombre: 'FERREYRA, MÍA',
+    mesas: const [21],
+    sillas: 1,
+  );
+  _familia(
+    e,
+    id: NocheDeLaVenta.herrera,
+    nombre: 'HERRERA, LUCAS',
+    mesas: const [22],
+    division: '5° C',
+    acompanantes: 3,
+    nombres: const ['HERRERA, ANA', 'HERRERA, LUIS', 'HERRERA, PEDRO'],
+  );
+  _familia(
+    e,
+    id: NocheDeLaVenta.ibarra,
+    nombre: 'IBARRA, CAMILA',
+    mesas: const [23],
+    division: '5° C',
+    acompanantes: 2,
+    nombres: const ['IBARRA, JOSÉ'],
+  );
+  // El sorteo: las mesas de cada familia y lo que tenía cargado (PÉREZ, ACOSTA y
+  // BENÍTEZ ya tenían su mesa adicional; FERREYRA todavía no tenía la silla).
+  e.sorteos.registros.add(SorteoMesasRegistro(
+    id: 'f0000000-0000-4000-8000-000000000001',
+    eventoId: idFiestaEntrega,
+    tipo: TipoRegistroSorteo.sorteo,
+    resultado: {
+      for (final a in e.contratos.alumnos) a.id: a.numeroMesa ?? '',
+    },
+    lugares: const {
+      EntregaEnMemoria.idPerez: '2,0',
+      NocheDeLaVenta.acosta: '2,0',
+      NocheDeLaVenta.benitez: '2,0',
+    },
+    hechoPor: 'Jefe',
+    createdAt: NocheDeLaVenta.sorteoEl,
+  ));
 }
 
 /// `--dart-define=ventas=muchas`: la caja de Maxi con 700 ventas más, para que el
@@ -766,6 +1012,11 @@ class _PruebaDeLaVentaState extends State<PruebaDeLaVenta> {
               },
             ),
             TextButton(
+              key: const Key('prueba_caja_cobra'),
+              onPressed: _laCajaCobra,
+              child: const Text('LA CAJA COBRA'),
+            ),
+            TextButton(
               key: const Key('prueba_jefe_entradas'),
               onPressed: () => _irA(PestanaDelJefe.entradas),
               child: const Text('ENTRADAS DE LA FIESTA'),
@@ -825,11 +1076,7 @@ class _PruebaDeLaVentaState extends State<PruebaDeLaVenta> {
                           PestanaDelJefe.entradas => RetiroEntradasScreen(
                               key: const ValueKey('prueba_jefe_entrega'),
                               evento: fiestaDeLaEntrega,
-                              onCobrar: (a) => _avisar(
-                                context,
-                                'Acá se abre el cobro de ${a.nombreAlumno}: '
-                                'los cobros se prueban en la app.',
-                              ),
+                              onCobrar: (a) => _cobrarDesdeLaEntrega(context, a),
                               onEditarAlumno: (a) => _avisar(
                                 context,
                                 'Acá se abre Editar alumno de ${a.nombreAlumno}.',
@@ -849,6 +1096,86 @@ class _PruebaDeLaVentaState extends State<PruebaDeLaVenta> {
     );
   }
 
+  /// LA CAJA COBRA: las familias que deben algo, cada una con COBRAR TODO. Es la
+  /// caja de cuotas de otra PC: lo cobrado les llega a los dos lados.
+  Future<void> _laCajaCobra() async {
+    final contexto = _navJefe.currentContext;
+    if (contexto == null) return;
+    final l = widget.lados;
+    await showDialog<void>(
+      context: contexto,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, redibujar) {
+          final deben = l.familiasQueDeben;
+          return AlertDialog(
+            title: const Text('La caja de cuotas (otra PC)'),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Cobra todo lo que debe la familia (cuotas, extras y mora), como si '
+                      'pagara en la caja. Les llega a la tablet de Carla y a esta PC.',
+                    ),
+                    const SizedBox(height: 8),
+                    if (deben.isEmpty) const Text('Nadie debe nada.'),
+                    for (final a in deben)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(a.nombreAlumno),
+                        subtitle: Text('Debe ${pesos(l.deudaDe(a.id).total)}'),
+                        trailing: FilledButton(
+                          key: Key('prueba_cobrar_${a.id}'),
+                          onPressed: () => redibujar(() => l.cobrarTodo(a.id)),
+                          child: const Text('COBRAR TODO'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                key: const Key('prueba_caja_cerrar'),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('CERRAR'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// COBRAR, en la entrega del jefe: en la app abre el cobro; acá, la caja le
+  /// cobra todo lo que debe (como LA CAJA COBRA).
+  Future<void> _cobrarDesdeLaEntrega(BuildContext context, ContratoAlumno a) async {
+    final l = widget.lados;
+    final debe = l.deudaDe(a.id).total;
+    final cobrar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('La caja de cuotas'),
+        content: Text(
+          'Acá se abre el cobro de ${a.nombreAlumno}. En esta prueba, la caja le cobra '
+          'todo lo que debe: ${pesos(debe)}.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
+          FilledButton(
+            key: const Key('prueba_cobrar_todo'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('COBRAR TODO'),
+          ),
+        ],
+      ),
+    );
+    if (cobrar == true) l.cobrarTodo(a.id);
+  }
+
   static Future<void> _avisar(BuildContext context, String texto) => showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -858,7 +1185,8 @@ class _PruebaDeLaVentaState extends State<PruebaDeLaVenta> {
       );
 }
 
-/// El lado de Carla: Entradas con "Vende entradas" (ENTREGAR · VENDER de verdad).
+/// El lado de Carla: Entradas con "Vende entradas", con un solo botón, VENDER, de
+/// verdad (20-nov-2026): adentro entrega lo sin cargo en dos partes y vende.
 class _Carla extends ConsumerWidget {
   final Future<void> Function() entrar;
 

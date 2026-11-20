@@ -426,10 +426,12 @@ class _PreciosDeEntradasDialogState
         ),
       ),
       const SizedBox(height: 14),
-      _plata(
-        'precio_valor',
-        _general,
-        'Precio de la General (cuando termina la anticipada)',
+      // Cuándo rige va abajo, no en el rótulo: en el celular, "Precio de la
+      // General (cuando termina la anticipada)" se cortaba (muestras del 20-nov).
+      _plata('precio_valor', _general, 'Precio de la General'),
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text('Se cobra cuando termina la anticipada.', style: ayuda),
       ),
     ];
   }
@@ -517,27 +519,42 @@ class _PreciosDeEntradasDialogState
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
+                    // En un ancho chico, "Cada una" va debajo del descuento: al
+                    // lado se partía en tres renglones (muestras del 20-nov).
+                    LayoutBuilder(
+                      builder: (context, lugar) {
+                        final descuento = SizedBox(
                           width: 200,
-                          child: _porciento(
-                            'precio_lugares',
-                            _lugares,
-                            'Descuento',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        if (cadaUna != null)
-                          Expanded(
-                            child: Text(
-                              cadaUna,
-                              key: const Key('precio_cada_una'),
-                              style: const TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                      ],
+                          child: _porciento('precio_lugares', _lugares, 'Descuento'),
+                        );
+                        final texto = cadaUna == null
+                            ? null
+                            : Text(
+                                cadaUna,
+                                key: const Key('precio_cada_una'),
+                                style: const TextStyle(fontWeight: FontWeight.w800),
+                              );
+                        if (lugar.maxWidth < 440) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              descuento,
+                              if (texto != null) ...[
+                                const SizedBox(height: 8),
+                                texto,
+                              ],
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            descuento,
+                            const SizedBox(width: 12),
+                            if (texto != null) Expanded(child: texto),
+                          ],
+                        );
+                      },
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 6),

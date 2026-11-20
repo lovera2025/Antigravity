@@ -8,6 +8,19 @@ import 'mesas_extra_utils.dart';
 import 'retiro_entradas.dart';
 import 'salon_mesas.dart';
 
+/// Las tablas que, si bajan de otro equipo, cambian lo que pagó una familia y
+/// lo que debe: los pagos, su ficha (el saldo y la mora) y la mora congelada.
+/// Con cualquiera de ellas, VENDER vuelve a leer: la mesa adicional que acaba de
+/// pagarse en la caja se habilita sola, y lo sin cargo se destraba (20-nov-2026).
+///
+/// Vive acá y no en la venta: la venta de entradas no nombra la tabla de los
+/// pagos (`test/venta_entradas_no_toca_test.dart`), y la usa por este nombre.
+const tablasQueCambianLoPagado = {
+  'pagos_contrato_alumno',
+  'contratos_alumnos',
+  'mora_congelada',
+};
+
 /// De qué es una línea de A PAGAR.
 enum CosaAPagar { mesa, sillas }
 
@@ -127,7 +140,8 @@ class APagarDeLaFamilia {
     // Las pagas son siempre las primeras: lo pagado se reparte de la primera a
     // la última, y las que tenía al sorteo van primero.
     bool paga(CosaAparte c) => c.n <= (c.esMesa ? mesasPagas : sillasPagas);
-    final numeros = [for (final t in SalonMesas.tramos(a)) ...t];
+    // La del contrato primero, como en la puerta: la misma cuenta para los dos.
+    final numeros = SalonMesas.enOrdenDelContrato(a);
     final lineas = <LineaAPagar>[];
     for (final conDescuento in const [true, false]) {
       for (final c in cosas) {
@@ -137,7 +151,8 @@ class APagarDeLaFamilia {
           cosa: CosaAPagar.mesa,
           mesa: c.n,
           // La adicional k es el número k de la familia (el 0 es la del
-          // contrato), como en la puerta (`AdicionalesDeLaFamilia.aConfirmar`).
+          // contrato), como en la puerta (`AdicionalesDeLaFamilia.aConfirmar`):
+          // los dos salen de `SalonMesas.enOrdenDelContrato`.
           numeroEnElSalon: c.n < numeros.length ? numeros[c.n] : null,
           conDescuento: conDescuento,
           cantidad: 1,
@@ -168,6 +183,45 @@ class APagarDeLaFamilia {
       sillasExtra: SalonMesas.sillasExtra(a),
     );
   }
+
+  /// Por qué a esta familia **no se le vende nada de A PAGAR** por cómo está su
+  /// cuenta ([bloqueo]: **`RetiroEntradas.bloqueoDeLaVenta`**, no el de la
+  /// entrega, donde la deuda tapa los otros frenos), o null si se le
+  /// vende. **La misma regla en VENDER y en el diálogo de la entrega**
+  /// (revisión del 20-nov-2026: VENDER le vendía a una familia que el diálogo
+  /// frenaba):
+  /// - si debe, se le vende lo que ya pagó entero (la deuda frena solo lo sin
+  ///   cargo);
+  /// - con la ficha distinta de los pagos, sin mesa, con las mesas que no
+  ///   coinciden con su cuenta o si no entran, no: **la cuenta puede estar mal**
+  ///   (vendía las 8 de una mesa adicional que no tenía número en el salón), y
+  ///   lo revisa el jefe;
+  /// - con lo sin cargo ya entregado ([todoEntregado]), se le vende, como el
+  ///   diálogo desde la 6.9.0.
+  ///
+  /// Sin plata ni nombres de conceptos: lo lee quien vende, con la familia
+  /// adelante.
+  static String? porQueNoSeVendeCon(
+    BloqueoRetiro bloqueo, {
+    bool todoEntregado = false,
+  }) {
+    if (todoEntregado) return null;
+    return switch (bloqueo) {
+      BloqueoRetiro.ninguno || BloqueoRetiro.debe => null,
+      BloqueoRetiro.cuentaNoCoincide =>
+        'Hasta que el jefe revise su cuenta no se le vende: pedile que la revise.',
+      BloqueoRetiro.sinMesa =>
+        'Hasta que tenga su mesa no se le vende: pedile al jefe que lo revise.',
+      BloqueoRetiro.mesasNoCoinciden =>
+        'Hasta que el jefe revise sus mesas no se le vende: pedile que lo revise.',
+      BloqueoRetiro.noEntran =>
+        'Hasta que el jefe revise sus lugares no se le vende: pedile que lo revise.',
+    };
+  }
+
+  /// Si a la familia se le vende lo de A PAGAR ([porQueNoSeVendeCon]).
+  static bool seVendeCon(BloqueoRetiro bloqueo, {bool todoEntregado = false}) =>
+      porQueNoSeVendeCon(bloqueo, todoEntregado: todoEntregado) == null;
 
   /// Cuántas de sus sillas extra están pagas enteras. Lo pagado de las sillas
   /// se reparte silla por silla, de la primera a la última, con el precio de

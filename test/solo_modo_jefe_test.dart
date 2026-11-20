@@ -587,10 +587,24 @@ void main() {
     expect(cuerpo, isNot(contains('PermisoOperador.entradas')));
   });
 
-  test('la venta de entradas: abrir una caja, vender y cerrarla preguntan por el '
-      'permiso de vender antes de guardar', () {
-    final escribe = RegExp(r'\.(abrirCaja|cerrarCaja|vender|guardarEn)\(');
+  // 20-nov-2026: VENDER también entrega lo sin cargo (GRATIS, en dos partes),
+  // por `EntregarParte.entregar`: es otro guardado de la carpeta, con la misma
+  // llave (`_entregar`).
+  //
+  // Revisión del 20-nov-2026: VENDER también pone al día la fila de
+  // `entradas_retiro` (`EntregarParte.completarLaFila`, `_completarLaFila`), y la
+  // regla no lo veía. Es automático (lo llama la lectura), así que su llave va
+  // callada, sin cartel: `if (!ref.read(puedeVenderEntradasProvider)) return;`.
+  test('la venta de entradas: abrir una caja, vender, entregar lo sin cargo, poner al '
+      'día la fila de la entrega y cerrarla preguntan por el permiso de vender antes '
+      'de guardar', () {
+    final escribe = RegExp(
+      r'\.(abrirCaja|cerrarCaja|vender|guardarEn|entregar|completarLaFila)\(',
+    );
     final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
+    // Las que corren solas, sin que nadie toque un botón: la llave sin cartel.
+    const automaticas = {'_completarLaFila'};
+    const llaveCallada = 'if (!ref.read(puedeVenderEntradasProvider)) return;';
     final encontradas = <String>{};
     final carpeta = Directory('lib/features/entradas/widgets');
     for (final f in carpeta.listSync().whereType<File>()) {
@@ -603,11 +617,12 @@ void main() {
           (x) => x.start < g.start,
           orElse: () => fail('un guardado fuera de una función, en $ruta'),
         );
-        encontradas.add(donde.group(1)!);
+        final nombre = donde.group(1)!;
+        encontradas.add(nombre);
         expect(
           fuente.substring(donde.start, g.start),
-          contains('_frenaSinPermiso()'),
-          reason: '${donde.group(1)} ($ruta) guarda sin preguntar si puede vender',
+          contains(automaticas.contains(nombre) ? llaveCallada : '_frenaSinPermiso()'),
+          reason: '$nombre ($ruta) guarda sin preguntar si puede vender',
         );
       }
       if (escribe.hasMatch(fuente)) {
@@ -623,7 +638,10 @@ void main() {
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá.
-    expect(encontradas, {'_abrir', '_cobrar', '_cerrarDeVerdad'});
+    expect(
+      encontradas,
+      {'_abrir', '_cobrar', '_cerrarDeVerdad', '_entregar', '_completarLaFila'},
+    );
   });
 
   test('PRECIOS se abre solo desde ENTRADAS de la fiesta, y con la llave', () {

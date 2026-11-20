@@ -156,8 +156,11 @@ void main() {
 
     // Quien tiene solo su mesa no figura.
     expect(find.textContaining('GÓMEZ'), findsNothing);
+    // 20-nov-2026: lo agregado después del sorteo paga el precio del día, sin
+    // descuento (decía "la entrada entera", que no es lo que cobra).
     expect(texto(tester, 'revision_resumen'),
-        'Pagan entera: 8 entradas de 1 familia. Lo demás queda con descuento.');
+        'Sin descuento, al precio del día: 8 entradas de 1 familia. Lo demás '
+        'queda con descuento.');
   });
 
   testWidgets('la lista no dice mora, deuda ni "sin pagar"', (tester) async {
@@ -173,12 +176,13 @@ void main() {
     await tester.tap(find.byKey(const Key('revision_l|s|r')));
     await tester.pump();
     expect(texto(tester, 'revision_resumen'),
-        'Pagan entera: 10 entradas de 2 familias. Lo demás queda con descuento.');
+        'Sin descuento, al precio del día: 10 entradas de 2 familias. Lo demás '
+        'queda con descuento.');
     await tester.tap(find.byKey(const Key('revision_p|m|d')));
     await tester.tap(find.byKey(const Key('revision_l|s|r')));
     await tester.pump();
     expect(texto(tester, 'revision_resumen'),
-        'Nadie paga entera: todo lo cargado hoy queda con descuento.');
+        'Nadie va sin descuento: todo lo cargado hoy queda con descuento.');
   });
 
   testWidgets('ACEPTAR como viene: guarda en el renglón del sorteo y cierra',

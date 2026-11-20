@@ -111,8 +111,9 @@ class AdicionalesDeLaFamilia {
     if (pagos == null) return const [];
     final extra = SalonMesas.mesasExtra(a);
     // Sin mesa todavía (antes del sorteo, o sin nada pagado de la base): no
-    // hay nada que confirmar en la puerta.
-    final numeros = [for (final t in SalonMesas.tramos(a)) ...t];
+    // hay nada que confirmar en la puerta. La del contrato va primero: la
+    // adicional k es la que sigue (`SalonMesas.enOrdenDelContrato`).
+    final numeros = SalonMesas.enOrdenDelContrato(a);
     if (numeros.isEmpty) return const [];
     final items = _reparto(a, pagos);
     return [

@@ -217,7 +217,7 @@ void main() {
           eventoId: _evento,
           contratoAlumnoId: _ana.id,
         ),
-        isFalse,
+        ResultadoDeLaFila.alDia,
       );
       expect(pc.filasEscritas, 1);
       expect(nube.filasSubidas, 1);
@@ -311,7 +311,7 @@ void main() {
           eventoId: _evento,
           contratoAlumnoId: _ana.id,
         ),
-        isTrue,
+        ResultadoDeLaFila.escrita,
       );
       final fila = nube.retiros[_ana.id]!;
       expect(fila.entregado, isTrue);
@@ -333,10 +333,13 @@ void main() {
           eventoId: _evento,
           contratoAlumnoId: _ana.id,
         ),
-        isFalse,
+        ResultadoDeLaFila.alDia,
       );
     });
 
+    // Desde la revisión del 20-nov completarLaFila dice si pudo mirar la nube
+    // (`ResultadoDeLaFila.sinNube`): antes devolvía false igual que "no hacía
+    // falta", y las pantallas no volvían a intentar.
     test('sin internet, completar la fila no escribe nada', () async {
       await entregar(pc, _pulseras());
       tablet.hayInternet = false;
@@ -350,7 +353,7 @@ void main() {
           eventoId: _evento,
           contratoAlumnoId: _ana.id,
         ),
-        isFalse,
+        ResultadoDeLaFila.sinNube,
       );
       expect(pc.filasEscritas, 0);
     });
@@ -419,6 +422,345 @@ void main() {
     });
   });
 
+  // Revisión del 20-nov-2026: cada equipo tiene su reloj. Antes, una tablet
+  // atrasada que volvía a entregar algo anulado anotaba su entrega antes que la
+  // anulación: decía "Entregada" y la parte seguía pendiente.
+  group('relojes distintos', () {
+    test('la tablet atrasada vuelve a entregar lo que el jefe anuló: queda '
+        'entregada en todos lados', () async {
+      final pcReloj = RelojCorrido(DateTime.utc(2026, 11, 20, 18));
+      final tabletReloj = RelojCorrido(DateTime.utc(2026, 11, 20, 17, 57));
+      pc.reloj = pcReloj;
+      tablet.reloj = tabletReloj;
+      expect(await entregar(pc, _pulseras()), isA<Entregada>());
+      pcReloj.hora = DateTime.utc(2026, 11, 20, 18, 5);
+      expect(await anular(pc, {ParteEntrega.pulseras}), isA<Anulada>());
+
+      // 18:06 de verdad; la tablet, con 4 minutos de atraso, marca 18:02.
+      tabletReloj.hora = DateTime.utc(2026, 11, 20, 18, 2);
+      final r = await entregar(tablet, _pulseras(nombre: 'TÍA, OTRA'));
+      expect(r, isA<Entregada>());
+      final renglon = (r as Entregada).renglon;
+      final anulacion =
+          nube.renglonesDe(_ana.id).firstWhere((x) => x.esAnulacion).createdAt;
+      expect(renglon.createdAt.isAfter(anulacion), isTrue,
+          reason: 'va después de la anulación que la tablet ya vio');
+      expect(renglon.createdAt, anulacion.add(const Duration(milliseconds: 1)));
+      pc.bajar();
+      expect(estadoEnLaNube().pulseras.entregada, isTrue);
+      expect(estadoEn(tablet).pulseras.entregada, isTrue);
+      expect(estadoEn(pc).pulseras.retiroNombre, 'TÍA, OTRA');
+    });
+
+    test('el jefe atrasado anula lo que entregó una tablet adelantada: queda '
+        'anulada', () async {
+      final pcReloj = RelojCorrido(DateTime.utc(2026, 11, 20, 18));
+      final tabletReloj = RelojCorrido(DateTime.utc(2026, 11, 20, 18, 10));
+      pc.reloj = pcReloj;
+      tablet.reloj = tabletReloj;
+      await entregar(tablet, _pulseras());
+      await entregar(tablet, _generales());
+      expect(nube.retiros[_ana.id]!.entregado, isTrue);
+
+      // La PC, 10 minutos atrasada, anula todo.
+      pcReloj.hora = DateTime.utc(2026, 11, 20, 18, 3);
+      final r = await anular(pc, {ParteEntrega.pulseras, ParteEntrega.generales});
+      expect(r, isA<Anulada>());
+      expect(estadoEnLaNube().algoEntregado, isFalse);
+      expect(nube.retiros[_ana.id]!.entregado, isFalse);
+      tablet.bajar();
+      expect(estadoEn(tablet).algoEntregado, isFalse);
+    });
+
+    test('si al releer la parte no quedó entregada, no dice que salió bien',
+        () async {
+      // Mientras la PC sube, baja una anulación de otro equipo con la hora más
+      // nueva: lo anotado ya no es lo último.
+      pc.alTerminarDeSubir = () {
+        final nueva = EntregaEntradas.anulacion(
+          contratoAlumnoId: _ana.id,
+          eventoId: _evento,
+          parte: ParteEntrega.pulseras,
+          cantidad: 3,
+          motivo: 'se anotó en otra familia',
+          hechoPor: 'Jefe',
+          deviceId: 'pc-jefe',
+          ahora: DateTime.utc(2027),
+        );
+        pc.renglones[nueva.id] = nueva;
+      };
+      final r = await entregar(pc, _pulseras());
+      expect(r, isA<CambioAlgo>());
+      expect((r as CambioAlgo).motivo,
+          contains('Se anotó la entrega de las pulseras VIP con cena, pero figura sin entregar'));
+    });
+
+    test('lo mismo al anular: si sigue entregada, no dice "Anulada"', () async {
+      await entregar(pc, _pulseras());
+      pc.alTerminarDeSubir = () {
+        final otra = EntregaEntradas.entrega(
+          contratoAlumnoId: _ana.id,
+          eventoId: _evento,
+          parte: ParteEntrega.pulseras,
+          cantidad: 3,
+          parentesco: ParentescoRetiro.padre,
+          nombre: 'PADRE, UNO',
+          escribioEnPlanilla: true,
+          hechoPor: 'Sofi',
+          deviceId: 'tablet-2',
+          ahora: DateTime.utc(2027),
+        );
+        pc.renglones[otra.id] = otra;
+      };
+      final r = await anular(pc, {ParteEntrega.pulseras});
+      expect(r, isA<CambioAlgo>());
+      expect((r as CambioAlgo).motivo, contains('siguen figurando entregadas'));
+    });
+  });
+
+  // Revisión del 20-nov-2026: sin internet (con SEGUIR) la fila completa de
+  // `entradas_retiro` se escribía con lo que sabía ese equipo, y podía volver a
+  // poner "entregado" sobre una anulación de la otra parte que no había bajado.
+  group('sin internet, la fila completa espera', () {
+    test('la tablet ve las dos partes pero está sin internet: solo su renglón',
+        () async {
+      await entregar(pc, _pulseras());
+      tablet.bajar();
+      tablet.hayInternet = false;
+      final r = await entregar(tablet, _generales()) as Entregada;
+      expect(r.todoEntregado, isTrue);
+      expect(r.conFilaCompleta, isFalse);
+      expect(tablet.filasEscritas, 0);
+      // Con internet, la escribe completarLaFila.
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      expect(
+        await EntregarParte(tablet).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      expect(nube.retiros[_ana.id]!.entregado, isTrue);
+    });
+
+    test('el jefe anuló las pulseras mientras la tablet estaba sin internet: la '
+        'fila no vuelve a decir "entregado"', () async {
+      await entregar(pc, _pulseras());
+      tablet.bajar();
+      tablet.hayInternet = false;
+      expect(await anular(pc, {ParteEntrega.pulseras}), isA<Anulada>());
+      final r = await entregar(tablet, _generales()) as Entregada;
+      expect(r.conFilaCompleta, isFalse);
+      expect(tablet.filasEscritas, 0);
+
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      tablet.bajar();
+      pc.bajar();
+      expect(nube.retiros[_ana.id]?.entregado ?? false, isFalse);
+      final e = estadoEnLaNube();
+      expect(e.pulseras.entregada, isFalse);
+      expect(e.generales.entregada, isTrue);
+      expect(
+        await EntregarParte(tablet).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.alDia,
+      );
+    });
+  });
+
+  // Revisión del 20-nov-2026: la fila de `entradas_retiro` podía quedar en
+  // "entregado" con una parte anulada, y nada la corregía (completarLaFila solo
+  // escribía si la fila NO estaba entregada). Lo que lee la fila sola (el PLANO,
+  // una PC con la 6.9.x) veía "Retiró" a una familia a la que el jefe le anuló
+  // las pulseras. Ahora completarLaFila la pone al día también al revés: la
+  // escribe anulada, como reflejo de la anulación del renglón.
+  group('la fila que quedó vieja se pone al día', () {
+    test('A) carrera: el jefe anula las pulseras mientras la tablet escribe la fila '
+        'completa', () async {
+      final tablet = _EquipoConPausa(equipo('tablet-1'));
+      expect(await entregar(pc, _pulseras()), isA<Entregada>());
+      tablet.bajar();
+      tablet.hayInternet = false;
+      final g = await entregar(tablet, _generales()) as Entregada;
+      expect(g.conFilaCompleta, isFalse);
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      pc.bajar();
+      // Entre que la tablet mira la nube y guarda la fila, el jefe anula las
+      // pulseras en la PC: en la nube la fila todavía no dice "entregado", y la
+      // anulación no la toca.
+      ResultadoDeAnular? anulo;
+      tablet.antesDeGuardar = () async {
+        anulo = await anular(pc, {ParteEntrega.pulseras}, motivo: 'eran de otro');
+      };
+      expect(
+        await EntregarParte(tablet).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      expect(anulo, isA<Anulada>());
+      expect(nube.retiros[_ana.id]!.entregado, isTrue,
+          reason: 'la carrera deja la fila vieja en la nube');
+      expect(estadoEnLaNube().pulseras.entregada, isFalse);
+
+      // El que la ve después, con internet, la pone al día.
+      pc.bajar();
+      expect(
+        await EntregarParte(pc).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      _laFilaDiceLoMismo(nube, _ana, estadoEnLaNube());
+      final anulacion = nube
+          .renglonesDe(_ana.id)
+          .lastWhere((r) => r.parte == ParteEntrega.pulseras && !r.esEntrega);
+      final fila = nube.retiros[_ana.id]!;
+      expect(fila.anuladoAt, anulacion.createdAt,
+          reason: 'es el reflejo de la anulación del renglón');
+      expect(fila.anuladoMotivo, 'Solo las pulseras VIP con cena: eran de otro');
+      expect(fila.anuladoPor, 'Jefe');
+      // Las generales siguen entregadas: la anulación de la fila no las tapa.
+      expect(estadoEnLaNube().generales.entregada, isTrue);
+      expect(estadoEnLaNube().pulseras.entregada, isFalse);
+      // Y la segunda vez no hace falta.
+      tablet.bajar();
+      expect(
+        await EntregarParte(tablet).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.alDia,
+      );
+
+      // El jefe vuelve a entregar las pulseras: la fila vuelve a "entregado".
+      pc.bajar();
+      expect(await entregar(pc, _pulseras(nombre: 'TÍA, OTRA')), isA<Entregada>());
+      expect(nube.retiros[_ana.id]!.entregado, isTrue);
+      expect(estadoEnLaNube().todoEntregado, isTrue);
+      _laFilaDiceLoMismo(nube, _ana, estadoEnLaNube());
+    });
+
+    test('B) el jefe anula sin internet, antes de bajar la fila completa', () async {
+      expect(await entregar(pc, _pulseras()), isA<Entregada>());
+      tablet.bajar();
+      tablet.hayInternet = false;
+      expect(await entregar(tablet, _generales()), isA<Entregada>());
+      pc.hayInternet = false;
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      expect(
+        await EntregarParte(tablet).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      expect(nube.retiros[_ana.id]!.entregado, isTrue);
+      // En la PC del jefe la fila no está: la anulación es solo un renglón.
+      expect(await anular(pc, {ParteEntrega.pulseras}, motivo: 'eran de otro'),
+          isA<Anulada>());
+      pc.hayInternet = true;
+      pc.subirLaCola();
+      pc.bajar();
+      tablet.bajar();
+      expect(nube.retiros[_ana.id]!.entregado, isTrue,
+          reason: 'sin arreglarla, la fila sigue vieja');
+      expect(
+        await EntregarParte(pc).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      _laFilaDiceLoMismo(nube, _ana, estadoEnLaNube());
+      expect(estadoEnLaNube().generales.entregada, isTrue);
+      expect(nube.retiros[_ana.id]!.anuladoMotivo,
+          'Solo las pulseras VIP con cena: eran de otro');
+    });
+
+    test('con las dos partes anuladas, la fila dice el motivo sin "Solo"', () async {
+      await entregar(pc, _pulseras());
+      tablet.bajar();
+      tablet.hayInternet = false;
+      await entregar(tablet, _generales());
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      // La PC ve las dos partes, pero todavía no la fila que escribe la tablet.
+      pc.bajar();
+      await EntregarParte(tablet).completarLaFila(
+        eventoId: _evento,
+        contratoAlumnoId: _ana.id,
+      );
+      pc.hayInternet = false;
+      expect(await anular(pc, ParteEntrega.values.toSet(), motivo: 'se anotó mal'),
+          isA<Anulada>());
+      pc.hayInternet = true;
+      pc.subirLaCola();
+      pc.bajar();
+      expect(
+        await EntregarParte(pc).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.escrita,
+      );
+      _laFilaDiceLoMismo(nube, _ana, estadoEnLaNube());
+      expect(nube.retiros[_ana.id]!.anuladoMotivo, 'se anotó mal');
+      expect(estadoEnLaNube().algoEntregado, isFalse);
+    });
+
+    test('una parte que falta porque cambió la cuenta no es una anulación: la fila '
+        'no se toca', () {
+      final fila = RetiroEntradas.nuevaEntrega(
+        alumno: _ana,
+        entradas: RetiroEntradas.entradasDe(_ana),
+        tramos: const [],
+        menores10: 0,
+        parentesco: ParentescoRetiro.madre,
+        nombre: 'MADRE, UNA',
+        quien: 'Jefe',
+        ahora: DateTime.utc(2026, 11, 7, 18),
+      );
+      // Entregó las 8 juntas con la 6.9.x, y después le sacaron un acompañante:
+      // le cambió la cuenta, pero nadie anuló nada.
+      final conMenos = _alumno(
+        id: _ana.id,
+        nombre: _ana.nombreAlumno,
+        acompanantes: const ['MAMÁ'],
+      );
+      final estado =
+          EstadoDeLaEntrega.deAlumno(conMenos, retiro: fila, renglones: const []);
+      expect(estado.algoEntregado, isTrue);
+      expect(EntregaPorPartes.filaConLaAnulacion(retiro: fila, estado: estado), isNull);
+      expect(EntregaPorPartes.filaParaPonerAlDia(retiro: fila, estado: estado), isFalse);
+    });
+
+    test('si la nube no contesta, dice que hay que volver a intentar', () async {
+      await entregar(pc, _pulseras());
+      tablet.hayInternet = false;
+      await entregar(tablet, _generales());
+      tablet.hayInternet = true;
+      tablet.subirLaCola();
+      pc.bajar();
+      expect(
+        await EntregarParte(_NubeQueNoContesta(pc)).completarLaFila(
+          eventoId: _evento,
+          contratoAlumnoId: _ana.id,
+        ),
+        ResultadoDeLaFila.sinNube,
+      );
+      expect(pc.filasEscritas, 0);
+    });
+  });
+
   group('frena si algo cambió', () {
     test('cambió la cuenta mientras el diálogo estaba abierto', () async {
       // Sumaron un acompañante: ahora le corresponden 4 pulseras, no 3.
@@ -432,6 +774,35 @@ void main() {
       expect((r as CambioAlgo).motivo,
           contains('hoy le corresponden 4 pulseras VIP con cena, no 3'));
       expect(pc.renglones, isEmpty);
+    });
+
+    // Revisión independiente del 20-nov-2026: entre las dos partes se podían
+    // llevar 9 sin cargo si cambiaban los acompañantes en el medio.
+    test('las generales se dieron con 1 acompañante y después se sumó otro: las '
+        'pulseras no se dan (serían 9 sin cargo)', () async {
+      final conUno = _alumno(id: _ana.id, nombre: _ana.nombreAlumno,
+          acompanantes: const ['MAMÁ']);
+      pc.alumnos = [conUno, _beto];
+      expect(await entregar(pc, _generales(cantidad: 6)), isA<Entregada>());
+      pc.alumnos = [_ana, _beto];
+      final r = await entregar(pc, _pulseras(cantidad: 3));
+      expect(r, isA<CambioAlgo>());
+      expect((r as CambioAlgo).motivo, contains('Pedile al jefe'));
+      expect((r).motivo, contains('No se guardó nada.'));
+      expect(pc.renglones, hasLength(1), reason: 'solo el de las generales');
+      expect(nube.retiros, isEmpty, reason: 'no hay fila completa');
+    });
+
+    test('las pulseras se dieron con 2 acompañantes y después se sacó uno: las '
+        'generales no se dan', () async {
+      expect(await entregar(pc, _pulseras(cantidad: 3)), isA<Entregada>());
+      pc.alumnos = [
+        _alumno(id: _ana.id, nombre: _ana.nombreAlumno, acompanantes: const ['MAMÁ']),
+        _beto,
+      ];
+      final r = await entregar(pc, _generales(cantidad: 6));
+      expect(r, isA<CambioAlgo>());
+      expect(pc.renglones, hasLength(1));
     });
 
     test('se anuló un cobro: ahora debe', () async {
@@ -663,31 +1034,156 @@ void main() {
     });
   });
 
-  test('nadie más agrega renglones de la entrega por partes ni guarda la fila '
-      'junto con ellos', () {
-    final escribe = RegExp(r'\.(agregar|agregarEn)\(');
-    final quienes = <String>{};
-    final guardanEn = <String>{};
+  // Paso 1 del plan del 20-nov: un solo camino para guardar la entrega. Hasta la
+  // 6.9.2 la pantalla de la entrega escribía `entradas_retiro` por su cuenta; desde
+  // la 6.9.3 todo pasa por `EntregarParte`, y su adaptador es el único que escribe
+  // las dos tablas (además de sus repositorios). El motor de sync no cuenta: sube y
+  // baja todas las tablas igual, sin nombrarlas.
+  test('nadie más escribe la entrega por partes ni la fila de la entrega', () {
+    const repoPartes =
+        'lib/features/eventos/repositories/entradas_entregas_repository.dart';
+    const repoRetiro =
+        'lib/features/eventos/repositories/entradas_retiro_repository.dart';
+    const adaptador =
+        'lib/features/eventos/repositories/entregar_parte_de_la_app.dart';
+    final escribenPartes = <String>{};
+    final escribenRetiro = <String>{};
     for (final f in Directory('lib').listSync(recursive: true)) {
       if (f is! File || !f.path.endsWith('.dart')) continue;
       final ruta = f.path.replaceAll('\\', '/');
-      final fuente = f.readAsStringSync();
-      if (ruta.endsWith('entradas_entregas_repository.dart')) continue;
-      if ((fuente.contains('EntradasEntregasRepository') ||
-              fuente.contains('entradasEntregasRepositoryProvider')) &&
-          escribe.hasMatch(fuente)) {
-        quienes.add(ruta);
+      final codigo = _sinComentarios(f.readAsStringSync());
+      if (_escribe(
+        codigo,
+        tabla: 'entradas_entregas',
+        constante: 'EntradasEntregasRepository.tabla',
+        tipo: 'EntradasEntregasRepository',
+        provider: 'entradasEntregasRepositoryProvider',
+        metodos: const ['agregar', 'agregarEn'],
+      )) {
+        escribenPartes.add(ruta);
       }
-      if (fuente.contains('_retiros.guardarEn(') ||
-          RegExp(r'entradasRetiroRepositoryProvider\)\s*\.guardarEn\(')
-              .hasMatch(fuente)) {
-        guardanEn.add(ruta);
+      if (_escribe(
+        codigo,
+        tabla: 'entradas_retiro',
+        tipo: 'EntradasRetiroRepository',
+        provider: 'entradasRetiroRepositoryProvider',
+        metodos: const ['guardar', 'guardarEn'],
+      )) {
+        escribenRetiro.add(ruta);
       }
     }
-    const adaptador = 'lib/features/eventos/repositories/entregar_parte_de_la_app.dart';
-    expect(quienes, {adaptador});
-    expect(guardanEn, {adaptador});
+    expect(escribenPartes, contains(adaptador));
+    expect(escribenPartes.difference({repoPartes, adaptador}), isEmpty,
+        reason: 'escriben entradas_entregas por fuera de EntregarParte');
+    expect(escribenRetiro, containsAll({repoRetiro, adaptador}));
+    expect(escribenRetiro.difference({repoRetiro, adaptador}), isEmpty,
+        reason: 'escriben entradas_retiro por fuera de EntregarParte');
   });
+
+  test('la vigilancia de quién escribe ve cada forma de escribir', () {
+    bool partes(String codigo) => _escribe(
+          codigo,
+          tabla: 'entradas_entregas',
+          constante: 'EntradasEntregasRepository.tabla',
+          tipo: 'EntradasEntregasRepository',
+          provider: 'entradasEntregasRepositoryProvider',
+          metodos: const ['agregar', 'agregarEn'],
+        );
+    bool retiro(String codigo) => _escribe(
+          codigo,
+          tabla: 'entradas_retiro',
+          tipo: 'EntradasRetiroRepository',
+          provider: 'entradasRetiroRepositoryProvider',
+          metodos: const ['guardar', 'guardarEn'],
+        );
+    for (final c in [
+      "await db.insert('entradas_entregas', fila);",
+      "await txn.rawInsert('INSERT INTO entradas_entregas (id) VALUES (?)', [id]);",
+      "await db.update('entradas_entregas', {'cantidad': 0});",
+      "await db.delete('entradas_entregas', where: 'id = ?');",
+      "await db.rawDelete('DELETE FROM entradas_entregas WHERE id = ?', [id]);",
+      "await supabase.from('entradas_entregas').upsert(fila);",
+      'await db.insert(EntradasEntregasRepository.tabla, fila);',
+      'await ref.read(entradasEntregasRepositoryProvider).agregar([r]);',
+      'final repo = ref.read(entradasEntregasRepositoryProvider);\nawait repo.agregar([r]);',
+    ]) {
+      expect(partes(c), isTrue, reason: c);
+    }
+    for (final c in [
+      "await db.insert('entradas_retiro', r.toMap());",
+      "await db.rawUpdate('UPDATE entradas_retiro SET estado = ?', ['x']);",
+      "await supabase\n    .from('entradas_retiro')\n    .update({'estado': 'x'});",
+      'await ref.read(entradasRetiroRepositoryProvider).guardar(r);',
+      'final repo = ref.read(entradasRetiroRepositoryProvider);\nawait repo.guardar(r);',
+      'EntradasRetiroRepository get _retiros => x;\nawait _retiros.guardarEn(txn, r);',
+    ]) {
+      expect(retiro(c), isTrue, reason: c);
+    }
+    // Leer no es escribir.
+    for (final c in [
+      "final filas = await db.query('entradas_entregas');",
+      'await ref.read(entradasEntregasRepositoryProvider).deContratos(ids);',
+      "const tablas = {'entradas_retiro', 'entradas_entregas'};",
+      'await ref.read(entradasRetiroRepositoryProvider).obtenerPorContratoIds(ids);',
+      'await otroRepo.guardar(x);',
+    ]) {
+      expect(partes(c), isFalse, reason: c);
+      expect(retiro(c), isFalse, reason: c);
+    }
+  });
+}
+
+String _sinComentarios(String fuente) => fuente
+    .replaceAll('\r\n', '\n')
+    .split('\n')
+    .where((l) => !l.trimLeft().startsWith('//'))
+    .join('\n');
+
+/// Si [codigo] escribe [tabla]: un `insert`/`update`/`delete`/`upsert` con su
+/// nombre (o con [constante]), un SQL que la escribe, o [metodos] llamados sobre
+/// su repositorio (por el [provider], o por una variable o un campo del [tipo]).
+bool _escribe(
+  String codigo, {
+  required String tabla,
+  String? constante,
+  required String tipo,
+  required String provider,
+  required List<String> metodos,
+}) {
+  final nombres = [
+    "['\"]$tabla['\"]",
+    if (constante != null) RegExp.escape(constante),
+  ];
+  for (final n in nombres) {
+    if (RegExp('(insert|rawInsert|update|rawUpdate|delete|rawDelete|upsert)'
+            '\\s*\\(\\s*$n')
+        .hasMatch(codigo)) {
+      return true;
+    }
+    if (RegExp('from\\s*\\(\\s*$n\\s*\\)\\s*\\.\\s*(insert|upsert|update|delete)\\s*\\(')
+        .hasMatch(codigo)) {
+      return true;
+    }
+  }
+  if (RegExp(
+    '(INSERT\\s+(OR\\s+\\w+\\s+)?INTO|REPLACE\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+$tabla\\b',
+    caseSensitive: false,
+  ).hasMatch(codigo)) {
+    return true;
+  }
+  final llamada = '\\.\\s*(${metodos.join('|')})\\s*\\(';
+  if (RegExp('$provider\\s*\\)\\s*$llamada').hasMatch(codigo)) return true;
+  final variables = <String>{
+    for (final m in RegExp('(\\w+)\\s*=\\s*\\w+\\s*\\.\\s*(read|watch)\\s*\\(\\s*$provider\\s*\\)')
+        .allMatches(codigo))
+      m.group(1)!,
+    for (final m in RegExp('\\b$tipo\\??\\s+(?:get\\s+)?(\\w+)').allMatches(codigo))
+      m.group(1)!,
+  };
+  for (final v in variables) {
+    if (RegExp('\\b${RegExp.escape(v)}\\s*$llamada').hasMatch(codigo)) return true;
+  }
+  return false;
 }
 
 /// Un equipo con internet cuya nube no contesta (se cae a mitad de la consulta).
@@ -704,4 +1200,41 @@ class _NubeQueNoContesta extends EquipoDeEntrega {
   @override
   Future<LoDeLaNube> deLaNube(String contratoAlumnoId) async =>
       throw StateError('la nube no contesta');
+}
+
+/// Un equipo que deja hacer algo justo antes de guardar: lo que otro equipo
+/// anota en ese mismo momento (una carrera).
+class _EquipoConPausa extends EquipoDeEntrega {
+  _EquipoConPausa(EquipoDeEntrega base)
+      : super(
+          nombre: base.nombre,
+          nube: base.nube,
+          reloj: base.reloj,
+          alumnos: base.alumnos,
+          pagos: base.pagos,
+        );
+
+  Future<void> Function()? antesDeGuardar;
+
+  @override
+  Future<void> guardar(List<EntregaEntradas> nuevos, {EntradasRetiro? retiro}) async {
+    final h = antesDeGuardar;
+    antesDeGuardar = null;
+    if (h != null) await h();
+    return super.guardar(nuevos, retiro: retiro);
+  }
+}
+
+/// La fila de `entradas_retiro` en la nube dice lo mismo que los renglones: lo
+/// que la lee sola (el PLANO, una PC con la 6.9.x) ve "Retiró" solo con las dos
+/// partes; y leída junto con los renglones, la fila no cambia nada.
+void _laFilaDiceLoMismo(NubeDeEntregas nube, ContratoAlumno a, EstadoDeLaEntrega e) {
+  final fila = nube.retiros[a.id];
+  expect(fila?.entregado ?? false, e.todoEntregado,
+      reason: 'la fila dice "entregado" solo con las dos partes');
+  final sinLaFila = EstadoDeLaEntrega.deAlumno(a, renglones: nube.renglonesDe(a.id));
+  for (final p in ParteEntrega.values) {
+    expect(e.parte(p).entregada, sinLaFila.parte(p).entregada,
+        reason: 'la fila es reflejo de los renglones (${p.clave})');
+  }
 }

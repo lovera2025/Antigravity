@@ -4,10 +4,15 @@
 //
 // Salen, con el tema claro de la app:
 //   • Entradas_1_precios.png: PRECIOS, en modo jefe;
-//   • Entradas_2_inicio.png: el inicio de quien vende, con ENTREGAR y VENDER;
+//   • Entradas_2_inicio.png: el inicio de quien vende, con un solo botón, VENDER
+//     (20-nov-2026);
 //   • Entradas_3_abrir_caja.png: abrir la caja, con su cambio;
 //   • Entradas_4_vender.png y Entradas_5_vender_celular.png: VENDER, con una
-//     familia que ya pagó su mesa adicional;
+//     familia que ya pagó su mesa adicional (GRATIS y A PAGAR);
+//   • Entradas_4a a 4k: VENDER desde el 20-nov-2026: la lista con el filtro (en
+//     la PC, con "Todos" y en el celular), una familia que debe, entregar las
+//     pulseras (en la PC y en el celular) y las pulseras entregadas, las sillas
+//     con una a confirmar, alguien de afuera y VENDER sin caja;
 //   • Entradas_6_cobro.png: la hoja del cobro (la de la barra), en mixto;
 //   • Entradas_7_guardada.png: la venta guardada;
 //   • Entradas_8_ventas_jefe.png, Entradas_9_ventas_vendedor.png y
@@ -22,8 +27,27 @@
 //   • Entradas_12 a 15: CERRAR CAJA (contar a ciegas, confirmar, el cierre, y en
 //     el celular) y Cierre_de_caja_entradas.pdf, su papel;
 //   • Entradas_16 y 17: ENTRADAS en el cierre de caja (en la PC y en el celular);
-//   • Entradas_18 y 19: la entrega con lo vendido a la vista, y VENDERLE ESAS
-//     ENTRADAS en el cartel de una familia que debe.
+//   • Entradas_18 y 19: la entrega con lo vendido a la vista, y el cartel de una
+//     familia que debe su mesa adicional (desde el 20-nov-2026 lo de esa mesa
+//     espera el pago: ya no ofrece VENDERLE ESAS ENTRADAS).
+//
+// Lo de la 6.9.3 (20-nov-2026), con la noche de la ventana de prueba
+// (`sumarLaNoche`: una familia de cada caso) y el 20-nov, con la anticipada vigente:
+//   • Entradas_2b: el inicio de quien vende, en el celular (un solo botón, VENDER);
+//   • Entradas_30 a 30d: PRECIOS con ANTICIPADA vigente y con GENERAL, en la PC y
+//     en el celular;
+//   • Entradas_31 a 31e: la lista de VENDER con el filtro (puede retirar, debe, ya
+//     retiró), en la PC y en el celular;
+//   • Entradas_32_<caso>: la tarjeta de cada caso (pagó todo con mesa adicional,
+//     debe una cuota con la adicional paga, debe solo mora, la adicional sin pagar,
+//     la silla agregada después del sorteo, 3 acompañantes, uno sin nombre, sin
+//     adicional, ya retiró), en la PC y en el celular (_celular);
+//   • Entradas_33: los formularios de las dos partes (pulseras, y generales con
+//     número), en la PC y en el celular;
+//   • Entradas_34: las dos partes entregadas ("✓ Todo entregado");
+//   • Entradas_35: "pagó todo: ya podés entregar", la familia que pagó en la caja;
+//   • Entradas_36: la entrega del jefe con las partes de cada familia.
+// La planilla por material es otra muestra: tool/planilla_entrega_muestra_test.dart.
 //
 // Los nombres y el precio de $ 10.000 son inventados.
 
@@ -61,12 +85,73 @@ import 'package:arguello_events/features/entradas/widgets/imprimir_por_hojas.dar
 import 'package:arguello_events/features/entradas/widgets/precios_de_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
+import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 
 import '../test/helpers/entradas_en_memoria.dart';
 import '../test/helpers/entrega_en_memoria.dart';
 import '../test/helpers/tema_de_la_app.dart';
+import 'venta_entradas_prueba.dart' show NocheDeLaVenta, sumarLaNoche;
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
+
+// Los alumnos que suma la muestra de VENDER a los tres de siempre.
+const _conDos = 'a0000000-0000-4000-8000-000000000301';
+const _conMesa = 'a0000000-0000-4000-8000-000000000302';
+const _conSillas = 'a0000000-0000-4000-8000-000000000303';
+const _conMora = 'a0000000-0000-4000-8000-000000000304';
+const _conFicha = 'a0000000-0000-4000-8000-000000000305';
+
+/// Un alumno más en la fiesta de la muestra, con la base de $300.000 pagada
+/// ([pagado]), [extras] mesas adicionales de $70.000 pagadas y [sillas] sillas
+/// de $8.000 ([sillasPagas] de ellas pagadas). La ficha dice lo que dan los
+/// pagos, salvo [saldoFicha].
+void alumnoDeMuestra(
+  EntregaEnMemoria e, {
+  required String id,
+  required String nombre,
+  required List<int> mesas,
+  int extras = 0,
+  int sillas = 0,
+  int sillasPagas = 0,
+  int acompanantes = 0,
+  List<String> nombres = const [],
+  double pagado = 300000,
+  double? saldoFicha,
+  double mora = 0,
+}) {
+  final total = 300000 + 70000.0 * extras + 8000.0 * sillas;
+  final pagos = pagado + 70000.0 * extras + 8000.0 * sillasPagas;
+  e.contratos.alumnos.add(ContratoAlumno(
+    id: id,
+    eventoId: idFiestaEntrega,
+    nombreAlumno: nombre,
+    cantidadAcompanantes: acompanantes,
+    nombresAcompanantes: nombres,
+    montoTotalPactado: total,
+    saldoDeudor: saldoFicha ?? (total - pagos),
+    totalCuotas: 9,
+    cuotasPagadas: 9,
+    mesaExtraPrecio: 70000.0 * extras,
+    mesaExtraCantidad: extras,
+    mesaExtraCuotas: 1,
+    sillasExtraCantidad: sillas,
+    sillasExtraPrecioTotal: 8000.0 * sillas,
+    sillasExtraCuotas: 1,
+    moraPendienteTracked: mora,
+    numeroMesa: MesasExtraUtils.formatearAsignacionMesas(mesas),
+    cursoDivision: '5° B',
+    createdAt: DateTime(2026, 2, 1),
+  ));
+  if (pagado > 0) e.contratos.pagos.add(pagoDeLaEntrega(id, pagado, 'Cuota Base (9/9)'));
+  if (extras > 0) e.contratos.pagos.add(pagoDeLaEntrega(id, 70000.0 * extras, 'Mesa Extra 1'));
+  if (sillasPagas > 0) {
+    e.contratos.pagos.add(pagoDeLaEntrega(id, 8000.0 * sillasPagas, 'Sillas extra (1/1)'));
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -109,22 +194,31 @@ void main() {
     bool conCaja = true,
     List<Override> extra = const [],
     Future<void> Function(EntradasEnMemoria)? antes,
+    void Function(EntregaEnMemoria)? preparar,
     bool asentar = true,
+    DateTime? hoy,
+    bool conAnticipada = true,
   }) async {
     await letras();
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final e = EntregaEnMemoria();
-    final entradas = EntradasEnMemoria()
-      ..conPrecio(idFiestaEntrega, anticipada: 8000, hasta: '2026-11-28');
+    preparar?.call(e);
+    final entradas = EntradasEnMemoria();
+    if (conAnticipada) {
+      entradas.conPrecio(idFiestaEntrega, anticipada: 8000, hasta: '2026-11-28');
+    } else {
+      entradas.conPrecio(idFiestaEntrega);
+    }
     final comprobantes = <DatosDelComprobante>[];
     cierres.clear();
     final c = ProviderContainer(overrides: [
       ...e.reemplazos(jefe: jefe),
       ...entradas.reemplazos,
-      // El 30-nov la anticipada ya no rige: se ve el precio de siempre.
-      hoyEnArgentinaProvider.overrideWithValue(() => DateTime.utc(2026, 11, 30, 12)),
+      // Sin [hoy], el 30-nov: la anticipada ya no rige y se ve el precio de siempre.
+      hoyEnArgentinaProvider
+          .overrideWithValue(() => hoy ?? DateTime.utc(2026, 11, 30, 12)),
       abrirComprobanteDeEntradasProvider.overrideWithValue(
         (datos, {context}) async => comprobantes.add(datos),
       ),
@@ -251,6 +345,183 @@ void main() {
       await guardar(tester, clave, nombre);
     });
   }
+
+  // ── VENDER desde el 20-nov-2026: la lista, GRATIS en dos partes y A PAGAR ──
+
+  /// Una fiesta con un poco de todo (nombres inventados): con acompañantes, con
+  /// mesa adicional paga, con sillas (una agregada después del sorteo y sin
+  /// pagar), que debe la mora, y con la ficha distinta de los pagos.
+  void unaFiestaConDeTodo(EntregaEnMemoria e) {
+    alumnoDeMuestra(e,
+        id: _conDos,
+        nombre: 'ACOSTA, LUCÍA',
+        mesas: const [16],
+        acompanantes: 2,
+        nombres: const ['ACOSTA, MARTA', 'ACOSTA, RUBÉN']);
+    alumnoDeMuestra(e,
+        id: _conMesa,
+        nombre: 'BENÍTEZ, TOMÁS',
+        mesas: const [17, 18],
+        extras: 1,
+        acompanantes: 1,
+        nombres: const ['BENÍTEZ, CLARA']);
+    alumnoDeMuestra(e,
+        id: _conSillas,
+        nombre: 'CABRAL, JULIETA',
+        mesas: const [19],
+        sillas: 3,
+        sillasPagas: 2,
+        acompanantes: 2,
+        nombres: const ['CABRAL, ANA']);
+    alumnoDeMuestra(e, id: _conMora, nombre: 'DÍAZ, NICOLÁS', mesas: const [20], mora: 12500);
+    alumnoDeMuestra(e,
+        id: _conFicha, nombre: 'ESPÍNDOLA, ROCÍO', mesas: const [21], pagado: 0, saldoFicha: 0);
+  }
+
+  /// Al sorteo CABRAL tenía la mesa y 2 sillas (la tercera la agregó después), y
+  /// BENÍTEZ ya tenía su mesa adicional.
+  final fotoDeLaMuestra = FotoDeLosLugares.anotada({
+    _conSillas: const LugaresCargados(1, 2),
+    _conMesa: const LugaresCargados(2, 0),
+  });
+
+  Future<void> elegir(WidgetTester tester, String id, {String? filtro}) async {
+    if (filtro != null) await tocar(tester, filtro);
+    await tester.ensureVisible(find.byKey(Key('vender_familia_$id')));
+    await tester.pump();
+    await tester.tap(find.byKey(Key('vender_familia_$id')));
+    await tester.pumpAndSettle();
+  }
+
+  for (final (nombre, tamano, filtro) in [
+    ('Entradas_4a_vender_lista.png', const Size(1100, 900), null),
+    ('Entradas_4b_vender_lista_todos.png', const Size(1100, 1100), 'vender_filtro_todos'),
+    ('Entradas_4c_vender_lista_celular.png', const Size(390, 1250), 'vender_filtro_todos'),
+  ]) {
+    testWidgets('VENDER · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        tamano: tamano,
+        preparar: unaFiestaConDeTodo,
+        extra: [fotoDeLosLugaresProvider.overrideWithValue((_) async => fotoDeLaMuestra)],
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      if (filtro != null) await tocar(tester, filtro);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('VENDER · una familia que debe', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      tamano: const Size(1100, 950),
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await elegir(tester, EntregaEnMemoria.idPerez, filtro: 'vender_filtro_debe');
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Entradas_4d_vender_debe.png');
+  });
+
+  for (final (nombre, tamano) in [
+    ('Entradas_4e_vender_entregar_pulseras.png', const Size(1100, 1250)),
+    ('Entradas_4f_vender_entregar_pulseras_celular.png', const Size(390, 1800)),
+  ]) {
+    testWidgets('VENDER · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        tamano: tamano,
+        preparar: unaFiestaConDeTodo,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await elegir(tester, _conDos);
+      await tocar(tester, 'vender_entregar_pulseras');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('VENDER · las pulseras entregadas', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      tamano: const Size(1100, 950),
+      preparar: unaFiestaConDeTodo,
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await elegir(tester, _conDos);
+    await tocar(tester, 'vender_entregar_pulseras');
+    await tester.pumpAndSettle();
+    final formulario = find.byKey(const Key('vender_formulario_pulseras'));
+    Finder adentro(Finder f) => find.descendant(of: formulario, matching: f);
+    await tester.tap(adentro(find.text('Madre')));
+    await tester.enterText(
+      adentro(find.widgetWithText(TextField, 'Nombre y apellido de quien retira')),
+      'Marta Acosta',
+    );
+    final planilla =
+        adentro(find.text('Escribió su nombre y apellido en la planilla de papel'));
+    await tester.ensureVisible(planilla);
+    await tester.pump();
+    await tester.tap(planilla);
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('entrega_confirmar_pulseras')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('entrega_confirmar_pulseras')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Entradas_4g_vender_pulseras_entregadas.png');
+  });
+
+  testWidgets('VENDER · las sillas, con una a confirmar', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      tamano: const Size(1100, 1200),
+      preparar: unaFiestaConDeTodo,
+      extra: [fotoDeLosLugaresProvider.overrideWithValue((_) async => fotoDeLaMuestra)],
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await elegir(tester, _conSillas, filtro: 'vender_filtro_debe');
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Entradas_4h_vender_sillas.png');
+  });
+
+  for (final (nombre, tamano) in [
+    ('Entradas_4i_vender_afuera.png', const Size(1100, 800)),
+    ('Entradas_4j_vender_afuera_celular.png', const Size(390, 1100)),
+  ]) {
+    testWidgets('VENDER · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        tamano: tamano,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await tester.tap(find.text('Alguien de afuera'));
+      await tester.pump();
+      await tocar(tester, 'vender_sueltas_mas', veces: 2);
+      await poner(tester, 'vender_comprador', 'RUIZ, MARTA');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('VENDER · sin caja: lo sin cargo se entrega igual', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      conCaja: false,
+      tamano: const Size(1100, 950),
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await tester.tap(find.byKey(const Key('abrir_caja_volver')));
+    await tester.pumpAndSettle();
+    await elegir(tester, EntregaEnMemoria.idLopez);
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Entradas_4k_vender_sin_caja.png');
+  });
 
   /// Una noche con dos cajas: la de Carla (la que abrió [montar]) y la de Maxi.
   /// Una venta con el pago verificado, una mixta con un número que quedó en dos
@@ -830,5 +1101,258 @@ void main() {
           .writeAsBytesSync(anulado);
       print('── PDF en: $carpeta');
     });
+  });
+
+  // ── La 6.9.3 (20-nov-2026): VENDER con la entrega adentro ───────────────────
+
+  /// El día de la noche de la ventana de prueba: la anticipada rige hasta el 28.
+  final hoyDeLaNoche = DateTime.utc(2026, 11, 20, 12);
+
+  /// Lo que cada familia de la noche tenía al sorteo, para la nota de PRECIOS.
+  final fotoDeLaNoche = FotoDeLosLugares.anotada({
+    EntregaEnMemoria.idPerez: const LugaresCargados(2, 0),
+    NocheDeLaVenta.acosta: const LugaresCargados(2, 0),
+    NocheDeLaVenta.benitez: const LugaresCargados(2, 0),
+  }, sorteoEl: NocheDeLaVenta.sorteoEl);
+
+  /// En la tarjeta: ENTREGAR de [parte], quién retira y la planilla, sin
+  /// confirmar. [numero]: las generales vienen numeradas desde ese.
+  Future<void> llenarParte(WidgetTester tester, ParteEntrega parte, {String? numero}) async {
+    await tester.ensureVisible(find.byKey(Key('vender_entregar_${parte.clave}')));
+    await tester.pumpAndSettle();
+    await tocar(tester, 'vender_entregar_${parte.clave}');
+    await tester.pumpAndSettle();
+    final formulario = find.byKey(Key('vender_formulario_${parte.clave}'));
+    Finder adentro(Finder f) => find.descendant(of: formulario, matching: f);
+    if (numero != null) {
+      await tester.ensureVisible(adentro(find.text('Vienen con número')));
+      await tester.pumpAndSettle();
+      await tester.tap(adentro(find.text('Vienen con número')));
+      await tester.pumpAndSettle();
+      await tester.enterText(adentro(find.widgetWithText(TextField, 'Del')), numero);
+      await tester.pump();
+    }
+    await tester.ensureVisible(adentro(find.text('Madre')));
+    await tester.pumpAndSettle();
+    await tester.tap(adentro(find.text('Madre')));
+    await tester.enterText(
+      adentro(find.widgetWithText(TextField, 'Nombre y apellido de quien retira')),
+      'Marta Acosta',
+    );
+    final planilla =
+        adentro(find.text('Escribió su nombre y apellido en la planilla de papel'));
+    await tester.ensureVisible(planilla);
+    await tester.pumpAndSettle();
+    await tester.tap(planilla);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> confirmarParte(WidgetTester tester, ParteEntrega parte) async {
+    await tester.ensureVisible(find.byKey(Key('entrega_confirmar_${parte.clave}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('entrega_confirmar_${parte.clave}')));
+    await tester.pumpAndSettle();
+  }
+
+  for (final (nombre, tamano, conAnticipada) in [
+    ('Entradas_30_precios_anticipada.png', const Size(900, 1050), true),
+    ('Entradas_30b_precios_anticipada_celular.png', const Size(390, 1500), true),
+    ('Entradas_30c_precios_general.png', const Size(900, 950), false),
+    ('Entradas_30d_precios_general_celular.png', const Size(390, 1300), false),
+  ]) {
+    testWidgets('PRECIOS · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        jefe: true,
+        hoy: hoyDeLaNoche,
+        conAnticipada: conAnticipada,
+        tamano: tamano,
+        preparar: sumarLaNoche,
+        pantalla: Scaffold(
+          body: PreciosDeEntradasDialog(
+            eventoId: idFiestaEntrega,
+            fiesta: 'PUERTO VIEJO',
+            quien: 'Jefe',
+            fechaFiesta: fiestaDeLaEntrega.fechaEvento,
+            lugares: fotoDeLaNoche,
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('el inicio de quien vende, en el celular', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      hoy: hoyDeLaNoche,
+      tamano: const Size(390, 480),
+      pantalla: const EntradasHomeScreen(),
+    );
+    expect(find.text('ENTREGAR'), findsNothing);
+    expect(find.text('VENDER'), findsOneWidget);
+    await guardar(tester, clave, 'Entradas_2b_inicio_celular.png');
+  });
+
+  for (final (nombre, tamano, filtro) in [
+    ('Entradas_31_lista_puede.png', const Size(1100, 950), null),
+    ('Entradas_31b_lista_debe.png', const Size(1100, 850), 'vender_filtro_debe'),
+    ('Entradas_31c_lista_ya_retiro.png', const Size(1100, 700), 'vender_filtro_ya'),
+    ('Entradas_31d_lista_puede_celular.png', const Size(390, 1500), null),
+    ('Entradas_31e_lista_debe_celular.png', const Size(390, 1250), 'vender_filtro_debe'),
+  ]) {
+    testWidgets('VENDER de la noche · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        hoy: hoyDeLaNoche,
+        tamano: tamano,
+        preparar: sumarLaNoche,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      if (filtro != null) await tocar(tester, filtro);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  for (final (caso, id, filtro) in [
+    ('acosta_pago_todo', NocheDeLaVenta.acosta, null),
+    ('benitez_debe_cuota', NocheDeLaVenta.benitez, 'vender_filtro_debe'),
+    ('diaz_debe_mora', NocheDeLaVenta.diaz, 'vender_filtro_debe'),
+    ('perez_adicional_sin_pagar', EntregaEnMemoria.idPerez, 'vender_filtro_debe'),
+    ('ferreyra_silla_despues', NocheDeLaVenta.ferreyra, null),
+    ('herrera_tres_acompanantes', NocheDeLaVenta.herrera, null),
+    ('ibarra_uno_sin_nombre', NocheDeLaVenta.ibarra, null),
+    ('lopez_sin_adicional', EntregaEnMemoria.idLopez, null),
+    ('gomez_ya_retiro', EntregaEnMemoria.idGomez, 'vender_filtro_ya'),
+  ]) {
+    for (final (sufijo, tamano) in [
+      ('', const Size(1100, 1350)),
+      ('_celular', const Size(390, 2300)),
+    ]) {
+      testWidgets('VENDER · la tarjeta: $caso$sufijo', (tester) async {
+        final (clave, _, _, _) = await montar(
+          tester,
+          hoy: hoyDeLaNoche,
+          tamano: tamano,
+          preparar: sumarLaNoche,
+          pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+        );
+        await elegir(tester, id, filtro: filtro);
+        await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'nada se desborda');
+        await guardar(tester, clave, 'Entradas_32_$caso$sufijo.png');
+      });
+    }
+  }
+
+  for (final (parte, numero) in [
+    (ParteEntrega.pulseras, null),
+    (ParteEntrega.generales, '5001'),
+  ]) {
+    for (final (sufijo, tamano) in [
+      ('', const Size(1100, 1500)),
+      ('_celular', const Size(390, 2600)),
+    ]) {
+      testWidgets('VENDER · el formulario de ${parte.clave}$sufijo', (tester) async {
+        final (clave, _, _, _) = await montar(
+          tester,
+          hoy: hoyDeLaNoche,
+          tamano: tamano,
+          preparar: sumarLaNoche,
+          pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+        );
+        await elegir(tester, NocheDeLaVenta.acosta);
+        await llenarParte(tester, parte, numero: numero);
+        await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'nada se desborda');
+        await guardar(tester, clave, 'Entradas_33_formulario_${parte.clave}$sufijo.png');
+      });
+    }
+  }
+
+  for (final (sufijo, tamano) in [
+    ('', const Size(1100, 1250)),
+    ('_celular', const Size(390, 2100)),
+  ]) {
+    testWidgets('VENDER · las dos partes entregadas$sufijo', (tester) async {
+      final (clave, e, _, _) = await montar(
+        tester,
+        hoy: hoyDeLaNoche,
+        tamano: tamano,
+        preparar: sumarLaNoche,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await elegir(tester, NocheDeLaVenta.acosta);
+      await llenarParte(tester, ParteEntrega.pulseras);
+      await confirmarParte(tester, ParteEntrega.pulseras);
+      await llenarParte(tester, ParteEntrega.generales, numero: '5001');
+      await confirmarParte(tester, ParteEntrega.generales);
+      expect(e.estadoDe(NocheDeLaVenta.acosta).todoEntregado, isTrue);
+      // El aviso verde se va: queda lo que se ve en la tarjeta.
+      ScaffoldMessenger.of(tester.element(find.byType(VenderEntradasScreen)))
+          .removeCurrentSnackBar();
+      await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, 'Entradas_34_todo_entregado$sufijo.png');
+    });
+  }
+
+  for (final (sufijo, tamano) in [
+    ('', const Size(1100, 950)),
+    ('_celular', const Size(390, 1500)),
+  ]) {
+    testWidgets('VENDER · pagó en la caja: ya podés entregar$sufijo', (tester) async {
+      final (clave, e, _, _) = await montar(
+        tester,
+        hoy: hoyDeLaNoche,
+        tamano: tamano,
+        preparar: sumarLaNoche,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await elegir(tester, NocheDeLaVenta.diaz, filtro: 'vender_filtro_debe');
+      await tocar(tester, 'vender_mandar_a_caja');
+      await tester.pumpAndSettle();
+      // La caja de otra PC le cobra la mora: la ficha baja sin mora.
+      final i = e.contratos.alumnos.indexWhere((a) => a.id == NocheDeLaVenta.diaz);
+      e.contratos.alumnos[i] = e.contratos.alumnos[i].copyWith(moraPendienteTracked: 0);
+      e.motor.bajo.add({'contratos_alumnos', 'pagos_contrato_alumno'});
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('vender_pago_texto_${NocheDeLaVenta.diaz}')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, 'Entradas_35_pago_en_caja$sufijo.png');
+    });
+  }
+
+  testWidgets('la entrega del jefe, con las partes de cada familia', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      jefe: true,
+      asentar: false,
+      hoy: hoyDeLaNoche,
+      tamano: const Size(1300, 1150),
+      preparar: (e) {
+        sumarLaNoche(e);
+        e.entregadaEnOtroEquipo(
+            NocheDeLaVenta.acosta, ParteEntrega.pulseras, DateTime.utc(2026, 11, 18, 15));
+        e.entregadaEnOtroEquipo(
+            NocheDeLaVenta.herrera, ParteEntrega.pulseras, DateTime.utc(2026, 11, 19, 16));
+        e.entregadaEnOtroEquipo(
+            NocheDeLaVenta.herrera, ParteEntrega.generales, DateTime.utc(2026, 11, 20, 11));
+      },
+      pantalla: RetiroEntradasScreen(
+        evento: fiestaDeLaEntrega,
+        onCobrar: (_) async {},
+        onEditarAlumno: (_) async {},
+      ),
+    );
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_36_entrega_jefe.png');
   });
 }

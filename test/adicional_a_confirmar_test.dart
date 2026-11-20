@@ -125,4 +125,37 @@ void main() {
     final a = _familia(extras: 0, mesas: [12]);
     expect(AdicionalesDeLaFamilia.aConfirmar(a, const []), isEmpty);
   });
+
+  // Revisión del 20-nov-2026: con "Las mesas adicionales: Al final" y ninguna
+  // pegada (6.6.1), la principal queda sola adelante y las adicionales juntas
+  // al fondo. El orden salía del tramo más largo (67-68) y la principal (la 12)
+  // pasaba a ser la adicional que faltaba pagar.
+  group('la mesa del contrato es la de número más bajo', () {
+    test('la 12 principal y la 67-68 adicionales: la que falta pagar es la 68, '
+        'nunca la 12', () {
+      final a = _familia(extras: 2, mesas: [12, 67, 68]);
+      final r = AdicionalesDeLaFamilia.aConfirmar(a, [_pago(70000)]);
+      expect(r.single.n, 2);
+      expect(r.single.mesa, 68);
+      expect(AdicionalesDeLaFamilia.mesas(a, [_pago(70000)]), {68});
+    });
+
+    test('sin nada de las mesas pago: la 67 y la 68, y la 12 nunca', () {
+      final a = _familia(extras: 2, mesas: [12, 67, 68]);
+      expect(AdicionalesDeLaFamilia.mesas(a, const []), {67, 68});
+    });
+
+    test('con una pegada a la principal (12-13) y la otra al fondo (67): la '
+        'adicional 2 es la 67', () {
+      final a = _familia(extras: 2, mesas: [12, 13, 67]);
+      final r = AdicionalesDeLaFamilia.aConfirmar(a, [_pago(70000)]);
+      expect(r.single.mesa, 67);
+    });
+
+    test('las mesas nuevas al fondo de quien llegó después del sorteo', () {
+      // Tenía la 12; agregó dos mesas y el programa le dio la 90 y la 91.
+      final a = _familia(extras: 2, mesas: [12, 90, 91]);
+      expect(AdicionalesDeLaFamilia.mesas(a, const []), {90, 91});
+    });
+  });
 }

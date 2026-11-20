@@ -108,6 +108,33 @@ class NumerosDeEntradas {
           if (e.value.isNotEmpty) e.key: [...e.value],
       };
 
+  /// El número de las anticipadas que VENDER propone (20-nov-2026): **el que
+  /// sigue al último que vendió la caja [cajaId]**, o null si esa caja todavía
+  /// no vendió nada con números. Quien vende lo puede cambiar o borrar (sin
+  /// número se vende igual: son opcionales).
+  ///
+  /// "El último" es el de su venta más nueva con números (por el número del
+  /// comprobante, que es de la caja), y de esa venta el más alto. No cuenta una
+  /// venta anulada con las entradas devueltas: esos números volvieron al
+  /// talonario y se pueden volver a vender.
+  static int? siguienteDeLaCaja(
+    String cajaId,
+    Iterable<VentaEntradas> ventas,
+    Iterable<AnulacionEntradas> anulaciones,
+  ) {
+    final anuladas = anulacionesPorVenta(anulaciones);
+    final deLaCaja = [
+      for (final v in ventas)
+        if (v.cajaEntradasId == cajaId) v,
+    ]..sort((a, b) => b.numero.compareTo(a.numero));
+    for (final v in deLaCaja) {
+      if (_aNombreDe(v, anuladas[v.id]) == null) continue;
+      final tramos = TramoTalonario.deTexto(v.numeros);
+      return tramos.map((t) => t.hasta).reduce(max) + 1;
+    }
+    return null;
+  }
+
   /// Qué está mal en los números de una venta de [cantidad] entradas, o null
   /// si están bien. **Sin números está bien**: son opcionales. [ocupados] es
   /// lo que da [ocupadosDeLaVenta].

@@ -2967,21 +2967,25 @@ class SyncEngine {
     // sin internet, tiene que saber cuáles mesas ya están en el tope.
     'sillas_puerta',
     // La venta de entradas (v80, 6.9.0): la tablet que se prepara en la oficina
-    // vende sin internet con el precio, lo vendido y lo entregado sin cargo (si
-    // no, podría vender un número del talonario que ya tiene dueño). Sin el SQL
-    // de la v80 en la nube, "Lista para trabajar sin internet" no queda lista.
+    // vende sin internet con el precio y lo vendido (los números de las
+    // anticipadas ya vendidas no se repiten). Sin el SQL de la v80 en la nube,
+    // "Lista para trabajar sin internet" no queda lista.
     'entradas_config',
     'entradas_cajas',
     'entradas_ventas',
     'entradas_anulaciones',
     'entradas_verificaciones',
+    // La entrega sin cargo de las 8 juntas (6.9.x): la tablet **entrega sin
+    // internet**, y tiene que saber a quién ya se le entregó y qué números de
+    // las generales ya tienen dueño. Ya no es para VENDER: desde el 20-nov lo
+    // vendido es otro talonario (las anticipadas) y no mira lo entregado.
     'entradas_retiro',
     // La entrega en dos partes (v81): la tablet entrega sin internet una parte
     // que otro equipo pudo haber dado, y los números de las generales ya
     // entregadas no se repiten.
     'entradas_entregas',
     // El registro de sorteos (17-nov-2026): de ahí sale qué tenía cada familia
-    // al sorteo, que decide qué entradas van con descuento y cuáles enteras.
+    // al sorteo, que decide qué entradas van con descuento y cuáles sin él.
     // Sin esto la tablet que vende sin internet le daría el descuento a todo.
     'sorteos_mesas',
   ];

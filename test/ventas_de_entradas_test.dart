@@ -16,6 +16,7 @@ import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
@@ -232,6 +233,48 @@ void main() {
           reason: 'la venta de RUIZ no choca con ninguna entrega');
       expect(find.textContaining('RUIZ MARTA y'), findsNothing);
       expect(find.textContaining('en una entrega'), findsNothing);
+    });
+
+    // 20-nov-2026: las generales se entregan por partes (un renglón de
+    // `entradas_entregas`), y sus números también cuentan para el aviso.
+    testWidgets('el número de unas generales entregadas por partes también se avisa',
+        (tester) async {
+      await _montar(
+        tester,
+        preparar: (e) {
+          e.partes.renglones.add(EntregaEntradas.entrega(
+            contratoAlumnoId: EntregaEnMemoria.idLopez,
+            eventoId: idFiestaEntrega,
+            parte: ParteEntrega.generales,
+            cantidad: 7,
+            tramos: const [TramoTalonario(1005, 1011)],
+            parentesco: ParentescoRetiro.madre,
+            nombre: 'Sofía López',
+            escribioEnPlanilla: true,
+            hechoPor: 'Carla',
+            deviceId: 'tablet',
+            ahora: DateTime.utc(2026, 11, 20, 19),
+          ));
+        },
+      );
+      final avisos = [
+        for (final w in tester.widgetList<Text>(find.descendant(
+          of: find.byWidgetPredicate(
+            (w) => w.key is ValueKey<String> &&
+                (w.key! as ValueKey<String>).value.startsWith('ventas_repetido_'),
+          ),
+          matching: find.byType(Text),
+        )))
+          w.data ?? '',
+      ];
+      expect(
+        avisos.where((a) =>
+            a.startsWith('El 1005 está en dos entregas (') &&
+            a.contains('GÓMEZ, ANA') &&
+            a.contains('LÓPEZ, SOFÍA')),
+        hasLength(1),
+        reason: '$avisos',
+      );
     });
 
     testWidgets('sin ventas lo dice', (tester) async {

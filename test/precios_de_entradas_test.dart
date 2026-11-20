@@ -404,6 +404,24 @@ void main() {
         }
       });
 
+      // Roturas a propósito del 20-nov-2026: sacándole esta regla a conPrecios
+      // ningún test fallaba, porque EleccionDePrecios la frena antes. La segunda
+      // llave se prueba sola.
+      test('la segunda llave: conPrecios frena por su cuenta la anticipada sin la '
+          'General', () {
+        for (final valor in [null, 0.0]) {
+          expect(
+            () => conPrecios(valor: valor, anticipada: 8000, hasta: '2026-11-28'),
+            throwsArgumentError,
+            reason: 'General: $valor',
+          );
+        }
+        expect(
+          conPrecios(anticipada: 8000, hasta: '2026-11-28').valorEntrada,
+          10000,
+        );
+      });
+
       test('hoy no pasó: la anticipada puede valer hasta hoy', () {
         const hastaHoy = EleccionDePrecios(
           queSeVende: QueSeVende.anticipada,
@@ -484,13 +502,11 @@ void main() {
       findsOneWidget,
     );
     expect(escrito(tester, 'precio_hasta'), '28/11/2026');
-    expect(
-      find.widgetWithText(
-        TextField,
-        'Precio de la General (cuando termina la anticipada)',
-      ),
-      findsOneWidget,
-    );
+    // 20-nov-2026, mirando las muestras: el rótulo decía "Precio de la General
+    // (cuando termina la anticipada)" y en el celular se cortaba. Cuándo rige va
+    // ahora debajo del casillero.
+    expect(find.widgetWithText(TextField, 'Precio de la General'), findsOneWidget);
+    expect(find.text('Se cobra cuando termina la anticipada.'), findsOneWidget);
 
     // Tocar la elegida no la saca.
     await elegir(tester, QueSeVende.anticipada);

@@ -12,6 +12,7 @@ import 'package:arguello_events/features/caja_sesiones/services/entrada_de_opera
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'package:arguello_events/features/common/utils/quien_opera.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
+import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/services/fiestas_que_vienen.dart';
 import 'package:arguello_events/models/evento.dart';
 
@@ -446,8 +447,11 @@ void main() {
       expect(find.text('VENDER'), findsNothing);
     });
 
-    testWidgets('con "Vende entradas" cada fiesta tiene ENTREGAR y VENDER (6.9.0)',
-        (tester) async {
+    // Hasta la 6.9.2 quien vendía veía dos botones, ENTREGAR y VENDER. Cambió a
+    // propósito el 20-nov-2026 (decisión del usuario): un solo botón, VENDER, y
+    // adentro está todo (lo sin cargo en dos partes y lo que se paga).
+    testWidgets('con "Vende entradas" cada fiesta tiene un solo botón, VENDER, y la '
+        'tarjeta también abre VENDER', (tester) async {
       Evento? entrega;
       Evento? venta;
       await abrir(
@@ -456,21 +460,69 @@ void main() {
         alAbrir: (_, e) => entrega = e,
         alVender: (_, e) => venta = e,
       );
+      expect(find.byKey(const Key('entregar_uno')), findsNothing);
+      expect(find.text('ENTREGAR'), findsNothing);
       await tester.tap(find.byKey(const Key('vender_uno')));
       expect(venta?.id, 'uno');
       expect(entrega, isNull, reason: 'VENDER no abre la entrega');
-      await tester.tap(find.byKey(const Key('entregar_uno')));
+      venta = null;
+      await tester.tap(find.byKey(const Key('fiesta_uno')));
+      expect(venta?.id, 'uno', reason: 'la tarjeta entera abre VENDER');
+      expect(entrega, isNull);
+    });
+
+    testWidgets('quien solo entrega sigue igual: la tarjeta abre la entrega',
+        (tester) async {
+      Evento? entrega;
+      Evento? venta;
+      await abrir(
+        tester,
+        permisos: const PermisosEfectivos(entradas: true),
+        alAbrir: (_, e) => entrega = e,
+        alVender: (_, e) => venta = e,
+      );
+      await tester.tap(find.byKey(const Key('fiesta_uno')));
+      expect(entrega?.id, 'uno');
+      expect(venta, isNull);
+    });
+
+    testWidgets('en la web no se vende: con "Vende entradas", la tarjeta abre la entrega',
+        (tester) async {
+      Evento? entrega;
+      await tester.pumpWidget(const SizedBox());
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ...prueba.reemplazos,
+          entradasEnEsteEquipoProvider.overrideWithValue(false),
+          fiestasQueVienenProvider.overrideWith(
+            (ref) async => [fiesta('uno', DateTime(2026, 12, 1))],
+          ),
+        ],
+        child: MaterialApp(
+          home: EntradasHomeScreen(onAbrirFiesta: (_, e) => entrega = e),
+        ),
+      ));
+      final c = ProviderScope.containerOf(tester.element(find.byType(EntradasHomeScreen)));
+      await c.read(appRoleProvider.notifier).entrarComoEntradas(
+            prueba.operadores.lista.first,
+            const PermisosEfectivos(vendeEntradas: true),
+          );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('vender_uno')), findsNothing);
+      await tester.tap(find.byKey(const Key('fiesta_uno')));
       expect(entrega?.id, 'uno');
     });
 
-    testWidgets('en un celular, ENTREGAR y VENDER van debajo y no se desborda',
-        (tester) async {
+    testWidgets('en un celular, VENDER va debajo y no se desborda', (tester) async {
       await abrir(tester, permisos: const PermisosEfectivos(vendeEntradas: true));
       tester.view.physicalSize = const Size(360, 700);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('vender_uno')), findsOneWidget);
-      expect(find.byKey(const Key('entregar_uno')), findsOneWidget);
+      expect(find.byKey(const Key('entregar_uno')), findsNothing);
     });
 
     testWidgets('solo Entradas no ve PASAR A CAJA', (tester) async {

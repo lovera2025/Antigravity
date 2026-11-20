@@ -15,6 +15,7 @@ import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../../models/entradas_retiro.dart';
+import '../../../models/entrega_entradas.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
@@ -4450,60 +4451,62 @@ class PdfService {
     );
   }
 
-  /// Planilla de entrega de entradas: arma el PDF y devuelve los bytes. La usa
-  /// [generarPlanillaEntrega] y la muestra de `tool/`. Fuentes de los assets,
-  /// igual que la del sorteo: se imprime también sin red.
+  /// Planilla de entrega de un material (las pulseras VIP o las generales):
+  /// arma el PDF y devuelve los bytes. La usa [generarPlanillaEntrega] y la
+  /// muestra de `tool/`. Fuentes de los assets, igual que la del sorteo: se
+  /// imprime también sin red.
   static Future<Uint8List> construirPlanillaEntregaPdf(
     Evento evento,
     List<ContratoAlumno> alumnos, {
+    required ParteEntrega material,
     required Map<String, EntradasRetiro> retiros,
+    List<EntregaEntradas> renglones = const [],
     required Map<String, DeudaAlumno> deudas,
     bool blancoYNegro = false,
     DateTime? generada,
-    FotoDeLosLugares? foto,
-    double descuentoPct = 50,
   }) async {
     final fuentes = await _fuentesOutfit();
     return PlanillaEntregaPdf.construir(
       evento: evento,
       alumnos: alumnos,
+      material: material,
       retiros: retiros,
+      renglones: renglones,
       deudas: deudas,
       blancoYNegro: blancoYNegro,
       regular: fuentes?.$1,
       negrita: fuentes?.$2,
       generada: generada,
-      foto: foto,
-      descuentoPct: descuentoPct,
     );
   }
 
+  /// La planilla de entrega de [material]: una por material, porque cada uno
+  /// llega y se entrega en su tanda (20-nov-2026).
   static Future<void> generarPlanillaEntrega(
     Evento evento,
     List<ContratoAlumno> alumnos, {
+    required ParteEntrega material,
     required Map<String, EntradasRetiro> retiros,
+    List<EntregaEntradas> renglones = const [],
     required Map<String, DeudaAlumno> deudas,
     bool blancoYNegro = false,
-
-    /// Lo que cada familia tenía al sorteo, y el descuento de PRECIOS.
-    FotoDeLosLugares? foto,
-    double descuentoPct = 50,
   }) async {
     final bytes = await construirPlanillaEntregaPdf(
       evento,
       alumnos,
+      material: material,
       retiros: retiros,
+      renglones: renglones,
       deudas: deudas,
       blancoYNegro: blancoYNegro,
-      foto: foto,
-      descuentoPct: descuentoPct,
     );
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
       RegExp(r'[^a-zA-Z0-9_\-\.]'),
       '_',
     );
+    final queEs = material == ParteEntrega.pulseras ? 'Pulseras' : 'Generales';
     final nombre =
-        'Planilla_Entrega_$safeName${blancoYNegro ? '_BN' : ''}.pdf';
+        'Planilla_Entrega_${queEs}_$safeName${blancoYNegro ? '_BN' : ''}.pdf';
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, nombre);
     } else {

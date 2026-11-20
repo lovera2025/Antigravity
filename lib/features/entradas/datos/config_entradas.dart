@@ -91,9 +91,15 @@ class ConfigEntradas {
   static String diaDe(DateTime momento) => _dia(momento);
 
   /// La misma config con lo que el jefe puso en PRECIOS. **Tira `ArgumentError`
-  /// si algo no cierra**: es la segunda llave de lo que la pantalla ya frena.
+  /// si algo no cierra**: es la segunda llave de **las reglas de siempre** (los
+  /// precios en pesos enteros, la anticipada con su precio y su día o ninguna de
+  /// las dos, los porcentajes entre 0 y 100).
   ///
-  /// Los precios van en pesos enteros. La anticipada, las dos cosas o ninguna.
+  /// Las reglas nuevas de PRECIOS (6.9.3: elegir Anticipada o General, la
+  /// General siempre, un día que no pasó, los porcentajes con número) las frena
+  /// `EleccionDePrecios` (`loQueFalta` y `enColumnas`, que llama a esta): esta
+  /// no sabe qué día es ni qué se eligió (decisión de la fase A del 20-nov,
+  /// aceptada).
   ConfigEntradas conPrecios({
     required double? valorEntrada,
     required double? precioAnticipada,

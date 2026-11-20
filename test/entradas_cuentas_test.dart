@@ -12,6 +12,7 @@ import 'package:arguello_events/features/entradas/cuentas/precio_de_entradas.dar
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/eventos/services/lugares_pagos.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 
@@ -107,6 +108,7 @@ LugaresDeLaFamilia _lugaresDe(
       ventas: ventas,
       anulaciones: anulaciones,
       aPagar: APagarDeLaFamilia.de(a, pagos: _todoPago(a)),
+      bloqueo: BloqueoRetiro.ninguno,
     );
 
 /// Una venta ya hecha de [deLugar] entradas de lugares y [sueltas] sueltas.

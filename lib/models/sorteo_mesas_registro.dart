@@ -80,7 +80,8 @@ class SorteoMesasRegistro {
   /// Lo que cada familia tenía cargado en su cuenta cuando se sorteó (17-nov-2026):
   /// alumno → "mesas,sillas" (`LugaresCargados.texto`), solo de quien tenía mesa
   /// adicional o sillas extra. Las entradas de esos lugares van con descuento; lo
-  /// que la familia agregue después paga la entrada entera (`LugaresAlSorteo`).
+  /// que la familia agregue después paga el precio del día, sin descuento
+  /// (`LugaresAlSorteo`).
   ///
   /// Que esté —aunque vacío— es lo que dice que el sorteo anotó los lugares:
   /// quien no figura tenía solo la mesa del contrato. `null` en un sorteo

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../../../models/contrato_alumno.dart';
 import '../../eventos/services/lugares_pagos.dart';
+import '../../eventos/services/retiro_entradas.dart' show BloqueoRetiro;
 import '../datos/anulacion_entradas.dart';
 import '../datos/venta_entradas.dart';
 
@@ -92,6 +93,13 @@ class LugaresDeLaFamilia {
   /// falta pagarla en caja."). Lo arma [APagarDeLaFamilia.textoAConfirmar].
   final String? textoDeLoQueFalta;
 
+  /// Por qué hoy no se le vende nada, aunque tenga cosas pagas: su cuenta de la
+  /// entrega la tiene que revisar el jefe (la ficha distinta de los pagos, sin
+  /// mesa, las mesas que no coinciden, no entran). Null si se le vende. Lo
+  /// decide `APagarDeLaFamilia.porQueNoSeVendeCon`, la misma regla del diálogo
+  /// de la entrega (revisión del 20-nov-2026).
+  final String? frenada;
+
   const LugaresDeLaFamilia({
     required this.leCorresponden,
     required this.pagas,
@@ -100,6 +108,7 @@ class LugaresDeLaFamilia {
     this.pagasSinDescuento = 0,
     this.sueltasCompradas = 0,
     this.textoDeLoQueFalta,
+    this.frenada,
   });
 
   /// Quien no es una familia de la fiesta: no le corresponde ninguna.
@@ -109,11 +118,17 @@ class LugaresDeLaFamilia {
   /// [aPagar]: lo suyo cosa por cosa, con qué está pago (lo arma VENDER, que
   /// tiene los pagos, con `APagarDeLaFamilia.de`). Sin los pagos, nada está
   /// pago y no se le vende nada.
+  ///
+  /// [bloqueo]: cómo está su cuenta de la entrega (`RetiroEntradas.bloqueo`), y
+  /// [todoEntregado], si ya retiró lo sin cargo: con la cuenta para revisar no
+  /// se le vende nada ([frenada]).
   factory LugaresDeLaFamilia.de(
     ContratoAlumno alumno, {
     required Iterable<VentaEntradas> ventas,
     required Iterable<AnulacionEntradas> anulaciones,
     required APagarDeLaFamilia aPagar,
+    required BloqueoRetiro bloqueo,
+    bool todoEntregado = false,
   }) {
     assert(aPagar.alumnoId == alumno.id, 'lo de A PAGAR es de otro alumno');
     return LugaresDeLaFamilia(
@@ -124,13 +139,25 @@ class LugaresDeLaFamilia {
       pagasSinDescuento: aPagar.sinDescuentoPagas,
       sueltasCompradas: sueltasPorFamilia(ventas, anulaciones)[alumno.id] ?? 0,
       textoDeLoQueFalta: aPagar.textoAConfirmar,
+      frenada: APagarDeLaFamilia.porQueNoSeVendeCon(
+        bloqueo,
+        todoEntregado: todoEntregado,
+      ),
     );
   }
 
+  /// Las de lo pago con descuento que todavía no compró, sin mirar si está
+  /// [frenada].
+  int get _quedanPagas => max(0, pagas - compradas);
+
+  /// Lo mismo, sin descuento.
+  int get _quedanPagasSinDescuento =>
+      max(0, pagasSinDescuento - sueltasCompradas - compradasDeMas);
+
   /// Las que todavía puede comprar con el descuento: **las de lo pago, menos
   /// las que ya compró**. Nunca baja de cero (si le sacaron una silla después
-  /// de comprar, quedan 0).
-  int get quedan => max(0, pagas - compradas);
+  /// de comprar, quedan 0). Con la cuenta para revisar ([frenada]), ninguna.
+  int get quedan => frenada != null ? 0 : _quedanPagas;
 
   /// Las que compró con el descuento por encima de las que hoy le
   /// corresponden. Pasa con lo vendido por la 6.9.0 y la 6.9.1 (y por la 6.9.2
@@ -141,20 +168,64 @@ class LugaresDeLaFamilia {
 
   /// Las que todavía puede comprar sin descuento: **las de lo pago sin
   /// descuento, sin cobrar dos veces**: menos las sueltas que ya compró a su
-  /// nombre y menos lo que compró de más con descuento. Nunca baja de cero.
-  int get quedanSinDescuento =>
-      max(0, pagasSinDescuento - sueltasCompradas - compradasDeMas);
+  /// nombre y menos lo que compró de más con descuento. Nunca baja de cero. Con
+  /// la cuenta para revisar ([frenada]), ninguna.
+  int get quedanSinDescuento => frenada != null ? 0 : _quedanPagasSinDescuento;
 
   /// Todo lo que le queda para comprar hoy.
   int get quedanTodas => quedan + quedanSinDescuento;
+
+  /// Cuántas le quedan de cada línea de A PAGAR ([lineas], las de
+  /// `APagarDeLaFamilia.lineas`, en su orden) y cuántas de cada una siguen "a
+  /// confirmar", para que VENDER muestre un renglón por mesa adicional y por
+  /// sillas (20-nov-2026).
+  ///
+  /// **No es otra cuenta: es [quedan], [quedanSinDescuento] y [esperanElPago]
+  /// repartidas línea por línea.** Lo que ya compró se descuenta primero de lo
+  /// pago de cada línea, de la primera a la última (como lo pagado, que también
+  /// cubre primero las primeras): lo con descuento de las líneas con descuento,
+  /// y las sueltas (más lo comprado de más con descuento, [compradasDeMas]) de
+  /// las sin descuento. **Lo comprado que sobra tapa lo "a confirmar"** de cada
+  /// línea (revisión del 20-nov-2026): quien compró las de su mesa adicional con
+  /// la 6.9.0, antes de pagarla, no tiene nada a confirmar (pagarla no le da
+  /// más), y la línea no tiene que decir "A confirmar" mientras abajo dice "Ya
+  /// compró todas".
+  ///
+  /// Los [quedan] de las líneas con descuento suman [quedan]; los de las otras,
+  /// [quedanSinDescuento]. Los [aConfirmar] de todas suman [esperanElPago].
+  ({List<int> quedan, List<int> aConfirmar}) porLinea(List<LineaAPagar> lineas) {
+    var yaCon = compradas;
+    var yaSin = sueltasCompradas + compradasDeMas;
+    int usar(LineaAPagar l, int cuantas) {
+      final ya = l.conDescuento ? yaCon : yaSin;
+      final usadas = min(ya, cuantas);
+      if (l.conDescuento) {
+        yaCon -= usadas;
+      } else {
+        yaSin -= usadas;
+      }
+      return usadas;
+    }
+
+    final quedan = [
+      for (final l in lineas) l.habilitadas - usar(l, l.habilitadas),
+    ];
+    final aConfirmar = [
+      for (final l in lineas) l.aConfirmar - usar(l, l.aConfirmar),
+    ];
+    return (
+      quedan: frenada != null ? [for (final _ in lineas) 0] : quedan,
+      aConfirmar: aConfirmar,
+    );
+  }
 
   /// Las que se le habilitarían si pagara lo que falta: las "a confirmar".
   /// Lo que ya compró antes de pagar (la 6.9.x lo vendía igual) no se cuenta
   /// dos veces: si ya lo compró, pagarlo no le habilita nada más.
   int get esperanElPago =>
-      (max(0, leCorresponden - compradas) - quedan) +
+      (max(0, leCorresponden - compradas) - _quedanPagas) +
       (max(0, sinDescuento - sueltasCompradas - compradasDeMas) -
-          quedanSinDescuento);
+          _quedanPagasSinDescuento);
 
   /// Qué espera el pago, o null si nada (o si ya lo compró).
   String? get textoAConfirmar => esperanElPago <= 0
@@ -163,8 +234,11 @@ class LugaresDeLaFamilia {
           'Hay lugares adicionales a confirmar: falta pagarlos en caja.';
 
   /// Por qué a esta familia no se le puede vender nada hoy, en palabras de
-  /// quien vende. Null si le queda algo.
+  /// quien vende. Null si le queda algo. Con la cuenta para revisar, eso
+  /// primero ([frenada]).
   String? get porQueNoSeVende {
+    final freno = frenada;
+    if (freno != null && leCorresponden + sinDescuento > 0) return freno;
     if (quedanTodas > 0) return null;
     if (leCorresponden + sinDescuento == 0) {
       return 'No tiene entradas para comprar: la mesa del contrato trae las '

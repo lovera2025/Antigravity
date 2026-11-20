@@ -47,7 +47,8 @@ class _RevisionDeLugaresDialogState
     extends ConsumerState<RevisionDeLugaresDialog> {
   ListaDeLugares? _lista;
 
-  /// Los lugares que pagan la entrada entera (`LugarEnDuda.clave`).
+  /// Los lugares que van sin descuento, al precio del día
+  /// (`LugarEnDuda.clave`).
   Set<String> _tildados = {};
   bool _cargando = true;
   bool _guardando = false;
@@ -192,7 +193,7 @@ class _RevisionDeLugaresDialogState
       Text(
         'El descuento vale para la mesa adicional y las sillas extra que cada '
         'familia ya tenía cargadas ese día, pagadas o no. Lo que se agregó '
-        'después paga la entrada entera.',
+        'después paga el precio del día, sin descuento.',
         style: ayuda,
       ),
       if (lista.enDuda.isEmpty)
@@ -207,8 +208,8 @@ class _RevisionDeLugaresDialogState
       if (conHuella.isNotEmpty) ...[
         titulo('Se agregaron después del sorteo'),
         Text(
-          'Vienen tildados: pagan la entrada entera. Destildá el que no '
-          'corresponda.',
+          'Vienen tildados: pagan el precio del día, sin descuento. Destildá '
+          'el que no corresponda.',
           style: ayuda,
         ),
         for (final d in conHuella) _renglon(d, esJefe),
@@ -225,8 +226,8 @@ class _RevisionDeLugaresDialogState
       const Divider(height: 28),
       Text(
         total.entradas == 0
-            ? 'Nadie paga entera: todo lo cargado hoy queda con descuento.'
-            : 'Pagan entera: ${_entradas(total.entradas)} de '
+            ? 'Nadie va sin descuento: todo lo cargado hoy queda con descuento.'
+            : 'Sin descuento, al precio del día: ${_entradas(total.entradas)} de '
                 '${total.familias == 1 ? '1 familia' : '${total.familias} familias'}. '
                 'Lo demás queda con descuento.',
         key: const Key('revision_resumen'),
@@ -235,7 +236,7 @@ class _RevisionDeLugaresDialogState
       const SizedBox(height: 4),
       Text(
         'Al aceptar queda fijo para esta fiesta, en todas las PCs. Lo que se '
-        'agregue desde ahora paga la entrada entera.',
+        'agregue desde ahora paga el precio del día, sin descuento.',
         style: ayuda,
       ),
     ];

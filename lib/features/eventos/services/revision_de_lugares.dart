@@ -21,9 +21,9 @@ class ListaDeLugares {
     required this.enDuda,
   });
 
-  /// Lo que viene tildado "paga entera": solo lo que tiene huella de que vino
-  /// después. Lo demás queda para revisar, sin tildar: no se le cobra entera a
-  /// nadie por una duda.
+  /// Lo que viene tildado "sin descuento" (el precio del día): solo lo que
+  /// tiene huella de que vino después. Lo demás queda para revisar, sin tildar:
+  /// no se le saca el descuento a nadie por una duda.
   Set<String> get tildadosDeEntrada => {
         for (final d in enDuda)
           if (d.despues) d.clave,
@@ -36,8 +36,8 @@ class ListaDeLugares {
         for (final d in enDuda) '${d.clave}|${d.cantidad}',
       ].join(';');
 
-  /// Cuántas entradas pagan entera con lo que está tildado, y de cuántas
-  /// familias.
+  /// Cuántas entradas van sin descuento (al precio del día) con lo que está
+  /// tildado, y de cuántas familias.
   ({int entradas, int familias}) pagaEntera(Set<String> tildados) {
     var entradas = 0;
     final familias = <String>{};

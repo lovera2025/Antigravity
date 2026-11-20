@@ -2,6 +2,10 @@
 // (`test/helpers/entrega_en_memoria.dart`): el mostrador de Entradas, "En caja", el
 // aviso cuando la otra PC cobra, PASAR A CAJA, la línea en vivo y anular solo el
 // jefe. Y que la oficina sigue igual.
+//
+// Desde el 20-nov-2026 lo sin cargo se entrega **en dos partes** (las pulseras VIP
+// con cena y las generales), cada una por `EntregarParte`: estos tests entregan por
+// el formulario de cada parte y miran los renglones que quedaron.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +23,7 @@ import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_scr
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
@@ -28,6 +33,49 @@ import 'helpers/revision_en_memoria.dart';
 
 const _perez = EntregaEnMemoria.idPerez;
 const _gomez = EntregaEnMemoria.idGomez;
+const _lopez = EntregaEnMemoria.idLopez;
+
+/// PÉREZ pagó entera su mesa adicional, pero debe $30.000 de la base: no retira
+/// lo sin cargo, y lo de la mesa adicional sí se le vende (regla del 20-nov).
+void _perezDebeOtraCosa(EntregaEnMemoria e) {
+  final i = e.contratos.alumnos.indexWhere((a) => a.id == _perez);
+  e.contratos.alumnos[i] = e.contratos.alumnos[i].copyWith(
+    saldoDeudor: 30000,
+    mesaExtraCuotasPagadas: 1,
+  );
+  e.contratos.pagos
+    ..removeWhere((p) => p['contrato_alumno_id'] == _perez)
+    ..add(pagoDeLaEntrega(_perez, 270000, 'Cuota Base (8/9)'))
+    ..add(pagoDeLaEntrega(_perez, 70000, 'Mesa Extra 1'));
+}
+
+/// En el diálogo abierto: ENTREGAR de [parte], quién retira y CONFIRMAR. [numero]:
+/// el primero de las generales, si vienen numeradas.
+Future<void> _entregarParte(
+  WidgetTester tester,
+  ParteEntrega parte, {
+  String quien = 'Padre',
+  String nombre = 'Hugo López',
+  String? numero,
+}) async {
+  await tester.tap(find.byKey(Key('entrega_entregar_${parte.clave}')));
+  await _pasar(tester);
+  if (numero != null) {
+    await tester.tap(find.text('Vienen con número'));
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Del'), numero);
+  }
+  await tester.tap(find.text(quien));
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
+    nombre,
+  );
+  await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
+  await tester.pump();
+  await tester.ensureVisible(find.byKey(Key('entrega_confirmar_${parte.clave}')));
+  await tester.tap(find.byKey(Key('entrega_confirmar_${parte.clave}')));
+  await _pasar(tester);
+}
 
 class _Montada {
   final EntregaEnMemoria e;
@@ -49,9 +97,10 @@ Future<_Montada> _montar(
   RevisionEnMemoria Function(EntregaEnMemoria)? revision,
   // El momento de ahora en Argentina, para lo que depende del día (PRECIOS).
   DateTime? hoy,
+  Size tamano = const Size(1300, 1000),
 }) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(1300, 1000);
+  tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
@@ -432,7 +481,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('entrega_entregar_$_perez')));
       await _pasar(tester);
-      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget);
+      expect(find.byKey(const Key('entrega_entregar_pulseras')), findsOneWidget);
     });
 
     testWidgets('un pago de una parte dice cuánto falta', (tester) async {
@@ -459,7 +508,7 @@ void main() {
       m.e.cobrar(_perez, 70000);
       await _pasar(tester);
       expect(find.textContaining('Que pase por caja'), findsNothing);
-      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget);
+      expect(find.byKey(const Key('entrega_entregar_pulseras')), findsOneWidget);
     });
 
     testWidgets('entregar a una familia de En caja la saca de la lista', (tester) async {
@@ -471,21 +520,12 @@ void main() {
       await _pasar(tester);
       await tester.tap(find.byKey(const Key('entrega_entregar_$_perez')));
       await _pasar(tester);
+      await _entregarParte(tester, ParteEntrega.pulseras, quien: 'Madre', nombre: 'Marta Pérez');
 
-      await tester.enterText(find.widgetWithText(TextField, 'Del').first, '2001');
-      await tester.tap(find.text('Madre'));
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
-        'Marta Pérez',
-      );
-      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
-      await tester.pump();
-      await tester.tap(find.text('CONFIRMAR ENTREGA'));
-      await _pasar(tester);
-
-      final r = m.e.entregas.filas[_perez]!;
-      expect(r.entregado, isTrue);
-      expect(r.entregadoPor, 'Carla', reason: 'queda anotado quién entregó');
+      final r = m.e.renglonesDe(_perez).single;
+      expect(r.parte, ParteEntrega.pulseras);
+      expect(r.esEntrega, isTrue);
+      expect(r.hechoPor, 'Carla', reason: 'queda anotado quién entregó');
       expect(m.enCaja.contiene(_perez), isFalse);
       expect(find.byKey(const Key('entrega_pago_$_perez')), findsNothing);
     });
@@ -598,11 +638,14 @@ void main() {
       expect(find.byKey(const Key('entrega_venderle')), findsNothing);
     });
 
-    testWidgets('el jefe se las vende desde la entrega, aunque la familia deba: VENDER '
+    // Hasta la 6.9.2 se le vendían aunque debiera la mesa. Cambió a propósito el
+    // 20-nov: se le vende solo lo que ya pagó entero, cosa por cosa.
+    testWidgets('el jefe le vende lo que ya pagó entero aunque deba otra cosa: VENDER '
         'con la familia ya elegida', (tester) async {
       final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
       await vender(e, lugar: 3);
-      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      await _montar(tester, mostrador: false, jefe: true, entradas: e,
+          preparar: _perezDebeOtraCosa);
       await _abrir(tester, 'PÉREZ, JUAN');
       expect(find.textContaining('Debe'), findsWidgets, reason: 'debe: no se le entrega');
       expect(
@@ -616,10 +659,21 @@ void main() {
       expect(venta.familiaId, _perez);
     });
 
+    testWidgets('si debe la mesa adicional, no se le vende: "a confirmar"', (tester) async {
+      final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.byKey(const Key('entrega_venderle')), findsNothing);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_a_confirmar'))).data,
+        'La mesa adicional está a confirmar: falta pagarla en caja.',
+      );
+    });
+
     testWidgets('en el mostrador, sin el permiso de vender, dice quién se las vende',
         (tester) async {
       final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
-      await _montar(tester, entradas: e);
+      await _montar(tester, entradas: e, preparar: _perezDebeOtraCosa);
       await _abrir(tester, 'PÉREZ, JUAN');
       expect(
         tester.widget<Text>(find.byKey(const Key('entrega_compro'))).data,
@@ -631,7 +685,7 @@ void main() {
 
     testWidgets('en el mostrador, con "Vende entradas", también se las vende', (tester) async {
       final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
-      await _montar(tester, vende: true, entradas: e);
+      await _montar(tester, vende: true, entradas: e, preparar: _perezDebeOtraCosa);
       await _abrir(tester, 'PÉREZ, JUAN');
       expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
     });
@@ -641,7 +695,7 @@ void main() {
     testWidgets('sin el permiso, VENDERLE ESAS ENTRADAS no abre VENDER aunque el botón '
         'ya estuviera', (tester) async {
       final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
-      final m = await _montar(tester, vende: true, entradas: e);
+      final m = await _montar(tester, vende: true, entradas: e, preparar: _perezDebeOtraCosa);
       await _abrir(tester, 'PÉREZ, JUAN');
       expect(find.byKey(const Key('entrega_venderle')), findsOneWidget);
       await m.c.read(appRoleProvider.notifier).entrarComoEntradas(
@@ -684,16 +738,7 @@ void main() {
       );
       expect(find.textContaining('RÍOS'), findsNothing, reason: 'la baja no se lista');
       await _abrir(tester, 'LÓPEZ, SOFÍA');
-      await tester.enterText(find.widgetWithText(TextField, 'Del'), '5001');
-      await tester.tap(find.text('Padre'));
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
-        'Hugo López',
-      );
-      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
-      await tester.pump();
-      await tester.tap(find.text('CONFIRMAR ENTREGA'));
-      await _pasar(tester);
+      await _entregarParte(tester, ParteEntrega.generales, numero: '5001');
       expect(find.textContaining('El 5001 ya se le dio a [BAJA] RÍOS, PEDRO'), findsOneWidget);
     });
 
@@ -706,19 +751,10 @@ void main() {
           numeros: '3001-3002');
       final m = await _montar(tester, mostrador: false, jefe: true, entradas: e);
       await _abrir(tester, 'LÓPEZ, SOFÍA');
-      await tester.enterText(find.widgetWithText(TextField, 'Del'), '3001');
-      await tester.tap(find.text('Padre'));
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
-        'Hugo López',
-      );
-      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
-      await tester.pump();
-      await tester.tap(find.text('CONFIRMAR ENTREGA'));
-      await _pasar(tester);
+      await _entregarParte(tester, ParteEntrega.generales, numero: '3001');
       expect(find.textContaining('ya se le dio'), findsNothing);
-      final r = m.e.entregas.filas[EntregaEnMemoria.idLopez]!;
-      expect(r.entregado, isTrue);
+      final r = m.e.renglonesDe(_lopez).single;
+      expect(r.parte, ParteEntrega.generales);
       expect(r.tramos, const [TramoTalonario(3001, 3007)]);
     });
 
@@ -727,18 +763,10 @@ void main() {
       await _montar(tester, mostrador: false, jefe: true,
           entradas: EntradasEnMemoria()..conPrecio(idFiestaEntrega));
       await _abrir(tester, 'LÓPEZ, SOFÍA');
-      await tester.enterText(find.widgetWithText(TextField, 'Del'), '1005');
-      await tester.tap(find.text('Padre'));
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
-        'Hugo López',
-      );
-      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
-      await tester.pump();
-      await tester.tap(find.text('CONFIRMAR ENTREGA'));
-      await _pasar(tester);
+      await _entregarParte(tester, ParteEntrega.generales, numero: '1005');
       expect(find.textContaining('El 1005 ya se le dio a GÓMEZ, ANA'), findsOneWidget);
-      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget, reason: 'no se entregó');
+      expect(find.byKey(const Key('entrega_confirmar_generales')), findsOneWidget,
+          reason: 'no se entregó');
     });
   });
 
@@ -762,7 +790,8 @@ void main() {
       expect(find.text(kSoloEnModoJefe), findsOneWidget);
     });
 
-    testWidgets('el jefe anula con motivo', (tester) async {
+    testWidgets('el jefe anula con motivo: la entrega de las 8 juntas (6.9.x), entera',
+        (tester) async {
       final m = await _montar(tester, mostrador: false, jefe: true);
       await _abrir(tester, 'GÓMEZ, ANA');
       await tester.tap(find.text('ANULAR ENTREGA'));
@@ -771,11 +800,275 @@ void main() {
         find.widgetWithText(TextField, 'Por qué se anula'),
         'Se equivocó de alumno',
       );
-      await tester.tap(find.text('CONFIRMAR ANULACIÓN'));
+      await tester.tap(find.text('CONFIRMAR ANULACIÓN DE TODO'));
       await _pasar(tester);
       final r = m.e.entregas.filas[_gomez]!;
       expect(r.entregado, isFalse);
       expect(r.anuladoMotivo, 'Se equivocó de alumno');
+      expect(m.e.estadoDe(_gomez).algoEntregado, isFalse);
+      expect(find.textContaining('Entrega de GÓMEZ, ANA anulada.'), findsOneWidget);
+    });
+  });
+
+  // 20-nov-2026: lo sin cargo llega en dos tandas y se entrega en dos partes.
+  group('la entrega en dos partes', () {
+    testWidgets('las pulseras un día y las generales otro: su ✓, el total de arriba '
+        'y "✓ Todo entregado"', (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      // LÓPEZ no tiene acompañantes: 1 pulsera y 7 generales.
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_total_partes'))).data,
+        'Pulseras VIP: 3 (entregadas 1) · Generales: 21 (entregadas 7)',
+      );
+
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      // Una sola, en singular (revisión del 20-nov: decía "1 pulseras").
+      expect(find.textContaining('✓ Entregada 1 pulsera VIP con cena a HUGO LÓPEZ'),
+          findsOneWidget);
+      expect(find.text('✓ Pulseras entregadas'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_total_partes'))).data,
+        'Pulseras VIP: 3 (entregadas 2) · Generales: 21 (entregadas 7)',
+      );
+      // Una entrega a medias no escribe la fila de siempre.
+      expect(m.e.entregas.filas[_lopez], isNull);
+
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      expect(find.byKey(const Key('entrega_hecha_pulseras')), findsOneWidget);
+      await _entregarParte(tester, ParteEntrega.generales);
+      expect(find.text('✓ Todo entregado'), findsWidgets);
+      expect(m.e.estadoDe(_lopez).todoEntregado, isTrue);
+      // Con las dos partes, la fila completa: una 6.9.x la ve "Retiró".
+      final fila = m.e.entregas.filas[_lopez]!;
+      expect(fila.entregado, isTrue);
+      expect(fila.vip, 1);
+      expect(fila.generales, 7);
+      expect(fila.tramos, isEmpty, reason: 'las generales vinieron sin número');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_total_partes'))).data,
+        'Pulseras VIP: 3 (entregadas 2) · Generales: 21 (entregadas 14)',
+      );
+    });
+
+    // Revisión del 20-nov-2026: si al completar la fila la nube no contestaba,
+    // la familia quedaba marcada y no se volvía a intentar en toda la noche.
+    testWidgets('si la nube no contesta al completar la fila, se vuelve a intentar en '
+        'la próxima lectura', (tester) async {
+      final m = await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: (e) {
+          // Cada parte la dio un equipo distinto: la fila de siempre no está.
+          e.entregadaEnOtroEquipo(_lopez, ParteEntrega.pulseras, DateTime.utc(2026, 11, 18));
+          e.entregadaEnOtroEquipo(_lopez, ParteEntrega.generales, DateTime.utc(2026, 11, 19));
+          e.nubeQueNoContesta = 1;
+        },
+      );
+      expect(m.e.entregas.filas[_lopez], isNull, reason: 'la nube no contestó');
+      // Baja algo de otro equipo: se relee, y esta vez la nube contesta.
+      m.e.motor.bajo.add({'contratos_alumnos'});
+      await _pasar(tester);
+      expect(m.e.entregas.filas[_lopez]?.entregado, isTrue);
+    });
+
+    testWidgets('la fila que dice "entregado" con las pulseras anuladas se pone al día',
+        (tester) async {
+      final m = await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: (e) {
+          final g = e.entregadaEnOtroEquipo(
+              _lopez, ParteEntrega.generales, DateTime.utc(2026, 11, 19));
+          e.entregadaEnOtroEquipo(_lopez, ParteEntrega.pulseras, DateTime.utc(2026, 11, 18));
+          // La tablet escribió la fila completa (reflejo de las generales)...
+          final lopez = e.contratos.alumnos.firstWhere((a) => a.id == _lopez);
+          e.entregas.filas[_lopez] = RetiroEntradas.nuevaEntrega(
+            alumno: lopez,
+            entradas: RetiroEntradas.entradasDe(lopez),
+            tramos: const [],
+            menores10: 0,
+            parentesco: ParentescoRetiro.madre,
+            nombre: 'MADRE, UNA',
+            quien: 'Sofi',
+            ahora: g.createdAt,
+          );
+          // ...y el jefe anuló las pulseras sin enterarse.
+          e.anuladaEnOtroEquipo(_lopez, ParteEntrega.pulseras, DateTime.utc(2026, 11, 20));
+        },
+      );
+      final fila = m.e.entregas.filas[_lopez]!;
+      expect(fila.entregado, isFalse, reason: 'el plano y la 6.9.x ya no ven "Retiró"');
+      expect(fila.anuladoMotivo, 'Solo las pulseras VIP con cena: eran de otro');
+      expect(m.e.estadoDe(_lopez).generales.entregada, isTrue);
+      expect(m.e.estadoDe(_lopez).pulseras.entregada, isFalse);
+    });
+
+    // Revisión del 20-nov-2026: en un celular, las cinco tarjetas de arriba en
+    // una fila partían los rótulos a mitad de palabra ("Pulser / as VIP").
+    testWidgets('en un celular las tarjetas van de a dos, sin repetir la línea de '
+        'pulseras y generales', (tester) async {
+      await _montar(tester, tamano: const Size(390, 900));
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('entrega_tarjetas_celular')), findsOneWidget);
+      expect(find.text('Retiraron todo'), findsOneWidget);
+      expect(find.text('Con deuda'), findsOneWidget);
+      expect(find.text('Pulseras VIP'), findsNothing);
+      expect(find.text('Generales'), findsNothing);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('entrega_total_partes'))).data,
+        'Pulseras VIP: 3 (entregadas 1) · Generales: 21 (entregadas 7)',
+      );
+      // Cada tarjeta mide la mitad del ancho (con cinco en una fila, un quinto).
+      final tarjeta = tester.getSize(find.ancestor(
+        of: find.text('Retiraron todo'),
+        matching: find.byType(SizedBox),
+      ).first);
+      expect(tarjeta.width, greaterThan(170));
+    });
+
+    testWidgets('sin internet: pregunta, guarda y avisa que no subió', (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      m.e.conexion.cambiar(AppConnectivity.offline);
+      await _pasar(tester);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      expect(find.text('Sin conexión'), findsOneWidget);
+      await tester.tap(find.text('SEGUIR'));
+      await _pasar(tester);
+      expect(find.text('Entregado, pero todavía no subió'), findsOneWidget);
+      expect(m.e.renglonesDe(_lopez), hasLength(1));
+    });
+
+    testWidgets('sin internet, si no sigue, no se guarda nada', (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      m.e.conexion.cambiar(AppConnectivity.offline);
+      await _pasar(tester);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      await tester.tap(find.text('CANCELAR'));
+      await _pasar(tester);
+      expect(m.e.renglonesDe(_lopez), isEmpty);
+    });
+
+    testWidgets('si otro equipo la entregó con el diálogo abierto, "Ya retiró" y no se '
+        'guarda nada', (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      m.e.partes.renglones.add(EntregaEntradas.entrega(
+        contratoAlumnoId: _lopez,
+        eventoId: idFiestaEntrega,
+        parte: ParteEntrega.pulseras,
+        cantidad: 1,
+        parentesco: ParentescoRetiro.madre,
+        nombre: 'Sofía López',
+        escribioEnPlanilla: true,
+        hechoPor: 'Sofi',
+        deviceId: 'tablet-2',
+        ahora: DateTime.utc(2026, 11, 20, 12),
+      ));
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      expect(find.text('Ya retiró'), findsOneWidget);
+      expect(find.textContaining('(lo registró Sofi)'), findsOneWidget);
+      expect(m.e.renglonesDe(_lopez), hasLength(1));
+    });
+
+    testWidgets('si cambió la cuenta con el diálogo abierto, "Cambió algo"', (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      final i = m.e.contratos.alumnos.indexWhere((a) => a.id == _lopez);
+      m.e.contratos.alumnos[i] = m.e.contratos.alumnos[i].copyWith(
+        cantidadAcompanantes: 1,
+        nombresAcompanantes: const ['LÓPEZ, MARTA'],
+      );
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      expect(find.text('Cambió algo'), findsOneWidget);
+      expect(find.textContaining('hoy le corresponden 2 pulseras VIP con cena, no 1'),
+          findsOneWidget);
+      expect(m.e.renglonesDe(_lopez), isEmpty);
+    });
+
+    testWidgets('el jefe anula solo las generales: las pulseras siguen entregadas',
+        (tester) async {
+      final m = await _montar(tester, mostrador: false, jefe: true);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await _entregarParte(tester, ParteEntrega.pulseras);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await _entregarParte(tester, ParteEntrega.generales);
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await tester.tap(find.byKey(const Key('entrega_anular')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('entrega_anular_pulseras')));
+      await tester.pump();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Por qué se anula'),
+        'Faltaba una general',
+      );
+      await tester.tap(find.text('CONFIRMAR ANULACIÓN'));
+      await _pasar(tester);
+      final e = m.e.estadoDe(_lopez);
+      expect(e.pulseras.entregada, isTrue);
+      expect(e.generales.entregada, isFalse);
+      expect(e.generales.motivoAnulacion, 'Faltaba una general');
+      expect(m.e.entregas.filas[_lopez]!.anuladoMotivo,
+          'Solo las entradas generales: Faltaba una general');
+      expect(find.text('✓ Pulseras entregadas'), findsOneWidget);
+    });
+
+    testWidgets('quien debe no tiene ENTREGAR, en ninguna de las dos partes', (tester) async {
+      await _montar(tester, mostrador: false, jefe: true);
+      await _abrir(tester, 'PÉREZ, JUAN');
+      expect(find.byKey(const Key('entrega_entregar_pulseras')), findsNothing);
+      expect(find.byKey(const Key('entrega_entregar_generales')), findsNothing);
+      expect(find.text('IR A COBRAR'), findsOneWidget);
+    });
+
+    testWidgets('cada parte la dio un equipo y ninguno vio las dos: con internet, la '
+        'fila de siempre se completa sola', (tester) async {
+      EntregaEntradas renglon(ParteEntrega p, String quien, DateTime ahora) =>
+          EntregaEntradas.entrega(
+            contratoAlumnoId: _lopez,
+            eventoId: idFiestaEntrega,
+            parte: p,
+            cantidad: p == ParteEntrega.pulseras ? 1 : 7,
+            parentesco: ParentescoRetiro.padre,
+            nombre: 'Hugo López',
+            escribioEnPlanilla: true,
+            hechoPor: quien,
+            deviceId: quien,
+            ahora: ahora,
+          );
+      final m = await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        preparar: (e) => e.partes.renglones.addAll([
+          renglon(ParteEntrega.pulseras, 'pc', DateTime.utc(2026, 11, 19, 15)),
+          renglon(ParteEntrega.generales, 'tablet', DateTime.utc(2026, 11, 20, 15)),
+        ]),
+      );
+      await _pasar(tester);
+      final fila = m.e.entregas.filas[_lopez]!;
+      expect(fila.entregado, isTrue);
+      expect(fila.entregadoAt, DateTime.utc(2026, 11, 20, 15),
+          reason: 'como si la hubiera escrito quien entregó la última parte');
+      expect(find.text('✓ Todo entregado'), findsWidgets);
+    });
+
+    testWidgets('el total de arriba y el menú de la planilla, por material', (tester) async {
+      await _montar(tester, mostrador: false, jefe: true);
+      await tester.tap(find.byKey(const Key('entrega_imprimir')));
+      await _pasar(tester);
+      for (final texto in [
+        'Planilla de pulseras VIP (blanco y negro)',
+        'Planilla de pulseras VIP (color)',
+        'Planilla de generales (blanco y negro)',
+        'Planilla de generales (color)',
+      ]) {
+        expect(find.text(texto), findsOneWidget, reason: texto);
+      }
     });
   });
 }

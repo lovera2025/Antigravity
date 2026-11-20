@@ -19,11 +19,13 @@ import '../common/utils/quien_opera.dart';
 import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
 import '../eventos/repositories/contratos_repository.dart';
+import '../eventos/repositories/entradas_entregas_repository.dart';
 import '../eventos/repositories/entradas_retiro_repository.dart';
 import '../eventos/repositories/sillas_reparto_repository.dart';
 import '../eventos/repositories/sorteos_mesas_repository.dart';
 import '../eventos/services/adicional_a_confirmar.dart';
 import '../eventos/services/edicion_de_alumno.dart';
+import '../eventos/services/entrega_por_partes.dart';
 import '../eventos/services/pagos_por_contrato.dart';
 import '../eventos/services/registro_sorteo.dart';
 import '../eventos/services/salon_mesas.dart';
@@ -128,8 +130,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   List<SorteoMesasRegistro> _registros = [];
   List<MovimientoMesas> _movimientos = [];
 
-  /// Las familias que ya retiraron sus entradas: si se les cambia la mesa hay
-  /// que avisarles.
+  /// Las familias que ya retiraron algo de sus entradas sin cargo: si se les
+  /// cambia la mesa hay que avisarles. **Basta con una parte** (las pulseras o
+  /// las generales, que llevan la mesa escrita): desde el 20-nov-2026 la fila de
+  /// `entradas_retiro` se escribe recién con las dos, y entre una tanda y la
+  /// otra pueden pasar días (`EstadoDeLaEntrega.algoEntregado`).
   Set<String> _yaRetiraron = {};
 
   /// Lo que se muestra, ya calculado. Null si la fiesta no tiene plano o si su
@@ -155,6 +160,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     'mesas_movimientos',
     'sorteos_mesas',
     'entradas_retiro',
+    // Una parte de la entrega (pulseras o generales) que dio otro equipo.
+    'entradas_entregas',
     'predios',
     // Un cobro que bajó de la otra PC: la mesa adicional que estaba "a
     // confirmar" deja de estarlo.
@@ -263,6 +270,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       final retiros = await ref
           .read(entradasRetiroRepositoryProvider)
           .obtenerPorContratoIds(ids);
+      // La entrega por partes: una familia con solo las generales (o solo las
+      // pulseras) ya retiró algo, y la fila de siempre todavía no lo dice.
+      final renglones = await ref
+          .read(entradasEntregasRepositoryProvider)
+          .deContratos(ids);
       final registros = await ref
           .read(sorteosMesasRepositoryProvider)
           .delEvento(widget.evento.id);
@@ -290,8 +302,13 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         _registros = registros;
         _movimientos = movimientos;
         _yaRetiraron = {
-          for (final e in retiros.entries)
-            if (e.value.entregado) e.key,
+          for (final a in alumnos)
+            if (EstadoDeLaEntrega.deAlumno(
+              a,
+              retiro: retiros[a.id],
+              renglones: renglones[a.id] ?? const [],
+            ).algoEntregado)
+              a.id,
         };
         _plano = plano;
         _predios = predios;

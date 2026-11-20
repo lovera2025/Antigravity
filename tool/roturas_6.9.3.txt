@@ -1,0 +1,96 @@
+1. quien debe puede retirar las 8 gratis
+lib/features/eventos/services/retiro_entradas.dart
+test/retiro_entradas_test.dart test/entrega_por_partes_test.dart test/vender_entradas_pantalla_test.dart
+    if (!deuda.pagoTodo) return BloqueoRetiro.debe;
+
+---
+2. el filtro de VENDER pone al que debe en "puede retirar"
+lib/features/eventos/services/entrega_por_partes.dart
+test/entrega_por_partes_test.dart test/vender_entradas_pantalla_test.dart
+      BloqueoRetiro.debe => GrupoDeRetiro.debe,
+      BloqueoRetiro.debe => GrupoDeRetiro.puedeRetirar,
+---
+3. se vende la mesa adicional o la silla que no está paga entera
+lib/features/eventos/services/lugares_pagos.dart
+test/lugares_pagos_test.dart test/vender_entradas_pantalla_test.dart
+    bool paga(CosaAparte c) => c.n <= (c.esMesa ? mesasPagas : sillasPagas);
+    bool paga(CosaAparte c) => true;
+---
+4. lo sin descuento se cobra dos veces (no resta las sueltas ya compradas)
+lib/features/entradas/cuentas/lugares_de_la_familia.dart
+test/entradas_cuentas_test.dart test/lugares_pagos_test.dart test/vender_entradas_pantalla_test.dart
+      max(0, pagasSinDescuento - sueltasCompradas - compradasDeMas);
+      max(0, pagasSinDescuento - compradasDeMas);
+---
+5. la fila de entradas_retiro se arma con una sola parte (la guarda de filaCompleta; la de _laFilaAlDia es una capa más)
+lib/features/eventos/services/entrega_por_partes.dart
+test/entrega_por_partes_test.dart test/entregar_parte_test.dart test/entregar_parte_en_la_base_test.dart
+    if (!estado.todoEntregado) return null;
+
+---
+6. se anula una entrega sin modo jefe
+lib/features/eventos/services/entregar_parte.dart
+test/entregar_parte_test.dart
+    if (!esJefe) return const NoSeAnulo('Anular una entrega es solo del jefe.');
+
+---
+7. PRECIOS toma un porcentaje vacío como 0
+lib/features/entradas/widgets/precios_de_entradas_dialog.dart
+test/precios_de_entradas_test.dart
+    if (t.isEmpty) return null;
+    if (t.isEmpty) return 0;
+---
+8. PRECIOS acepta que la anticipada valga hasta un día que ya pasó
+lib/features/entradas/cuentas/eleccion_de_precios.dart
+test/precios_de_entradas_test.dart
+      dia.compareTo(ConfigEntradas.diaDe(hoyAr)) < 0;
+      false;
+---
+9. VENDER frena un número porque ya se entregó sin cargo (un talonario frena al otro)
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart test/venta_entradas_prueba_test.dart
+      NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones);
+      {...NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones), ...EntregaPorPartes.numerosDeOtros(_todos, _retiros, [for (final l in _renglones.values) ...l], salvo: '')};
+---
+10. otro archivo escribe la tabla de la entrega por partes
+lib/features/entradas/widgets/vender_gratis.dart
+test/entregar_parte_test.dart
+import 'vender_a_pagar.dart';
+import 'vender_a_pagar.dart'; const _rotura = "db.insert('entradas_entregas', {})";
+---
+11. VENDER vuelve a usar el bloqueo de la entrega en A PAGAR (la deuda tapa el freno de las mesas)
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+            bloqueo: RetiroEntradas.bloqueoDeLaVenta(a, deuda),
+            bloqueo: bloqueo,
+---
+12. el diálogo de la entrega vuelve a usar el bloqueo de la entrega para ofrecer lo de los lugares
+lib/features/eventos/widgets/entrega_entradas_dialog.dart
+test/entrega_entradas_dialog_test.dart
+            ? RetiroEntradas.bloqueoDeLaVenta(widget.alumno, widget.deuda)
+            ? widget.bloqueo
+---
+14. el servicio entrega una parte aunque entre las dos se pasen de lo sin cargo
+lib/features/eventos/services/entregar_parte.dart
+test/entregar_parte_test.dart
+    if (porLaOtra != null) return CambioAlgo('$porLaOtra No se guardó nada.');
+
+---
+15. la regla de la otra parte no frena nunca
+lib/features/eventos/services/entrega_por_partes.dart
+test/entrega_por_partes_test.dart test/vender_entradas_pantalla_test.dart test/entrega_entradas_dialog_test.dart
+    if (esta.leToca + otra.cantidad <= sinCargo) return null;
+    return null;
+---
+16. relojes: la entrega de una 6.9.x atrasada queda antes de la anulación que ya estaba
+lib/features/eventos/services/entrega_por_partes.dart
+test/entrega_por_partes_test.dart
+          entrega = anulacionOriginal.add(unMs);
+          anulacion = null;
+---
+17. relojes: la anulación de una 6.9.x atrasada queda antes de las generales
+lib/features/eventos/services/entrega_por_partes.dart
+test/entrega_por_partes_test.dart
+          anulacion = entregaOriginal.add(unMs);
+          entrega = null;
+---

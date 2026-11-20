@@ -166,6 +166,30 @@ class SalonMesas {
       });
   }
 
+  /// Sus números con **la mesa del contrato primero** y después sus mesas
+  /// adicionales, en orden: la adicional 1 es la segunda de la lista, la 2 la
+  /// tercera… Es lo que dice cuál de sus mesas es cada adicional para "a
+  /// confirmar" (`AdicionalesDeLaFamilia.aConfirmar`: la puerta y el PLANO) y
+  /// para A PAGAR de VENDER (`APagarDeLaFamilia`), que reparten lo pagado de la
+  /// primera adicional a la última.
+  ///
+  /// **La mesa del contrato es la de número más bajo.** El sorteo no anota cuál
+  /// es (guarda los números de menor a mayor), pero siempre la pone adelante:
+  /// - con la familia junta, es la primera de su tramo;
+  /// - con las adicionales "Al final" (6.6.1), las adicionales van después de
+  ///   todas las principales, con números más altos, aunque formen un tramo más
+  ///   largo que el de la principal;
+  /// - la mesa nueva de quien llega después del sorteo (6.5.1) lleva el número
+  ///   que sigue al más alto.
+  ///
+  /// No sale del tramo más largo ([tramos]): con la principal sola y dos
+  /// adicionales juntas al fondo (la 12, y la 67 y la 68), la del contrato era
+  /// la 67 y la 12 quedaba "a confirmar" (revisión del 20-nov-2026). Lo que el
+  /// número solo no puede decir: una adicional "lejos" (6.5.0) que cayó antes
+  /// que el bloque de su familia se toma por la del contrato.
+  static List<int> enOrdenDelContrato(ContratoAlumno a) =>
+      MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).toList()..sort();
+
   static String _textoTramo(List<int> t) =>
       t.length == 1 ? '${t.first}' : '${t.first}-${t.last}';
 

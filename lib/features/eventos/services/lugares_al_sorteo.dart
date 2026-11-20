@@ -65,7 +65,8 @@ enum EstadoDeLosLugares {
 ///
 /// **La regla (17-nov-2026):** las entradas de la mesa adicional y de las sillas
 /// extra que la familia ya tenía al sorteo van con el descuento de PRECIOS, y
-/// las compra cuando quiera. Lo que agregue después paga la entrada entera.
+/// las compra cuando quiera. Lo que agregue después paga el precio del día,
+/// sin descuento (la anticipada mientras rige).
 class FotoDeLosLugares {
   final EstadoDeLosLugares estado;
   final Map<String, LugaresCargados> _porAlumno;
@@ -117,9 +118,9 @@ class LugarEnDuda {
   final bool esMesa;
   final int cantidad;
 
-  /// Hay huella de que vino después del sorteo: viene tildado "paga entera".
-  /// Sin huella de ningún lado queda para revisar, sin tildar: no se le cobra
-  /// entera a nadie por una duda.
+  /// Hay huella de que vino después del sorteo: viene tildado "sin
+  /// descuento" (el precio del día). Sin huella de ningún lado queda para
+  /// revisar, sin tildar: no se le saca el descuento a nadie por una duda.
   final bool despues;
 
   /// El porqué, con fecha y hora.

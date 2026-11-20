@@ -21,6 +21,17 @@ class RelojDeLaEntrega {
   DateTime ahora() => _ahora = _ahora.add(const Duration(minutes: 1));
 }
 
+/// El reloj de **un** equipo, que dice la [hora] que se le ponga: para probar
+/// equipos con la hora corrida (una tablet atrasada unos minutos).
+class RelojCorrido extends RelojDeLaEntrega {
+  RelojCorrido(this.hora);
+
+  DateTime hora;
+
+  @override
+  DateTime ahora() => hora;
+}
+
 class NubeDeEntregas {
   /// La fila de cada alumno.
   final retiros = <String, EntradasRetiro>{};
@@ -48,7 +59,13 @@ class EquipoDeEntrega implements PuertosDeLaEntrega {
 
   final String nombre;
   final NubeDeEntregas nube;
-  final RelojDeLaEntrega reloj;
+
+  /// Se puede cambiar a mitad de la prueba: un equipo con la hora corrida.
+  RelojDeLaEntrega reloj;
+
+  /// Si está, corre apenas termina de subir: lo que otro equipo anotó en ese
+  /// mismo momento y baja enseguida.
+  void Function()? alTerminarDeSubir;
 
   /// Los alumnos de la fiesta tal como los ve este equipo (se pueden cambiar
   /// a mitad de la prueba: "cambió la cuenta").
@@ -126,7 +143,9 @@ class EquipoDeEntrega implements PuertosDeLaEntrega {
     required DateTime desde,
   }) async {
     subirLaCola();
-    return colaDeRenglones.isEmpty && colaDeFilas.isEmpty;
+    final subio = colaDeRenglones.isEmpty && colaDeFilas.isEmpty;
+    alTerminarDeSubir?.call();
+    return subio;
   }
 
   /// Sube todo lo que espera, si hay internet (lo que hace el motor cuando

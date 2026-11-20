@@ -22,6 +22,7 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/common/providers/user_role_provider.dart';
 import 'package:arguello_events/features/common/utils/subir_ya.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entradas_entregas_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
@@ -43,6 +44,7 @@ import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -50,6 +52,7 @@ import 'package:arguello_events/models/predio.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
+import 'helpers/entrega_en_memoria.dart' show PartesEnMemoria;
 import 'helpers/salon_puerto_viejo.dart';
 
 const _eventoId = 'e0000000-0000-4000-8000-000000000001';
@@ -379,6 +382,10 @@ class _Mundo {
   final subida = _Subida();
   final puerta = _Puerta();
 
+  /// Los renglones de la entrega por partes (pulseras y generales): sin este
+  /// reemplazo, el plano iría a leer la base de la PC.
+  final partes = PartesEnMemoria();
+
   /// El último plano guardado.
   PlanoEvento get guardado => planos.guardados.last;
 }
@@ -437,6 +444,7 @@ Future<_Mundo> _abrir(
         sillasRepartoRepositoryProvider.overrideWithValue(_Sillas()),
         entradasRetiroRepositoryProvider
             .overrideWithValue(_Entradas(_supabase)),
+        entradasEntregasRepositoryProvider.overrideWithValue(mundo.partes),
         sorteosMesasRepositoryProvider.overrideWithValue(_Sorteos()),
         esRolJefeProvider.overrideWithValue(esJefe),
         userRoleProvider.overrideWith(
@@ -1622,6 +1630,45 @@ void main() {
       expect(cambio.movimiento!.eventoId, _eventoId);
       expect(_dicho(tester), 'SOSA pasó a la 30.');
       expect(mundo.subida.pedidas, ['mesas_movimientos']);
+    });
+
+    // Revisión del 20-nov-2026: desde la 6.9.3 la entrega sin cargo va en dos
+    // partes, y la fila de `entradas_retiro` se escribe recién con las dos. Las
+    // generales llevan la mesa escrita: a una familia que ya se las llevó (y
+    // espera las pulseras) no se la puede mudar sin el aviso, como con la 6.9.2.
+    testWidgets('una familia que ya retiró solo las generales: al mudarla avisa que '
+        'ya retiró sus entradas', (tester) async {
+      await _abrir(
+        tester,
+        antes: (m) => m.partes.renglones.add(
+          EntregaEntradas.entrega(
+            contratoAlumnoId: 'sosa',
+            eventoId: _eventoId,
+            parte: ParteEntrega.generales,
+            cantidad: 7,
+            parentesco: ParentescoRetiro.madre,
+            nombre: 'MADRE, UNA',
+            escribioEnPlanilla: true,
+            hechoPor: 'Carla',
+            deviceId: 'tablet',
+            ahora: DateTime.utc(2026, 11, 20, 13),
+          ),
+        ),
+      );
+      await _personalizar(tester);
+      await _tocarMesa(tester, 20);
+      await _tocar(tester, 'accion_mover');
+      await _tocarMesa(tester, 30);
+      await _asentar(tester);
+      expect(
+        find.textContaining('SOSA ya retiró sus entradas: hay que avisarle'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin nada retirado, al mudarla no dice que ya retiró', (tester) async {
+      await mudarASosa(tester);
+      expect(find.textContaining('ya retiró sus entradas'), findsNothing);
     });
 
     // "¿Cuál mesa querés mover?" (11-nov-2026): GÓMEZ tiene la 8 y la 9, y el

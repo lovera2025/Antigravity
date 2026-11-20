@@ -29,9 +29,9 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-# La versión de la base que tienen las PCs (la de la 6.8.0). La rama va por la
-# 80: si la base de esta PC da otra cosa, una prueba la migró.
-VERSION_DE_LAS_PCS = 79
+# La versión de la base que tienen las PCs (la de la 6.9.x). La rama va por la
+# 81: si la base de esta PC da otra cosa, una prueba la migró.
+VERSION_DE_LAS_PCS = 80
 
 
 def documentos():

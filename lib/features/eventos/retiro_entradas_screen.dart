@@ -10,16 +10,16 @@ import '../../core/services/sync_engine.dart';
 import '../../core/utils/ar_time.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/entradas_retiro.dart';
+import '../../models/entrega_entradas.dart';
 import '../../models/evento.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/services/pdf_service.dart';
+import '../common/utils/cortes_pantalla.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
 import '../common/utils/solo_jefe.dart';
-import '../common/utils/subir_ya.dart';
 import '../common/utils/texto_busqueda.dart';
 import '../entradas/cuentas/lugares_de_la_familia.dart';
-import '../entradas/cuentas/numeros_de_entradas.dart';
 import '../entradas/datos/entradas_repositorio.dart';
 import '../entradas/providers/entradas_providers.dart';
 import '../entradas/services/en_caja.dart';
@@ -28,13 +28,19 @@ import '../entradas/widgets/precios_de_entradas_dialog.dart';
 import '../entradas/widgets/vender_entradas_screen.dart';
 import '../entradas/widgets/ventas_de_entradas_screen.dart';
 import 'repositories/contratos_repository.dart';
+import 'repositories/entradas_entregas_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
+import 'repositories/entregar_parte_de_la_app.dart';
 import 'repositories/sorteos_mesas_repository.dart';
+import 'services/entrega_por_partes.dart';
+import 'services/entregar_parte.dart';
 import 'services/lugares_al_sorteo.dart';
+import 'services/lugares_pagos.dart';
 import 'services/permisos_de_entrega.dart';
 import 'services/planilla_sorteo.dart';
 import 'services/retiro_entradas.dart';
 import 'services/salon_mesas.dart';
+import 'widgets/carteles_de_la_entrega.dart';
 import 'widgets/entrega_entradas_dialog.dart';
 import 'widgets/lugares_al_sorteo_dialog.dart';
 
@@ -42,7 +48,11 @@ import 'widgets/lugares_al_sorteo_dialog.dart';
 /// falta y quién no puede retirar todavía, y el diálogo del mostrador para
 /// entregar.
 ///
-/// Solo escribe `entradas_retiro`. La cuenta del alumno y los pagos se leen,
+/// **La entrega sin cargo va en dos partes** (20-nov-2026), cada una cuando
+/// llega su material: las pulseras VIP con cena y las entradas generales. **No
+/// escribe nada por su cuenta**: entregar y anular van por `EntregarParte`
+/// (`entregarParteProvider`), el único camino para guardar una entrega
+/// (`test/entregar_parte_test.dart`). La cuenta del alumno y los pagos se leen,
 /// nunca se tocan: cobrar y editar al alumno abren las pantallas de siempre
 /// ([onCobrar], [onEditarAlumno]).
 class RetiroEntradasScreen extends ConsumerStatefulWidget {
@@ -93,13 +103,30 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   Map<String, DeudaAlumno> _deudas = {};
   Map<String, EntradasRetiro> _retiros = {};
 
-  /// La venta de entradas de la fiesta (6.9.0): cuántas del 50 % compró cada
-  /// familia. Los números vendidos no frenan la entrega: son el talonario de
-  /// las anticipadas, otro que el de las generales (20-nov).
+  /// Los renglones de la entrega por partes (`entradas_entregas`) de **todos**
+  /// los alumnos, también los de baja: sus números entregados siguen teniendo
+  /// dueño.
+  Map<String, List<EntregaEntradas>> _renglones = {};
+
+  /// Los pagos de cada alumno: de ahí sale qué mesa adicional y qué silla
+  /// extra están pagas enteras (lo único que se le vende, `APagarDeLaFamilia`).
+  Map<String, List<Map<String, dynamic>>> _pagos = {};
+
+  /// La venta de entradas de la fiesta (6.9.0): lo que compró cada familia.
+  /// Los números vendidos no frenan la entrega: son el talonario de las
+  /// anticipadas, otro que el de las generales (20-nov).
   /// [_ventaAndando]: la fiesta tiene precio y este equipo tiene la base (en la
   /// web, no).
+  List<VentaEntradas> _ventas = const [];
+  List<AnulacionEntradas> _anulaciones = const [];
   Map<String, int> _compradas = {};
   bool _ventaAndando = false;
+
+  /// Las familias a las que ya se les intentó poner al día la fila de
+  /// `entradas_retiro`, con cómo estaba lo suyo (`_firmaDeLaFila`): se intenta
+  /// una vez por familia mientras lo suyo no cambie, **salvo que no se haya
+  /// podido mirar la nube**: ahí se vuelve a intentar en la próxima lectura.
+  final _completadas = <String, String>{};
 
   /// Lo que cada familia tenía al sorteo: el descuento es solo para eso
   /// (17-nov-2026). Y el descuento que el jefe puso en PRECIOS (viene en 50).
@@ -128,6 +155,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   /// cuenta del alumno o un cobro.
   static const _tablasQueMiro = {
     'entradas_retiro',
+    'entradas_entregas',
     'contratos_alumnos',
     'pagos_contrato_alumno',
     'entradas_config',
@@ -194,9 +222,13 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         if (id != null) pagos.putIfAbsent(id, () => []).add(p);
       }
       final mora = await repo.sumMoraCobradaHistorialPorContratos(ids);
+      final idsDeTodos = [for (final a in todos) a.id];
       final retiros = await ref
           .read(entradasRetiroRepositoryProvider)
-          .obtenerPorContratoIds([for (final a in todos) a.id]);
+          .obtenerPorContratoIds(idsDeTodos);
+      final renglones = await ref
+          .read(entradasEntregasRepositoryProvider)
+          .deContratos(idsDeTodos);
       final deudas = {
         for (final a in alumnos)
           a.id: RetiroEntradas.deudaDe(
@@ -213,6 +245,10 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         _todos = todos;
         _deudas = deudas;
         _retiros = retiros;
+        _renglones = renglones;
+        _pagos = pagos;
+        _ventas = venta.ventas;
+        _anulaciones = venta.anulaciones;
         _compradas = compradasPorFamilia(venta.ventas, venta.anulaciones);
         _ventaAndando = venta.andando;
         _descuentoPct = venta.descuentoPct;
@@ -221,6 +257,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         _errorCarga = null;
       });
       _despuesDeLeer(deudas);
+      _completarLasFilas();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -261,13 +298,106 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     }
   }
 
-  /// Los números de las generales que ya se entregaron sin cargo, salvo los de
-  /// [alumnoId]. Es el `deOtros` de la entrega: no mira lo vendido, que es el
-  /// talonario de las anticipadas (20-nov).
-  Map<String, List<TramoTalonario>> _ocupadosPara(String alumnoId) =>
-      NumerosDeEntradas.ocupadosDeLaEntrega(
-        RetiroEntradas.tramosDeOtros(_todos, _retiros, salvo: alumnoId),
+  /// Todos los renglones de la entrega por partes de la fiesta.
+  List<EntregaEntradas> get _todosLosRenglones => [
+        for (final l in _renglones.values) ...l,
+      ];
+
+  /// Cómo está la entrega de [a], por parte.
+  EstadoDeLaEntrega _estadoDe(ContratoAlumno a) => EstadoDeLaEntrega.deAlumno(
+        a,
+        retiro: _retiros[a.id],
+        renglones: _renglones[a.id] ?? const [],
       );
+
+  /// Los números de las generales que ya se entregaron sin cargo a las otras
+  /// familias (de una entrega de las 8 juntas y de los renglones de generales),
+  /// salvo los de [alumnoId]. Es el `deOtros` de la entrega: **no mira lo
+  /// vendido**, que es el talonario de las anticipadas (20-nov).
+  Map<String, List<TramoTalonario>> _ocupadosPara(String alumnoId) =>
+      EntregaPorPartes.numerosDeOtros(
+        _todos,
+        _retiros,
+        _todosLosRenglones,
+        salvo: alumnoId,
+      );
+
+  /// Lo de sus lugares adicionales: lo que compró y lo que le queda, **solo de
+  /// lo que ya está pago entero** (la cuenta de VENDER, con los pagos que esta
+  /// pantalla ya leyó), y con la misma regla para la cuenta que el jefe tiene
+  /// que revisar (`APagarDeLaFamilia.porQueNoSeVendeCon`).
+  LugaresDeLaFamilia _lugaresDe(ContratoAlumno a) {
+    final deuda = _deudas[a.id];
+    return LugaresDeLaFamilia.de(
+      a,
+      ventas: _ventas,
+      anulaciones: _anulaciones,
+      aPagar: APagarDeLaFamilia.de(a, pagos: _pagos[a.id] ?? const [], foto: _foto),
+      // El de la venta: la deuda no tapa los otros frenos (sin mesa, las mesas
+      // que no coinciden, no entran).
+      bloqueo: RetiroEntradas.bloqueoDeLaVenta(a, deuda),
+      todoEntregado: _estadoDe(a).todoEntregado,
+    );
+  }
+
+  /// Una familia cuya fila de `entradas_retiro` no dice lo mismo que sus
+  /// partes (`EntregaPorPartes.filaParaPonerAlDia`): tiene las dos partes y la
+  /// fila no dice "entregado" (cada parte la dio un equipo distinto y uno estaba
+  /// sin internet), o la fila dice "entregado" y el jefe anuló una parte. Con
+  /// internet se pone al día ahora, para que una PC con la 6.9.x, el plano y la
+  /// planilla vieja vean lo mismo. Lo decide `EntregarParte.completarLaFila`,
+  /// que mira la nube antes. Se intenta una vez por familia mientras lo suyo no
+  /// cambie, salvo que no haya podido mirar la nube.
+  void _completarLasFilas() {
+    if (ref.read(connectivityServiceProvider).currentStatus ==
+        AppConnectivity.offline) {
+      return;
+    }
+    for (final a in _alumnos) {
+      final retiro = _retiros[a.id];
+      if (!EntregaPorPartes.filaParaPonerAlDia(
+        retiro: retiro,
+        estado: _estadoDe(a),
+      )) {
+        continue;
+      }
+      final firma = _firmaDeLaFila(a);
+      if (_completadas[a.id] == firma) continue;
+      _completadas[a.id] = firma;
+      unawaited(_completarLaFila(a));
+    }
+  }
+
+  /// Cómo está lo suyo: cuántos renglones tiene y cómo está su fila. Si cambia,
+  /// se vuelve a intentar.
+  String _firmaDeLaFila(ContratoAlumno a) {
+    final retiro = _retiros[a.id];
+    return '${(_renglones[a.id] ?? const []).length}'
+        '|${retiro?.estado.name}|${retiro?.updatedAt.toIso8601String()}';
+  }
+
+  Future<void> _completarLaFila(ContratoAlumno a) async {
+    try {
+      final r = await ref.read(entregarParteProvider).completarLaFila(
+            eventoId: widget.evento.id,
+            contratoAlumnoId: a.id,
+          );
+      switch (r) {
+        case ResultadoDeLaFila.escrita:
+          if (mounted && !_ocupado) await _cargar(silencioso: true);
+        case ResultadoDeLaFila.sinNube:
+          // No se pudo mirar la nube: se vuelve a intentar en la próxima
+          // lectura (la tablet queda abierta toda la noche).
+          _completadas.remove(a.id);
+        case ResultadoDeLaFila.alDia:
+          break;
+      }
+    } catch (e) {
+      // Se vuelve a intentar en la próxima lectura.
+      _completadas.remove(a.id);
+      debugPrint('No se puso al día la fila de la entrega de ${a.nombreAlumno}: $e');
+    }
+  }
 
   /// Con las cuentas recién leídas (de esta PC, o bajadas cuando la otra cobró):
   /// en el mostrador, quién de "En caja" ya pagó, con un sonido corto la primera
@@ -298,21 +428,23 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
 
   // ── Estado de cada egresado ──────────────────────────────────────────────
 
-  ({String texto, Color color, IconData icono}) _estado(ContratoAlumno a) {
-    final r = _retiros[a.id];
-    if (r != null && r.entregado) {
-      final cambio =
-          RetiroEntradas.cambioLaCuenta(r, RetiroEntradas.entradasDe(a, foto: _foto));
+  /// El estado de [a], para el chip de su renglón. Lo entregado lleva el tilde
+  /// en el texto y va sin ícono: con los dos se veían dos tildes (muestras del
+  /// 20-nov-2026).
+  ({String texto, Color color, IconData? icono}) _estado(ContratoAlumno a) {
+    final e = _estadoDe(a);
+    if (e.todoEntregado) {
+      final cambio = e.pulseras.cambioLaCuenta || e.generales.cambioLaCuenta;
       return cambio
           ? (
-              texto: 'Retiró · cambió la cuenta',
+              texto: '✓ Todo entregado · cambió la cuenta',
               color: Colors.orange.shade800,
               icono: Icons.warning_amber_rounded,
             )
           : (
-              texto: 'Retiró',
+              texto: '✓ Todo entregado',
               color: Colors.green.shade700,
-              icono: Icons.check_circle,
+              icono: null,
             );
     }
     final deuda = _deudas[a.id];
@@ -345,11 +477,19 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           color: Colors.orange.shade800,
           icono: Icons.groups_outlined,
         ),
-      BloqueoRetiro.ninguno => (
-          texto: 'Pendiente',
-          color: Colors.blueGrey.shade600,
-          icono: Icons.schedule,
-        ),
+      BloqueoRetiro.ninguno => e.algoEntregado
+          ? (
+              texto: e.pulseras.entregada
+                  ? '✓ Pulseras entregadas'
+                  : '✓ Generales entregadas',
+              color: Colors.green.shade700,
+              icono: null,
+            )
+          : (
+              texto: 'Pendiente',
+              color: Colors.blueGrey.shade600,
+              icono: Icons.schedule,
+            ),
     };
   }
 
@@ -359,9 +499,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     final deuda = _deudas[a.id];
     if (deuda == null || _ocupado) return;
     final bloqueo = RetiroEntradas.bloqueo(a, deuda);
-    final retiro = _retiros[a.id];
-    final bloqueado =
-        !(retiro != null && retiro.entregado) && bloqueo != BloqueoRetiro.ninguno;
+    final estado = _estadoDe(a);
+    final bloqueado = !estado.todoEntregado && bloqueo != BloqueoRetiro.ninguno;
     _abiertoId = bloqueado ? a.id : null;
     _abiertoDebia = bloqueado ? deuda.total : null;
     final AccionEntrega? accion;
@@ -370,15 +509,17 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         context: context,
         alumno: a,
         entradas: RetiroEntradas.entradasDe(a, foto: _foto),
+        estado: estado,
         deuda: deuda,
         bloqueo: bloqueo,
         permisos: _permisos,
-        retiro: retiro,
+        retiro: _retiros[a.id],
+        renglones: _renglones[a.id] ?? const [],
         deOtros: _ocupadosPara(a.id),
         cuentaCambio: _cuentaCambio,
         venta: _ventaAndando
             ? VentaAlCincuenta(
-                compradas: _compradas[a.id] ?? 0,
+                lugares: _lugaresDe(a),
                 puedeVender: ref.read(puedeVenderEntradasProvider) &&
                     ref.read(entradasEnEsteEquipoProvider),
                 descuentoPct: _descuentoPct,
@@ -409,9 +550,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         await _pasarACaja();
       case VolverAAbrir():
         await _volverAAbrir(a.id);
-      case AnularEntrega(:final motivo):
-        await _anular(a, motivo);
-      case final EntregarEntradas datos:
+      case AnularEntrega(:final partes, :final motivo):
+        await _anular(a, partes, motivo);
+      case EntregarUnaParte(:final datos):
         await _entregar(a, datos);
       case VenderAlCincuenta():
         await _venderAlCincuenta(a);
@@ -450,27 +591,6 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     if (fresco != null) await _abrir(fresco);
   }
 
-  Future<bool> _confirmar(String titulo, String texto, String boton) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(titulo),
-        content: Text(texto),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCELAR'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(boton),
-          ),
-        ],
-      ),
-    );
-    return ok == true;
-  }
-
   Future<void> _avisar(String titulo, String texto) => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -485,128 +605,27 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         ),
       );
 
-  String _textoRetiro(EntradasRetiro r) =>
-      '${r.parentesco?.etiqueta ?? ''} ${r.retiroNombre ?? ''}'
-      '${r.entregadoAt == null ? '' : ', el ${ArTime.formatFechaHora(r.entregadoAt!)}'}'
-      '${r.entregadoPor == null ? '' : ' (lo registró ${r.entregadoPor})'}';
-
-  Future<void> _entregar(ContratoAlumno alumno, EntregarEntradas datos) async {
+  /// Entrega una parte por `EntregarParte`, el único camino para guardar una
+  /// entrega: mira la nube, pregunta si no hay internet, relee y frena si algo
+  /// cambió. Acá solo se muestran los carteles.
+  Future<void> _entregar(ContratoAlumno alumno, DatosDeLaParte datos) async {
     setState(() => _ocupado = true);
     try {
-      final repo = ref.read(entradasRetiroRepositoryProvider);
-
-      // La otra PC puede haber entregado hace un minuto y todavía no bajó.
-      var online = ref.read(connectivityServiceProvider).currentStatus !=
-          AppConnectivity.offline;
-      if (online) {
-        try {
-          final nube = await repo.traerDeLaNube(alumno.id);
-          final local = _retiros[alumno.id];
-          if (nube != null &&
-              nube.entregado &&
-              (local == null || nube.updatedAt.isAfter(local.updatedAt))) {
-            await _cargar();
-            if (mounted) {
-              await _avisar(
-                'Ya retiró',
-                'La otra PC ya le entregó las entradas: ${_textoRetiro(nube)}. '
-                    'No se guardó nada.',
-              );
-            }
-            return;
-          }
-        } catch (_) {
-          online = false;
-        }
-      }
-      if (!online && mounted) {
-        final seguir = await _confirmar(
-          'Sin conexión',
-          'No se puede ver si la otra PC ya le entregó las entradas. Seguí '
-              'solo si hoy se entregan únicamente desde esta PC.',
-          'SEGUIR',
-        );
-        if (!seguir) return;
-      }
-
-      // Con todo recién leído: si mientras el diálogo estaba abierto cambió la
-      // cuenta, se anuló un cobro o la otra PC usó esos números, no se guarda.
+      final r = await ref.read(entregarParteProvider).entregar(
+            eventoId: widget.evento.id,
+            contratoAlumnoId: alumno.id,
+            datos: datos,
+            quien: quienOpera(ref),
+            seguirSinInternet: () => seguirSinInternetEnLaEntrega(context, datos.parte),
+          );
       await _cargar();
       if (!mounted) return;
-      final a = _alumnoPorId(alumno.id);
-      final deuda = _deudas[alumno.id];
-      final actual = _retiros[alumno.id];
-      if (a == null || deuda == null) return;
-      if (actual != null && actual.entregado) {
-        await _avisar(
-          'Ya retiró',
-          'Ya figura entregado: ${_textoRetiro(actual)}. No se guardó nada.',
-        );
-        return;
-      }
-      final entradas = RetiroEntradas.entradasDe(a, foto: _foto);
-      final bloqueo = RetiroEntradas.bloqueo(a, deuda);
-      final errorTramos = RetiroEntradas.errorTramos(
-        tramos: datos.tramos,
-        generales: entradas.generales,
-        deOtros: _ocupadosPara(a.id),
-      );
-      if (bloqueo != BloqueoRetiro.ninguno || errorTramos != null) {
-        await _avisar(
-          'Cambió algo',
-          '${errorTramos ?? 'La cuenta de este alumno cambió mientras el '
-              'diálogo estaba abierto.'} No se guardó nada: volvé a abrirlo '
-              'con los datos nuevos.',
-        );
-        return;
-      }
-
-      final checkpoint = DateTime.now().toUtc();
-      final retiro = RetiroEntradas.nuevaEntrega(
-        alumno: a,
-        entradas: entradas,
-        tramos: datos.tramos,
-        menores10: datos.menores10,
-        parentesco: datos.parentesco,
-        nombre: datos.nombre,
-        motivo: datos.motivo,
-        autorizacionFirmada: datos.autorizacionFirmada,
-        quien: quienOpera(ref),
-        ahora: ArTime.nowUtc(),
-        anterior: actual,
-      );
-      await repo.guardar(retiro);
       // Si estaba en "En caja", ya está: se le entregó.
-      ref.read(enCajaProvider(widget.evento.id).notifier).sacar(a.id);
-      final subida = ref.read(subidaInmediataProvider);
-      await _cargar();
-      // Arriba ya, no en el próximo ciclo: mientras no sube, la otra PC no la ve
-      // y podría entregarle de nuevo a la misma familia.
-      final subio = await subida.subir(
-        tabla: 'entradas_retiro',
-        registroId: retiro.id,
-        desde: checkpoint,
-      );
-      if (!mounted) return;
-      if (!subio) {
-        await _avisar(
-          'Entregado, pero todavía no subió',
-          'La entrega quedó guardada en esta PC, pero no llegó a la nube (¿sin '
-              'internet?). Hasta que suba, la otra PC no la ve: no le entreguen '
-              'a esta familia desde la otra PC. Sube sola cuando vuelva la '
-              'conexión.',
-        );
-        return;
+      if (r is Entregada) {
+        ref.read(enCajaProvider(widget.evento.id).notifier).sacar(alumno.id);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.green.shade700,
-          content: Text(
-            'Entregadas ${retiro.entradas} entradas a ${retiro.retiroNombre} '
-            '(${retiro.parentesco?.etiqueta.toLowerCase() ?? ''}).',
-          ),
-        ),
-      );
+      // Los mismos carteles que VENDER (`carteles_de_la_entrega.dart`).
+      await mostrarComoTerminoLaEntrega(context, r, alumno: alumno, datos: datos);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -617,40 +636,48 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     }
   }
 
-  Future<void> _anular(ContratoAlumno a, String motivo) async {
+  /// Anula [partes] por `EntregarParte` (otro renglón: no se borra nada).
+  Future<void> _anular(
+    ContratoAlumno a,
+    Set<ParteEntrega> partes,
+    String motivo,
+  ) async {
     // Doble llave: el botón está apagado sin modo jefe, y acá tampoco pasa.
     if (!_permisos.anular) return;
-    final r = _retiros[a.id];
-    if (r == null || !r.entregado) return;
     setState(() => _ocupado = true);
     try {
-      final checkpoint = DateTime.now().toUtc();
-      await ref.read(entradasRetiroRepositoryProvider).guardar(
-            RetiroEntradas.anular(
-              r,
-              motivo: motivo,
-              quien: quienOpera(ref),
-              ahora: ArTime.nowUtc(),
+      final r = await ref.read(entregarParteProvider).anularParte(
+            eventoId: widget.evento.id,
+            contratoAlumnoId: a.id,
+            partes: partes,
+            motivo: motivo,
+            quien: quienOpera(ref),
+            esJefe: _permisos.anular,
+          );
+      await _cargar();
+      if (!mounted) return;
+      switch (r) {
+        case Anulada(:final subio, :final partes):
+          final que = partes.length == ParteEntrega.values.length
+              ? 'Entrega'
+              : partes.single == ParteEntrega.pulseras
+                  ? 'Entrega de las pulseras'
+                  : 'Entrega de las generales';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                subio
+                    ? '$que de ${a.nombreAlumno.trim()} anulada.'
+                    : '$que de ${a.nombreAlumno.trim()} anulada en este equipo; sube '
+                        'a la nube cuando vuelva la conexión.',
+              ),
             ),
           );
-      final subida = ref.read(subidaInmediataProvider);
-      await _cargar();
-      final subio = await subida.subir(
-        tabla: 'entradas_retiro',
-        registroId: r.id,
-        desde: checkpoint,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            subio
-                ? 'Entrega de ${a.nombreAlumno} anulada.'
-                : 'Entrega de ${a.nombreAlumno} anulada en esta PC; sube a la '
-                    'nube cuando vuelva la conexión.',
-          ),
-        ),
-      );
+        case NoSeAnulo(:final motivo):
+          await _avisar('No se anuló', motivo);
+        case CambioAlgo(:final motivo):
+          await _avisar('Cambió algo', motivo);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -665,52 +692,82 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   /// llega desde PLANILLAS, donde todavía no se eligió.
   Future<void> _preguntarComoImprimir() async {
     if (_errorCarga != null) return;
+    var material = ParteEntrega.pulseras;
     final blancoYNegro = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Imprimir la planilla de entrega'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: const Text(
-            'Sale una hoja A4 acostada por división, con lo que retira cada '
-            'familia y el lugar para anotar quién se lo lleva.',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogo) => AlertDialog(
+          title: const Text('Imprimir la planilla de entrega'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Una planilla por material: las pulseras VIP y las generales '
+                  'llegan y se entregan en tandas distintas. Sale una hoja A4 '
+                  'acostada por división, con lo que retira cada familia y el '
+                  'lugar para anotar quién se lo lleva.',
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<ParteEntrega>(
+                  segments: const [
+                    ButtonSegment(
+                      value: ParteEntrega.pulseras,
+                      label: Text('Pulseras VIP', key: Key('entrega_material_pulseras')),
+                    ),
+                    ButtonSegment(
+                      value: ParteEntrega.generales,
+                      label: Text('Generales', key: Key('entrega_material_generales')),
+                    ),
+                  ],
+                  selected: {material},
+                  onSelectionChanged: (s) => setDialogo(() => material = s.first),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              key: const Key('entrega_cancelar'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CANCELAR'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('entrega_bn'),
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.contrast, size: 18),
+              label: const Text('BLANCO Y NEGRO'),
+            ),
+            FilledButton.icon(
+              key: const Key('entrega_color'),
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.palette_outlined, size: 18),
+              label: const Text('EN COLOR'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            key: const Key('entrega_cancelar'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('CANCELAR'),
-          ),
-          OutlinedButton.icon(
-            key: const Key('entrega_bn'),
-            onPressed: () => Navigator.of(context).pop(true),
-            icon: const Icon(Icons.contrast, size: 18),
-            label: const Text('BLANCO Y NEGRO'),
-          ),
-          FilledButton.icon(
-            key: const Key('entrega_color'),
-            onPressed: () => Navigator.of(context).pop(false),
-            icon: const Icon(Icons.palette_outlined, size: 18),
-            label: const Text('EN COLOR'),
-          ),
-        ],
       ),
     );
     if (blancoYNegro == null || !mounted) return;
-    await _imprimir(blancoYNegro: blancoYNegro);
+    await _imprimir(material: material, blancoYNegro: blancoYNegro);
   }
 
-  Future<void> _imprimir({required bool blancoYNegro}) async {
+  /// La planilla de entrega de [material]: las pulseras VIP o las generales.
+  Future<void> _imprimir({
+    required ParteEntrega material,
+    required bool blancoYNegro,
+  }) async {
     try {
       await PdfService.generarPlanillaEntrega(
         widget.evento,
         _alumnos,
+        material: material,
         retiros: _retiros,
+        renglones: _todosLosRenglones,
         deudas: _deudas,
         blancoYNegro: blancoYNegro,
-        foto: _foto,
-        descuentoPct: _descuentoPct,
       );
     } catch (e) {
       if (!mounted) return;
@@ -750,19 +807,23 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
             onPressed: _ocupado ? null : () => _cargar(),
             icon: const Icon(Icons.refresh),
           ),
-          PopupMenuButton<bool>(
+          // Una planilla por material: cada uno llega y se entrega en su tanda.
+          PopupMenuButton<(ParteEntrega, bool)>(
+            key: const Key('entrega_imprimir'),
             tooltip: 'Planilla de entrega',
             icon: const Icon(Icons.print_rounded),
-            onSelected: (bn) => _imprimir(blancoYNegro: bn),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: true,
-                child: Text('Planilla de entrega (blanco y negro)'),
-              ),
-              PopupMenuItem(
-                value: false,
-                child: Text('Planilla de entrega (color)'),
-              ),
+            onSelected: (e) => _imprimir(material: e.$1, blancoYNegro: e.$2),
+            itemBuilder: (_) => [
+              for (final material in ParteEntrega.values)
+                for (final bn in const [true, false])
+                  PopupMenuItem(
+                    key: Key('entrega_imprimir_${material.clave}_${bn ? 'bn' : 'color'}'),
+                    value: (material, bn),
+                    child: Text(
+                      'Planilla de ${material == ParteEntrega.pulseras ? 'pulseras VIP' : 'generales'}'
+                      ' (${bn ? 'blanco y negro' : 'color'})',
+                    ),
+                  ),
             ],
           ),
           const SizedBox(width: 8),
@@ -1042,6 +1103,15 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   }
 
   Widget _cuerpo() {
+    // Lo sin cargo, por parte: cuántas pulseras y cuántas generales tienen que
+    // llegar, y cuántas se entregaron.
+    final partes = ResumenPorPartes.de(
+      alumnos: _alumnos,
+      retiros: _retiros,
+      renglones: _todosLosRenglones,
+      deudas: _deudas,
+    );
+    // Lo que se compra aparte no depende de la entrega.
     final resumen =
         RetiroEntradas.resumen(_alumnos, _retiros, _deudas, foto: _foto);
     final al = '${_alPorciento[0].toUpperCase()}${_alPorciento.substring(1)}';
@@ -1053,54 +1123,108 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         if (widget.enElMostrador) _arribaDelMostrador(),
         ?_recordatorioDeLosLugares(),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            children: [
-              _tarjeta('Retiraron', '${resumen.retiraron} de ${resumen.alumnos}'),
-              _tarjeta('Faltan', '${resumen.faltan}'),
-              _tarjeta(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: LayoutBuilder(
+            builder: (context, caja) {
+              final retiraronTodo = _tarjeta(
+                'Retiraron todo',
+                '${partes.familiasConTodo} de ${partes.familias}',
+              );
+              final conDeuda = _tarjeta(
                 'Con deuda',
-                '${resumen.conDeuda}',
-                color: resumen.conDeuda > 0 ? Colors.red.shade700 : null,
-              ),
-              _tarjeta(
-                'Sin cargo entregadas',
-                '${resumen.entradasEntregadas} de ${resumen.entradasTotales}',
-              ),
+                '${partes.conDeuda}',
+                color: partes.conDeuda > 0 ? Colors.red.shade700 : null,
+              );
               // Las de las mesas adicionales y las sillas extra: no se entregan
               // acá, se compran aparte con el descuento de PRECIOS (lo que la
               // familia agregó después del sorteo, sin descuento).
               // Con la venta de entradas andando, cuántas ya se vendieron.
-              _ventaAndando
+              // Lo sin descuento va en el rótulo: en el número partía la
+              // tarjeta en dos renglones, más alta que las demás (muestras del
+              // 20-nov-2026).
+              final aparte = _ventaAndando
                   ? _tarjeta(
-                      al,
-                      '${_vendidasAlCincuenta()} vendidas de '
-                          '${resumen.conDescuento}$sinDescuento',
+                      '$al$sinDescuento',
+                      '${_vendidasAlCincuenta()} vendidas de ${resumen.conDescuento}',
                     )
-                  : _tarjeta('$al, aparte', '${resumen.conDescuento}$sinDescuento'),
-            ],
+                  : _tarjeta('$al, aparte$sinDescuento', '${resumen.conDescuento}');
+              // En un celular, cinco tarjetas en una fila partían los rótulos a
+              // mitad de palabra (revisión del 20-nov-2026): van de a dos, y sin
+              // las de pulseras y generales, que ya dice la línea de abajo.
+              if (CortesPantalla.esCelular(caja.maxWidth)) {
+                final mitad = (caja.maxWidth - 8) / 2;
+                return Wrap(
+                  key: const Key('entrega_tarjetas_celular'),
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in [retiraronTodo, conDeuda, aparte])
+                      SizedBox(width: mitad, child: t),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: retiraronTodo),
+                  Expanded(
+                    child: _tarjeta(
+                      'Pulseras VIP',
+                      '${partes.pulserasEntregadas} de ${partes.pulserasTotales}',
+                    ),
+                  ),
+                  Expanded(
+                    child: _tarjeta(
+                      'Generales',
+                      '${partes.generalesEntregadas} de ${partes.generalesTotales}',
+                    ),
+                  ),
+                  Expanded(child: conDeuda),
+                  Expanded(child: aparte),
+                ],
+              );
+            },
+          ),
+        ),
+        // Para saber cuántas pulseras y cuántas generales tienen que llegar.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              partes.texto,
+              key: const Key('entrega_total_partes'),
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                    value: false,
-                    icon: Icon(Icons.search),
-                    label: Text('Mostrador'),
+              // En un celular angosto se achica en vez de salirse de la
+              // pantalla.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        icon: Icon(Icons.search),
+                        label: Text('Mostrador'),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: Icon(Icons.view_list),
+                        label: Text('Por división'),
+                      ),
+                    ],
+                    selected: {_porDivision},
+                    onSelectionChanged: (s) =>
+                        setState(() => _porDivision = s.first),
                   ),
-                  ButtonSegment(
-                    value: true,
-                    icon: Icon(Icons.view_list),
-                    label: Text('Por división'),
-                  ),
-                ],
-                selected: {_porDivision},
-                onSelectionChanged: (s) =>
-                    setState(() => _porDivision = s.first),
+                ),
               ),
               if (_ocupado) ...[
                 const SizedBox(width: 12),
@@ -1132,29 +1256,27 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     return total;
   }
 
-  Widget _tarjeta(String rotulo, String valor, {Color? color}) => Expanded(
-        child: Card(
-          elevation: 0,
-          color: Colors.grey.withValues(alpha: 0.08),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  rotulo,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+  Widget _tarjeta(String rotulo, String valor, {Color? color}) => Card(
+        elevation: 0,
+        color: Colors.grey.withValues(alpha: 0.08),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                rotulo,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+              Text(
+                valor,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: color,
                 ),
-                Text(
-                  valor,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -1221,7 +1343,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         for (final d in claves) ...[
           () {
             final g = grupos[d]!;
-            final r = g.where((a) => _retiros[a.id]?.entregado ?? false).length;
+            // Retiró: las dos partes.
+            final r = g.where((a) => _estadoDe(a).todoEntregado).length;
             return Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 4),
               child: Row(
@@ -1257,10 +1380,27 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
 
   Widget _fila(ContratoAlumno a, {bool compacta = false}) {
     final e = RetiroEntradas.entradasDe(a, foto: _foto);
-    final r = _retiros[a.id];
+    final partes = _estadoDe(a);
     final estado = _estado(a);
     final division = a.cursoDivision?.trim() ?? '';
     final mesa = SalonMesas.textoMesasPuerta(a) ?? 'sin mesa';
+    // Lo que se llevó de cada parte: quién y cuándo, y los números si vinieron.
+    final entregadas = [
+      for (final p in ParteEntrega.values)
+        if (partes.parte(p).entregada)
+          () {
+            final x = partes.parte(p);
+            final cuando = x.entregadaAt == null
+                ? ''
+                : ' · ${ArTime.formatFechaHora(x.entregadaAt!)}';
+            final numeros = p == ParteEntrega.generales && x.tramos.isNotEmpty
+                ? ' · del ${TramoTalonario.legible(x.tramos)}'
+                : '';
+            return '${p == ParteEntrega.pulseras ? 'Pulseras' : 'Generales'} ✓ '
+                '${x.parentesco?.etiqueta ?? ''} ${x.retiroNombre ?? ''}'
+                '$cuando$numeros';
+          }(),
+    ];
     return InkWell(
       onTap: _ocupado ? null : () => _abrir(a),
       child: Padding(
@@ -1280,19 +1420,16 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                   ),
                   Text(
                     '${!compacta && division.isNotEmpty ? '$division · ' : ''}'
-                    'mesa $mesa · ${e.sinCargo} sin cargo '
-                    '(${e.vip} VIP + ${e.generales} generales)'
+                    'mesa $mesa · ${e.vip} VIP con cena + ${e.generales} generales'
                     '${e.conDescuento > 0 ? ' · ${e.conDescuento} $_alPorciento' : ''}'
                     '${e.conDescuento > 0 && _ventaAndando && (_compradas[a.id] ?? 0) > 0 ? ' (compró ${_compradas[a.id]})' : ''}'
                     '${e.sinDescuento > 0 ? ' · ${e.sinDescuento} sin descuento' : ''}',
                     style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
                   ),
-                  if (r != null && r.entregado && !compacta)
+                  if (entregadas.isNotEmpty && !compacta)
                     Text(
-                      '${r.parentesco?.etiqueta ?? ''}: ${r.retiroNombre ?? ''}'
-                      '${r.entregadoAt == null ? '' : ' · ${ArTime.formatFechaHora(r.entregadoAt!)}'}'
-                      '${r.tramos.isEmpty ? '' : ' · talonario ${TramoTalonario.legible(r.tramos)}'}',
-                      style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                      entregadas.join('\n'),
+                      style: TextStyle(fontSize: 12.5, color: Colors.green.shade800),
                     ),
                 ],
               ),
@@ -1307,8 +1444,10 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(estado.icono, size: 15, color: estado.color),
-                  const SizedBox(width: 4),
+                  if (estado.icono != null) ...[
+                    Icon(estado.icono, size: 15, color: estado.color),
+                    const SizedBox(width: 4),
+                  ],
                   Text(
                     estado.texto,
                     style: TextStyle(

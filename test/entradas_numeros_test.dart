@@ -319,6 +319,82 @@ void main() {
     });
   });
 
+  // Revisión del 20-nov-2026: el número que VENDER propone no tenía test propio.
+  group('el número que sigue al último que vendió la caja', () {
+    /// La venta [n] de la caja [caja], con sus [numeros] ("1043-1044").
+    VentaEntradas venta(int n, String? numeros, {String caja = 'caja', int cantidad = 2}) =>
+        VentaEntradas.nueva(
+          cajaEntradasId: caja,
+          eventoId: _fiesta,
+          numero: n,
+          compradorNombre: 'COMPRADOR $n',
+          renglones: [
+            RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: cantidad),
+          ],
+          medio: MedioBarra.efectivo,
+          efectivo: 10000.0 * cantidad,
+          numeros: numeros,
+          ahora: _ahora,
+        );
+
+    test('sin ventas con número, no propone nada', () {
+      expect(NumerosDeEntradas.siguienteDeLaCaja('caja', const [], const []), isNull);
+      expect(
+        NumerosDeEntradas.siguienteDeLaCaja('caja', [venta(1, null)], const []),
+        isNull,
+      );
+    });
+
+    test('el que sigue a la venta más nueva, aunque una vieja tenga números más altos',
+        () {
+      final ventas = [venta(1, '2000-2001'), venta(2, '1050-1051')];
+      expect(NumerosDeEntradas.siguienteDeLaCaja('caja', ventas, const []), 1052);
+    });
+
+    test('una venta sin números se saltea: sigue a la anterior con números', () {
+      final ventas = [venta(1, '1050-1051'), venta(2, null)];
+      expect(NumerosDeEntradas.siguienteDeLaCaja('caja', ventas, const []), 1052);
+    });
+
+    test('la última anulada con las entradas devueltas se saltea: sus números '
+        'volvieron al talonario', () {
+      final ultima = venta(2, '1052-1053');
+      final ventas = [venta(1, '1050-1051'), ultima];
+      expect(
+        NumerosDeEntradas.siguienteDeLaCaja(
+          'caja',
+          ventas,
+          [_anulada(ultima, devueltas: true)],
+        ),
+        1052,
+      );
+    });
+
+    test('la última anulada sin devolver cuenta: esos números ya no se usan', () {
+      final ultima = venta(2, '1052-1053');
+      final ventas = [venta(1, '1050-1051'), ultima];
+      expect(
+        NumerosDeEntradas.siguienteDeLaCaja(
+          'caja',
+          ventas,
+          [_anulada(ultima, devueltas: false)],
+        ),
+        1054,
+      );
+    });
+
+    test('con dos tramos, el mayor + 1', () {
+      final ventas = [venta(1, '1043-1044,1100-1101', cantidad: 4)];
+      expect(NumerosDeEntradas.siguienteDeLaCaja('caja', ventas, const []), 1102);
+    });
+
+    test('solo mira las ventas de esa caja', () {
+      final ventas = [venta(1, '1050-1051'), venta(5, '3000-3001', caja: 'otra')];
+      expect(NumerosDeEntradas.siguienteDeLaCaja('caja', ventas, const []), 1052);
+      expect(NumerosDeEntradas.siguienteDeLaCaja('otra', ventas, const []), 3002);
+    });
+  });
+
   group('los que quedaron anotados dos veces', () {
     test('en dos ventas: avisa con los dos nombres', () {
       final repetidos = NumerosDeEntradas.repetidosDeLaVenta(

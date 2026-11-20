@@ -17,6 +17,7 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/common/providers/user_role_provider.dart';
 import 'package:arguello_events/features/common/utils/subir_ya.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/entradas_entregas_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_retiro_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
@@ -30,6 +31,7 @@ import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -203,6 +205,15 @@ class _Entradas extends EntradasRetiroRepository {
       const {};
 }
 
+/// La entrega por partes: nadie retiró nada.
+class _Partes extends EntradasEntregasRepository {
+  _Partes() : super(null, abrir: () => throw StateError('la prueba no abre la base'));
+
+  @override
+  Future<Map<String, List<EntregaEntradas>>> deContratos(List<String> ids) async =>
+      const {};
+}
+
 class _Sorteos extends SorteosMesasRepository {
   @override
   Future<List<SorteoMesasRegistro>> delEvento(String eventoId) async =>
@@ -362,6 +373,9 @@ Future<MundoDelPlano> montarPlanoDeLaFiesta(
         sillasRepartoRepositoryProvider.overrideWithValue(_Sillas()),
         entradasRetiroRepositoryProvider
             .overrideWithValue(_Entradas(supabase)),
+        // Sin este reemplazo el plano iría a leer la base de la PC: quién ya
+        // retiró una parte de la entrega.
+        entradasEntregasRepositoryProvider.overrideWithValue(_Partes()),
         sorteosMesasRepositoryProvider.overrideWithValue(_Sorteos()),
         esRolJefeProvider.overrideWithValue(esJefe),
         userRoleProvider.overrideWith(

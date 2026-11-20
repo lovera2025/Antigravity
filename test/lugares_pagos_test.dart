@@ -120,12 +120,16 @@ LugaresDeLaFamilia _lugares(
   FotoDeLosLugares? foto,
   List<VentaEntradas> ventas = const [],
   List<AnulacionEntradas> anulaciones = const [],
+  BloqueoRetiro bloqueo = BloqueoRetiro.ninguno,
+  bool todoEntregado = false,
 }) =>
     LugaresDeLaFamilia.de(
       a,
       ventas: ventas,
       anulaciones: anulaciones,
       aPagar: APagarDeLaFamilia.de(a, pagos: pagos, foto: foto),
+      bloqueo: bloqueo,
+      todoEntregado: todoEntregado,
     );
 
 ConfigEntradas _config({double? anticipada, String? hasta}) =>
@@ -194,6 +198,24 @@ void main() {
       expect(pedido.deLugar, 8, reason: 'viene con las de lo pago');
       expect(pedido.conDeLugar(16).deLugar, 8, reason: 'lo que no está pago no se vende');
       expect(pedido.falta, isNull);
+    });
+
+    // Revisión del 20-nov-2026: con las adicionales "Al final" (la 12 sola
+    // adelante, la 67 y la 68 juntas al fondo), el número salía del tramo más
+    // largo y el texto nombraba a la mesa del contrato como la que faltaba.
+    test('la mesa del contrato es la 12 aunque las adicionales 67-68 formen un '
+        'tramo más largo: falta pagar la 68', () {
+      final a = _alumno(extras: 2).copyWith(
+        numeroMesa: MesasExtraUtils.formatearAsignacionMesas(const [12, 67, 68]),
+      );
+      final p = APagarDeLaFamilia.de(a, pagos: _pagos(mesas: 70000));
+      expect(p.lineas[0].numeroEnElSalon, 67);
+      expect(p.lineas[1].numeroEnElSalon, 68);
+      expect(p.lineas[1].pagaEntera, isFalse);
+      expect(_lugares(a, pagos: _pagos(mesas: 70000)).textoAConfirmar,
+          'La mesa adicional 68 está a confirmar: falta pagarla en caja.');
+      // Y la puerta dice lo mismo: es la misma cuenta.
+      expect(AdicionalesDeLaFamilia.mesas(a, _pagos(mesas: 70000)), {68});
     });
 
     test('pagada a medias no se vende, aunque falte poco', () {
@@ -456,6 +478,201 @@ void main() {
       );
       expect(v.contratoAlumnoId, _id);
       expect(v.cuantas(TipoRenglonEntradas.suelta), 2);
+    });
+  });
+
+  // Revisión del 20-nov-2026: lo que VENDER muestra en cada línea de A PAGAR
+  // (`porLinea`) no tenía test propio, y lo comprado de más no tapaba el "a
+  // confirmar" de la línea.
+  group('línea por línea', () {
+    /// Lo de cada línea suma lo mismo que la cuenta de la familia.
+    void sumaLoMismo(LugaresDeLaFamilia l, List<LineaAPagar> lineas) {
+      final (:quedan, :aConfirmar) = l.porLinea(lineas);
+      var con = 0, sin = 0;
+      for (var i = 0; i < lineas.length; i++) {
+        if (lineas[i].conDescuento) {
+          con += quedan[i];
+        } else {
+          sin += quedan[i];
+        }
+        expect(quedan[i], inInclusiveRange(0, lineas[i].habilitadas));
+        expect(aConfirmar[i], inInclusiveRange(0, lineas[i].aConfirmar));
+      }
+      expect(con, l.quedan);
+      expect(sin, l.quedanSinDescuento);
+      expect(aConfirmar.fold<int>(0, (s, n) => s + n), l.esperanElPago);
+    }
+
+    test('lo comprado se descuenta de la primera línea paga y sigue en la otra', () {
+      final a = _alumno(extras: 2, sillas: 2);
+      final pagos = _pagos(mesas: 140000, sillas: 16000);
+      final p = APagarDeLaFamilia.de(a, pagos: pagos);
+      final l = _lugares(a, pagos: pagos, ventas: [_vendida(deLugar: 10)]);
+      final (:quedan, :aConfirmar) = l.porLinea(p.lineas);
+      expect(quedan, [0, 6, 2]);
+      expect(aConfirmar, [0, 0, 0]);
+      sumaLoMismo(l, p.lineas);
+    });
+
+    test('lo comprado de más con descuento (la 6.9.0) pasa a la línea sin descuento',
+        () {
+      // Al sorteo tenía la mesa del contrato y una adicional; la segunda la
+      // agregó después. Las dos pagas. La 6.9.0 le vendió 11 con descuento: 8 de
+      // la primera y 3 de más, que tapan la línea sin descuento.
+      final a = _alumno(extras: 2);
+      final pagos = _pagos(mesas: 140000);
+      final foto = _alSorteo(2, 0);
+      final p = APagarDeLaFamilia.de(a, pagos: pagos, foto: foto);
+      final l = _lugares(a, pagos: pagos, foto: foto, ventas: [_vendida(deLugar: 11)]);
+      expect(l.compradasDeMas, 3);
+      final (:quedan, :aConfirmar) = l.porLinea(p.lineas);
+      expect(quedan, [0, 5]);
+      expect(aConfirmar, [0, 0]);
+      sumaLoMismo(l, p.lineas);
+    });
+
+    test('compró las de su mesa adicional antes de pagarla: la línea no queda "a '
+        'confirmar"', () {
+      final a = _alumno(extras: 1);
+      final p = APagarDeLaFamilia.de(a, pagos: _pagos());
+      final l = _lugares(a, pagos: _pagos(), ventas: [_vendida(deLugar: 8)]);
+      final (:quedan, :aConfirmar) = l.porLinea(p.lineas);
+      expect(p.lineas.single.aConfirmar, 8, reason: 'la mesa no está paga');
+      expect(quedan, [0]);
+      expect(aConfirmar, [0], reason: 'ya las compró: pagarla no le da más');
+      sumaLoMismo(l, p.lineas);
+    });
+
+    test('compró 3 antes de pagarla: quedan 5 a confirmar en esa línea', () {
+      final a = _alumno(extras: 1);
+      final p = APagarDeLaFamilia.de(a, pagos: _pagos());
+      final l = _lugares(a, pagos: _pagos(), ventas: [_vendida(deLugar: 3)]);
+      final (:quedan, :aConfirmar) = l.porLinea(p.lineas);
+      expect(quedan, [0]);
+      expect(aConfirmar, [5]);
+      sumaLoMismo(l, p.lineas);
+    });
+
+    test('lo comprado de más tapa también una línea sin descuento sin pagar', () {
+      // La mesa adicional la agregó después del sorteo y no la pagó; la 6.9.0 le
+      // vendió las 8 con descuento.
+      final a = _alumno(extras: 1);
+      final foto = _alSorteo(1, 0);
+      final p = APagarDeLaFamilia.de(a, pagos: _pagos(), foto: foto);
+      final l = _lugares(a, pagos: _pagos(), foto: foto, ventas: [_vendida(deLugar: 8)]);
+      expect(l.compradasDeMas, 8);
+      final (:quedan, :aConfirmar) = l.porLinea(p.lineas);
+      expect(quedan, [0]);
+      expect(aConfirmar, [0]);
+      sumaLoMismo(l, p.lineas);
+    });
+
+    test('sueltas y lugar repartidos en varias líneas, con cosas sin pagar', () {
+      // Al sorteo: la mesa del contrato, una adicional y 1 silla. Después: otra
+      // adicional y 2 sillas. Pagó las dos mesas y 2 de las 3 sillas.
+      final a = _alumno(extras: 2, sillas: 3);
+      final foto = _alSorteo(2, 1);
+      final pagos = _pagos(mesas: 140000, sillas: 16000);
+      final p = APagarDeLaFamilia.de(a, pagos: pagos, foto: foto);
+      for (final ventas in [
+        <VentaEntradas>[],
+        [_vendida(deLugar: 4)],
+        [_vendida(deLugar: 9, sueltas: 2)],
+        [_vendida(deLugar: 9), _vendida(sueltas: 9)],
+      ]) {
+        sumaLoMismo(_lugares(a, pagos: pagos, foto: foto, ventas: ventas), p.lineas);
+      }
+    });
+  });
+
+  // Revisión del 20-nov-2026: VENDER le vendía a una familia que el diálogo de
+  // la entrega frenaba. Una sola regla para las dos pantallas.
+  group('con la cuenta para revisar no se le vende', () {
+    test('qué bloqueo frena la venta', () {
+      for (final (b, seVende) in [
+        (BloqueoRetiro.ninguno, true),
+        (BloqueoRetiro.debe, true),
+        (BloqueoRetiro.cuentaNoCoincide, false),
+        (BloqueoRetiro.sinMesa, false),
+        (BloqueoRetiro.mesasNoCoinciden, false),
+        (BloqueoRetiro.noEntran, false),
+      ]) {
+        expect(APagarDeLaFamilia.seVendeCon(b), seVende, reason: b.name);
+        // Con lo sin cargo ya entregado se le vende, como el diálogo desde la
+        // 6.9.0.
+        expect(APagarDeLaFamilia.seVendeCon(b, todoEntregado: true), isTrue,
+            reason: b.name);
+      }
+    });
+
+    // Revisión independiente del 20-nov-2026: en `RetiroEntradas.bloqueo` la
+    // deuda va primero y tapaba los otros frenos. A una familia que debía una
+    // cuota y no tenía número de mesa se le vendían las 8 de una adicional que
+    // no estaba en el salón. A PAGAR usa `bloqueoDeLaVenta`, sin la deuda.
+    test('quien debe y tiene las mesas mal cargadas tampoco compra: la deuda no '
+        'tapa los otros frenos', () {
+      // Debe $100.000 de la base y tiene la adicional paga entera.
+      final pagos = _pagos(base: 200000, mesas: 70000);
+      for (final (a, frena, texto) in [
+        (
+          _alumno(extras: 1, saldo: 100000, conMesas: false),
+          BloqueoRetiro.sinMesa,
+          'Hasta que tenga su mesa no se le vende: pedile al jefe que lo revise.',
+        ),
+        (
+          // La adicional cargada, sin su número en el salón.
+          _alumno(extras: 1, saldo: 100000)
+              .copyWith(numeroMesa: MesasExtraUtils.formatearAsignacionMesas([12])),
+          BloqueoRetiro.mesasNoCoinciden,
+          'Hasta que el jefe revise sus mesas no se le vende: pedile que lo revise.',
+        ),
+      ]) {
+        final deuda = RetiroEntradas.deudaDe(a, pagos: pagos, moraCobradaHistorial: 0);
+        expect(deuda.noCoincide, isFalse, reason: 'la ficha coincide con los pagos');
+        expect(deuda.pagoTodo, isFalse);
+        // Para lo sin cargo, lo que frena es la deuda (a caja).
+        expect(RetiroEntradas.bloqueo(a, deuda), BloqueoRetiro.debe);
+        // Para A PAGAR, las mesas.
+        expect(RetiroEntradas.bloqueoDeLaVenta(a, deuda), frena, reason: frena.name);
+        final l = _lugares(
+          a,
+          pagos: pagos,
+          bloqueo: RetiroEntradas.bloqueoDeLaVenta(a, deuda),
+        );
+        expect(l.frenada, texto);
+        expect(l.quedanTodas, 0, reason: frena.name);
+        expect(_pedidoDe(l).conDeLugar(8).deLugarQueVan, 0, reason: frena.name);
+      }
+    });
+
+    test('quien debe, con sus mesas bien, compra lo que ya pagó entero', () {
+      final a = _alumno(extras: 1, saldo: 100000);
+      final pagos = _pagos(base: 200000, mesas: 70000);
+      final deuda = RetiroEntradas.deudaDe(a, pagos: pagos, moraCobradaHistorial: 0);
+      expect(RetiroEntradas.bloqueo(a, deuda), BloqueoRetiro.debe);
+      expect(RetiroEntradas.bloqueoDeLaVenta(a, deuda), BloqueoRetiro.ninguno);
+      expect(RetiroEntradas.bloqueoDeLaVenta(a, null), BloqueoRetiro.ninguno);
+      final l = _lugares(a, pagos: pagos, bloqueo: RetiroEntradas.bloqueoDeLaVenta(a, deuda));
+      expect(l.frenada, isNull);
+      expect(l.quedan, 8);
+    });
+
+    test('con las mesas mal cargadas: nada le queda, y el porqué llega al pedido', () {
+      final a = _alumno(extras: 1);
+      final pagos = _pagos(mesas: 70000);
+      final l = _lugares(a, pagos: pagos, bloqueo: BloqueoRetiro.mesasNoCoinciden);
+      const texto =
+          'Hasta que el jefe revise sus mesas no se le vende: pedile que lo revise.';
+      expect(l.frenada, texto);
+      expect(l.quedan, 0);
+      expect(l.quedanTodas, 0);
+      expect(l.porQueNoSeVende, texto);
+      expect(l.esperanElPago, 0, reason: 'la mesa está paga: no espera el pago');
+      final p = APagarDeLaFamilia.de(a, pagos: pagos);
+      expect(l.porLinea(p.lineas).quedan, [0]);
+      final pedido = _pedidoDe(l).conDeLugar(8);
+      expect(pedido.deLugarQueVan, 0);
+      expect(pedido.falta, texto);
     });
   });
 

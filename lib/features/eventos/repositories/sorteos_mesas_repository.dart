@@ -110,8 +110,8 @@ final sorteosMesasRepositoryProvider = Provider<SorteosMesasRepository>(
 /// ([LugaresAlSorteo.vigente]), para quien solo lo lee: la entrega, la venta de
 /// entradas y los papeles. Sale del registro de esta PC, así que anda sin
 /// internet. **Si no se puede leer, todo va con descuento, como antes de la
-/// regla**: una lectura que falla no le cobra la entrada entera a nadie. En la
-/// web no hay base.
+/// regla**: una lectura que falla no le saca el descuento a nadie. En la web no
+/// hay base.
 final fotoDeLosLugaresProvider =
     Provider<Future<FotoDeLosLugares> Function(String eventoId)>((ref) {
   if (kIsWeb) return (_) async => FotoDeLosLugares.sinSorteo;

@@ -1,13 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/services/planilla_entrega_pdf.dart';
+import 'package:arguello_events/features/eventos/services/entrega_por_partes.dart';
 import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
 
 /// Un alumno con la base de $300.000 en 9 cuotas, y lo que se le cargue encima.
@@ -567,27 +571,111 @@ void main() {
     });
   });
 
+  // 20-nov-2026: una planilla por material (las pulseras VIP y las generales),
+  // porque cada uno llega y se entrega en su tanda. Hasta la 6.9.2 era una sola,
+  // con las 8 juntas y una columna "Al 50 %": estos tests se reescribieron con
+  // la regla nueva.
   group('planilla en papel', () {
-    test('sin retirar: van las entradas y el nombre queda en blanco', () {
+    test('sin retirar: van las de cada material y el nombre queda en blanco', () {
       final a = _alumno(extras: 1, sillas: 3, mesas: [13, 14], acompanantes: ['MAMÁ', 'PAPÁ']);
-      final f = RetiroEntradas.filaPlanilla(a, deuda: _deuda(a, _pagosCompletos(a)));
-      expect(f.mesa, '13-14');
-      expect(f.vip, 3);
-      expect(f.generales, 5);
-      expect(f.conDescuento, 11);
-      expect(f.delAl, isEmpty);
-      expect(f.parentesco, isEmpty);
-      expect(f.noEntregar, isNull);
-      expect(f.entregado, isFalse);
+      final deuda = _deuda(a, _pagosCompletos(a));
+      final p = EntregaPorPartes.filaPlanilla(a, material: ParteEntrega.pulseras, deuda: deuda);
+      expect(p.mesa, '13-14');
+      expect(p.cantidad, 3);
+      expect(p.menores, isEmpty);
+      expect(p.parentesco, isEmpty);
+      expect(p.noEntregar, isNull);
+      expect(p.entregado, isFalse);
+      final g = EntregaPorPartes.filaPlanilla(a, material: ParteEntrega.generales, deuda: deuda);
+      expect(g.cantidad, 5);
+      expect(g.delAl, isEmpty);
+      expect(g.entregado, isFalse);
     });
 
-    test('si debe, la planilla lo dice', () {
+    test('si debe, las dos planillas lo dicen', () {
       final a = _alumno(moraTracked: 3500);
-      final f = RetiroEntradas.filaPlanilla(a, deuda: _deuda(a, _pagosCompletos(a)));
-      expect(f.noEntregar, 'Debe: no entregar');
+      final deuda = _deuda(a, _pagosCompletos(a));
+      for (final m in ParteEntrega.values) {
+        expect(
+          EntregaPorPartes.filaPlanilla(a, material: m, deuda: deuda).noEntregar,
+          'Debe: no entregar',
+          reason: m.name,
+        );
+      }
     });
 
-    test('ya retirado: sus números, sus menores y el parentesco', () {
+    test('ya retiró una parte: sus datos en esa planilla, y la otra pendiente', () {
+      final a = _alumno(extras: 1, sillas: 3, mesas: [13, 14], acompanantes: ['MAMÁ', 'PAPÁ']);
+      final pulseras = EntregaEntradas.entrega(
+        contratoAlumnoId: a.id,
+        eventoId: a.eventoId,
+        parte: ParteEntrega.pulseras,
+        cantidad: 3,
+        menores10: 2,
+        parentesco: ParentescoRetiro.abuelo,
+        nombre: 'Rosa Gómez',
+        escribioEnPlanilla: true,
+        hechoPor: 'Operador',
+        deviceId: 'pc',
+        ahora: DateTime.utc(2026, 11, 12),
+      );
+      final deuda = _deuda(a, _pagosCompletos(a));
+      final p = EntregaPorPartes.filaPlanilla(
+        a,
+        material: ParteEntrega.pulseras,
+        renglones: [pulseras],
+        deuda: deuda,
+      );
+      expect(p.entregado, isTrue);
+      expect(p.menores, '2');
+      expect(p.parentesco, 'Abuelo/a');
+      final g = EntregaPorPartes.filaPlanilla(
+        a,
+        material: ParteEntrega.generales,
+        renglones: [pulseras],
+        deuda: deuda,
+      );
+      expect(g.entregado, isFalse);
+      expect(g.parentesco, isEmpty);
+    });
+
+    test('las generales: sus números, o "-" si vinieron sin número', () {
+      final a = _alumno(acompanantes: ['MAMÁ', 'PAPÁ']);
+      EntregaEntradas generales(List<TramoTalonario> tramos) => EntregaEntradas.entrega(
+            contratoAlumnoId: a.id,
+            eventoId: a.eventoId,
+            parte: ParteEntrega.generales,
+            cantidad: 5,
+            tramos: tramos,
+            parentesco: ParentescoRetiro.padre,
+            nombre: 'Hugo Gómez',
+            escribioEnPlanilla: true,
+            hechoPor: 'Operador',
+            deviceId: 'pc',
+            ahora: DateTime.utc(2026, 11, 12),
+          );
+      final deuda = _deuda(a, _pagosCompletos(a));
+      expect(
+        EntregaPorPartes.filaPlanilla(
+          a,
+          material: ParteEntrega.generales,
+          renglones: [generales(const [TramoTalonario(1043, 1047)])],
+          deuda: deuda,
+        ).delAl,
+        '1043 al 1047',
+      );
+      expect(
+        EntregaPorPartes.filaPlanilla(
+          a,
+          material: ParteEntrega.generales,
+          renglones: [generales(const [])],
+          deuda: deuda,
+        ).delAl,
+        '-',
+      );
+    });
+
+    test('una entrega de las 8 juntas (6.9.x) sale retirada en las dos', () {
       final a = _alumno(extras: 1, sillas: 3, mesas: [13, 14], acompanantes: ['MAMÁ', 'PAPÁ']);
       final r = RetiroEntradas.nuevaEntrega(
         alumno: a,
@@ -599,19 +687,41 @@ void main() {
         quien: 'Operador',
         ahora: DateTime.utc(2026, 11, 12),
       );
-      final f = RetiroEntradas.filaPlanilla(
+      final deuda = _deuda(a, _pagosCompletos(a));
+      final p = EntregaPorPartes.filaPlanilla(
         a,
+        material: ParteEntrega.pulseras,
         retiro: r,
-        deuda: _deuda(a, _pagosCompletos(a)),
+        deuda: deuda,
       );
-      expect(f.delAl, '1043 al 1047');
-      expect(f.menores, '2');
-      expect(f.parentesco, 'Abuelo/a');
-      expect(f.entregado, isTrue);
-      expect(f.noEntregar, isNull);
+      expect(p.entregado, isTrue);
+      expect(p.menores, '2');
+      final g = EntregaPorPartes.filaPlanilla(
+        a,
+        material: ParteEntrega.generales,
+        retiro: r,
+        deuda: deuda,
+      );
+      expect(g.entregado, isTrue);
+      expect(g.delAl, '1043 al 1047');
+      expect(g.parentesco, 'Abuelo/a');
+      expect(g.noEntregar, isNull);
     });
 
-    test('se arma en color y en blanco y negro con las fuentes de la app',
+    test('con 8 o más con cena, la de las generales dice que no lleva', () {
+      final a = _alumno(extras: 1, acompanantes: List.generate(8, (i) => 'ACOMP $i'),
+          mesas: [13, 14]);
+      final g = EntregaPorPartes.filaPlanilla(
+        a,
+        material: ParteEntrega.generales,
+        deuda: _deuda(a, _pagosCompletos(a)),
+      );
+      expect(g.noLleva, isTrue);
+      expect(g.noEntregar, isNull);
+      expect(g.entregado, isFalse);
+    });
+
+    test('se arman las dos, en color y en blanco y negro, con las fuentes de la app',
         () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       final evento = Evento(
@@ -634,16 +744,72 @@ void main() {
       final deudas = {
         for (final a in alumnos) a.id: _deuda(a, _pagosCompletos(a)),
       };
-      for (final bn in [false, true]) {
-        final bytes = await PdfService.construirPlanillaEntregaPdf(
-          evento,
-          alumnos,
-          retiros: const {},
-          deudas: deudas,
-          blancoYNegro: bn,
-          generada: DateTime(2026, 11, 12, 21, 30),
-        );
-        expect(bytes.length, greaterThan(1000), reason: 'bn=$bn');
+      for (final material in ParteEntrega.values) {
+        for (final bn in [false, true]) {
+          final bytes = await PdfService.construirPlanillaEntregaPdf(
+            evento,
+            alumnos,
+            material: material,
+            retiros: const {},
+            deudas: deudas,
+            blancoYNegro: bn,
+            generada: DateTime(2026, 11, 12, 21, 30),
+          );
+          expect(bytes.length, greaterThan(1000), reason: '${material.name} bn=$bn');
+        }
+      }
+    });
+
+    test('cada material tiene sus columnas', () {
+      expect(PlanillaEntregaPdf.columnas(ParteEntrega.pulseras), [
+        'Egresado',
+        'Mesa',
+        'VIP',
+        'Menores de 10',
+        'Parentesco',
+        'Nombre y apellido de quien retira',
+        'Retiró',
+      ]);
+      expect(PlanillaEntregaPdf.columnas(ParteEntrega.generales), [
+        'Egresado',
+        'Mesa',
+        'Generales',
+        'Del … al …',
+        'Parentesco',
+        'Nombre y apellido de quien retira',
+        'Retiró',
+      ]);
+    });
+
+    // Revisión del 20-nov-2026: en la planilla de las generales el título de la
+    // cantidad salía "GENERALE / S". La planilla se arma con las letras de la
+    // app (Outfit), que no se leen palabra por palabra en el PDF: se mide cada
+    // palabra de cada título con la letra misma, como lo hace el paquete
+    // (negrita de 7,5 con 0,6 de espaciado), contra el ancho de su columna.
+    test('con las letras de la app, ningún título parte una palabra', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final f = (await PdfService.fuentesOutfit())!;
+      final negrita = f.$2.getFont(pw.Context(document: PdfDocument()));
+      const tam = 7.5;
+      const espaciado = 0.6;
+      const relleno = 10.0; // 5 a cada lado de la celda
+      final util = PlanillaEntregaPdf.anchoDeLaHoja - 2 * PlanillaEntregaPdf.margenDeLaHoja;
+      for (final material in ParteEntrega.values) {
+        final anchos = PlanillaEntregaPdf.anchos(material);
+        final total = anchos.fold<double>(0, (s, a) => s + a);
+        final titulos = PlanillaEntregaPdf.columnas(material);
+        expect(anchos, hasLength(titulos.length));
+        for (var i = 0; i < titulos.length; i++) {
+          final columna = util * anchos[i] / total - relleno;
+          for (final palabra in titulos[i].toUpperCase().split(' ')) {
+            final ancho =
+                (negrita.stringMetrics(palabra, letterSpacing: espaciado / tam) * tam)
+                    .width;
+            expect(ancho, lessThanOrEqualTo(columna),
+                reason: '${material.name}: "$palabra" no entra en su columna '
+                    '(${ancho.toStringAsFixed(1)} de ${columna.toStringAsFixed(1)} pt)');
+          }
+        }
       }
     });
 
@@ -662,7 +828,7 @@ void main() {
       );
     });
 
-    test('una división de 26 entra en una sola hoja', () async {
+    test('una división de 26 entra en una sola hoja, en las dos planillas', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       final evento = Evento(
         id: 'e',
@@ -678,18 +844,21 @@ void main() {
           _alumno(id: 'a$i', nombre: 'ALUMNO $i', mesas: [i + 1])
               .copyWith(cursoDivision: '5° A'),
       ];
-      final bytes = await PdfService.construirPlanillaEntregaPdf(
-        evento,
-        alumnos,
-        retiros: const {},
-        deudas: {
-          for (final a in alumnos) a.id: _deuda(a, _pagosCompletos(a)),
-        },
-        generada: DateTime(2026, 11, 12, 21, 30),
-      );
-      final texto = String.fromCharCodes(bytes);
-      final hojas = RegExp(r'/Type\s*/Page(?![s\w])').allMatches(texto).length;
-      expect(hojas, 1);
+      for (final material in ParteEntrega.values) {
+        final bytes = await PdfService.construirPlanillaEntregaPdf(
+          evento,
+          alumnos,
+          material: material,
+          retiros: const {},
+          deudas: {
+            for (final a in alumnos) a.id: _deuda(a, _pagosCompletos(a)),
+          },
+          generada: DateTime(2026, 11, 12, 21, 30),
+        );
+        final texto = String.fromCharCodes(bytes);
+        final hojas = RegExp(r'/Type\s*/Page(?![s\w])').allMatches(texto).length;
+        expect(hojas, 1, reason: material.name);
+      }
     });
   });
 

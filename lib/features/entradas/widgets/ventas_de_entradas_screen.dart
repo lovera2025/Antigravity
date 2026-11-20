@@ -13,8 +13,9 @@ import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/quien_opera.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/repositories/contratos_repository.dart';
+import '../../eventos/repositories/entradas_entregas_repository.dart';
 import '../../eventos/repositories/entradas_retiro_repository.dart';
-import '../../eventos/services/retiro_entradas.dart';
+import '../../eventos/services/entrega_por_partes.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../cuentas/historial_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
@@ -73,6 +74,8 @@ class _VentasDeEntradasScreenState
     'entradas_anulaciones',
     'entradas_verificaciones',
     'entradas_retiro',
+    // La entrega por partes (20-nov-2026): sus números de las generales.
+    'entradas_entregas',
   };
 
   @override
@@ -115,9 +118,11 @@ class _VentasDeEntradasScreenState
       final id = widget.evento.id;
       final entradas = ref.read(entradasDeLaFiestaProvider);
       final alumnos = await ref.read(contratosRepositoryProvider).getByEvento(id);
-      final retiros = await ref
-          .read(entradasRetiroRepositoryProvider)
-          .obtenerPorContratoIds([for (final a in alumnos) a.id]);
+      final ids = [for (final a in alumnos) a.id];
+      final retiros =
+          await ref.read(entradasRetiroRepositoryProvider).obtenerPorContratoIds(ids);
+      final renglones =
+          await ref.read(entradasEntregasRepositoryProvider).deContratos(ids);
       final historial = HistorialDeEntradas.de(
         cajas: await entradas.cajas(id),
         ventas: await entradas.ventas(id),
@@ -125,7 +130,15 @@ class _VentasDeEntradasScreenState
         verificaciones: await entradas.verificaciones(id),
         // Las entregas sin cargo se comparan solo entre ellas (el talonario de
         // las generales): nunca con lo vendido, que es el de las anticipadas.
-        entregados: RetiroEntradas.tramosDeOtros(alumnos, retiros, salvo: ''),
+        // Desde el 20-nov-2026 las generales se entregan por partes: sus
+        // números salen de la fila de siempre y de los renglones de la entrega
+        // (`EntregaPorPartes.numerosDeOtros`, el mismo `deOtros` de la entrega).
+        entregados: EntregaPorPartes.numerosDeOtros(
+          alumnos,
+          retiros,
+          [for (final l in renglones.values) ...l],
+          salvo: '',
+        ),
         soloDeLaCaja: _soloDeLaCaja,
       );
       if (!mounted) return;

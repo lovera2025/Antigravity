@@ -248,53 +248,6 @@ enum BloqueoRetiro {
   noEntran,
 }
 
-/// Un renglón de la planilla de entrega en papel. Lo que la app ya sabe va
-/// impreso; el nombre de quien retira queda siempre en blanco, porque lo
-/// escribe esa persona (no se firma).
-class FilaPlanillaEntrega {
-  final String alumnoId;
-  final String egresado;
-  final String mesa;
-  final int vip;
-  final int generales;
-
-  /// Las de la mesa adicional y las sillas extra que ya tenía al sorteo: se
-  /// compran aparte, con el descuento de PRECIOS.
-  final int conDescuento;
-
-  /// Las de lo que agregó después del sorteo: pagan la entrada entera.
-  final int sinDescuento;
-
-  /// Los números del talonario si ya se entregó; vacío si no.
-  final String delAl;
-
-  /// Menores de 10 si ya se entregó; vacío si no.
-  final String menores;
-
-  /// El parentesco si ya se entregó; vacío si no.
-  final String parentesco;
-
-  /// Por qué no se puede entregar ("Debe: no entregar"), o `null`.
-  final String? noEntregar;
-
-  final bool entregado;
-
-  const FilaPlanillaEntrega({
-    required this.alumnoId,
-    required this.egresado,
-    required this.mesa,
-    required this.vip,
-    required this.generales,
-    required this.conDescuento,
-    this.sinDescuento = 0,
-    required this.delAl,
-    required this.menores,
-    required this.parentesco,
-    required this.noEntregar,
-    required this.entregado,
-  });
-}
-
 /// La cuenta de un evento en la pantalla de retiro.
 class ResumenRetiro {
   final int alumnos;
@@ -311,7 +264,8 @@ class ResumenRetiro {
   /// tenían al sorteo: se compran con el descuento de PRECIOS.
   final int conDescuento;
 
-  /// Las de lo agregado después del sorteo: pagan la entrada entera.
+  /// Las de lo agregado después del sorteo: pagan el precio del día, sin
+  /// descuento.
   final int sinDescuento;
 
   const ResumenRetiro({
@@ -386,6 +340,24 @@ class RetiroEntradas {
   static BloqueoRetiro bloqueo(ContratoAlumno a, DeudaAlumno deuda) {
     if (deuda.noCoincide) return BloqueoRetiro.cuentaNoCoincide;
     if (!deuda.pagoTodo) return BloqueoRetiro.debe;
+    return _bloqueoDeLasMesas(a);
+  }
+
+  /// Lo que frena **la venta de A PAGAR** (lo de la mesa adicional y las
+  /// sillas, `APagarDeLaFamilia.porQueNoSeVendeCon`): lo mismo que [bloqueo]
+  /// **sin la deuda**. Quien debe compra igual lo que ya pagó entero, pero sin
+  /// mesa, con las mesas que no coinciden o si no entran, no: la cuenta puede
+  /// estar mal. En [bloqueo] la deuda va antes y tapaba esos frenos: a una
+  /// familia que debía una cuota y no tenía número de mesa se le vendían las 8
+  /// de una mesa adicional que no estaba en el salón (revisión del 20-nov-2026).
+  ///
+  /// [deuda] null: todavía no se leyó; frenan solo las mesas.
+  static BloqueoRetiro bloqueoDeLaVenta(ContratoAlumno a, DeudaAlumno? deuda) {
+    if (deuda != null && deuda.noCoincide) return BloqueoRetiro.cuentaNoCoincide;
+    return _bloqueoDeLasMesas(a);
+  }
+
+  static BloqueoRetiro _bloqueoDeLasMesas(ContratoAlumno a) {
     if (MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isEmpty) {
       return BloqueoRetiro.sinMesa;
     }
@@ -577,31 +549,6 @@ class RetiroEntradas {
         BloqueoRetiro.mesasNoCoinciden => 'Revisar sus mesas: no entregar',
         BloqueoRetiro.noEntran => 'No entran: no entregar',
       };
-
-  /// Los renglones de la planilla de entrega, uno por egresado activo.
-  static FilaPlanillaEntrega filaPlanilla(
-    ContratoAlumno a, {
-    EntradasRetiro? retiro,
-    required DeudaAlumno deuda,
-    FotoDeLosLugares? foto,
-  }) {
-    final e = entradasDe(a, foto: foto);
-    final entregado = retiro?.entregado ?? false;
-    return FilaPlanillaEntrega(
-      alumnoId: a.id,
-      egresado: a.nombreAlumno.trim(),
-      mesa: SalonMesas.textoMesasPuerta(a) ?? '-',
-      vip: entregado ? retiro!.vip : e.vip,
-      generales: entregado ? retiro!.generales : e.generales,
-      conDescuento: e.conDescuento,
-      sinDescuento: e.sinDescuento,
-      delAl: entregado ? TramoTalonario.legible(retiro!.tramos) : '',
-      menores: entregado ? '${retiro!.menores10}' : '',
-      parentesco: entregado ? retiro!.parentesco?.etiqueta ?? '' : '',
-      noEntregar: entregado ? null : textoBloqueo(bloqueo(a, deuda)),
-      entregado: entregado,
-    );
-  }
 
   static ResumenRetiro resumen(
     Iterable<ContratoAlumno> alumnos,

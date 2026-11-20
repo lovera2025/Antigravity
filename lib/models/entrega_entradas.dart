@@ -7,15 +7,23 @@ import 'entradas_retiro.dart';
 ///
 /// La [clave] es lo que se guarda en `entradas_entregas.parte`.
 enum ParteEntrega {
-  pulseras('pulseras', 'pulseras VIP con cena'),
-  generales('generales', 'entradas generales');
+  pulseras('pulseras', 'pulseras VIP con cena', 'pulsera VIP con cena'),
+  generales('generales', 'entradas generales', 'entrada general');
 
   final String clave;
 
   /// Cómo se nombra en un aviso: "Ya se le entregaron las pulseras VIP…".
   final String nombre;
 
-  const ParteEntrega(this.clave, this.nombre);
+  /// Una sola: "1 pulsera VIP con cena".
+  final String nombreDeUna;
+
+  const ParteEntrega(this.clave, this.nombre, this.nombreDeUna);
+
+  /// "1 pulsera VIP con cena", "3 pulseras VIP con cena", "1 entrada general":
+  /// lo más común es una sola (el egresado solo), y "1 pulseras" se leía mal
+  /// (revisión del 20-nov-2026).
+  String cuantas(int n) => n == 1 ? '1 $nombreDeUna' : '$n $nombre';
 
   /// Null si la clave no es una de estas: una versión más nueva puede anotar
   /// algo que esta no conoce, y nunca se inventa qué fue.

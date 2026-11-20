@@ -74,9 +74,12 @@ class YaEntregadaEnOtroEquipo extends ResultadoDeLaEntrega {
 }
 
 /// Mientras el diálogo estaba abierto cambió la cuenta, se anuló un cobro, o los
-/// números ya tienen dueño. No se guardó nada: se vuelve a abrir con los datos
-/// nuevos.
-class CambioAlgo extends ResultadoDeLaEntrega {
+/// números ya tienen dueño: no se guardó nada, y se vuelve a abrir con los datos
+/// nuevos. O se guardó, pero al releer la parte no quedó como se pidió (otro
+/// equipo anotó algo más nuevo al mismo tiempo): [motivo] lo dice.
+///
+/// Vale para una entrega y para una anulación.
+class CambioAlgo extends ResultadoDeLaEntrega implements ResultadoDeAnular {
   final String motivo;
   const CambioAlgo(this.motivo);
 }
@@ -101,6 +104,21 @@ class Anulada extends ResultadoDeAnular {
 class NoSeAnulo extends ResultadoDeAnular {
   final String motivo;
   const NoSeAnulo(this.motivo);
+}
+
+/// Cómo terminó [EntregarParte.completarLaFila].
+enum ResultadoDeLaFila {
+  /// La fila de `entradas_retiro` se escribió (completa o anulada).
+  escrita,
+
+  /// Miró la nube y no hacía falta escribir nada.
+  alDia,
+
+  /// No pudo mirar la nube (sin internet, o la nube no contestó): no escribió
+  /// nada, y **hay que volver a intentarlo** (revisión del 20-nov-2026: antes
+  /// esto decía lo mismo que [alDia], y las pantallas no volvían a probar en
+  /// toda la noche).
+  sinNube,
 }
 
 /// Lo que este equipo tiene de una fiesta: **todos** los alumnos (también los de
@@ -217,7 +235,14 @@ abstract class PuertosDeLaEntrega {
 /// queda con las dos partes y `entradas_retiro` no está entregada, escribe
 /// también la fila completa (`EntregaPorPartes.filaCompleta`), en la misma
 /// transacción: así una PC con la 6.9.x, el plano y la planilla vieja la ven
-/// "Retiró".
+/// "Retiró". **Solo con internet**: sin ella, este equipo puede no saber de una
+/// anulación de la otra parte que todavía no bajó, y volvería a poner
+/// "entregado" sobre ella; la fila la escribe después [completarLaFila].
+///
+/// **Cada renglón nuevo va después de lo que este equipo ya vio**
+/// (`EntregaPorPartes.horaDelRenglon`): los equipos no tienen la misma hora. Y
+/// después de guardar se relee: si la parte no quedó como se pidió, no dice
+/// que salió bien ([CambioAlgo]).
 class EntregarParte {
   final PuertosDeLaEntrega _puertos;
 
@@ -299,10 +324,14 @@ class EntregarParte {
     }
     if (datos.cantidad != parte.leToca) {
       return CambioAlgo(
-        'Cambió la cuenta: hoy le corresponden ${parte.leToca} '
-        '${datos.parte.nombre}, no ${datos.cantidad}. $_volverAAbrir',
+        'Cambió la cuenta: hoy le corresponden '
+        '${datos.parte.cuantas(parte.leToca)}, no ${datos.cantidad}. $_volverAAbrir',
       );
     }
+    // La otra parte ya se entregó con otra cuenta: entre las dos se pasaría de
+    // lo sin cargo (revisión del 20-nov-2026).
+    final porLaOtra = EntregaPorPartes.frenoPorLaOtraParte(estado, datos.parte);
+    if (porLaOtra != null) return CambioAlgo('$porLaOtra No se guardó nada.');
     final errorNumeros = EntregaPorPartes.errorDeLosNumeros(
       parte: datos.parte,
       tramos: datos.tramos,
@@ -327,7 +356,14 @@ class EntregarParte {
     }
 
     final desde = DateTime.now().toUtc();
-    final ahora = _puertos.ahora();
+    // Después de todo lo que este equipo ya vio de esta parte: si su reloj está
+    // atrasado, la entrega igual queda después de una anulación más nueva.
+    final ahora = EntregaPorPartes.horaDelRenglon(
+      parte: datos.parte,
+      retiro: retiro,
+      renglones: propios,
+      ahora: _puertos.ahora(),
+    );
     final equipo = await _puertos.equipo();
     final nuevo = EntregaEntradas.entrega(
       contratoAlumnoId: a.id,
@@ -350,7 +386,7 @@ class EntregarParte {
       renglones: [...propios, nuevo],
       entradas: entradas,
     );
-    final (:renglones, :fila) = _conLaFilaSiCompleta(
+    final (:renglones, :fila) = _laFilaAlDia(
       alumno: a,
       retiro: retiro,
       propios: propios,
@@ -359,6 +395,10 @@ class EntregarParte {
       entradas: entradas,
       equipo: equipo,
       ahora: ahora,
+      // Sin internet no se escribe la fila: este equipo puede no saber de una
+      // anulación de la otra parte que todavía no bajó (revisión del 20-nov).
+      // La escribe [completarLaFila], con internet.
+      conFila: online,
     );
     await _puertos.guardar(renglones, retiro: fila);
     final subio = await _puertos.subir(
@@ -366,18 +406,48 @@ class EntregarParte {
       retiro: fila?.id,
       desde: desde,
     );
+
+    // Se relee: lo que se anotó tiene que haber quedado como se pidió.
+    final quedo = await _comoQuedo(eventoId, a, entradas);
+    if (!quedo.parte(datos.parte).entregada) {
+      return CambioAlgo(
+        'Se anotó la entrega de ${EntregaPorPartes.nombreDe(datos.parte)}, '
+        'pero figura sin entregar: otro equipo anotó algo más nuevo al mismo '
+        'tiempo. Volvé a abrirlo para ver cómo quedó.',
+      );
+    }
     return Entregada(
       subio: subio,
       renglon: nuevo,
-      todoEntregado: despues.todoEntregado,
-      conFilaCompleta: fila != null,
+      todoEntregado: quedo.todoEntregado,
+      conFilaCompleta: fila?.entregado ?? false,
     );
   }
 
-  /// Si con [nuevos] la familia queda con todo y `entradas_retiro` no está
-  /// entregada: antes, las copias de lo que dependía de esa fila (si no, al
-  /// reescribirla se perdería), y la fila completa. Si no, solo [nuevos].
-  ({List<EntregaEntradas> renglones, EntradasRetiro? fila}) _conLaFilaSiCompleta({
+  /// Cómo quedó la entrega de [a] en este equipo, recién leída.
+  Future<EstadoDeLaEntrega> _comoQuedo(
+    String eventoId,
+    ContratoAlumno a,
+    EntradasDeAlumno entradas,
+  ) async {
+    final fiesta = await _puertos.leer(eventoId);
+    return EstadoDeLaEntrega.de(
+      retiro: fiesta.retiros[a.id],
+      renglones: fiesta.renglonesDe(a.id),
+      entradas: entradas,
+    );
+  }
+
+  /// La fila de `entradas_retiro` al día con las partes, con [nuevos] ya
+  /// contados ([despues]): lo que se guarda (las copias de lo que dependía de
+  /// esa fila, si no al reescribirla se perdería, y [nuevos]) y la fila nueva.
+  /// - Si la familia queda con todo y la fila no dice "entregado": la fila
+  ///   completa (`EntregaPorPartes.filaCompleta`).
+  /// - Si la fila dice "entregado" y una parte está anulada por un renglón: la
+  ///   fila anulada, reflejo de esa anulación
+  ///   (`EntregaPorPartes.filaConLaAnulacion`).
+  /// - Si no (o sin [conFila]): solo [nuevos], sin fila.
+  ({List<EntregaEntradas> renglones, EntradasRetiro? fila}) _laFilaAlDia({
     required ContratoAlumno alumno,
     required EntradasRetiro? retiro,
     required List<EntregaEntradas> propios,
@@ -386,54 +456,71 @@ class EntregarParte {
     required EntradasDeAlumno entradas,
     required String? equipo,
     required DateTime ahora,
+    bool conFila = true,
   }) {
-    if (!despues.todoEntregado || (retiro?.entregado ?? false)) {
-      return (renglones: nuevos, fila: null);
+    if (!conFila) return (renglones: nuevos, fila: null);
+    List<EntregaEntradas> copias() => EntregaPorPartes.copiasDeLaFila(
+          alumno: alumno,
+          retiro: retiro,
+          estado: despues,
+          deviceId: equipo,
+          ahora: ahora,
+        );
+    if (retiro != null && retiro.entregado) {
+      final anulada = EntregaPorPartes.filaConLaAnulacion(
+        retiro: retiro,
+        estado: despues,
+        ahora: ahora,
+      );
+      if (anulada == null) return (renglones: nuevos, fila: null);
+      return (renglones: [...copias(), ...nuevos], fila: anulada);
     }
-    final copias = EntregaPorPartes.copiasDeLaFila(
-      alumno: alumno,
-      retiro: retiro,
-      estado: despues,
-      deviceId: equipo,
-      ahora: ahora,
-    );
+    if (!despues.todoEntregado) return (renglones: nuevos, fila: null);
+    final lasCopias = copias();
     final fila = EntregaPorPartes.filaCompleta(
       alumno: alumno,
       anterior: retiro,
       estado: EstadoDeLaEntrega.de(
         retiro: retiro,
-        renglones: [...propios, ...copias, ...nuevos],
+        renglones: [...propios, ...lasCopias, ...nuevos],
         entradas: entradas,
       ),
       ahora: ahora,
     );
-    return (renglones: [...copias, ...nuevos], fila: fila);
+    return (renglones: [...lasCopias, ...nuevos], fila: fila);
   }
 
-  /// La familia tiene las dos partes pero `entradas_retiro` no está entregada:
-  /// pasa cuando cada parte la entregó un equipo distinto y ninguno vio las dos
-  /// (uno sin internet). Escribe la fila completa, como si la hubiera escrito
-  /// el que entregó la última parte, para que la 6.9.x, el plano y la planilla
-  /// vieja la vean "Retiró".
+  /// Pone al día la fila de `entradas_retiro` de una familia, para que lo que
+  /// la lee sola (el PLANO, una PC con la 6.9.x, la planilla vieja) vea lo
+  /// mismo que dicen los renglones (`EntregaPorPartes.filaParaPonerAlDia`):
+  /// - **la familia tiene las dos partes** y la fila no dice "entregado" (cada
+  ///   parte la entregó un equipo distinto y ninguno vio las dos, uno sin
+  ///   internet): la escribe completa, como si la hubiera escrito el que
+  ///   entregó la última parte;
+  /// - **la fila dice "entregado" y una parte está anulada** (el jefe la anuló
+  ///   mientras otro equipo escribía la fila, o sin internet antes de bajarla;
+  ///   revisión del 20-nov-2026): la escribe anulada, con la hora, quién y el
+  ///   motivo de esa anulación, así es su reflejo y no tapa la otra parte.
   ///
   /// **Pide internet y mira la nube antes**: con lo de este equipo solo, podría
-  /// volver a poner "entregado" sobre una anulación que todavía no bajó. Sin
-  /// internet, o si no hace falta, no escribe nada. True si la escribió.
-  Future<bool> completarLaFila({
+  /// volver a poner "entregado" sobre una anulación que todavía no bajó.
+  /// [ResultadoDeLaFila.sinNube] si no la pudo mirar: **hay que volver a
+  /// intentarlo**.
+  Future<ResultadoDeLaFila> completarLaFila({
     required String eventoId,
     required String contratoAlumnoId,
   }) async {
-    if (!_puertos.hayInternet) return false;
+    if (!_puertos.hayInternet) return ResultadoDeLaFila.sinNube;
     final LoDeLaNube nube;
     try {
       nube = await _puertos.deLaNube(contratoAlumnoId);
     } catch (_) {
-      return false;
+      return ResultadoDeLaFila.sinNube;
     }
     final fiesta =
         (await _puertos.leer(eventoId)).conLaNube(contratoAlumnoId, nube);
     final a = fiesta.alumno(contratoAlumnoId);
-    if (a == null) return false;
+    if (a == null) return ResultadoDeLaFila.alDia;
     final retiro = fiesta.retiros[a.id];
     final propios = fiesta.renglonesDe(a.id);
     final entradas = RetiroEntradas.entradasDe(a);
@@ -445,7 +532,7 @@ class EntregarParte {
     final desde = DateTime.now().toUtc();
     final ahora = _puertos.ahora();
     final equipo = await _puertos.equipo();
-    final (:renglones, :fila) = _conLaFilaSiCompleta(
+    final (:renglones, :fila) = _laFilaAlDia(
       alumno: a,
       retiro: retiro,
       propios: propios,
@@ -455,14 +542,14 @@ class EntregarParte {
       equipo: equipo,
       ahora: ahora,
     );
-    if (fila == null) return false;
+    if (fila == null) return ResultadoDeLaFila.alDia;
     await _puertos.guardar(renglones, retiro: fila);
     await _puertos.subir(
       renglones: [for (final r in renglones) r.id],
       retiro: fila.id,
       desde: desde,
     );
-    return true;
+    return ResultadoDeLaFila.escrita;
   }
 
   /// Anula [partes] de la entrega de [contratoAlumnoId] (una o las dos), con
@@ -471,6 +558,10 @@ class EntregarParte {
   /// estaba entregada, la anula también (`RetiroEntradas.anular`), con la misma
   /// hora: así la 6.9.x deja de verla "Retiró" y esta versión sabe que es el
   /// reflejo de la anulación, no una de la 6.9.x.
+  ///
+  /// Esa hora va después de todo lo que este equipo ya vio de esas partes
+  /// (`EntregaPorPartes.horaDelRenglon`), y después de guardar se relee: si
+  /// alguna sigue entregada, devuelve [CambioAlgo] y no [Anulada].
   Future<ResultadoDeAnular> anularParte({
     required String eventoId,
     required String contratoAlumnoId,
@@ -511,7 +602,19 @@ class EntregarParte {
     }
 
     final desde = DateTime.now().toUtc();
-    final ahora = _puertos.ahora();
+    // Una sola hora para todas las anulaciones y la fila (así la fila es su
+    // reflejo), después de todo lo que este equipo ya vio de esas partes: si su
+    // reloj está atrasado, la anulación igual queda después de la entrega.
+    var ahora = _puertos.ahora().toUtc();
+    for (final p in aAnular) {
+      final hora = EntregaPorPartes.horaDelRenglon(
+        parte: p,
+        retiro: retiro,
+        renglones: propios,
+        ahora: ahora,
+      );
+      if (hora.isAfter(ahora)) ahora = hora;
+    }
     final equipo = await _puertos.equipo();
     final reescribe = retiro?.entregado ?? false;
     final copias = reescribe
@@ -556,6 +659,20 @@ class EntregarParte {
       retiro: fila?.id,
       desde: desde,
     );
+
+    // Se relee: lo anulado tiene que haber quedado sin entregar.
+    final quedo = await _comoQuedo(eventoId, a, RetiroEntradas.entradasDe(a));
+    final siguen = [
+      for (final p in aAnular)
+        if (quedo.parte(p).entregada) p,
+    ];
+    if (siguen.isNotEmpty) {
+      return CambioAlgo(
+        'Se anotó la anulación, pero ${siguen.map(EntregaPorPartes.nombreDe).join(' y ')} '
+        'siguen figurando entregadas: otro equipo anotó algo más nuevo al mismo '
+        'tiempo. Volvé a abrirlo para ver cómo quedó.',
+      );
+    }
     return Anulada(subio: subio, partes: aAnular.toSet());
   }
 }

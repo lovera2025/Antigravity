@@ -4,12 +4,16 @@
 //   flutter test tool/planilla_entrega_muestra_test.dart
 //   flutter test tool/planilla_entrega_muestra_test.dart --dart-define=salida=C:\carpeta
 //
-// Salen dos PDF, en color y en blanco y negro. Lo que se mira:
+// Desde el 20-nov-2026 hay una planilla por material: las pulseras VIP con cena
+// y las generales llegan y se entregan en tandas distintas. Salen cuatro PDF (cada
+// material, en color y en blanco y negro). Lo que se mira:
 //   • una hoja acostada por división, con los títulos repetidos si sigue;
-//   • egresado, mesa, VIP y generales impresos;
-//   • los que ya retiraron, con sus números, sus menores y el parentesco;
+//   • egresado, mesa y lo de ese material (VIP y menores, o generales y sus
+//     números: "-" si vinieron sin número);
+//   • los que ya retiraron esa parte, con el parentesco; los que retiraron solo
+//     la otra, todavía pendientes en esta;
 //   • "Debe: no entregar" y "Sin mesa: no entregar" donde corresponde;
-//   • la columna del nombre siempre en blanco: la escribe quien retira;
+//   • la columna del nombre en blanco: la escribe quien retira;
 //   • que el renglón alcance para escribir a mano.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -18,12 +22,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
-import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
+import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
@@ -72,7 +76,7 @@ void main() {
       ? _salida
       : Directory.systemTemp.createTempSync('planilla_entrega').path;
 
-  test('planilla de entrega — dos divisiones, con entregas, deudas y sin mesa',
+  test('planillas de entrega — dos divisiones, con entregas, deudas y sin mesa',
       () async {
     final alumnos = [
       for (var i = 0; i < 26; i++) _alumno(i, '5° A'),
@@ -118,23 +122,47 @@ void main() {
       siguiente += e.generales;
     }
 
-    // Lo que cada familia tenía cargado al sorteo (17-nov-2026): todo lo de
-    // hoy, salvo dos que agregaron después. "a6" agregó su mesa adicional y
-    // "a8" sus dos sillas: esas entradas salen entre paréntesis, sin descuento.
-    final foto = FotoDeLosLugares.anotada(
-      {
-        for (final a in alumnos)
-          if (LugaresCargados.de(a).tieneAdicionales)
-            a.id: switch (a.id) {
-              'a6' => const LugaresCargados(1, 0),
-              'a8' => const LugaresCargados(1, 0),
-              _ => LugaresCargados.de(a),
-            },
-      },
-      sorteoEl: DateTime.utc(2026, 11, 13, 0, 40),
-    );
-    expect(RetiroEntradas.entradasDe(alumnos[6], foto: foto).sinDescuento, 8);
-    expect(RetiroEntradas.entradasDe(alumnos[8], foto: foto).sinDescuento, 2);
+    // Por partes (20-nov-2026): a otros, las pulseras un día y las generales
+    // otro; algunos solo las pulseras, y unas generales sin número.
+    final renglones = <EntregaEntradas>[];
+    var hora = DateTime.utc(2026, 11, 20, 15);
+    for (final a in alumnos) {
+      final n = int.parse(a.id.substring(1));
+      if (retiros.containsKey(a.id) || n % 5 != 2) continue;
+      if (RetiroEntradas.bloqueo(a, deudas[a.id]!) != BloqueoRetiro.ninguno) continue;
+      final e = RetiroEntradas.entradasDe(a);
+      hora = hora.add(const Duration(minutes: 7));
+      renglones.add(EntregaEntradas.entrega(
+        contratoAlumnoId: a.id,
+        eventoId: a.eventoId,
+        parte: ParteEntrega.pulseras,
+        cantidad: e.vip,
+        menores10: n % 2,
+        parentesco: ParentescoRetiro.madre,
+        nombre: 'Madre De Prueba',
+        escribioEnPlanilla: true,
+        hechoPor: 'Carla',
+        deviceId: 'tablet',
+        ahora: hora,
+      ));
+      if (n % 3 == 0) continue;
+      renglones.add(EntregaEntradas.entrega(
+        contratoAlumnoId: a.id,
+        eventoId: a.eventoId,
+        parte: ParteEntrega.generales,
+        cantidad: e.generales,
+        tramos: n % 4 == 2
+            ? const []
+            : [TramoTalonario(siguiente, siguiente + e.generales - 1)],
+        parentesco: ParentescoRetiro.padre,
+        nombre: 'Padre De Prueba',
+        escribioEnPlanilla: true,
+        hechoPor: 'Carla',
+        deviceId: 'tablet',
+        ahora: hora.add(const Duration(days: 2)),
+      ));
+      siguiente += e.generales;
+    }
 
     final evento = Evento(
       id: 'muestra',
@@ -146,21 +174,25 @@ void main() {
       cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE MUESTRA'),
     );
 
-    for (final bn in [false, true]) {
-      final bytes = await PdfService.construirPlanillaEntregaPdf(
-        evento,
-        alumnos,
-        retiros: retiros,
-        deudas: deudas,
-        blancoYNegro: bn,
-        foto: foto,
-        generada: DateTime(2026, 11, 12, 21, 30),
-      );
-      final nombre = 'Planilla_Entrega_MUESTRA${bn ? '_BN' : ''}.pdf';
-      final archivo = File('$destino${Platform.pathSeparator}$nombre')
-        ..writeAsBytesSync(bytes);
-      stdout.writeln('── PDF en: ${archivo.path}');
-      expect(archivo.lengthSync(), greaterThan(1000));
+    for (final material in ParteEntrega.values) {
+      for (final bn in [false, true]) {
+        final bytes = await PdfService.construirPlanillaEntregaPdf(
+          evento,
+          alumnos,
+          material: material,
+          retiros: retiros,
+          renglones: renglones,
+          deudas: deudas,
+          blancoYNegro: bn,
+          generada: DateTime(2026, 11, 20, 21, 30),
+        );
+        final queEs = material == ParteEntrega.pulseras ? 'Pulseras' : 'Generales';
+        final nombre = 'Planilla_Entrega_${queEs}_MUESTRA${bn ? '_BN' : ''}.pdf';
+        final archivo = File('$destino${Platform.pathSeparator}$nombre')
+          ..writeAsBytesSync(bytes);
+        stdout.writeln('── PDF en: ${archivo.path}');
+        expect(archivo.lengthSync(), greaterThan(1000));
+      }
     }
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

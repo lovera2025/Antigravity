@@ -186,7 +186,7 @@ class PedidoDeEntradas {
   double? get precioDeLugar => PrecioDeEntradas.deLugar(config);
 
   /// **El descuento a mano, solo con permiso:** en modo jefe, o si el jefe
-  /// tildó "El vendedor puede poner descuentos" en PRECIOS.
+  /// tildó "Quien vende puede poner descuentos" en PRECIOS.
   bool get puedeDescontar => esJefe || (config?.descuentoAMano ?? false);
 
   /// El descuento que de verdad va: sin permiso, ninguno.

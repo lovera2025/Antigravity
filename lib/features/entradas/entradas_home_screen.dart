@@ -49,10 +49,14 @@ bool _yaPaso(Evento e) => laFiestaYaPaso(e, DateTime.now());
 ///
 /// Si además tiene Cobros, PASAR A CAJA lo lleva sin volver a poner el PIN.
 ///
-/// **Quien tiene "Vende entradas" (6.9.0) ve dos botones en cada fiesta,
-/// ENTREGAR y VENDER**; quien solo entrega la ve como siempre, sin VENDER
-/// (`puedeVenderEntradasProvider`). La venta va en su propia pantalla
-/// (`widgets/vender_entradas_screen.dart`): acá solo está el botón.
+/// **Quien tiene "Vende entradas" ve un solo botón en cada fiesta, VENDER**
+/// (decisión del usuario, 20-nov-2026), y tocar la tarjeta entera también abre
+/// VENDER: ahí está todo, lo sin cargo que se entrega (en dos partes) y lo que
+/// se paga (`widgets/vender_entradas_screen.dart`). Solo en un equipo con la
+/// base (`entradasEnEsteEquipoProvider`): en la web no se vende.
+///
+/// **Quien solo entrega la ve como siempre**: sin VENDER, y la tarjeta abre la
+/// entrega del mostrador (`RetiroEntradasScreen.mostrador`).
 class EntradasHomeScreen extends ConsumerWidget {
   /// Para los tests y la ventana de prueba. Sin esto, abre el retiro de entradas.
   final void Function(BuildContext context, Evento evento)? onAbrirFiesta;
@@ -74,7 +78,9 @@ class EntradasHomeScreen extends ConsumerWidget {
     final ancho = MediaQuery.sizeOf(context).width;
     final enCelular = CortesPantalla.esCelular(ancho);
     final margen = enCelular ? 12.0 : 24.0;
-    final vende = ref.watch(puedeVenderEntradasProvider);
+    // Con "Vende entradas" y la base del equipo, VENDER es la única puerta.
+    final vende = ref.watch(puedeVenderEntradasProvider) &&
+        ref.watch(entradasEnEsteEquipoProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -118,24 +124,14 @@ class EntradasHomeScreen extends ConsumerWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final e = lista[i];
-                      // Con la caja de entradas: ENTREGAR y VENDER, a la vista.
+                      // Con "Vende entradas": un solo botón, VENDER. Adentro se
+                      // entrega lo sin cargo y se vende lo que se paga.
                       final botones = !vende
                           ? null
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                OutlinedButton(
-                                  key: Key('entregar_${e.id}'),
-                                  onPressed: () => _abrir(context, ref, e),
-                                  child: const Text('ENTREGAR'),
-                                ),
-                                const SizedBox(width: 6),
-                                FilledButton(
-                                  key: Key('vender_${e.id}'),
-                                  onPressed: () => _vender(context, ref, e),
-                                  child: const Text('VENDER'),
-                                ),
-                              ],
+                          : FilledButton(
+                              key: Key('vender_${e.id}'),
+                              onPressed: () => _vender(context, ref, e),
+                              child: const Text('VENDER'),
                             );
                       final tile = ListTile(
                         key: Key('fiesta_${e.id}'),
@@ -161,8 +157,11 @@ class EntradasHomeScreen extends ConsumerWidget {
                         trailing: botones == null
                             ? const Icon(Icons.chevron_right)
                             : (enCelular ? null : botones),
-                        // Quien solo entrega toca la tarjeta entera, como siempre.
-                        onTap: vende ? null : () => _abrir(context, ref, e),
+                        // La tarjeta entera abre lo mismo que su botón: VENDER
+                        // a quien vende; a quien solo entrega, la entrega.
+                        onTap: vende
+                            ? () => _vender(context, ref, e)
+                            : () => _abrir(context, ref, e),
                       );
                       return Card(
                         child: botones != null && enCelular
