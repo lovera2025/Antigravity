@@ -668,11 +668,14 @@ void main() {
       expect(find.textContaining('El 5001 ya se le dio a [BAJA] RÍOS, PEDRO'), findsOneWidget);
     });
 
-    testWidgets('un número del talonario ya vendido no se entrega sin cargo', (tester) async {
+    // Hasta la 6.9.2 este número no se entregaba ("El 3001 ya se le dio a
+    // GOMEZ, LUIS"). Cambió a propósito el 20-nov: lo vendido sale del
+    // talonario de las anticipadas, y las generales de los alumnos son otro.
+    testWidgets('un número ya vendido se entrega igual: es otro talonario', (tester) async {
       final e = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
       await vender(e, familia: null, comprador: 'GOMEZ, LUIS', lugar: 0, sueltas: 2,
           numeros: '3001-3002');
-      await _montar(tester, mostrador: false, jefe: true, entradas: e);
+      final m = await _montar(tester, mostrador: false, jefe: true, entradas: e);
       await _abrir(tester, 'LÓPEZ, SOFÍA');
       await tester.enterText(find.widgetWithText(TextField, 'Del'), '3001');
       await tester.tap(find.text('Padre'));
@@ -684,7 +687,28 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('CONFIRMAR ENTREGA'));
       await _pasar(tester);
-      expect(find.textContaining('El 3001 ya se le dio a GOMEZ, LUIS'), findsOneWidget);
+      expect(find.textContaining('ya se le dio'), findsNothing);
+      final r = m.e.entregas.filas[EntregaEnMemoria.idLopez]!;
+      expect(r.entregado, isTrue);
+      expect(r.tramos, const [TramoTalonario(3001, 3007)]);
+    });
+
+    testWidgets('un número ya entregado a otra familia sigue sin volver a darse',
+        (tester) async {
+      await _montar(tester, mostrador: false, jefe: true,
+          entradas: EntradasEnMemoria()..conPrecio(idFiestaEntrega));
+      await _abrir(tester, 'LÓPEZ, SOFÍA');
+      await tester.enterText(find.widgetWithText(TextField, 'Del'), '1005');
+      await tester.tap(find.text('Padre'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
+        'Hugo López',
+      );
+      await tester.tap(find.text('Escribió su nombre y apellido en la planilla de papel'));
+      await tester.pump();
+      await tester.tap(find.text('CONFIRMAR ENTREGA'));
+      await _pasar(tester);
+      expect(find.textContaining('El 1005 ya se le dio a GÓMEZ, ANA'), findsOneWidget);
       expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget, reason: 'no se entregó');
     });
   });

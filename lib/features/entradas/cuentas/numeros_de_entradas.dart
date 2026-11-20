@@ -6,9 +6,13 @@ import '../datos/anulacion_entradas.dart';
 import '../datos/venta_entradas.dart';
 import 'lugares_de_la_familia.dart';
 
-/// Un número del talonario que quedó anotado dos veces: en dos ventas, o en
-/// una venta y en una entrega sin cargo. Pasa cuando dos equipos venden sin
-/// internet: **no se puede evitar, se avisa cuando se juntan.**
+/// Un número anotado dos veces **en el mismo talonario**: en dos ventas (el de
+/// las anticipadas) o en dos entregas sin cargo (el de las generales de los
+/// alumnos). Pasa cuando dos equipos venden o entregan sin internet: **no se
+/// puede evitar, se avisa cuando se juntan.**
+///
+/// Una venta y una entrega con el mismo número no son un repetido: son dos
+/// talonarios distintos (ver [NumerosDeEntradas]).
 class NumeroRepetido {
   /// El primer número que comparten.
   final int numero;
@@ -17,30 +21,40 @@ class NumeroRepetido {
   final String uno;
   final String otro;
 
-  /// Si [otro] es una entrega sin cargo y no una venta.
-  final bool conUnaEntrega;
+  /// Si son dos entregas sin cargo (el talonario de las generales) y no dos
+  /// ventas (el de las anticipadas).
+  final bool enEntregas;
 
   const NumeroRepetido({
     required this.numero,
     required this.uno,
     required this.otro,
-    this.conUnaEntrega = false,
+    this.enEntregas = false,
   });
 
   /// "El 1043 está en dos ventas (A y B): revisar."
   String get texto {
-    if (conUnaEntrega) {
-      return 'El $numero está en una venta ($uno) y en una entrega ($otro): revisar.';
-    }
-    if (uno == otro) return 'El $numero está en dos ventas de $uno: revisar.';
-    return 'El $numero está en dos ventas ($uno y $otro): revisar.';
+    final donde = enEntregas ? 'entregas' : 'ventas';
+    if (uno == otro) return 'El $numero está en dos $donde de $uno: revisar.';
+    return 'El $numero está en dos $donde ($uno y $otro): revisar.';
   }
 }
 
-/// Los números del talonario de las entradas vendidas. **Son opcionales**; si
-/// se anotan, se validan con las mismas reglas y las mismas palabras que la
-/// entrega sin cargo (`RetiroEntradas.errorTramos`), y no pueden repetir uno ya
-/// entregado ni uno ya vendido.
+/// Los números del talonario de las entradas. **Son dos talonarios, y cada uno
+/// se mira solo consigo mismo** (lo confirmó el usuario el 20-nov, con el audio
+/// del jefe):
+/// - **el de las anticipadas**: todo lo que se vende, al público y lo A PAGAR
+///   de las familias (la mesa adicional y las sillas). Se guarda en
+///   `entradas_ventas.numeros`, y lo valida VENDER con [ocupadosDeLaVenta];
+/// - **el de las generales de los alumnos**, lo que se entrega sin cargo: es
+///   otro material, con su propia numeración (o sin número). Lo valida la
+///   entrega con [ocupadosDeLaEntrega].
+///
+/// Hasta la 6.9.2 iban juntos, y el 5 de un talonario frenaba el 5 del otro.
+/// **No hay una cuenta que junte los dos grupos**, a propósito: que no vuelva.
+///
+/// Los números **son opcionales**; si se anotan, se validan con las mismas
+/// reglas y las mismas palabras que la entrega (`RetiroEntradas.errorTramos`).
 class NumerosDeEntradas {
   NumerosDeEntradas._();
 
@@ -56,11 +70,14 @@ class NumerosDeEntradas {
     return anulacion.devueltas ? null : '${v.compradorNombre} $sinDevolver';
   }
 
-  /// Los números que ocupan las ventas (comprador → tramos). Cuentan los de
-  /// una venta que cuenta y los de una **anulada sin devolver**; los de una
-  /// anulada con las entradas devueltas vuelven a quedar libres. [salvo] es el
-  /// id de una venta que no se mira.
-  static Map<String, List<TramoTalonario>> deLasVentas(
+  /// Los números de las anticipadas que ya tienen dueño (comprador → tramos).
+  /// Cuentan los de una venta que cuenta y los de una **anulada sin
+  /// devolver**; los de una anulada con las entradas devueltas vuelven a
+  /// quedar libres. [salvo] es el id de una venta que no se mira.
+  ///
+  /// **Es el `deOtros` de VENDER**: no mira lo entregado sin cargo, que es
+  /// otro talonario.
+  static Map<String, List<TramoTalonario>> ocupadosDeLaVenta(
     Iterable<VentaEntradas> ventas,
     Iterable<AnulacionEntradas> anulaciones, {
     String? salvo,
@@ -76,29 +93,24 @@ class NumerosDeEntradas {
     return out;
   }
 
-  /// Todos los números que ya tienen dueño: los entregados sin cargo
-  /// ([entregados], lo que da `RetiroEntradas.tramosDeOtros`) más los vendidos.
+  /// Los números de las generales que ya se entregaron sin cargo (nombre →
+  /// tramos). [entregados] llega armado: hoy, lo que da
+  /// `RetiroEntradas.tramosDeOtros` sin el alumno que se está entregando.
   ///
-  /// **Es el `deOtros` de `errorTramos` para la venta y para la entrega**: así
-  /// "El 1043 ya se le dio a…" sirve para los dos.
-  static Map<String, List<TramoTalonario>> ocupados({
-    Map<String, List<TramoTalonario>> entregados = const {},
-    Iterable<VentaEntradas> ventas = const [],
-    Iterable<AnulacionEntradas> anulaciones = const [],
-    String? salvoVenta,
-  }) {
-    final out = <String, List<TramoTalonario>>{
-      for (final e in entregados.entries) e.key: [...e.value],
-    };
-    final vendidos = deLasVentas(ventas, anulaciones, salvo: salvoVenta);
-    for (final e in vendidos.entries) {
-      out.putIfAbsent(e.key, () => []).addAll(e.value);
-    }
-    return out;
-  }
+  /// **Es el `deOtros` de la entrega**: no mira lo vendido, que es el
+  /// talonario de las anticipadas. Devuelve una copia, sin los nombres que no
+  /// tienen números.
+  static Map<String, List<TramoTalonario>> ocupadosDeLaEntrega(
+    Map<String, List<TramoTalonario>> entregados,
+  ) =>
+      {
+        for (final e in entregados.entries)
+          if (e.value.isNotEmpty) e.key: [...e.value],
+      };
 
   /// Qué está mal en los números de una venta de [cantidad] entradas, o null
-  /// si están bien. **Sin números está bien**: son opcionales.
+  /// si están bien. **Sin números está bien**: son opcionales. [ocupados] es
+  /// lo que da [ocupadosDeLaVenta].
   static String? error({
     required List<TramoTalonario> tramos,
     required int cantidad,
@@ -123,14 +135,26 @@ class NumerosDeEntradas {
     );
   }
 
-  /// Los números que quedaron anotados dos veces, del más bajo al más alto:
-  /// entre dos ventas, o entre una venta y una entrega sin cargo. **Solo
-  /// avisa**: nada se corrige solo.
-  static List<NumeroRepetido> repetidos({
-    required Iterable<VentaEntradas> ventas,
-    required Iterable<AnulacionEntradas> anulaciones,
-    Map<String, List<TramoTalonario>> entregados = const {},
-  }) {
+  /// El número más bajo que está en [a] y en [b], o null si no comparten
+  /// ninguno.
+  static int? _primeroEnComun(List<TramoTalonario> a, List<TramoTalonario> b) {
+    int? menor;
+    for (final x in a) {
+      for (final y in b) {
+        if (!x.seCruzaCon(y)) continue;
+        final n = max(x.desde, y.desde);
+        if (menor == null || n < menor) menor = n;
+      }
+    }
+    return menor;
+  }
+
+  /// Los números de las anticipadas anotados en dos ventas, del más bajo al
+  /// más alto. **Solo avisa**: nada se corrige solo.
+  static List<NumeroRepetido> repetidosDeLaVenta(
+    Iterable<VentaEntradas> ventas,
+    Iterable<AnulacionEntradas> anulaciones,
+  ) {
     final anuladas = anulacionesPorVenta(anulaciones);
     final conNumeros = <({String nombre, List<TramoTalonario> tramos})>[];
     for (final v in ventas) {
@@ -139,22 +163,10 @@ class NumerosDeEntradas {
       conNumeros.add((nombre: nombre, tramos: TramoTalonario.deTexto(v.numeros)));
     }
 
-    int? primeroEnComun(List<TramoTalonario> a, List<TramoTalonario> b) {
-      int? menor;
-      for (final x in a) {
-        for (final y in b) {
-          if (!x.seCruzaCon(y)) continue;
-          final n = max(x.desde, y.desde);
-          if (menor == null || n < menor) menor = n;
-        }
-      }
-      return menor;
-    }
-
     final out = <NumeroRepetido>[];
     for (var i = 0; i < conNumeros.length; i++) {
       for (var j = i + 1; j < conNumeros.length; j++) {
-        final n = primeroEnComun(conNumeros[i].tramos, conNumeros[j].tramos);
+        final n = _primeroEnComun(conNumeros[i].tramos, conNumeros[j].tramos);
         if (n == null) continue;
         out.add(NumeroRepetido(
           numero: n,
@@ -162,14 +174,55 @@ class NumerosDeEntradas {
           otro: conNumeros[j].nombre,
         ));
       }
-      for (final e in entregados.entries) {
-        final n = primeroEnComun(conNumeros[i].tramos, e.value);
+    }
+    out.sort((a, b) => a.numero.compareTo(b.numero));
+    return out;
+  }
+
+  /// Los números de las generales anotados en dos entregas sin cargo, del más
+  /// bajo al más alto. [entregados] es nombre → tramos de **todas** las
+  /// entregas vigentes (`RetiroEntradas.tramosDeOtros` con `salvo: ''`).
+  /// **Solo avisa**: nada se corrige solo.
+  ///
+  /// Hasta la 6.9.2 no se miraba: dos entregas sin internet con los mismos
+  /// números no se avisaban nunca. Como `tramosDeOtros` junta a los alumnos
+  /// del mismo nombre, también se mira dentro de cada nombre: ahí, dos tramos
+  /// que se pisan son dos entregas (una sola entrega no deja pisarlos).
+  static List<NumeroRepetido> repetidosDeLaEntrega(
+    Map<String, List<TramoTalonario>> entregados,
+  ) {
+    final conNumeros = [
+      for (final e in entregados.entries)
+        if (e.value.isNotEmpty) (nombre: e.key, tramos: e.value),
+    ];
+
+    final out = <NumeroRepetido>[];
+    for (var i = 0; i < conNumeros.length; i++) {
+      final (:nombre, :tramos) = conNumeros[i];
+      int? dentro;
+      for (var a = 0; a < tramos.length; a++) {
+        for (var b = a + 1; b < tramos.length; b++) {
+          if (!tramos[a].seCruzaCon(tramos[b])) continue;
+          final n = max(tramos[a].desde, tramos[b].desde);
+          if (dentro == null || n < dentro) dentro = n;
+        }
+      }
+      if (dentro != null) {
+        out.add(NumeroRepetido(
+          numero: dentro,
+          uno: nombre,
+          otro: nombre,
+          enEntregas: true,
+        ));
+      }
+      for (var j = i + 1; j < conNumeros.length; j++) {
+        final n = _primeroEnComun(tramos, conNumeros[j].tramos);
         if (n == null) continue;
         out.add(NumeroRepetido(
           numero: n,
-          uno: conNumeros[i].nombre,
-          otro: e.key,
-          conUnaEntrega: true,
+          uno: nombre,
+          otro: conNumeros[j].nombre,
+          enEntregas: true,
         ));
       }
     }

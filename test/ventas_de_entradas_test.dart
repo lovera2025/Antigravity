@@ -14,6 +14,8 @@ import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.d
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
+import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
+import 'package:arguello_events/models/entradas_retiro.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
@@ -58,12 +60,15 @@ Future<_Montada> _montar(
   bool jefe = false,
   bool conVentas = true,
   Size tamano = const Size(1200, 1300),
+  String? numerosDeRuiz,
+  void Function(EntregaEnMemoria)? preparar,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
+  preparar?.call(e);
   final entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
   final comprobantes = <DatosDelComprobante>[];
   final historiales = <DatosDelHistorial>[];
@@ -96,7 +101,7 @@ Future<_Montada> _montar(
     v1 = await _vender(entradas, carla, 'PEREZ MARTA',
         numeros: '2000-2001', familia: EntregaEnMemoria.idPerez);
     v2 = await _vender(entradas, carla, 'RUIZ MARTA',
-        sueltas: 4, medio: MedioBarra.transferencia);
+        sueltas: 4, medio: MedioBarra.transferencia, numeros: numerosDeRuiz);
     v3 = await _vender(entradas, maxi, 'SOSA DIEGO', sueltas: 1, numeros: '2001');
   }
   entradas.escrituras = 0;
@@ -188,6 +193,45 @@ void main() {
         find.text('El 2001 está en dos ventas (PEREZ MARTA y SOSA DIEGO): revisar.'),
         findsOneWidget,
       );
+    });
+
+    // Son dos talonarios (20-nov): lo vendido es el de las anticipadas y lo
+    // entregado sin cargo, el de las generales. Hasta la 6.9.2 la venta de
+    // RUIZ (1003 al 1006) salía repetida con la entrega de GÓMEZ (1001 al
+    // 1007), y dos entregas con el mismo número no se avisaban nunca.
+    testWidgets('el número que quedó en dos entregas se avisa aparte; el de una venta '
+        'y una entrega, no', (tester) async {
+      await _montar(
+        tester,
+        numerosDeRuiz: '1003-1006',
+        preparar: (e) {
+          final lopez =
+              e.contratos.alumnos.firstWhere((a) => a.id == EntregaEnMemoria.idLopez);
+          e.entregas.filas[lopez.id] = RetiroEntradas.nuevaEntrega(
+            alumno: lopez,
+            entradas: RetiroEntradas.entradasDe(lopez),
+            tramos: const [TramoTalonario(1005, 1011)],
+            menores10: 0,
+            parentesco: ParentescoRetiro.madre,
+            nombre: 'Sofía López',
+            quien: 'Jefe',
+            ahora: DateTime.utc(2026, 11, 7, 19),
+          );
+        },
+      );
+      String aviso(int i) => tester
+          .widget<Text>(find.descendant(
+            of: find.byKey(Key('ventas_repetido_$i')),
+            matching: find.byType(Text),
+          ))
+          .data!;
+      expect(aviso(0), 'El 2001 está en dos ventas (PEREZ MARTA y SOSA DIEGO): revisar.');
+      expect(aviso(1), startsWith('El 1005 está en dos entregas ('));
+      expect(aviso(1), allOf(contains('GÓMEZ, ANA'), contains('LÓPEZ, SOFÍA')));
+      expect(find.byKey(const Key('ventas_repetido_2')), findsNothing,
+          reason: 'la venta de RUIZ no choca con ninguna entrega');
+      expect(find.textContaining('RUIZ MARTA y'), findsNothing);
+      expect(find.textContaining('en una entrega'), findsNothing);
     });
 
     testWidgets('sin ventas lo dice', (tester) async {
