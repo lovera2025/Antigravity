@@ -501,8 +501,8 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
   - **En la ventana del tótem, lo que guardó y le llegó a la principal no le gana a la principal**
     (`PreferenciasDeLaVentana`, `_sinEntregar`).
   - **Quien vende no ve sumas de plata en VENTAS ni en su historial impreso** (`conPlata`): cuenta su caja a ciegas.
-  - **La entrega sin cargo no da un número vendido** (`NumerosDeEntradas.ocupados` es su `deOtros`), y **dos alumnos
-    con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta).
+  - **Dos alumnos con el mismo nombre ya no se pisan los números** (`RetiroEntradas.tramosDeOtros` los junta). (Que
+    la entrega sin cargo no diera un número vendido cambió en la 6.9.3: son dos talonarios.)
   - **Las cinco tablas de entradas y `entradas_retiro` están en `tablasDeLaPuerta`**: sin el SQL de la v80 en la nube,
     "Lista para trabajar sin internet" no queda lista.
   - **El efectivo "anulado después del cierre" de una caja cerrada sale de lo anotado al cerrar**
@@ -528,9 +528,9 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
     Argentina**) y el de los lugares adicionales, **siempre sobre el valor de la entrada, nunca sobre la anticipada**.
   - `LugaresDeLaFamilia`: cuántas al 50 % le corresponden, compró y le quedan. **No se guarda: se cuenta cada vez**
     de la cuenta del alumno y de las ventas no anuladas.
-  - `NumerosDeEntradas.ocupados` (lo entregado sin cargo más lo vendido) **es el `deOtros` de
-    `RetiroEntradas.errorTramos` para la venta y para la entrega**. Una venta anulada **con** las entradas devueltas
-    libera sus números; sin devolver, quedan anulados para siempre.
+  - **Dos talonarios desde la 6.9.3:** `NumerosDeEntradas.ocupadosDeLaVenta` (solo lo vendido) es el `deOtros` de
+    VENDER, y `ocupadosDeLaEntrega` (solo lo entregado sin cargo) el de la entrega. Una venta anulada **con** las
+    entradas devueltas libera sus números; sin devolver, quedan anulados para siempre.
   - `PedidoDeEntradas`: lo que decide VENDER. **La pantalla guarda con `guardarEn`**, que manda al repositorio lo
     mismo que arma `venta(...)`; el descuento a mano lo decide `puedeDescontar`, no la pantalla.
   - `CierreDeEntradas`: **una anulada no cuenta, tampoco en el efectivo que tiene que haber**; los descuentos a
@@ -539,8 +539,8 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v80: no correr la app desde esta carpeta contra la base de verdad** hasta que esta
-  PC tenga la 6.9.0 instalada (hasta entonces tiene la 79). Los arneses que no abren la base sí.
+- **La base del equipo va por la v81 (6.9.3): no correr la app desde esta carpeta contra la base de verdad** hasta
+  que esta PC tenga la 6.9.3 instalada (hasta entonces tiene la 80). Los arneses que no abren la base sí.
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
     (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
@@ -594,15 +594,17 @@ cumplimiento). Sin SQL ni migración; el motor del sorteo y el puntaje del cumpl
 que falta, en orden**). Versión `6.9.2+77`, tag `v6.9.2`, release con el Setup y el APK, y la web. Las novedades dicen
 "Link de los delegados mejorado, y nuevas capacidades en el modo jefe". **Un SQL en la nube, solo de agregar, corrido
 el 18-nov** (el del link) y probado en la nube de verdad; sin migración en las PCs (la base sigue en la 80). Foto de
-la mora "antes de 6.9.2" sin nada sospechoso. **Falta que instale (primero la PC que sortea) y avise, y la foto
-"después de 6.9.2".** Hasta que todos los equipos la tengan: **no vender entradas desde uno sin esta versión, y el
-link de los delegados se maneja desde una PC con la 6.9.2.**
+la mora "antes de 6.9.2" sin nada sospechoso. **El 18-nov a la noche el usuario dijo que cree que ya está en las tres
+PCs** (PLANILLAS ya dice "Link para los delegados"), y se sacó la foto "después de 6.9.2" (`e3ea7b63…`, 642 alumnos):
+comparada con la de antes, nada sospechoso (22 fichas tocadas por cobros o ediciones, ninguna mora que subiera). Las
+tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entradas desde uno sin esta versión.**
 - **Parte 1, programada: la planilla del sorteo usa la cuenta de la entrega** (`RetiroEntradas.entradasDe`). En la
   mesa principal, los con cena y las generales que completan sus 8; aparte, "8 al 50 %" debajo de la adicional y "2
   al 50 %" debajo de las sillas. Antes sumaba las sillas como generales ("1 con cena · 9 generales").
 - **Parte 2, programada y probada (18-nov): el descuento es solo para lo que la familia tenía al sorteo** (regla del
   usuario, 17-nov). La mesa adicional y las sillas extra **cargadas al sorteo, pagadas o no**, van con el descuento de
-  PRECIOS y se compran cuando quiera; **lo agregado después paga la entrada entera** y se vende como entrada común.
+  PRECIOS y se compran cuando quiera; **lo agregado después paga el precio del día, sin descuento** (la 6.9.3
+  corrigió el texto, que decía "la entrada entera": el código ya cobraba el precio del día).
   - `EntradasDeAlumno` ya no tiene `alCincuenta`: `conDescuento`, `sinDescuento`, `aComprar`, `deMesas`, `deSillas`.
   - Cada sorteo del jefe anota `_lugares` en su renglón (`LugaresAlSorteo`, `eventos/services/lugares_al_sorteo.dart`);
     **el sorteo de la fiesta es el primer renglón del jefe en pie**. Lo lee `fotoDeLosLugaresProvider`: si no se
@@ -693,6 +695,38 @@ link de los delegados se maneja desde una PC con la 6.9.2.**
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
   dicen se comprueba en los tests con la letra de fábrica.
 
+**La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo — PROGRAMADA Y PROBADA EN EL
+SANDBOX el 20-nov, SIN PUBLICAR** (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
+vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
+al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Un SQL en la nube, solo de agregar, SIN
+CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81 en las PCs, que solo crea una tabla**
+(probada sobre una copia de la base real el 20-nov).
+- **Los dos talonarios:** lo que se vende (las anticipadas, `NumerosDeEntradas.ocupadosDeLaVenta`) y lo que se
+  entrega sin cargo (las generales de los alumnos, `ocupadosDeLaEntrega`) ya no se frenan entre sí; cada uno no deja
+  repetir lo suyo. **Los números de las generales son opcionales.**
+- **PRECIOS:** "¿Qué se vende ahora? ANTICIPADA · GENERAL" (`cuentas/eleccion_de_precios.dart`); sin SQL, las mismas
+  columnas. **Lo agregado después del sorteo paga el precio del día, sin descuento** (antes decía "la entrada entera").
+- **A PAGAR vende solo lo pagado entero, cosa por cosa** (`eventos/services/lugares_pagos.dart`, de los pagos): la
+  mesa adicional o la silla paga entera se le vende aunque deba otra cosa; la que no, "a confirmar". **Lo que frena
+  A PAGAR es `RetiroEntradas.bloqueoDeLaVenta`** (sin la deuda: sin mesa, mesas que no coinciden, no entran), no
+  `bloqueo`, donde la deuda va primero y tapaba esos frenos.
+- **La entrega en dos partes:** las pulseras VIP con cena y las generales, cada una cuando llega, en
+  **`entradas_entregas`** (v81, solo se agregan renglones; el estado de cada parte es su último renglón). **Un solo
+  camino: `EntregarParte`**, y el único que escribe la tabla es `entregar_parte_de_la_app.dart`. Con las dos partes
+  se escribe también la fila completa de `entradas_retiro` (para la 6.9.x, el plano y la planilla vieja); **sin
+  internet no**: la escribe `completarLaFila` cuando vuelve la red. **`EntregaPorPartes.frenoPorLaOtraParte`**: si
+  la otra parte se entregó con otra cuenta y entre las dos se pasaría de lo sin cargo, no se entrega (lo revisa el
+  jefe). Anular una parte o las dos, solo el jefe, con motivo.
+- **VENDER:** un solo botón con "Vende entradas"; la lista con el filtro (Pagó todo · Debe · Ya retiró · Todos, y
+  Revisar si hay alguien), el total de la fiesta, GRATIS en dos renglones, A PAGAR por origen y la planilla por
+  material. **Lo que baja con VENDER ocupado se relee al terminar** (`_hayQueReleer`).
+- Probado: la suite entera (5.724), `test/entregar_parte_en_la_base_test.dart` contra SQLite de verdad, las roturas
+  de `tool/roturas_6.9.3.txt` (16 de 16), una revisión independiente (5 arreglados) y el recorrido con el mouse.
+- **No usar PRECIOS nuevo ni entregar por partes hasta que todas las PCs y las tablets tengan la 6.9.3**: una 6.9.x
+  ve una entrega a medias como "Pendiente" y junta los talonarios.
+- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v82**: la v81 es de la entrega en dos partes.
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -738,7 +772,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 80 en la rama, con las cinco tablas de la venta de entradas; las PCs tienen la 79) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 81 en la rama, con la tabla de la entrega en dos partes; las PCs tienen la 80) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
