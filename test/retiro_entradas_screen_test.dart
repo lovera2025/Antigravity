@@ -12,6 +12,7 @@ import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
+import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/services/en_caja.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
@@ -46,6 +47,8 @@ Future<_Montada> _montar(
   EntradasEnMemoria? entradas,
   void Function(EntregaEnMemoria)? preparar,
   RevisionEnMemoria Function(EntregaEnMemoria)? revision,
+  // El momento de ahora en Argentina, para lo que depende del día (PRECIOS).
+  DateTime? hoy,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1300, 1000);
@@ -59,6 +62,7 @@ Future<_Montada> _montar(
     ...e.reemplazos(jefe: mostrador ? null : jefe),
     ...(entradas ?? EntradasEnMemoria()).reemplazos,
     if (revision != null) revision(e).reemplazo,
+    if (hoy != null) hoyEnArgentinaProvider.overrideWithValue(() => hoy),
   ]);
   addTearDown(c.dispose);
   final cobrosDeLaOficina = <String>[];
@@ -117,6 +121,10 @@ void main() {
       await tester.tap(find.byKey(const Key('entradas_precios')));
       await _pasar(tester);
       expect(find.text('Precios de las entradas'), findsOneWidget);
+      // 6.9.3: primero se elige qué se vende ahora, y recién ahí sus precios.
+      expect(find.byKey(const Key('precio_valor')), findsNothing);
+      await tester.tap(find.byKey(const Key('precio_se_vende_general')));
+      await tester.pump();
       await tester.enterText(find.byKey(const Key('precio_valor')), '10000');
       await tester.pump();
       await tester.tap(find.byKey(const Key('precios_guardar')));
@@ -124,7 +132,28 @@ void main() {
       expect(find.text('Precios de las entradas'), findsNothing);
       final guardada = entradas.configs[idFiestaEntrega]!;
       expect(guardada.valorEntrada, 10000);
+      expect(guardada.precioAnticipada, isNull);
       expect(guardada.hechoPor, isNotEmpty);
+    });
+
+    testWidgets('PRECIOS propone que la anticipada valga hasta el día anterior '
+        'a la fiesta', (tester) async {
+      await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        entradas: EntradasEnMemoria(),
+        hoy: DateTime.utc(2026, 11, 20, 12),
+      );
+      await tester.tap(find.byKey(const Key('entradas_precios')));
+      await _pasar(tester);
+      await tester.tap(find.byKey(const Key('precio_se_vende_anticipada')));
+      await tester.pump();
+      // La fiesta de la entrega es el 4-dic-2026.
+      expect(
+        tester.widget<TextField>(find.byKey(const Key('precio_hasta'))).controller!.text,
+        '03/12/2026',
+      );
     });
 
     testWidgets('en el mostrador no está: quien entrega no ve los precios',

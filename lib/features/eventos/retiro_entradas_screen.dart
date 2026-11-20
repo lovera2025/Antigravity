@@ -807,6 +807,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       eventoId: widget.evento.id,
       fiesta: nombreDeLaFiesta(widget.evento),
       quien: quienOpera(ref),
+      // Para proponer hasta cuándo vale la anticipada: el día anterior.
+      fechaFiesta: widget.evento.fechaEvento,
       lugares: _foto,
       revisarLugares: _revisarLugares,
     );

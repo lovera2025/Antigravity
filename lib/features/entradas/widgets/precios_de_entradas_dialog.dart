@@ -7,16 +7,21 @@ import '../../barra/cuentas/pesos.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/services/lugares_al_sorteo.dart';
+import '../cuentas/eleccion_de_precios.dart';
 import '../cuentas/precio_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
 import '../providers/entradas_providers.dart';
 
-/// PRECIOS: el jefe pone el precio de la entrada de una fiesta (6.9.0).
-/// Devuelve lo guardado, o null si se canceló.
+/// PRECIOS: el jefe pone el precio de la entrada de una fiesta (6.9.0; desde la
+/// 6.9.3, primero "¿Qué se vende ahora? Anticipada · General" y sin nada
+/// opcional). Devuelve lo guardado, o null si se canceló.
 ///
 /// **Solo en modo jefe**, con doble llave: quien lo abre ya preguntó, y
 /// `_guardar` vuelve sin escribir si `esRolJefeProvider` da falso
 /// (`test/solo_modo_jefe_test.dart`). [quien] es quién queda anotado.
+///
+/// [fechaFiesta]: el día de la fiesta, para proponer hasta cuándo vale la
+/// anticipada (el día anterior). Sin ella no se propone ninguno.
 ///
 /// [lugares]: lo que cada familia tenía al sorteo, para decir a qué le toca el
 /// descuento (17-nov-2026). En una fiesta sorteada antes de esa regla,
@@ -28,6 +33,7 @@ Future<ConfigEntradas?> mostrarPreciosDeEntradas(
   required String eventoId,
   required String fiesta,
   required String quien,
+  DateTime? fechaFiesta,
   FotoDeLosLugares? lugares,
   RevisarLugares? revisarLugares,
 }) =>
@@ -38,6 +44,7 @@ Future<ConfigEntradas?> mostrarPreciosDeEntradas(
         eventoId: eventoId,
         fiesta: fiesta,
         quien: quien,
+        fechaFiesta: fechaFiesta,
         lugares: lugares,
         revisarLugares: revisarLugares,
       ),
@@ -53,6 +60,7 @@ class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
   final String eventoId;
   final String fiesta;
   final String quien;
+  final DateTime? fechaFiesta;
   final FotoDeLosLugares? lugares;
   final RevisarLugares? revisarLugares;
 
@@ -61,6 +69,7 @@ class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
     required this.eventoId,
     required this.fiesta,
     required this.quien,
+    this.fechaFiesta,
     this.lugares,
     this.revisarLugares,
   });
@@ -72,12 +81,20 @@ class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
 
 class _PreciosDeEntradasDialogState
     extends ConsumerState<PreciosDeEntradasDialog> {
-  final _valor = TextEditingController();
+  /// El precio de la General (`valor_entrada`). Es el mismo casillero con
+  /// ANTICIPADA y con GENERAL: cambiar de opinión arriba no lo borra.
+  final _general = TextEditingController();
   final _anticipada = TextEditingController();
   final _hasta = TextEditingController();
   final _lugares = TextEditingController();
   final _recargo = TextEditingController();
   bool _aMano = false;
+
+  /// Lo elegido arriba. Null: todavía nada (la fiesta no tiene precio).
+  QueSeVende? _que;
+
+  /// "La anticipada terminó el dd/mm", si la guardada ya pasó su día.
+  String? _notaDeLaAnticipada;
 
   /// Lo que había guardado (o una vacía): de ahí salen el id y cuándo nació.
   ConfigEntradas? _base;
@@ -97,7 +114,7 @@ class _PreciosDeEntradasDialogState
 
   @override
   void dispose() {
-    for (final c in [_valor, _anticipada, _hasta, _lugares, _recargo]) {
+    for (final c in [_general, _anticipada, _hasta, _lugares, _recargo]) {
       c.dispose();
     }
     super.dispose();
@@ -106,8 +123,14 @@ class _PreciosDeEntradasDialogState
   static String _entero(double? v) =>
       v == null || v <= 0 ? '' : v.round().toString();
 
-  static String _porcentaje(double v) =>
-      v == v.roundToDouble() ? v.round().toString() : '$v'.replaceAll('.', ',');
+  static String _porcentaje(double? v) {
+    if (v == null) return '';
+    return v == v.roundToDouble() ? v.round().toString() : '$v'.replaceAll('.', ',');
+  }
+
+  /// El momento de ahora en Argentina: decide si la anticipada todavía rige y
+  /// qué día ya pasó. Los tests lo fijan.
+  DateTime get _hoy => ref.read(hoyEnArgentinaProvider)();
 
   Future<void> _cargar() async {
     ConfigEntradas? guardada;
@@ -117,16 +140,21 @@ class _PreciosDeEntradasDialogState
       guardada = null;
     }
     if (!mounted) return;
-    final c = guardada ??
-        ConfigEntradas.vacia(widget.eventoId, ahora: DateTime.now());
+    // Lo que se ve elegido sale de las columnas y del día de hoy, con la misma
+    // regla que cobra: no se guarda aparte.
+    final leida =
+        EleccionDePrecios.leer(guardada, _hoy, fiesta: widget.fechaFiesta);
     setState(() {
-      _base = c;
-      _valor.text = _entero(c.valorEntrada);
-      _anticipada.text = _entero(c.precioAnticipada);
-      _hasta.text = PrecioDeEntradas.textoDelDia(c.anticipadaHasta);
-      _lugares.text = _porcentaje(c.descuentoLugaresPct);
-      _recargo.text = _porcentaje(c.recargoPct);
-      _aMano = c.descuentoAMano;
+      _base = guardada ??
+          ConfigEntradas.vacia(widget.eventoId, ahora: DateTime.now());
+      _que = leida.queSeVende;
+      _notaDeLaAnticipada = leida.notaDeLaAnticipada;
+      _general.text = _entero(leida.general);
+      _anticipada.text = _entero(leida.anticipada);
+      _hasta.text = PrecioDeEntradas.textoDelDia(leida.hasta);
+      _lugares.text = _porcentaje(leida.descuentoLugaresPct);
+      _recargo.text = _porcentaje(leida.recargoPct);
+      _aMano = leida.descuentoAMano;
       _cargando = false;
     });
   }
@@ -137,47 +165,44 @@ class _PreciosDeEntradasDialogState
     return digitos.isEmpty ? null : double.tryParse(digitos);
   }
 
-  /// El porcentaje de un casillero. Null: no es un número. Vacío es 0.
+  /// El porcentaje de un casillero. **Null: vacío, que no vale 0** (hay que
+  /// escribir el número). NaN: lo escrito no es un número.
   static double? _pct(String texto) {
     final t = texto.trim().replaceAll(',', '.');
-    return t.isEmpty ? 0 : double.tryParse(t);
+    if (t.isEmpty) return null;
+    return double.tryParse(t) ?? double.nan;
+  }
+
+  /// Lo que hay escrito, para la cuenta ([EleccionDePrecios]).
+  EleccionDePrecios get _escrito {
+    final hasta = _hasta.text.trim();
+    return EleccionDePrecios(
+      queSeVende: _que,
+      general: _pesos(_general.text),
+      anticipada: _pesos(_anticipada.text),
+      // Un día mal escrito va tal cual: la cuenta dice que no existe.
+      hasta: hasta.isEmpty ? null : (PrecioDeEntradas.diaDeTexto(hasta) ?? hasta),
+      descuentoLugaresPct: _pct(_lugares.text),
+      recargoPct: _pct(_recargo.text),
+      descuentoAMano: _aMano,
+    );
   }
 
   /// "Cada una: $ 5.000", con lo que hay escrito. Null si todavía no se puede
   /// calcular.
   String? get _cadaUna {
-    final valor = _pesos(_valor.text);
+    final general = _pesos(_general.text);
     final pct = _pct(_lugares.text);
-    if (valor == null || valor <= 0 || pct == null || pct < 0 || pct > 100) {
+    if (_que == null ||
+        general == null ||
+        general <= 0 ||
+        pct == null ||
+        pct.isNaN ||
+        pct < 0 ||
+        pct > 100) {
       return null;
     }
-    return 'Cada una: ${pesos(RenglonEntradas.precioCon(valor, pct))}';
-  }
-
-  /// Qué está mal en lo escrito, en palabras. Null: se puede guardar.
-  String? _loQueFalta() {
-    final valor = _pesos(_valor.text) ?? 0;
-    final anticipada = _pesos(_anticipada.text) ?? 0;
-    final hasta = _hasta.text.trim();
-    if ((anticipada > 0) != hasta.isNotEmpty) {
-      return 'La anticipada lleva su precio y hasta qué día: poné las dos '
-          'cosas o ninguna.';
-    }
-    if (hasta.isNotEmpty && PrecioDeEntradas.diaDeTexto(hasta) == null) {
-      return 'Ese día no existe: escribilo como 28/11/2026.';
-    }
-    if (anticipada > 0 && valor <= 0) {
-      return 'Para la anticipada, primero poné el valor de la entrada.';
-    }
-    final lugares = _pct(_lugares.text);
-    if (lugares == null || lugares < 0 || lugares > 100) {
-      return 'El porcentaje de la mesa adicional y las sillas extra va de 0 a 100.';
-    }
-    final recargo = _pct(_recargo.text);
-    if (recargo == null || recargo < 0 || recargo > 100) {
-      return 'El recargo va de 0 a 100.';
-    }
-    return null;
+    return 'Cada una: ${pesos(RenglonEntradas.precioCon(general, pct))}';
   }
 
   /// La segunda llave: sin modo jefe no se guarda, aunque alguien llegue hasta
@@ -192,7 +217,9 @@ class _PreciosDeEntradasDialogState
     if (_frenaSinModoJefe()) return;
     final base = _base;
     if (base == null) return;
-    final falta = _loQueFalta();
+    final hoy = _hoy;
+    final escrito = _escrito;
+    final falta = escrito.loQueFalta(hoy);
     if (falta != null) {
       setState(() => _problema = falta);
       return;
@@ -202,16 +229,8 @@ class _PreciosDeEntradasDialogState
       _problema = null;
     });
     try {
-      final hasta = _hasta.text.trim();
-      final nueva = base.conPrecios(
-        valorEntrada: _pesos(_valor.text),
-        precioAnticipada: _pesos(_anticipada.text),
-        anticipadaHasta:
-            hasta.isEmpty ? null : PrecioDeEntradas.diaDeTexto(hasta),
-        descuentoLugaresPct: _pct(_lugares.text)!,
-        recargoPct: _pct(_recargo.text)!,
-        descuentoAMano: _aMano,
-      );
+      // Las columnas salen de la cuenta, que vuelve a frenar con `conPrecios`.
+      final nueva = escrito.enColumnas(base, hoyAr: hoy);
       final guardada = await ref
           .read(entradasDelJefeProvider)
           .guardarConfig(nueva, quien: widget.quien);
@@ -236,14 +255,21 @@ class _PreciosDeEntradasDialogState
   }
 
   Future<void> _elegirDia() async {
-    final hoy = DateTime.now();
-    final escrito = PrecioDeEntradas.diaDeTexto(_hasta.text);
+    final ahora = _hoy;
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final hasta = DateTime(hoy.year + 3);
+    final escrito =
+        DateTime.tryParse(PrecioDeEntradas.diaDeTexto(_hasta.text) ?? '');
+    final inicial = escrito == null || escrito.isBefore(hoy)
+        ? hoy
+        : (escrito.isAfter(hasta) ? hasta : escrito);
     final elegido = await showDatePicker(
       context: context,
-      initialDate: DateTime.tryParse(escrito ?? '') ?? hoy,
-      firstDate: DateTime(hoy.year - 1),
-      lastDate: DateTime(hoy.year + 2),
-      helpText: 'La anticipada, hasta el día',
+      initialDate: inicial,
+      // Un día que ya pasó no se ofrece: la anticipada vale de hoy en adelante.
+      firstDate: hoy,
+      lastDate: hasta,
+      helpText: 'La anticipada vale hasta el día',
     );
     if (elegido == null || !mounted) return;
     setState(() {
@@ -268,7 +294,7 @@ class _PreciosDeEntradasDialogState
       case EstadoDeLosLugares.sinSorteo:
         return Text(
           'Vale para lo que cada familia tenga cargado el día del sorteo. Lo '
-          'que agregue después paga la entrada entera.',
+          'que agregue después paga el precio del día, sin descuento.',
           key: const Key('precio_lugares_sin_sorteo'),
           style: ayuda,
         );
@@ -277,7 +303,7 @@ class _PreciosDeEntradasDialogState
         return Text(
           'Vale para lo que cada familia tenía cargado al sorteo'
           '${del == null ? '' : ' del ${ArTime.formatFechaHora(del)}'}. Lo '
-          'que agregó después paga la entrada entera.',
+          'que agregó después paga el precio del día, sin descuento.',
           key: const Key('precio_lugares_anotados'),
           style: ayuda,
         );
@@ -289,8 +315,8 @@ class _PreciosDeEntradasDialogState
           children: [
             Text(
               'Esta fiesta se sorteó antes de la regla "lo que se agrega '
-              'después del sorteo paga la entrada entera". Hasta que aceptes '
-              'la lista, todo va con descuento.',
+              'después del sorteo paga el precio del día, sin descuento". '
+              'Hasta que aceptes la lista, todo va con descuento.',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -330,12 +356,90 @@ class _PreciosDeEntradasDialogState
         onChanged: (_) => setState(() => _problema = null),
       );
 
+  /// Arriba de todo: qué se vende ahora. Tocar la elegida no la saca: una vez
+  /// elegida, siempre hay una.
+  Widget _queSeVende() => SegmentedButton<QueSeVende>(
+        key: const Key('precio_que_se_vende'),
+        showSelectedIcon: false,
+        emptySelectionAllowed: true,
+        segments: const [
+          ButtonSegment(
+            value: QueSeVende.anticipada,
+            label: Text('ANTICIPADA', key: Key('precio_se_vende_anticipada')),
+          ),
+          ButtonSegment(
+            value: QueSeVende.general,
+            label: Text('GENERAL', key: Key('precio_se_vende_general')),
+          ),
+        ],
+        selected: _que == null ? const <QueSeVende>{} : {_que!},
+        onSelectionChanged: (s) {
+          if (s.isEmpty) return;
+          setState(() {
+            _que = s.first;
+            _problema = null;
+          });
+        },
+      );
+
+  /// Con ANTICIPADA: su precio, hasta qué día y el precio de la General. El
+  /// precio y el día van lado a lado; en un ancho chico, uno debajo del otro
+  /// (lado a lado, "Vale hasta el día (inclusive)" se cortaba).
+  List<Widget> _conAnticipada(TextStyle ayuda) {
+    final precio =
+        _plata('precio_anticipada', _anticipada, 'Precio de la anticipada');
+    final dia = TextField(
+      key: const Key('precio_hasta'),
+      controller: _hasta,
+      keyboardType: TextInputType.datetime,
+      decoration: InputDecoration(
+        labelText: 'Vale hasta el día (inclusive)',
+        hintText: 'dd/mm/aaaa',
+        suffixIcon: IconButton(
+          tooltip: 'Elegir el día',
+          icon: const Icon(Icons.event),
+          onPressed: _elegirDia,
+        ),
+      ),
+      onChanged: (_) => setState(() => _problema = null),
+    );
+    return [
+      LayoutBuilder(
+        builder: (context, lugar) => lugar.maxWidth < 440
+            ? Column(
+                children: [precio, const SizedBox(height: 14), dia],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: precio),
+                  const SizedBox(width: 10),
+                  Expanded(child: dia),
+                ],
+              ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          'Termina sola: el día siguiente ya se cobra la General.',
+          style: ayuda,
+        ),
+      ),
+      const SizedBox(height: 14),
+      _plata(
+        'precio_valor',
+        _general,
+        'Precio de la General (cuando termina la anticipada)',
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final esJefe = ref.watch(esRolJefeProvider);
     final gris = Theme.of(context).hintColor;
     final ayuda = TextStyle(fontSize: 12, color: gris);
-    final sinPrecio = (_pesos(_valor.text) ?? 0) <= 0;
+    final sinPrecio = _que == null || (_pesos(_general.text) ?? 0) <= 0;
     final cadaUna = _cadaUna;
     final notaDeLosLugares = _notaDeLosLugares(ayuda);
 
@@ -362,7 +466,38 @@ class _PreciosDeEntradasDialogState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _plata('precio_valor', _valor, 'Valor de la entrada'),
+                    const Text(
+                      '¿Qué se vende ahora?',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    _queSeVende(),
+                    if (_notaDeLaAnticipada != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          _notaDeLaAnticipada!,
+                          key: const Key('precio_anticipada_termino'),
+                          style: ayuda,
+                        ),
+                      ),
+                    if (_que == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Elegí qué se vende para poner su precio.',
+                          key: const Key('precio_elegi'),
+                          style: ayuda,
+                        ),
+                      ),
+                    if (_que == QueSeVende.anticipada) ...[
+                      const SizedBox(height: 14),
+                      ..._conAnticipada(ayuda),
+                    ],
+                    if (_que == QueSeVende.general) ...[
+                      const SizedBox(height: 14),
+                      _plata('precio_valor', _general, 'Precio de la General'),
+                    ],
                     if (sinPrecio)
                       Padding(
                         key: const Key('precio_sin_valor'),
@@ -376,45 +511,7 @@ class _PreciosDeEntradasDialogState
                           ),
                         ),
                       ),
-                    const SizedBox(height: 14),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _plata(
-                            'precio_anticipada',
-                            _anticipada,
-                            'Anticipada (opcional)',
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            key: const Key('precio_hasta'),
-                            controller: _hasta,
-                            keyboardType: TextInputType.datetime,
-                            decoration: InputDecoration(
-                              labelText: 'hasta el día',
-                              hintText: 'dd/mm/aaaa',
-                              suffixIcon: IconButton(
-                                tooltip: 'Elegir el día',
-                                icon: const Icon(Icons.event),
-                                onPressed: _elegirDia,
-                              ),
-                            ),
-                            onChanged: (_) => setState(() => _problema = null),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Las dos cosas o ninguna. El último día rige entero.',
-                        style: ayuda,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 18),
                     const Text(
                       'Entradas de la mesa adicional y las sillas extra',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -445,8 +542,8 @@ class _PreciosDeEntradasDialogState
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        'Siempre sobre el valor de la entrada, nunca sobre la '
-                        'anticipada.',
+                        'Pagan el precio de la General con este descuento, '
+                        'nunca el de la anticipada.',
                         style: ayuda,
                       ),
                     ),
@@ -464,6 +561,13 @@ class _PreciosDeEntradasDialogState
                         'Recargo por transferencia',
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Los dos porcentajes van con su número: 0 si no hay.',
+                        style: ayuda,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     CheckboxListTile(
                       key: const Key('precio_a_mano'),
@@ -472,7 +576,7 @@ class _PreciosDeEntradasDialogState
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _aMano,
                       onChanged: (v) => setState(() => _aMano = v ?? false),
-                      title: const Text('El vendedor puede poner descuentos'),
+                      title: const Text('Quien vende puede poner descuentos'),
                       subtitle: const Text('Destildado: solo en modo jefe.'),
                     ),
                     Text(
