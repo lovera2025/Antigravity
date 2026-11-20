@@ -17,6 +17,8 @@ import 'package:arguello_events/features/entradas/providers/entradas_providers.d
 import 'package:arguello_events/features/entradas/widgets/abrir_caja_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
+import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repository.dart';
+import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
@@ -31,6 +33,10 @@ class _Montada {
 }
 
 /// Entra Carla (con "Vende entradas" salvo [vende] false) y toca VENDER.
+///
+/// [pagaLaMesa]: PÉREZ ya pagó su mesa adicional (si no, la debe y no se le
+/// vende nada de ella: A PAGAR va por lo pago, 20-nov-2026). [foto]: lo que
+/// cada familia tenía al sorteo.
 Future<_Montada> _montar(
   WidgetTester tester, {
   bool vende = true,
@@ -41,12 +47,15 @@ Future<_Montada> _montar(
   double recargo = 0,
   bool anticipada = false,
   bool fallaElComprobante = false,
+  bool pagaLaMesa = false,
+  FotoDeLosLugares? foto,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1100, 1500);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
+  if (pagaLaMesa) e.cobrar(_perez, 70000);
   final entradas = EntradasEnMemoria();
   final comprobantes = <DatosDelComprobante>[];
   if (conPrecio) {
@@ -62,6 +71,7 @@ Future<_Montada> _montar(
     ...e.reemplazos(jefe: jefe),
     ...entradas.reemplazos,
     hoyEnArgentinaProvider.overrideWithValue(() => DateTime.utc(2026, 11, 20, 12)),
+    if (foto != null) fotoDeLosLugaresProvider.overrideWithValue((_) async => foto),
     abrirComprobanteDeEntradasProvider.overrideWithValue((datos, {context}) async {
       if (fallaElComprobante) throw StateError('sin impresora (prueba)');
       comprobantes.add(datos);
@@ -229,17 +239,39 @@ void main() {
       expect(_apagado(tester, 'vender_efectivo'), isTrue);
     });
 
-    testWidgets('una familia: cuántas le quedan, a cuánto, y que debe; se le vende '
-        'igual, y nunca más de las que le quedan', (tester) async {
+    // 20-nov-2026: A PAGAR va por cosa pagada. La mesa adicional que no está
+    // paga entera no se vende (antes de esta regla, "se le vende igual").
+    testWidgets('una familia que debe su mesa adicional: no se le vende, y dice qué '
+        'falta pagar', (tester) async {
       await _montar(tester);
+      await _elegirAPerez(tester);
+      expect(
+        _texto(tester, 'vender_le_quedan'),
+        'De sus lugares adicionales no le queda nada pago para comprar (le '
+        'corresponden 8, compró 0).',
+      );
+      expect(_texto(tester, 'vender_a_confirmar'),
+          'La mesa adicional está a confirmar: falta pagarla en caja.');
+      expect(_texto(tester, 'vender_debe'),
+          r'Debe $ 70.000 del contrato: se salda en caja. Se le vende solo lo que '
+          'ya está pago entero.');
+      expect(find.byKey(const Key('vender_lugar_mas')), findsNothing);
+      await _poner(tester, 'vender_comprador', 'PEREZ MARTA');
+      expect(_falta(tester), 'La mesa adicional está a confirmar: falta pagarla en caja.');
+      expect(_apagado(tester, 'vender_efectivo'), isTrue);
+    });
+
+    testWidgets('con la mesa adicional paga: cuántas le quedan, a cuánto, y nunca más '
+        'de las que le quedan', (tester) async {
+      await _montar(tester, pagaLaMesa: true);
       await _elegirAPerez(tester);
       expect(
         _texto(tester, 'vender_le_quedan'),
         r'Le quedan 8 entradas de sus lugares adicionales, a $ 5.000 cada una '
         '(le corresponden 8, compró 0).',
       );
-      expect(_texto(tester, 'vender_debe'),
-          r'Debe $ 70.000 del contrato: se salda en caja. Se le vende igual.');
+      expect(find.byKey(const Key('vender_a_confirmar')), findsNothing);
+      expect(find.byKey(const Key('vender_debe')), findsNothing);
       expect(_texto(tester, 'vender_lugar_cantidad'), '8',
           reason: 'viene con todas las que le quedan');
       await _tocar(tester, 'vender_lugar_mas', veces: 3);
@@ -247,8 +279,31 @@ void main() {
       await _tocar(tester, 'vender_lugar_menos', veces: 3);
       expect(_texto(tester, 'vender_lugar_cantidad'), '5');
       expect(_texto(tester, 'vender_total'), r'$ 25.000');
+      expect(find.byKey(const Key('vender_sueltas_mas')), findsNothing,
+          reason: 'no agregó nada después del sorteo: no hay sueltas para la familia');
       await _poner(tester, 'vender_comprador', 'PEREZ MARTA');
-      expect(_falta(tester), isNull, reason: 'la deuda del contrato no frena la venta');
+      expect(_falta(tester), isNull);
+    });
+
+    testWidgets('lo agregado después del sorteo, pago: sin descuento, al precio de hoy '
+        'y con su tope', (tester) async {
+      // Al sorteo PÉREZ tenía solo la mesa del contrato: la adicional la agregó
+      // después.
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: FotoDeLosLugares.anotada({_perez: LugaresCargados.soloElContrato}),
+      );
+      await _elegirAPerez(tester);
+      expect(find.byKey(const Key('vender_lugar_mas')), findsNothing);
+      expect(find.text('Sin descuento: lo agregado después del sorteo'), findsOneWidget);
+      expect(_texto(tester, 'vender_sueltas_cantidad'), '8',
+          reason: 'viene con todo lo que le queda sin descuento');
+      await _tocar(tester, 'vender_sueltas_mas', veces: 2);
+      expect(_texto(tester, 'vender_sueltas_cantidad'), '8', reason: 'el tope');
+      expect(_texto(tester, 'vender_total'), r'$ 80.000');
+      await _tocar(tester, 'vender_sueltas_menos', veces: 3);
+      expect(_texto(tester, 'vender_total'), r'$ 50.000');
     });
 
     testWidgets('una familia sin lugares adicionales no tiene ese renglón',
@@ -258,8 +313,12 @@ void main() {
       await tester.tap(find.byKey(const Key('vender_familia_${EntregaEnMemoria.idLopez}')));
       await tester.pump();
       expect(find.byKey(const Key('vender_lugar_mas')), findsNothing);
-      expect(_texto(tester, 'vender_le_quedan'), contains('van al precio de hoy'));
+      expect(find.byKey(const Key('vender_sueltas_mas')), findsNothing,
+          reason: 'las entradas para otra gente van por "Alguien de afuera"');
+      expect(_texto(tester, 'vender_le_quedan'), contains('no tiene entradas para comprar'));
       expect(find.byKey(const Key('vender_debe')), findsNothing);
+      await _poner(tester, 'vender_comprador', 'LOPEZ SOFIA');
+      expect(_falta(tester), startsWith('No tiene entradas para comprar'));
     });
 
     testWidgets('el descuento a mano, solo con permiso: apagado y con el motivo',
@@ -287,11 +346,13 @@ void main() {
 
     testWidgets('con la anticipada dice "anticipada" y cobra ese precio; las de lugar '
         'no bajan', (tester) async {
-      await _montar(tester, anticipada: true);
-      await _elegirAPerez(tester);
+      await _montar(tester, anticipada: true, pagaLaMesa: true);
+      await _aAlguienDeAfuera(tester);
       expect(find.text('Entradas (anticipada)'), findsOneWidget);
-      await _tocar(tester, 'vender_sueltas_mas', veces: 2);
       expect(_texto(tester, 'vender_sueltas_subtotal'), r'$ 16.000');
+      await tester.tap(find.text('Una familia de la fiesta'));
+      await tester.pump();
+      await _elegirAPerez(tester);
       expect(_texto(tester, 'vender_lugar_subtotal'), r'$ 40.000',
           reason: 'el 50 % sale del valor de la entrada, no de la anticipada');
     });
@@ -365,32 +426,31 @@ void main() {
   group('cobrar y guardar', () {
     testWidgets('en efectivo: guarda la venta, abre el comprobante y deja la pantalla '
         'limpia', (tester) async {
-      final m = await _montar(tester);
+      final m = await _montar(tester, pagaLaMesa: true);
       await _elegirAPerez(tester);
-      await _tocar(tester, 'vender_sueltas_mas', veces: 2);
       await _poner(tester, 'vender_comprador', 'perez marta');
       await _poner(tester, 'vender_dni', '30111222');
       await _poner(tester, 'vender_del', '2000');
-      expect(_texto(tester, 'vender_total'), r'$ 60.000');
-      expect(_texto(tester, 'vender_al_calculado'), 'al 2009');
+      expect(_texto(tester, 'vender_total'), r'$ 40.000');
+      expect(_texto(tester, 'vender_al_calculado'), 'al 2007');
 
       await _tocar(tester, 'vender_efectivo');
       await tester.pumpAndSettle();
       expect(find.text('Pagar en efectivo'), findsOneWidget);
-      expect(_texto(tester, 'cobro_a_cobrar'), r'$ 60.000');
+      expect(_texto(tester, 'cobro_a_cobrar'), r'$ 40.000');
       await _confirmarElCobro(tester);
 
       final v = m.entradas.listaVentas.single;
       expect(v.numero, 1);
-      expect(v.total, 60000);
-      expect(v.efectivo, 60000);
+      expect(v.total, 40000);
+      expect(v.efectivo, 40000);
       expect(v.medio, MedioBarra.efectivo);
-      expect(v.cantidad, 10);
+      expect(v.cantidad, 8);
       expect(v.cuantas(TipoRenglonEntradas.lugar), 8);
       expect(v.contratoAlumnoId, _perez);
       expect(v.compradorNombre, 'perez marta');
       expect(v.compradorDni, '30111222');
-      expect(v.numeros, '2000-2009');
+      expect(v.numeros, '2000-2007');
       expect(v.hechoPor, 'Carla');
       expect(v.cajaEntradasId, m.entradas.listaCajas.single.id);
 
@@ -403,7 +463,7 @@ void main() {
       expect(c.copia, isFalse);
 
       // La pantalla queda lista para la siguiente.
-      expect(find.textContaining(r'Venta N° 0001 guardada · 10 entradas · $ 60.000'),
+      expect(find.textContaining(r'Venta N° 0001 guardada · 8 entradas · $ 40.000'),
           findsOneWidget);
       expect(
         tester.widget<TextField>(find.byKey(const Key('vender_comprador'))).controller!.text,

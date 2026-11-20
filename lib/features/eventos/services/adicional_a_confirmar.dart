@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../../../models/contrato_alumno.dart';
+import '../../../models/mesa_extra_item.dart';
 import '../../barra/cuentas/pesos.dart';
 import 'cobro_abono_acumulado.dart';
 import 'mesas_extra_utils.dart';
@@ -64,24 +65,56 @@ String textoNoSeAnula(AdicionalAConfirmar x) =>
 class AdicionalesDeLaFamilia {
   AdicionalesDeLaFamilia._();
 
+  /// Lo pagado de cada mesa adicional, de la primera a la última. Vacío sin
+  /// adicionales.
+  static List<MesaExtraItem> _reparto(
+    ContratoAlumno a,
+    Iterable<Map<String, dynamic>> pagos,
+  ) {
+    final extra = SalonMesas.mesasExtra(a);
+    final unit = SalonMesas.precioUnitarioMesa(a);
+    if (extra < 1 || unit == null) return const [];
+    return MesasExtraUtils.repartirPagadoFifo(
+      cantidad: extra,
+      precioUnitario: unit,
+      cuotasPlan: max(1, a.mesaExtraCuotas),
+      pagadoTotal: grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
+    );
+  }
+
+  /// Cuántas de sus mesas adicionales están pagas enteras. Son siempre las
+  /// primeras: lo pagado se reparte de la primera a la última. Con esto VENDER
+  /// sabe qué entradas de A PAGAR se le pueden vender (`APagarDeLaFamilia`):
+  /// la mesa paga entera sí, aunque la familia deba otra cosa (regla del
+  /// usuario, 20-nov-2026).
+  ///
+  /// **Sin los pagos (null), ninguna**: lo que no se pudo leer no habilita
+  /// nada. A diferencia de [aConfirmar], no mira si la mesa ya tiene número en
+  /// el salón: esto es la plata, no la puerta.
+  static int pagasEnteras(
+    ContratoAlumno a,
+    Iterable<Map<String, dynamic>>? pagos,
+  ) {
+    if (pagos == null) return 0;
+    var n = 0;
+    for (final m in _reparto(a, pagos)) {
+      if (!m.liquidada) break;
+      n++;
+    }
+    return n;
+  }
+
   static List<AdicionalAConfirmar> aConfirmar(
     ContratoAlumno a,
     Iterable<Map<String, dynamic>>? pagos,
   ) {
     if (pagos == null) return const [];
     final extra = SalonMesas.mesasExtra(a);
-    final unit = SalonMesas.precioUnitarioMesa(a);
-    if (extra < 1 || unit == null) return const [];
     // Sin mesa todavía (antes del sorteo, o sin nada pagado de la base): no
     // hay nada que confirmar en la puerta.
     final numeros = [for (final t in SalonMesas.tramos(a)) ...t];
     if (numeros.isEmpty) return const [];
-    final items = MesasExtraUtils.repartirPagadoFifo(
-      cantidad: extra,
-      precioUnitario: unit,
-      cuotasPlan: max(1, a.mesaExtraCuotas),
-      pagadoTotal: grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
-    );
+    final items = _reparto(a, pagos);
     return [
       for (var k = 1; k <= extra && k <= items.length; k++)
         if (!items[k - 1].liquidada)

@@ -19,6 +19,7 @@ import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/sorteos_mesas_repository.dart';
 import '../../eventos/services/lugares_al_sorteo.dart';
+import '../../eventos/services/lugares_pagos.dart';
 import '../../eventos/services/retiro_entradas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../cuentas/linea_de_subida.dart';
@@ -75,13 +76,21 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// se lee (`fotoDeLosLugaresProvider`): la venta no escribe el registro.
   FotoDeLosLugares _foto = FotoDeLosLugares.sinSorteo;
 
+  /// Lo de cada familia que se compra aparte, cosa por cosa y con qué está
+  /// pago entero (20-nov-2026): se le vende solo eso. Sale de los pagos, que
+  /// se leen para la deuda; la cuenta está en `APagarDeLaFamilia`.
+  Map<String, APagarDeLaFamilia> _aPagar = {};
+
   // Lo que se está por vender.
   late bool _aUnaFamilia = true;
   late String? _familiaId = widget.familiaId;
 
   /// Cuántas de sus lugares adicionales lleva. Null: todas las que le quedan.
   int? _deLugar;
-  int _sueltas = 0;
+
+  /// Cuántas sueltas lleva. Null: las que vienen (a una familia, todas las
+  /// que le quedan sin descuento; a alguien de afuera, ninguna).
+  int? _sueltas;
   bool _dosTramos = false;
   final _busqueda = TextEditingController();
   final _comprador = TextEditingController();
@@ -204,6 +213,14 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       );
       final sinSubir = await entradas.ventasSinSubir();
       final foto = await ref.read(fotoDeLosLugaresProvider)(id);
+      final aPagar = {
+        for (final a in alumnos)
+          a.id: APagarDeLaFamilia.de(
+            a,
+            pagos: pagos[a.id] ?? const [],
+            foto: foto,
+          ),
+      };
       if (!mounted) return;
       setState(() {
         // La última venta anulada ya no es "guardada": se va su aviso verde.
@@ -211,6 +228,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           _ultima = null;
         }
         _foto = foto;
+        _aPagar = aPagar;
         _config = config;
         _alumnos = alumnos;
         _deudas = deudas;
@@ -286,11 +304,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     return null;
   }
 
+  /// Sin lo de A PAGAR leído todavía, nada está pago: no se le vende nada.
   LugaresDeLaFamilia _lugaresDe(ContratoAlumno a) => LugaresDeLaFamilia.de(
         a,
         ventas: _ventas,
         anulaciones: _anulaciones,
-        foto: _foto,
+        aPagar: _aPagar[a.id] ?? APagarDeLaFamilia.de(a, pagos: null, foto: _foto),
       );
 
   /// "al 50 %": lo que se paga con el descuento que el jefe puso en PRECIOS.
@@ -318,8 +337,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       final n = _deLugar;
       if (n != null) p = p.conDeLugar(n);
     }
+    final sueltas = _sueltas;
+    if (sueltas != null) p = p.conSueltas(sueltas);
     return p
-        .conSueltas(_sueltas)
         .conDescuento(double.tryParse(_descuento.text.replaceAll(',', '.')) ?? 0)
         .conComprador(_comprador.text)
         .conDni(_dni.text);
@@ -348,13 +368,14 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   void _elegirFamilia(String? id) => setState(() {
         _familiaId = id;
         _deLugar = null;
+        _sueltas = null;
         _busqueda.clear();
       });
 
   void _limpiar() {
     _familiaId = null;
     _deLugar = null;
-    _sueltas = 0;
+    _sueltas = null;
     _dosTramos = false;
     _busqueda.clear();
     _comprador.clear();
@@ -713,6 +734,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           onSelectionChanged: (s) => setState(() {
             _aUnaFamilia = s.first;
             _deLugar = null;
+            _sueltas = null;
           }),
         ),
         const SizedBox(height: 8),
@@ -861,11 +883,16 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                         ? lugares.sinDescuento > 0
                             ? 'Sus lugares adicionales los agregó después del '
                                 'sorteo: no llevan el descuento.'
-                            : 'No tiene mesa adicional ni sillas extra: sus '
-                                'entradas van al precio de hoy.'
+                            : 'No tiene mesa adicional ni sillas extra: no '
+                                'tiene entradas para comprar.'
                         : lugares.quedan == 0
-                            ? 'Ya compró todas las de sus lugares adicionales '
-                                '(${lugares.compradas}).'
+                            ? lugares.compradas >= lugares.leCorresponden
+                                ? 'Ya compró todas las de sus lugares adicionales '
+                                    '(${lugares.compradas}).'
+                                : 'De sus lugares adicionales no le queda nada '
+                                    'pago para comprar (le corresponden '
+                                    '${lugares.leCorresponden}, compró '
+                                    '${lugares.compradas}).'
                             : 'Le quedan ${lugares.quedan} '
                                 '${lugares.quedan == 1 ? 'entrada' : 'entradas'} de sus '
                                 'lugares adicionales, a ${pesos(cadaUna ?? 0)} cada una '
@@ -880,9 +907,23 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                         'Agregó ${lugares.sinDescuento} '
                         '${lugares.sinDescuento == 1 ? 'lugar' : 'lugares'} después '
                         'del sorteo: ${lugares.sinDescuento == 1 ? 'esa entrada va' : 'esas entradas van'} '
-                        'al precio de hoy, sin el descuento.',
+                        'al precio de hoy, sin el descuento. Le '
+                        '${lugares.quedanSinDescuento == 1 ? 'queda 1' : 'quedan ${lugares.quedanSinDescuento}'}.',
                         key: const Key('vender_sin_descuento'),
                         style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  // Lo que no está pago entero no se vende (20-nov-2026).
+                  if (lugares.textoAConfirmar != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        lugares.textoAConfirmar!,
+                        key: const Key('vender_a_confirmar'),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade800,
+                        ),
                       ),
                     ),
                   if (deuda != null && !deuda.pagoTodo)
@@ -890,7 +931,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         'Debe ${pesos(deuda.total)} del contrato: se salda en '
-                        'caja. Se le vende igual.',
+                        'caja. Se le vende solo lo que ya está pago entero.',
                         key: const Key('vender_debe'),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
@@ -932,50 +973,59 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             subtotal: p.deLugarQueVan * (p.precioDeLugar ?? 0),
           ),
         ],
-        const Divider(height: 1),
-        _renglon(
-          titulo: p.rigeLaAnticipada ? 'Entradas (anticipada)' : 'Entradas',
-          detalle: p.descuentoQueVa > 0
-              ? '${pesos(p.precioDeHoy ?? 0)} c/u · con el descuento, '
-                  '${pesos(RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa))}'
-              : '${pesos(p.precioDeHoy ?? 0)} c/u',
-          cantidad: _sueltas,
-          clave: 'vender_sueltas',
-          alCambiar: (n) => setState(() => _sueltas = n < 0 ? 0 : n),
-          subtotal: _sueltas *
-              RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa),
-          antes: SizedBox(
-            width: 120,
-            child: Tooltip(
-              message: p.puedeDescontar
-                  ? 'Descuento a mano sobre estas entradas'
-                  : kSoloEnModoJefe,
-              child: TextField(
-                key: const Key('vender_descuento'),
-                controller: _descuento,
-                enabled: p.puedeDescontar,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Descuento',
-                  suffixText: '%',
-                  isDense: true,
+        // A una familia, las sueltas son lo que agregó después del sorteo, con
+        // su tope: sin nada de eso pago, el renglón no está.
+        if (lugares == null || lugares.quedanSinDescuento > 0) ...[
+          const Divider(height: 1),
+          _renglon(
+            titulo: lugares != null
+                ? 'Sin descuento: lo agregado después del sorteo'
+                : p.rigeLaAnticipada
+                    ? 'Entradas (anticipada)'
+                    : 'Entradas',
+            detalle: (p.descuentoQueVa > 0
+                    ? '${pesos(p.precioDeHoy ?? 0)} c/u · con el descuento, '
+                        '${pesos(RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa))}'
+                    : '${pesos(p.precioDeHoy ?? 0)} c/u') +
+                (lugares != null ? ' · tope ${lugares.quedanSinDescuento}' : ''),
+            cantidad: p.sueltasQueVan,
+            clave: 'vender_sueltas',
+            alCambiar: (n) => setState(() => _sueltas = n < 0 ? 0 : n),
+            subtotal: p.sueltasQueVan *
+                RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa),
+            antes: SizedBox(
+              width: 120,
+              child: Tooltip(
+                message: p.puedeDescontar
+                    ? 'Descuento a mano sobre estas entradas'
+                    : kSoloEnModoJefe,
+                child: TextField(
+                  key: const Key('vender_descuento'),
+                  controller: _descuento,
+                  enabled: p.puedeDescontar,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Descuento',
+                    suffixText: '%',
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
-                onChanged: (_) => setState(() {}),
               ),
             ),
           ),
-        ),
-        if (!p.puedeDescontar)
-          Text(
-            'El descuento a mano: $kSoloEnModoJefe, o si el jefe lo permite en '
-            'PRECIOS.',
-            key: const Key('vender_descuento_motivo'),
-            style: TextStyle(fontSize: 12, color: gris),
-          ),
+          if (!p.puedeDescontar)
+            Text(
+              'El descuento a mano: $kSoloEnModoJefe, o si el jefe lo permite en '
+              'PRECIOS.',
+              key: const Key('vender_descuento_motivo'),
+              style: TextStyle(fontSize: 12, color: gris),
+            ),
+        ],
       ],
     );
   }

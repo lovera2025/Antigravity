@@ -18,10 +18,12 @@ import 'salon_mesas.dart';
 ///
 /// **El descuento es para lo que la familia tenía al sorteo** (regla del
 /// usuario, 17-nov-2026): la mesa adicional y las sillas extra que ya estaban
-/// cargadas cuando se sorteó van con el descuento de PRECIOS, y se compran
-/// cuando quiera; lo que agregó después paga la entrada entera
+/// cargadas cuando se sorteó van con el descuento de PRECIOS; lo que agregó
+/// después paga la entrada sin descuento, al precio del día (la anticipada
+/// mientras rige; confirmado por el usuario el 20-nov)
 /// ([conDescuento] y [sinDescuento]). Sin nada anotado ([alSorteo] en null),
-/// todo va con descuento.
+/// todo va con descuento. Se le venden solo las de lo que ya pagó entero, cosa
+/// por cosa (`APagarDeLaFamilia`, 20-nov-2026).
 class EntradasDeAlumno {
   /// Las mesas de su cuenta: la del contrato y las adicionales.
   final int mesas;
@@ -59,32 +61,65 @@ class EntradasDeAlumno {
 
   bool get entran => vip <= lugares;
 
-  /// Lo que se compra aparte, por dónde está el lugar y con qué precio. Los VIP
-  /// que no entran en la mesa del contrato ocupan esos lugares sin pagar la
-  /// entrada (su cena ya está en la cuenta), en este orden: las mesas que
-  /// tenía al sorteo, sus sillas, y recién después lo que agregó. Así agregar
-  /// un lugar nunca le sube lo que va con descuento.
-  ({LugaresAparte mesas, LugaresAparte sillas}) get _aparte {
+  /// Cada mesa adicional y cada silla extra de la cuenta, con cuántas de sus
+  /// entradas se compran aparte. Los VIP que no entran en la mesa del contrato
+  /// ocupan esos lugares sin pagar la entrada (su cena ya está en la cuenta),
+  /// en este orden: las mesas que tenía al sorteo, sus sillas, y recién después
+  /// lo que agregó. Así agregar un lugar nunca le sube lo que va con descuento.
+  ///
+  /// **Es la única cuenta de lo que se compra aparte**: [deMesas], [deSillas]
+  /// y A PAGAR de VENDER (`APagarDeLaFamilia`, que le suma qué está pago) salen
+  /// de acá, cosa por cosa. Las mesas que tenía al sorteo son las primeras
+  /// (lo pagado de las mesas también se reparte de la primera a la última).
+  List<CosaAparte> get cosas {
     final adicionales = max(0, mesas - 1);
     final foto = alSorteo;
     final mesasDeAntes =
         foto == null ? adicionales : min(adicionales, max(0, foto.mesas - 1));
     final sillasDeAntes = foto == null ? sillas : min(sillas, max(0, foto.sillas));
     var vipDeMas = max(0, vip - lugaresSinCargo);
-    int libres(int lugares) {
+    CosaAparte cosa({required bool esMesa, required int n, required bool alSorteo}) {
+      final lugares = esMesa ? SalonMesas.sillasPorMesa : 1;
       final ocupan = min(vipDeMas, lugares);
       vipDeMas -= ocupan;
-      return lugares - ocupan;
+      return CosaAparte(
+        esMesa: esMesa,
+        n: n,
+        alSorteo: alSorteo,
+        lugares: lugares,
+        deVip: ocupan,
+      );
     }
 
-    final mesasCon = libres(SalonMesas.sillasPorMesa * mesasDeAntes);
-    final sillasCon = libres(sillasDeAntes);
-    final mesasSin =
-        libres(SalonMesas.sillasPorMesa * (adicionales - mesasDeAntes));
-    final sillasSin = libres(sillas - sillasDeAntes);
+    // El orden de la lista es el orden en que los VIP de más ocupan lugares.
+    return [
+      for (var n = 1; n <= mesasDeAntes; n++)
+        cosa(esMesa: true, n: n, alSorteo: true),
+      for (var n = 1; n <= sillasDeAntes; n++)
+        cosa(esMesa: false, n: n, alSorteo: true),
+      for (var n = mesasDeAntes + 1; n <= adicionales; n++)
+        cosa(esMesa: true, n: n, alSorteo: false),
+      for (var n = sillasDeAntes + 1; n <= sillas; n++)
+        cosa(esMesa: false, n: n, alSorteo: false),
+    ];
+  }
+
+  /// Lo que se compra aparte, por dónde está el lugar y con qué precio: la
+  /// suma de [cosas].
+  ({LugaresAparte mesas, LugaresAparte sillas}) get _aparte {
+    final todas = cosas;
+    int suma({required bool esMesa, required bool alSorteo}) => todas
+        .where((c) => c.esMesa == esMesa && c.alSorteo == alSorteo)
+        .fold(0, (s, c) => s + c.entradas);
     return (
-      mesas: LugaresAparte(conDescuento: mesasCon, sinDescuento: mesasSin),
-      sillas: LugaresAparte(conDescuento: sillasCon, sinDescuento: sillasSin),
+      mesas: LugaresAparte(
+        conDescuento: suma(esMesa: true, alSorteo: true),
+        sinDescuento: suma(esMesa: true, alSorteo: false),
+      ),
+      sillas: LugaresAparte(
+        conDescuento: suma(esMesa: false, alSorteo: true),
+        sinDescuento: suma(esMesa: false, alSorteo: false),
+      ),
     );
   }
 
@@ -98,7 +133,7 @@ class EntradasDeAlumno {
   /// las sillas extra que ya tenía al sorteo.
   int get conDescuento => deMesas.conDescuento + deSillas.conDescuento;
 
-  /// Las de lo que agregó después del sorteo: pagan la entrada entera.
+  /// Las de lo que agregó después del sorteo: sin descuento, al precio del día.
   int get sinDescuento => deMesas.sinDescuento + deSillas.sinDescuento;
 
   /// Todas las que se compran aparte: [conDescuento] más [sinDescuento].
@@ -114,6 +149,39 @@ String alPorcientoQuePaga(double descuentoPct) {
       ? paga.round().toString()
       : paga.toStringAsFixed(1).replaceAll('.', ',');
   return 'al $texto %';
+}
+
+/// Una mesa adicional o una silla extra de la cuenta de una familia: lo que
+/// compra aparte (`EntradasDeAlumno.cosas`).
+class CosaAparte {
+  /// Una mesa adicional (8 lugares) o, si no, una silla extra (1).
+  final bool esMesa;
+
+  /// Cuál es: 1 es la primera mesa adicional (la que sigue a la del contrato),
+  /// o la primera silla extra.
+  final int n;
+
+  /// La tenía al sorteo: sus entradas van con el descuento de PRECIOS. Si no,
+  /// la agregó después y van sin descuento.
+  final bool alSorteo;
+
+  /// Sus lugares: 8 una mesa, 1 una silla.
+  final int lugares;
+
+  /// Los lugares que ocupan los VIP que no entran en la mesa del contrato:
+  /// esas entradas no se compran.
+  final int deVip;
+
+  const CosaAparte({
+    required this.esMesa,
+    required this.n,
+    required this.alSorteo,
+    required this.lugares,
+    required this.deVip,
+  });
+
+  /// Las entradas que se compran por esta cosa.
+  int get entradas => lugares - deVip;
 }
 
 /// Las entradas que se compran aparte, por el precio que pagan.

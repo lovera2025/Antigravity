@@ -7,7 +7,7 @@
 //   • Entradas_2_inicio.png: el inicio de quien vende, con ENTREGAR y VENDER;
 //   • Entradas_3_abrir_caja.png: abrir la caja, con su cambio;
 //   • Entradas_4_vender.png y Entradas_5_vender_celular.png: VENDER, con una
-//     familia que debe;
+//     familia que ya pagó su mesa adicional;
 //   • Entradas_6_cobro.png: la hoja del cobro (la de la barra), en mixto;
 //   • Entradas_7_guardada.png: la venta guardada;
 //   • Entradas_8_ventas_jefe.png, Entradas_9_ventas_vendedor.png y
@@ -184,12 +184,15 @@ void main() {
     }
   }
 
-  /// PÉREZ, JUAN (debe su mesa adicional): sus 8 de lugar y 2 sueltas.
-  Future<void> armarUnaVenta(WidgetTester tester) async {
+  /// PÉREZ, JUAN: paga su mesa adicional en la caja de cuotas (desde el
+  /// 20-nov-2026 lo de A PAGAR se vende solo si está pago entero) y se lleva
+  /// sus 8 de lugar.
+  Future<void> armarUnaVenta(WidgetTester tester, EntregaEnMemoria e) async {
+    e.cobrar(EntregaEnMemoria.idPerez, 70000);
+    await tester.pumpAndSettle();
     await poner(tester, 'vender_buscar', 'perez');
     await tester.tap(find.byKey(const Key('vender_familia_${EntregaEnMemoria.idPerez}')));
     await tester.pump();
-    await tocar(tester, 'vender_sueltas_mas', veces: 2);
     await poner(tester, 'vender_comprador', 'PEREZ, MARTA');
     await poner(tester, 'vender_dni', '30111222');
     await poner(tester, 'vender_del', '2000');
@@ -238,12 +241,12 @@ void main() {
     ('Entradas_5_vender_celular.png', const Size(390, 1250)),
   ]) {
     testWidgets('VENDER · $nombre', (tester) async {
-      final (clave, _, _, _) = await montar(
+      final (clave, e, _, _) = await montar(
         tester,
         tamano: tamano,
         pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
       );
-      await armarUnaVenta(tester);
+      await armarUnaVenta(tester, e);
       expect(tester.takeException(), isNull, reason: 'nada se desborda');
       await guardar(tester, clave, nombre);
     });
@@ -778,12 +781,12 @@ void main() {
   });
 
   testWidgets('el cobro, la venta guardada y el comprobante', (tester) async {
-    final (clave, _, entradas, comprobantes) = await montar(
+    final (clave, e, entradas, comprobantes) = await montar(
       tester,
       tamano: const Size(1100, 1000),
       pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
     );
-    await armarUnaVenta(tester);
+    await armarUnaVenta(tester, e);
     await tocar(tester, 'vender_mixto');
     await tester.pumpAndSettle();
     await poner(tester, 'cobro_mixto_efectivo', '20000');

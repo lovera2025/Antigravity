@@ -214,6 +214,10 @@ void main() {
   testWidgets('Carla, con el mouse: abre la caja, le vende a PÉREZ y sale el comprobante',
       (tester) async {
     await abrir(tester);
+    // PÉREZ debe su mesa adicional: desde el 20-nov-2026 lo de A PAGAR se vende
+    // solo si está pago entero. La paga antes, en la caja de cuotas.
+    lados.entrega.cobrar(EntregaEnMemoria.idPerez, 70000);
+    await asentar(tester);
     await tocar(tester, 'vender_$idFiestaEntrega');
     await tester.enterText(find.byKey(const Key('abrir_caja_cambio')), '5000');
     await asentar(tester);
