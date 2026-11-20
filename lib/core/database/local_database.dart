@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 80;
+  static const int _version = 81;
 
   /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
   /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
@@ -155,6 +155,11 @@ class LocalDatabase {
       await crearTablasV80(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v80 sin crear: $e');
+    }
+    try {
+      await crearTablasV81(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v81 sin crear: $e');
     }
     return db;
   }
@@ -744,6 +749,7 @@ class LocalDatabase {
     await crearTablasV78(db);
     await crearTablasV79(db);
     await crearTablasV80(db);
+    await crearTablasV81(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1291,6 +1297,51 @@ class LocalDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_entradas_verificaciones_evento ON entradas_verificaciones(evento_id)',
+    );
+  }
+
+  /// La tabla de la v81 (20-nov-2026): `entradas_entregas`, **la entrega de
+  /// entradas en dos partes** (`EntregaEntradas`). Las pulseras VIP con cena y
+  /// las entradas generales de la mesa del contrato llegan en dos tandas, y
+  /// cada una se entrega cuando llega: cada entrega o anulación de una parte es
+  /// un renglón. **Solo se agregan renglones**: nunca se editan ni se borran.
+  ///
+  /// Va aparte de `entradas_retiro` a propósito: esa es una fila por alumno que
+  /// la subida pisa entera, y una tablet sin internet que entregara una parte
+  /// ahí borraría en la nube la otra que dio otro equipo. `entradas_retiro` se
+  /// sigue escribiendo cuando la familia tiene las dos partes, como siempre.
+  ///
+  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar ninguna tabla que ya exista. Una versión anterior no
+  /// la conoce y sigue como siempre.
+  static Future<void> crearTablasV81(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_entregas (
+        id TEXT PRIMARY KEY,
+        contrato_alumno_id TEXT NOT NULL,
+        evento_id TEXT,
+        parte TEXT NOT NULL,
+        accion TEXT NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 0,
+        tramos TEXT,
+        menores_10 INTEGER NOT NULL DEFAULT 0,
+        parentesco TEXT,
+        retiro_nombre TEXT,
+        otra_persona_motivo TEXT,
+        autorizacion_firmada INTEGER NOT NULL DEFAULT 0,
+        escribio_en_planilla INTEGER NOT NULL DEFAULT 0,
+        motivo TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_entregas_contrato ON entradas_entregas(contrato_alumno_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_entregas_evento ON entradas_entregas(evento_id)',
     );
   }
 
@@ -3588,6 +3639,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v80 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v80: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 80, la tabla de la v81 no aparece.
+    if (oldVersion < 81 && newVersion >= 81) {
+      debugPrint('  🔧 v81: la entrega de entradas en dos partes');
+      try {
+        await crearTablasV81(db);
+        debugPrint('✅ Migración v81 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v81: $e');
       }
     }
   }
