@@ -1,9 +1,10 @@
 # SPEC — Entradas para rendir (consignación), adentro de la 6.9.3
 
 **Estado (21-nov-2026): aprobado y en programación, sin publicar.** El usuario vio la maqueta
-(`docs/maqueta_entradas_para_rendir_2026-11-20.html`) el 20-nov y dio el OK. La etapa 2 (datos: el modelo, la v82,
-`EntradasLocal`, las interfaces y los dobles, con sus tests) está programada, sin commit; de la 3 en adelante, sin
-programar. **Con la v82 en el código, no correr la app desde esta carpeta contra la base de verdad.** Plan aprobado:
+(`docs/maqueta_entradas_para_rendir_2026-11-20.html`) el 20-nov y dio el OK. **Programadas, probadas y guardadas las
+etapas 2 a 5** (datos, motor y SQL, cuentas y pantallas), cada una con su revisión independiente; faltan la 6 en
+adelante (papeles, ventana de prueba, cierre y publicar): ver "Para retomar en otro chat" de
+`docs/CONTEXTO_v6.9.3_2026-11-20.md`. **Con la v82 en el código, no correr la app desde esta carpeta contra la base de verdad.** Plan aprobado:
 `C:\Users\lover\.claude\plans\que-sigue-fizzy-thompson.md`.
 
 Sale de una pregunta del usuario (20-nov): "hay veces que se le da y después le rinden, pero no es plata en el momento:
@@ -54,8 +55,9 @@ una entrada a quien rinde se lleva **solo la entrada**: no hace falta ningún pa
   puede rendir de a partes.**
 - **Mirar** (el jefe): PARA RENDIR, por persona: se llevó, vendió, devolvió, no volvieron, sin rendir, desde cuándo y
   "faltan hasta $X" (lo máximo que podría deber: puede devolver). Arriba los totales y los avisos.
-- **NO VOLVIERON** (el jefe, con motivo): no entra plata y esos números quedan anulados para siempre. Si la persona
-  paga una que no volvió, se rinde como vendida.
+- **NO VOLVIERON** (el jefe, con motivo): no entra plata y esos números quedan anulados. Si después aparecen (o la
+  persona paga una), el jefe anula ese "no volvieron" y se rinden como siempre (21-nov: la pantalla ya no dice "para
+  siempre", porque anularlo los devuelve).
 - **ANULAR** (el jefe, con motivo): un bloque sin movimientos, un "devolvió" o un "no volvieron". **La plata de una
   rendición se anula solo en VENTAS → ANULAR**, como cualquier venta (y si la caja ya cerró, sale como "anulado
   después").
@@ -144,8 +146,8 @@ después"), VENTAS, "Pago verificado", el historial, CERRAR CAJA a ciegas y una 
   números cruzados entre un bloque y una venta, o entre dos bloques.
 - **`porPersona`:** por `contrato_alumno_id` o, sin él, por nombre normalizado; primero quien tiene más sin rendir.
 - **Números** (`cuentas/numeros_de_entradas.dart`, todo nuevo, sin cambiar firmas): `ocupadosParaRendir(bloques)` →
-  `{'Juan Pérez (para rendir)': tramos}`; VENDER junta `ocupadosDeLaVenta ∪ ocupadosParaRendir` en `_ocupados` y el
-  mensaje sale de `RetiroEntradas.errorTramos` ("El 1205 ya se le dio a Juan Pérez (para rendir)"); `primeroLibreDesde`
+  `{'PÉREZ, JUAN, para rendir': tramos}`; VENDER junta `ocupadosDeLaVenta ∪ ocupadosParaRendir` en `_ocupados` y el
+  mensaje sale de `RetiroEntradas.errorTramos` ("El 1205 ya se le dio a PÉREZ, JUAN, para rendir (1201 al 1220)."); `primeroLibreDesde`
   para que `_proponerNumero` no proponga uno de un bloque; `repetidosConParaRendir` (los cruces, solo en PARA RENDIR).
   `repetidosDeLaVenta`, el historial PDF y `firmaDeLasHojas` no se tocan. **La entrega sin cargo
   (`EntregaPorPartes.numerosDeOtros`, `ocupadosDeLaEntrega`) no mira los bloques: es el otro talonario.**
@@ -170,7 +172,7 @@ después"), VENTAS, "Pago verificado", el historial, CERRAR CAJA a ciegas y una 
 | VENDER: `widgets/vender_para_rendir.dart` (aviso) | Quien puede vender | "Entradas para rendir: N personas · RENDIR", **sin plata**, solo si alguien tiene algo sin rendir |
 | `widgets/rendir_entradas_dialog.dart` (no escribe; hoja de abajo en el celular) | Ídem | Buscador, tarjeta, Vendió / Devuelve, números propuestos, Le quedan, A cobrar, medios o GUARDAR LA DEVOLUCIÓN |
 | VENDER `_rendir` | Ídem | `_frenaSinPermiso()`; ABRIR LA CAJA si vendió y no hay; no corre con `_ocupado`; `pedirCobro` con recargo apagado; `rendir(...)`, `avisarQueCambioLaVenta`, `_cargar` y el comprobante. `_tablasQueMiro`, `_cargar`, `_ocupados` y `_proponerNumero` suman los bloques |
-| VENTAS | El jefe y quien vende | Chip "RENDICIÓN · de …"; el anular de una rendición no pregunta "¿Devolvieron…?", dice "Las 15 vuelven a quedar a cargo de … para rendir" y manda **`devueltas: false`**; REIMPRIMIR saca el comprobante de rendición |
+| VENTAS | El jefe y quien vende | Chip "RENDICIÓN · de …"; el anular de una rendición no pregunta "¿Devolvieron…?", dice "Las 15 vuelven a quedar a cargo de … para rendir" (si rindió de más, cuántas le quedan de verdad; si el bloque todavía no bajó, "dejan de contar como vendidas") y manda **`devueltas: false`**; una venta con el renglón " · para rendir" y sin familia se reconoce como rendición aunque su "vendió" no haya bajado; REIMPRIMIR saca el comprobante de rendición |
 | Cierre de caja → ENTRADAS | — | **No se toca**: la plata ya está en la caja como venta |
 | `avisarQueCambioLaVenta` | — | también invalida `paraRendirDeLaFiestaProvider` |
 

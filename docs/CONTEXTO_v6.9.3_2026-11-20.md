@@ -1,10 +1,13 @@
 # CONTEXTO — la 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo
 
-**Estado (20-nov-2026): programada y probada en el sandbox, SIN PUBLICAR.** La versión del programa sigue en
-`6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y `installer/junior_eventos_setup.iss`), con las novedades
-**"Actualizaciones y estabilidad"** (decisión del usuario, 20-nov). Lleva **un SQL en la nube, solo de agregar, sin
-correr** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **una migración en las PCs, la v81, que solo
-crea una tabla**.
+**Estado (21-nov-2026): SIN PUBLICAR. Lo de VENDER y la entrega en dos partes, programado y probado en el sandbox;
+"Entradas para rendir", sumado adentro de la misma versión, con las etapas 2 a 5 de 9 hechas** (ver "Para retomar").
+La versión del programa sigue en `6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y
+`installer/junior_eventos_setup.iss`), con las novedades **"Actualizaciones y estabilidad"** (decisión del usuario,
+20-nov). Lleva **dos SQL en la nube, solo de agregar, sin correr**
+(`supabase/migrations/20261120120000_entradas_entregas.sql` y `supabase/migrations/20261121120000_entradas_para_rendir.sql`)
+y **dos migraciones en las PCs, la v81 y la v82, que solo crean una tabla cada una** (las PCs tienen la 80). **Con la
+v82 en el código, no correr la app desde esta carpeta contra la base de verdad.**
 
 Planes aprobados: el de la versión, `C:\Users\lover\.claude\plans\cucha-tema-permisos-de-resilient-codd.md` (20-nov,
 madrugada), y el de comprobar y probar, `C:\Users\lover\.claude\plans\hay-que-segur-chequear-synthetic-abelson.md`
@@ -13,7 +16,143 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 
 ## Para retomar en otro chat
 
-### Dónde quedó (20-nov-2026, mediodía)
+### Dónde quedó (21-nov-2026)
+
+- **Lo que faltaba de la 6.9.3 de antes, hecho el 20-nov a la noche** (`ca149c0`): el arreglo 9 (anular una parte
+  queda siempre después de cada copia de la fila, con su rotura, la 35), **las roturas 21, 22 y 24 a 35, todas
+  detectadas**, y la suite entera: 5.798 tests, ninguno falla.
+- **"Entradas para rendir", pedido del usuario el 20-nov y sumado adentro de la 6.9.3** (plan aprobado
+  `C:\Users\lover\.claude\plans\que-sigue-fizzy-thompson.md`; SPEC `docs/SPEC_entradas_para_rendir_2026-11-20.md`;
+  maqueta `docs/maqueta_entradas_para_rendir_2026-11-20.html`, que vio y aprobó el 20-nov). A veces se le dan entradas
+  a alguien sin plata en el momento (un egresado o alguien de afuera), las vende y después rinde: al precio del día
+  en que se las llevó, toda la plata, sin comisión, con los números del talonario reservados a su nombre. Ver
+  "Entradas para rendir", abajo.
+  - **Lo que aclaró al ver la maqueta (20-nov): la pulsera no se vende.** Lo único que se vende son las entradas
+    anticipadas; las pulseras VIP y las entradas generales se entregan sin cargo a los alumnos que pagaron. Quien le
+    compra a quien rinde se lleva solo la entrada (`8480ed3`).
+  - **"Olvidá el viceversa":** la regla de quién retira entradas sin cargo no cambia (`RetiroEntradas.bloqueo` y
+    `bloqueoDeLaVenta` no se tocaron).
+  - **Programadas, probadas y guardadas las etapas 2 a 5 de la SPEC**: los datos (`8a25140`), el motor y el SQL de la
+    nube, las cuentas y las pantallas (los commits de abajo). Cada etapa la programó un agente y la revisó otro, que
+    no escribía, hasta que dio bien; al final, siete detalles más de esas revisiones y dos revisiones más. **La suite
+    entera: 6.051 tests, ninguno falla (21-nov), y `flutter analyze` sin avisos en lo tocado.**
+  - **El usuario cortó acá** ("hacé hasta las pantallas: dar, rendir, aviso, ventas, y actualizá el contexto con lo
+    hecho y lo pendiente para retomar en otro chat").
+- **Plan general de la 6.9.3: 85 %** (lo de antes estaba en 96 %; con "Entradas para rendir" faltan los papeles, la
+  ventana de prueba y el cierre). El 100 % es publicar con él.
+
+### Lo que falta, en orden (21-nov)
+
+1. **Etapa 6, los papeles** (sección 6 de la SPEC):
+   - **La constancia "ENTRADAS PARA RENDIR"** (`pdf/para_rendir_pdf.dart`, `abrirConstanciaParaRendirProvider`, media
+     A4 en dos copias para firmar: quién, los números, el precio y "sin pulseras, rinde toda la plata"). Hoy el botón
+     CONSTANCIA de cada bloque está apagado con `kConstanciaTodaviaNo`; tiene que salir también después de DAR.
+   - **El comprobante de la rendición**: el mismo `ComprobanteEntradasPdf` con `DatosDelComprobante.rendicion`
+     ("Recibió / Rinde", regla 59). Hoy VENDER, después de rendir, solo dice "Rendición guardada · … · $ X", y en
+     VENTAS REIMPRIMIR de una rendición está apagado ("El comprobante de la rendición todavía no se imprime"): el de
+     una venta común diría "Pulseras normales".
+   - **Sacar las pulseras de lo vendido** (lo dijo el usuario): `comprobante_entradas_pdf.dart:216` ("Pulseras
+     normales: N") y `:227` ("devolvieron las entradas y pulseras"). VENTAS ya pregunta solo "¿Devolvieron las
+     entradas?". **El historial A4** (`historial_entradas_pdf.dart:278`, "devolvieron las entradas y pulseras") está en
+     la lista de lo que no se toca (§8): cambiar su texto cambia `firmaDeLasHojas` y una tanda ya impresa con una
+     anulada aparecería "sin imprimir". **Preguntarle** si se cambia igual.
+   - Los reemplazos en `PapelesDeLaPrueba` y en `test/arneses_sin_base_test.dart` (regla 60: una ventana de prueba no
+     escribe la constancia en la carpeta del programa).
+2. **Etapa 7, la ventana de prueba y las muestras:** en `tool/venta_entradas_prueba.dart`, el jefe le da 20 a Juan
+   en la PC y Carla rinde 15 y devuelve 5 en la tablet, con el caso sin internet de los dos lados (la nube de prueba
+   ya sube y baja `entradas_para_rendir`: `_sube` y `ponerDeOtroEquipo`); el recorrido de dos equipos en
+   `test/venta_entradas_prueba_test.dart` (rendir dos veces lo mismo da "rindió de más"). Las muestras
+   (`tool/venta_entradas_muestra_test.dart --dart-define=salida=build/muestras_para_rendir`, 23 casos de PARA RENDIR,
+   DAR, el aviso, RENDIR y VENTAS en PC y celular) **hay que sacarlas de nuevo** (las del 21-nov tienen textos viejos)
+   y mandárselas.
+3. **Etapa 8, el cierre:**
+   - **Las roturas 36 a 61** en `tool/roturas_6.9.3.txt` (una por regla de la sección 9 de la SPEC). Los agentes
+     rompieron unas 40 reglas a mano mientras programaban (todas detectadas, y los archivos volvieron a quedar
+     iguales), pero **no están en el archivo**.
+   - **La regla 61:** ampliar `test/venta_entradas_no_toca_test.dart` para que falle si otro archivo que no sea
+     `EntradasLocal` escribe `entradas_para_rendir`.
+   - **`tool/verificar_migracion_v82_test.dart`** (no existe; modelo: `tool/verificar_migracion_v81_test.dart`) sobre
+     una copia nueva de la base real (`python -I tool/copiar_base_solo_lectura.py`), **de la 80 a la 82** (lo que
+     tienen las PCs) y de la 81 a la 82, con la vuelta a la 6.9.2. La app instalada tiene que estar cerrada:
+     pedírselo.
+   - La suite entera y **una revisión independiente de todo "Entradas para rendir"** (un workflow con tres miradas: la
+     plata y las cuentas; sin internet, dos equipos y versiones mezcladas; las pantallas, las llaves y los papeles;
+     cada hallazgo con un verificador que intenta refutarlo).
+4. **Lo que ya estaba pendiente de la 6.9.3:** las muestras de la caja de entregas (`build/muestras_6.9.3/`: las 8
+   juntas partidas, NO CUENTA, la familia hoy de baja, la anulación de una entrega anterior, el TOTAL con la nota) y
+   mandárselas; **el recorrido con el mouse** en `tool/venta_entradas_prueba.dart`, ahora también con PARA RENDIR
+   (el jefe da, Carla rinde, VENTAS anula una rendición), con `python -I tool/huella_de_la_base.py` antes y después
+   (IGUAL) y **el permiso de computer-use: avisarle al celular y esperarlo**; que mire las capturas; y preguntarle
+   por "Emitido:" 3 horas antes en otros papeles (`docs/pendientes/horas-corridas-en-otros-papeles.md`).
+5. **Para preguntarle, sin frenar nada:**
+   - al DAR un número que ya se vendió, el aviso dice "El 1205 ya se le dio a …" (como VENDER desde la 6.9.0); la
+     maqueta decía "ya se le vendió a". Se dejó "ya se le dio a" porque sale de `RetiroEntradas.errorTramos`, que usa
+     también la entrega;
+   - el historial A4 con "pulseras" (punto 1).
+6. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"): **los dos SQL antes de instalar**,
+   y **no dar entradas para rendir hasta que todos los equipos que venden tengan la 6.9.3** (una 6.9.x no conoce los
+   bloques y vendería sus números).
+
+### Entradas para rendir: lo programado (21-nov)
+
+- **Cómo se usa** (el ejemplo de Juan): el lunes el jefe, en modo jefe, entra a ENTRADAS de la fiesta → **PARA
+  RENDIR** → DAR ENTRADAS PARA RENDIR; elige un alumno de la fiesta o escribe nombre y apellido de alguien de afuera
+  (y un contacto, si quiere), cuántas y los números (del 1201 al 1220; hasta dos tramos). **El precio no se escribe:**
+  es el de PRECIOS que rige ese día (la anticipada si todavía vale, si no la general) y queda fijo. Desde ahí ninguna
+  caja vende esos números ("El 1205 ya se le dio a PÉREZ, JUAN, para rendir (1201 al 1220).") y VENDER no los
+  propone. El viernes Carla, con permiso de vender, ve en VENDER **"Entradas para rendir: N personas · RENDIR"**, sin
+  plata; Juan vendió 15 y devuelve 5 (la app propone del 1216 al 1220); le cobra con la hoja de siempre (recargo
+  apagado) y la plata entra en su caja y en su cierre. Se rinde de a partes; si solo devuelve, no hace falta caja.
+  El jefe ve en PARA RENDIR quién tiene qué, desde cuándo y "faltan hasta $X", y puede marcar NO VOLVIERON (con
+  motivo) o ANULAR.
+- **Los datos** (`8a25140`): la tabla **`entradas_para_rendir`** (v82; solo se agregan renglones: `dio`, `vendio`,
+  `devolvio`, `no_volvieron`, `anulo`, este con id fijo `UuidUtils.entradasParaRendirAnulacionId`), el modelo
+  `datos/movimiento_para_rendir.dart` (cada renglón se arma validando: números del 1 en adelante, no al revés, que no
+  se pisen, del bloque, la cantidad justa), y `EntradasLocal.darParaRendir`, `rendir` (una sola transacción: vuelve a
+  contar lo que le queda y guarda la venta con `_venderEn`, que salió del cuerpo de `vender`), `noVolvieron`,
+  `anularDeParaRendir` y `paraRendir`. **La plata es una venta común de `entradas_ventas`**: sin familia
+  (`contratoAlumnoId` null), a nombre de quien rinde, con un solo renglón "<precio> · para rendir"
+  (`MovimientoParaRendir.sufijoDelRenglon`) al precio fijo y sin descuento. "Todo subido" cuenta la tabla. Los dobles
+  (`EntradasEnMemoria`, `EntradasDeUnEquipo`) hacen lo mismo que la base: `test/para_rendir_en_los_dobles_test.dart`
+  corre los mismos casos contra los tres.
+- **El motor y la nube:** la tabla en los mismos 7 lugares que `entradas_entregas` (`_incrementalColumns`, la bajada,
+  `_tablasDelCobro`, prioridad 5 para que suba después de su venta, `tablasDeLaPuerta`, `_cleanForSqlite` y
+  `_tablasSinRevisarBorrados`). SQL `supabase/migrations/20261121120000_entradas_para_rendir.sql`, **sin correr**: sin
+  CHECK, sin claves foráneas, sin índice único, con RLS y los disparadores, fuera de Realtime.
+  `test/sync_tablas_v82_test.dart` compara el modelo, la base, el motor y el SQL, y prueba el motor de verdad contra
+  una nube de mentira.
+- **Las cuentas** (`cuentas/para_rendir.dart`, puras): `ParaRendir.de` (bloques, por persona, totales y avisos: rindió
+  de más, bloque anulado con movimientos, un renglón de un bloque que no bajó, números cruzados), `errorAlDar`,
+  `errorAlRendir` (si anular un "no volvieron" alcanzaría, lo dice), `errorAlMarcarNoVolvieron`,
+  `proponerDevueltos`, `renglon` y `precioParaDar`. En `numeros_de_entradas.dart`: `ocupadosParaRendir`,
+  `primeroLibreDesde` y `repetidosConParaRendir`. **Dos talonarios:** la entrega sin cargo no mira los bloques
+  (`test/entrega_por_partes_test.dart` lo vigila).
+- **Las pantallas:** el botón PARA RENDIR (después de VENTAS, solo con modo jefe y la venta en este equipo; en el
+  celular PRECIOS, VENDER, VENTAS y PARA RENDIR van en un menú porque la barra se desbordaba);
+  `widgets/para_rendir_screen.dart`, `dar_para_rendir_dialog.dart` (no escribe, sin casilla de pulseras),
+  `vender_para_rendir.dart` (el aviso, sin plata), `rendir_entradas_dialog.dart` (no escribe; hoja de abajo en el
+  celular) y `para_rendir_comun.dart`. **Doble llave, y la segunda después de la ventana:** `_dar`, `_noVolvieron` y
+  `_anularMovimiento` empiezan y terminan con `_frenaSinModoJefe()`; `_rendir` de VENDER con `_frenaSinPermiso()`.
+  `_dar` vuelve a leer la fiesta antes de guardar: si con la ventana abierta otro equipo dio o vendió esos números, o
+  **cambió el precio** (GENERAL en PRECIOS, o pasó la medianoche del último día de la anticipada), no guarda y lo
+  dice. **VENTAS:** el chip "RENDICIÓN · de …"; anular una rendición no pregunta si devolvieron, manda `devueltas:
+  false` y dice cuántas vuelven a quedar a su cargo (si rindió de más, las de verdad; si el bloque no bajó todavía,
+  "dejan de contar como vendidas"). Una venta sin familia con el renglón " · para rendir" se reconoce como rendición
+  aunque su "vendió" no haya bajado (la venta sube antes). **En una venta común, la pregunta es solo "¿Devolvieron las
+  entradas?"**. `paraRendirDeLaFiestaProvider` (en `entradas_providers.dart`), y `avisarQueCambioLaVenta` también lo
+  invalida. `test/solo_modo_jefe_test.dart` cubre los archivos y guardados nuevos.
+- **Las pruebas:** `test/para_rendir_test.dart`, `test/para_rendir_pantalla_test.dart`,
+  `test/para_rendir_en_los_dobles_test.dart`, `test/sync_tablas_v82_test.dart`, `test/migracion_v82_test.dart` y lo
+  sumado a `entradas_repositorio_test`, `vender_entradas_pantalla_test`, `ventas_de_entradas_test`,
+  `cierre_de_entradas_test` (regla 42: la plata entra en el cierre de la caja que cobró) y `entrega_por_partes_test`.
+
+### Lo que no se probó de "Entradas para rendir"
+
+- Con la nube de verdad (el SQL no está corrido) y con dos equipos de verdad.
+- Los papeles (no están hechos) y el recorrido con el mouse.
+- La v82 sobre una copia de la base real (`tool/verificar_migracion_v82_test.dart` no existe todavía).
+
+### Dónde quedó antes (20-nov-2026, mediodía)
 
 - **VENDER y la entrega en dos partes: programados, probados y guardados** (`436adec`; los pasos 1 a 5 del plan: los
   dos talonarios, PRECIOS nuevo, "VENDER le vende solo lo pagado entero", la entrega en dos partes con la tabla
@@ -35,7 +174,7 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
   "Lo que falta".
 - **Plan general de la 6.9.3: 96 %; el 100 % es publicar con él.**
 
-### Lo que falta, en orden
+### Lo que faltaba el 20-nov (los pasos 1 a 3, hechos esa noche; el resto pasó a "Lo que falta, en orden (21-nov)")
 
 1. **El arreglo 9, de paso (chico):** `anularParte` (`eventos/services/entregar_parte.dart`) calcula la hora de la
    anulación con `horaDelRenglon` sin mirar las copias de la fila que va a escribir. Con una fila "entregado" cuya
@@ -244,6 +383,9 @@ Lo que pidió la revisión independiente (la lista de abajo, "Lo que pidió la r
    - **A PAGAR** por mesa adicional y por sillas, con o sin descuento, precio c/u, subtotal, total y el talonario de
      las anticipadas con el número que sigue al último de esa caja;
    - la caja se pide una vez; si se cancela, GRATIS sirve igual y A PAGAR muestra ABRIR LA CAJA.
+7. **"Todo subido" de VENDER** (`952900a`) y **la caja de entregas en el cierre** (`8d62895`, `c139ca3`, `ca149c0`).
+8. **Entradas para rendir** (21-nov, etapas 2 a 5 de 9; v82 y un SQL nuevo): ver "Entradas para rendir: lo
+   programado", en "Para retomar en otro chat".
 
 ## Cómo se probó (20-nov)
 
@@ -302,17 +444,19 @@ Lo que pidió la revisión independiente (la lista de abajo, "Lo que pidió la r
 ## Al publicar (con el usuario presente, cuando lo diga)
 
 1. Foto de la mora "antes de 6.9.3" (`supabase/mora_fotos.sql`) y comparar con la de "después de 6.9.2".
-2. Repetir la migración v81 sobre una copia nueva de la base, si pasaron días.
-3. **El SQL de `entradas_entregas`**, con su OK en el momento, antes de instalar; los conteos de antes y después
+2. Repetir la migración sobre una copia nueva de la base, **de la 80 a la 82** (`tool/verificar_migracion_v82_test.dart`),
+   si pasaron días.
+3. **Los dos SQL, `entradas_entregas` y `entradas_para_rendir`**, con su OK en el momento, antes de instalar; los conteos de antes y después
    iguales, y probar que un anónimo no ve ni escribe nada.
 4. Versión `6.9.3+78`, el instalador por pasos (ver el de la 6.9.2) y el APK firmado.
 5. Antes de subir, lo agregado desde `v6.9.2` comparado con los nombres de una copia de la base (el repo es público).
 6. Tag `v6.9.3`, release "Junior Eventos 6.9.3" con el Setup y el APK, novedades "Actualizaciones y estabilidad", y
    la web.
-7. **Todas las PCs y las tablets con la 6.9.3 antes de usar PRECIOS nuevo o entregar por partes**: una 6.9.x muestra
+7. **Todas las PCs y las tablets con la 6.9.3 antes de usar PRECIOS nuevo, entregar por partes o dar entradas para
+   rendir** (una 6.9.x no conoce los bloques y vendería sus números): una 6.9.x muestra
    una entrega a medias como "Pendiente" y junta los talonarios. Volver atrás: reinstalar la 6.9.2 sobre la misma
    base (la tabla nueva queda y no molesta).
 8. Foto de la mora "después de 6.9.3".
 
-**El locutor** (`docs/SPEC_locutor_2026-11-18.md`, en pausa desde el 18-nov) **pasa a la v82**: la v81 ya es de la
-entrega en dos partes.
+**El locutor** (`docs/SPEC_locutor_2026-11-18.md`, en pausa desde el 18-nov) **pasa a la v83**: la v81 es de la
+entrega en dos partes y la v82 de las entradas para rendir.

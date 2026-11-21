@@ -539,7 +539,7 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v81 (6.9.3): no correr la app desde esta carpeta contra la base de verdad** hasta
+- **La base del equipo va por la v82 (6.9.3): no correr la app desde esta carpeta contra la base de verdad** hasta
   que esta PC tenga la 6.9.3 instalada (hasta entonces tiene la 80). Los arneses que no abren la base sí.
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
@@ -695,13 +695,14 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
   dicen se comprueba en los tests con la letra de fábrica.
 
-**La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo — PROGRAMADA Y PROBADA EN EL
-SANDBOX el 20-nov, SIN PUBLICAR** (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+**La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — SIN
+PUBLICAR** (lo de VENDER y la entrega, programado y probado en el sandbox el 20-nov; Entradas para rendir, a medias) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
 ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
 vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
-al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Un SQL en la nube, solo de agregar, SIN
-CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81 en las PCs, que solo crea una tabla**
-(probada sobre una copia de la base real el 20-nov).
+al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar, SIN
+CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121120000_entradas_para_rendir.sql`) y
+**la v81 y la v82 en las PCs, que solo crean una tabla cada una** (la v81 probada sobre una copia de la base real el
+20-nov; la v82, todavía no).
 - **Los dos talonarios:** lo que se vende (las anticipadas, `NumerosDeEntradas.ocupadosDeLaVenta`) y lo que se
   entrega sin cargo (las generales de los alumnos, `ocupadosDeLaEntrega`) ya no se frenan entre sí; cada uno no deja
   repetir lo suyo. **Los números de las generales son opcionales.**
@@ -744,14 +745,35 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql`) y **la v81
   - **La planilla de entrega pasa por `imprimirPlanillaDeEntregaProvider`** (VENDER y la impresora de la entrega):
     las ventanas de prueba la reemplazan, igual que `imprimirEntregasSinCargoProvider`; `test/arneses_sin_base_test.dart`
     falla si una ventana con el cierre o la entrega no lo hace.
-- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO: el arreglo 9 (anular después de
-  las copias de la fila, chico), correr las roturas ya escritas (21, 22 y 24 a 34 de `tool/roturas_6.9.3.txt`), una
-  revisión independiente, las muestras de la caja, el recorrido con el mouse (con el permiso del usuario), que mire las
-  capturas, preguntarle por "Emitido:" 3 horas antes en otros papeles (`docs/pendientes/horas-corridas-en-otros-papeles.md`)
-  y publicar con él.
-- **No usar PRECIOS nuevo ni entregar por partes hasta que todas las PCs y las tablets tengan la 6.9.3**: una 6.9.x
-  ve una entrega a medias como "Pendiente" y junta los talonarios.
-- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v82**: la v81 es de la entrega en dos partes.
+- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO (21-nov): de "Entradas para
+  rendir", los papeles (la constancia y el comprobante de la rendición, y sacar las pulseras de lo vendido), la ventana
+  de prueba y las muestras, y el cierre (roturas 36 a 61, la regla 61, `verificar_migracion_v82` sobre una copia, la
+  suite y una revisión independiente); de antes, las muestras de la caja, el recorrido con el mouse (con el permiso del
+  usuario), que mire las capturas, preguntarle por "Emitido:" 3 horas antes en otros papeles
+  (`docs/pendientes/horas-corridas-en-otros-papeles.md`) y publicar con él. El arreglo 9 y las roturas 21 a 35 quedaron
+  hechos el 20-nov (`ca149c0`).
+- **No usar PRECIOS nuevo, entregar por partes ni dar entradas para rendir hasta que todas las PCs y las tablets
+  tengan la 6.9.3**: una 6.9.x ve una entrega a medias como "Pendiente", junta los talonarios y vendería los números
+  de un bloque para rendir.
+- **Entradas para rendir (21-nov, adentro de la 6.9.3; etapas 2 a 5 de 9 hechas, sin publicar;
+  `docs/SPEC_entradas_para_rendir_2026-11-20.md`, maqueta aprobada; lo programado, en "Entradas para rendir: lo
+  programado" del CONTEXTO).** Al que se le dan entradas sin plata (un egresado o alguien de afuera) las vende y rinde
+  después: al precio del día en que se las llevó (queda fijo), toda la plata, sin comisión, con los números reservados.
+  **La pulsera no se vende** (lo aclaró el usuario el 20-nov): lo único que se vende son las anticipadas; las pulseras
+  VIP y las generales se entregan sin cargo. **La regla de quién retira sin cargo no cambió** ("olvidá el viceversa").
+  - **Tabla `entradas_para_rendir` (v82; solo se agregan renglones: `dio`, `vendio`, `devolvio`, `no_volvieron`,
+    `anulo` con id fijo)**, con su SQL `supabase/migrations/20261121120000_entradas_para_rendir.sql` **sin correr**. La
+    escribe solo `EntradasLocal` (`darParaRendir`, `rendir` en una transacción, `noVolvieron`, `anularDeParaRendir`).
+  - **La plata de una rendición es una venta común de `entradas_ventas`**: sin familia, a nombre de quien rinde, con un
+    renglón "<precio> · para rendir" (`MovimientoParaRendir.sufijoDelRenglon`) al precio fijo y sin descuento; entra en
+    el cierre de la caja que cobró y se anula en VENTAS con `devueltas: false`.
+  - Las cuentas, en `cuentas/para_rendir.dart` (`ParaRendir.de`, `errorAlDar`, `errorAlRendir`, ...); VENDER no vende
+    ni propone un número de un bloque (`ocupadosParaRendir`); **la entrega sin cargo no mira los bloques** (dos
+    talonarios).
+  - Dar, NO VOLVIERON y anular: solo el jefe, con la llave al empezar y **otra vez después de la ventana**; rendir, con
+    "Vende entradas" (`_frenaSinPermiso`, también dos veces). Quien vende no ve plata en el aviso de VENDER.
+- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v83**: la v81 es de la entrega en dos partes y
+  la v82 de las entradas para rendir.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -798,7 +820,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 81 en la rama, con la tabla de la entrega en dos partes; las PCs tienen la 80) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 82 en la rama, con las tablas de la entrega en dos partes y de las entradas para rendir; las PCs tienen la 80) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).

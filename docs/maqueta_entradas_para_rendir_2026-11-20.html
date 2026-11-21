@@ -229,7 +229,7 @@ function errDar(){
   const del = num(d.del), hasta = del + d.cant - 1;
   if (del < 1) return 'Los números del talonario empiezan en 1.';
   for (let x = del; x <= hasta; x++){
-    const b = quienTiene(x); if (b) return `El ${x} ya se le dio a ${b.persona} (para rendir) (${tramo(b.del, b.del + b.cant - 1)}).`;
+    const b = quienTiene(x); if (b) return `El ${x} ya se le dio a ${b.persona}, para rendir (${tramo(b.del, b.del + b.cant - 1)}).`;
     for (const [a, z, q] of VENDIDAS) if (x >= a && x <= z) return `El ${x} ya se le vendió a ${q} (${tramo(a, z)}).`;
   }
   return null;
@@ -386,7 +386,7 @@ function p4(){
     <div class="relleno" style="margin:8px 0">La lista de la fiesta con su filtro, GRATIS y A PAGAR, como hoy</div>
     <div class="card"><div class="rot">Una venta común: números del talonario (opcionales)</div>
       <div class="fila"><div class="campo"><span>Del</span><input id="tal" value="${S.talonario}" inputmode="numeric" oninput="S.talonario=this.value;pintar()"></div><div class="campo"><span>Al</span><input value="${t ? t + 1 : ''}" readonly></div></div>
-      ${b ? `<p class="err nuevo" style="padding:4px 8px">El ${t} ya se le dio a ${b.persona} (para rendir) (${tramo(b.del, b.del + b.cant - 1)}).</p>` : '<p class="gris" style="font-size:12.5px">Probá 1205 o 1250.</p>'}
+      ${b ? `<p class="err nuevo" style="padding:4px 8px">El ${t} ya se le dio a ${b.persona}, para rendir (${tramo(b.del, b.del + b.cant - 1)}).</p>` : '<p class="gris" style="font-size:12.5px">Probá 1205 o 1250.</p>'}
     </div></div>`;
 }
 function p5(){
