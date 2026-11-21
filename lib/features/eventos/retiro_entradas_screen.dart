@@ -24,6 +24,7 @@ import '../entradas/datos/entradas_repositorio.dart';
 import '../entradas/providers/entradas_providers.dart';
 import '../entradas/services/en_caja.dart';
 import '../entradas/services/nombre_de_la_fiesta.dart';
+import '../entradas/widgets/para_rendir_screen.dart';
 import '../entradas/widgets/precios_de_entradas_dialog.dart';
 import '../entradas/widgets/vender_entradas_screen.dart';
 import '../entradas/widgets/ventas_de_entradas_screen.dart';
@@ -798,9 +799,14 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           // La venta de entradas es de la oficina: en el mostrador se entra por
           // el inicio de Entradas.
           if (!widget.enElMostrador) ...[
-            _botonPrecios(),
-            _botonVender(),
-            _botonVentas(),
+            if (CortesPantalla.esCelular(MediaQuery.sizeOf(context).width))
+              _menuDeLaVenta()
+            else ...[
+              _botonPrecios(),
+              _botonVender(),
+              _botonVentas(),
+              _botonParaRendir(),
+            ],
           ],
           IconButton(
             tooltip: 'Actualizar',
@@ -834,6 +840,51 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           : _errorCarga != null
               ? Center(child: Text('No se pudo cargar: $_errorCarga'))
               : _cuerpo(),
+    );
+  }
+
+  /// En un celular PRECIOS, VENDER, VENTAS y PARA RENDIR no entran en la barra
+  /// (21-nov-2026: con PARA RENDIR se desbordaba; ver el riesgo de la sección
+  /// 10 de `docs/SPEC_entradas_para_rendir_2026-11-20.md`): van en un menú.
+  ///
+  /// **Cada opción es su botón**: se arma el botón y se toma de él si está
+  /// prendido, qué abre y su motivo. Así el menú no tiene otra regla al lado,
+  /// y lo apagado se ve apagado, con el motivo, como en la PC.
+  Widget _menuDeLaVenta() {
+    final opciones = [
+      for (final b in [_botonPrecios(), _botonVender(), _botonVentas(), _botonParaRendir()])
+        if (b case Tooltip(:final message?, child: final TextButton boton))
+          (
+            clave: (boton.key! as ValueKey<String>).value,
+            texto: (boton.child! as Text).data!,
+            abrir: boton.onPressed,
+            motivo: message,
+          ),
+    ];
+    return PopupMenuButton<String>(
+      key: const Key('entradas_menu_venta'),
+      tooltip: 'La venta de entradas',
+      icon: const Icon(Icons.confirmation_number_outlined),
+      onSelected: (clave) {
+        for (final o in opciones) {
+          if (o.clave == clave) o.abrir?.call();
+        }
+      },
+      itemBuilder: (_) => [
+        for (final o in opciones)
+          PopupMenuItem<String>(
+            key: Key('${o.clave}_menu'),
+            value: o.clave,
+            enabled: o.abrir != null,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              enabled: o.abrir != null,
+              title: Text(o.texto),
+              subtitle: o.abrir != null ? null : Text(o.motivo),
+            ),
+          ),
+      ],
     );
   }
 
@@ -952,6 +1003,44 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => VentasDeEntradasScreen(evento: widget.evento),
+      ),
+    );
+    if (mounted) await _cargar(silencioso: true);
+  }
+
+  /// PARA RENDIR (21-nov-2026): quién se llevó entradas para venderlas por su
+  /// cuenta, qué rindió y qué le queda; ahí el jefe las da. **Solo el jefe en
+  /// modo jefe**, como VENTAS: sin él se ve apagado, con el motivo. En el
+  /// mostrador no está (lo de quien vende es el aviso de VENDER).
+  ({bool prendido, String motivo}) get _paraRendir {
+    final esJefe = ref.watch(esRolJefeProvider);
+    final enElEquipo = ref.watch(entradasEnEsteEquipoProvider);
+    return (
+      prendido: esJefe && enElEquipo,
+      motivo: !enElEquipo
+          ? kEntradasDesdeLaPc
+          : (esJefe ? 'Las entradas que alguien se llevó para vender y rendir' : kSoloEnModoJefe),
+    );
+  }
+
+  Widget _botonParaRendir() {
+    final (:prendido, :motivo) = _paraRendir;
+    return Tooltip(
+      message: motivo,
+      child: TextButton(
+        key: const Key('entradas_para_rendir'),
+        onPressed: prendido ? _abrirParaRendir : null,
+        child: const Text('PARA RENDIR'),
+      ),
+    );
+  }
+
+  Future<void> _abrirParaRendir() async {
+    // Doble llave: el botón ya está apagado sin modo jefe.
+    if (!ref.read(esRolJefeProvider)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ParaRendirScreen(evento: widget.evento),
       ),
     );
     if (mounted) await _cargar(silencioso: true);

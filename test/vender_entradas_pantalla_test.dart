@@ -18,6 +18,7 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
+import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
@@ -1657,6 +1658,391 @@ void main() {
       await _montar(tester, preparar: _perezDebeOtraCosa, familiaId: _perez);
       expect(find.byKey(const Key('vender_familia_elegida')), findsOneWidget);
       expect(_texto(tester, 'vender_linea_mesa_1_cantidad'), '8');
+    });
+  });
+
+  // ── Las entradas para rendir (21-nov-2026) ─────────────────────────────────
+  //
+  // `docs/SPEC_entradas_para_rendir_2026-11-20.md`: el jefe le da a alguien
+  // entradas para que las venda por su cuenta; en VENDER sale el aviso y quien
+  // cobra le rinde lo vendido (una venta de esta caja) y lo que no vendió.
+  group('las entradas para rendir', () {
+    /// El jefe le da a [persona] [cantidad] desde [desde], a $ 8.000 la
+    /// anticipada.
+    Future<MovimientoParaRendir> dar(
+      EntradasEnMemoria entradas, {
+      String persona = 'PÉREZ, JUAN',
+      int desde = 1201,
+      int cantidad = 20,
+    }) =>
+        entradas.darParaRendir(
+          eventoId: idFiestaEntrega,
+          personaNombre: persona,
+          cantidad: cantidad,
+          numeros: [TramoTalonario(desde, desde + cantidad - 1)],
+          precio: 8000,
+          nombrePrecio: 'Entrada anticipada',
+          quien: 'Jefe',
+        );
+
+    /// Todo lo que dice el aviso de VENDER, junto.
+    String aviso(WidgetTester tester) => [
+          for (final t in tester.widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('vender_para_rendir')),
+            matching: find.byType(Text),
+          )))
+            t.data ?? t.textSpan!.toPlainText(),
+        ].join(' ');
+
+    // Regla 53: quien cobra cuenta su caja a ciegas. Si el aviso dijera
+    // "faltan $ 240.000", sabría cuánta plata tendría que entrar.
+    testWidgets('el aviso dice cuántas personas, sin ninguna plata, y solo si alguien '
+        'tiene algo sin rendir', (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) async {
+        await dar(entradas);
+        await dar(entradas, persona: 'SOSA, DIEGO', desde: 1231, cantidad: 10);
+      });
+      expect(_texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 2 personas');
+      expect(aviso(tester), isNot(contains(r'$')), reason: 'sin plata: ${aviso(tester)}');
+      expect(aviso(tester), isNot(matches(RegExp(r'\d{4}'))),
+          reason: 'ni montos ni números del talonario');
+      expect(find.byKey(const Key('vender_rendir')), findsOneWidget);
+
+      // SOSA devuelve todo: queda una persona.
+      final sosa = m.entradas.listaParaRendir.last;
+      await m.entradas.rendir(
+        bloque: sosa,
+        vendidas: 0,
+        devueltas: 10,
+        numerosDevueltos: const [TramoTalonario(1231, 1240)],
+        quien: 'Jefe',
+      );
+      m.e.motor.bajo.add({'entradas_para_rendir'});
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+    });
+
+    testWidgets('sin nadie con entradas para rendir, el aviso no está', (tester) async {
+      await _montar(tester);
+      expect(find.byKey(const Key('vender_para_rendir')), findsNothing);
+    });
+
+    // Regla 43: los números que alguien tiene para rendir son del mismo
+    // talonario de las anticipadas: una venta común no los vende.
+    testWidgets('una venta común no vende un número que alguien tiene para rendir; uno '
+        'que devolvió, sí', (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      await _aAlguienDeAfuera(tester);
+      await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
+      await _poner(tester, 'vender_del', '1205');
+      expect(_falta(tester), 'El 1205 ya se le dio a PÉREZ, JUAN, para rendir (1201 al 1220).');
+      expect(_apagado(tester, 'vender_efectivo'), isTrue);
+      // El 1200 y el 1201: el segundo ya es del bloque.
+      await _poner(tester, 'vender_del', '1200');
+      expect(_falta(tester), startsWith('El 1201 ya se le dio a PÉREZ, JUAN, para rendir'));
+      await _poner(tester, 'vender_del', '1221');
+      expect(_falta(tester), isNull);
+
+      // Devuelve del 1216 al 1220: esos quedan libres.
+      await m.entradas.rendir(
+        bloque: m.entradas.listaParaRendir.single,
+        vendidas: 0,
+        devueltas: 5,
+        numerosDevueltos: const [TramoTalonario(1216, 1220)],
+        quien: 'Jefe',
+      );
+      m.e.motor.bajo.add({'entradas_para_rendir'});
+      await tester.pumpAndSettle();
+      await _poner(tester, 'vender_del', '1216');
+      expect(_falta(tester), isNull);
+      await _tocar(tester, 'vender_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas.single.numeros, '1216-1217');
+    });
+
+    testWidgets('el número propuesto salta los que alguien tiene para rendir',
+        (tester) async {
+      await _montar(tester, ventasDeAntes: (entradas) async {
+        final caja = entradas.listaCajas.single;
+        await entradas.vender(
+          caja: caja,
+          compradorNombre: 'RUIZ MARTA',
+          renglones: [RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 10000, cantidad: 2)],
+          medio: MedioBarra.efectivo,
+          efectivo: 20000,
+          numeros: '1199-1200',
+          quien: 'Carla',
+        );
+        await dar(entradas);
+      });
+      await _aAlguienDeAfuera(tester);
+      String del() =>
+          tester.widget<TextField>(find.byKey(const Key('vender_del'))).controller!.text;
+      expect(del(), '1221', reason: 'el que sigue (1201) lo tiene PÉREZ, JUAN para rendir');
+      expect(_texto(tester, 'vender_talonario_ayuda'), contains('para rendir'));
+      await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
+      expect(_falta(tester), isNull);
+    });
+
+    // De punta a punta: Carla le cobra a PÉREZ, JUAN las 15 que vendió y él le
+    // devuelve las 5 que no (las últimas, propuestas). Queda una venta de su
+    // caja, sin familia, al precio del día en que se las llevó.
+    testWidgets('RENDIR: vendió 15 y devuelve 5; queda la venta en esta caja y no le '
+        'queda ninguna', (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      final caja = m.entradas.listaCajas.single;
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      // Uno solo con algo para rendir: ya viene elegido.
+      expect(_texto(tester, 'rendir_tarjeta_texto'),
+          'se llevó 20 el vie 20/11 · del 1201 al 1220 · Entrada anticipada · le quedan 20');
+      expect(find.byKey(const Key('rendir_guardar_devolucion')), findsOneWidget);
+      expect(_apagado(tester, 'rendir_guardar_devolucion'), isTrue);
+
+      await _tocar(tester, 'rendir_vendio_mas', veces: 15);
+      await _tocar(tester, 'rendir_devuelve_mas', veces: 5);
+      expect(_texto(tester, 'rendir_le_quedan'), '0');
+      expect(tester.widget<TextField>(find.byKey(const Key('rendir_del'))).controller!.text,
+          '1216', reason: 'los últimos que tiene, propuestos');
+      expect(_texto(tester, 'rendir_al_calculado'), 'al 1220');
+      expect(_texto(tester, 'rendir_a_cobrar'), r'A cobrar: 15 × $ 8.000');
+      expect(_texto(tester, 'rendir_total'), r'$ 120.000');
+      expect(find.byKey(const Key('rendir_error')), findsNothing);
+      // No se puede rendir más de lo que se llevó.
+      expect(
+        tester.widget<IconButton>(find.byKey(const Key('rendir_vendio_mas'))).onPressed,
+        isNull,
+      );
+
+      await _tocar(tester, 'rendir_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+
+      final venta = m.entradas.listaVentas.single;
+      expect(venta.cajaEntradasId, caja.id);
+      expect(venta.compradorNombre, 'PÉREZ, JUAN');
+      expect(venta.contratoAlumnoId, isNull, reason: 'no es de ninguna familia');
+      expect(venta.cantidad, 15);
+      expect(venta.total, 120000);
+      expect(venta.renglones.single.nombre, 'Entrada anticipada · para rendir');
+      expect(venta.renglones.single.descuentoPct, 0);
+      expect(venta.numeros, isNull, reason: 'los números los lleva el bloque');
+      final movimientos = m.entradas.listaParaRendir;
+      expect(movimientos.where((x) => x.esVendio).single.ventaId, venta.id);
+      expect(movimientos.where((x) => x.esDevolvio).single.numeros, '1216-1220');
+      final cuenta = ParaRendir.de(
+        movimientos: movimientos,
+        ventas: m.entradas.listaVentas,
+        anulaciones: m.entradas.listaAnulaciones,
+      );
+      expect(cuenta.bloques.single.sinRendir, 0);
+      expect(cuenta.bloques.single.rindioTodo, isTrue);
+
+      // VENDER: ya nadie tiene para rendir, y el aviso de lo guardado.
+      expect(find.byKey(const Key('vender_para_rendir')), findsNothing);
+      expect(_texto(tester, 'vender_rendicion_guardada_texto'),
+          r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 · $ 120.000');
+      // El comprobante de la rendición llega con los papeles: no se abre el de
+      // una venta, que diría "Pulseras normales".
+      expect(m.comprobantes, isEmpty);
+      expect(find.byKey(const Key('vender_ver_comprobante')), findsNothing);
+    });
+
+    // 21-nov-2026, sección 2 de la SPEC: el cobro de RENDIR es la hoja de
+    // siempre **con el recargo apagado** (rinde toda la plata, al precio del
+    // día en que se las llevó); se puede prender si paga por transferencia.
+    // Una venta común por transferencia, con el mismo recargo de la fiesta, lo
+    // trae prendido ("por transferencia, con el recargo de la fiesta").
+    testWidgets('el cobro de RENDIR abre con el recargo apagado aunque la fiesta tenga '
+        'recargo, y se puede prender', (tester) async {
+      final m = await _montar(tester, recargo: 5, ventasDeAntes: (entradas) => dar(entradas));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: 3);
+      await _tocar(tester, 'rendir_transferencia');
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(find.byKey(const Key('cobro_recargo'))).value,
+          isFalse);
+      expect(_texto(tester, 'cobro_transfiere'), r'$ 24.000', reason: r'3 × $ 8.000, sin recargo');
+      await _confirmarElCobro(tester);
+      final v = m.entradas.listaVentas.single;
+      expect([v.medio, v.total, v.recargo, v.transferencia],
+          [MedioBarra.transferencia, 24000, 0, 24000]);
+    });
+
+    testWidgets('el recargo de RENDIR se puede prender a mano', (tester) async {
+      final m = await _montar(tester, recargo: 5, ventasDeAntes: (entradas) => dar(entradas));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: 3);
+      await _tocar(tester, 'rendir_transferencia');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cobro_recargo')));
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'cobro_transfiere'), r'$ 25.200');
+      await _confirmarElCobro(tester);
+      final v = m.entradas.listaVentas.single;
+      expect([v.total, v.recargo, v.transferencia], [24000, 1200, 25200]);
+    });
+
+    // El precio del bloque queda fijo: si hoy la entrada vale otra cosa, RENDIR
+    // lo dice, para que quien cobra no se sorprenda; si vale lo mismo, nada.
+    String? otroPrecio(WidgetTester tester) {
+      final f = find.descendant(
+        of: find.byKey(const Key('rendir_otro_precio')),
+        matching: find.byType(Text),
+      );
+      return f.evaluate().isEmpty ? null : tester.widget<Text>(f).data;
+    }
+
+    testWidgets('si hoy la entrada vale otra cosa, RENDIR avisa que rinde al precio del '
+        'día en que se las llevó', (tester) async {
+      // Se las llevó con la anticipada a $ 8.000; hoy rige la general a $ 10.000.
+      await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      expect(otroPrecio(tester),
+          r'Se las llevó a $ 8.000 (entrada anticipada): rinde a ese precio, aunque hoy '
+          r'la entrada valga $ 10.000.');
+      await _tocar(tester, 'rendir_vendio_mas', veces: 2);
+      expect(_texto(tester, 'rendir_a_cobrar'), r'A cobrar: 2 × $ 8.000');
+    });
+
+    testWidgets('si hoy vale lo mismo, RENDIR no avisa nada del precio', (tester) async {
+      // Hoy rige la anticipada a $ 8.000, la misma con que se las llevó.
+      await _montar(tester, anticipada: true, ventasDeAntes: (entradas) => dar(entradas));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rendir_tarjeta_texto')), findsOneWidget);
+      expect(otroPrecio(tester), isNull);
+      expect(find.byKey(const Key('rendir_otro_precio')), findsNothing);
+    });
+
+    testWidgets('volver del cobro no guarda nada y vuelve a RENDIR con lo cargado',
+        (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: 3);
+      await _tocar(tester, 'rendir_efectivo');
+      await tester.pumpAndSettle();
+      // La hoja del cobro: se vuelve sin confirmar.
+      await tester.tap(find.byKey(const Key('cobro_volver')));
+      await tester.pumpAndSettle();
+      expect(m.entradas.listaVentas, isEmpty);
+      expect(m.entradas.listaParaRendir, hasLength(1));
+      expect(_texto(tester, 'rendir_vendio_cantidad'), '3');
+    });
+
+    testWidgets('solo devuelve: no pide caja ni plata', (tester) async {
+      final m = await _montar(
+        tester,
+        conCaja: false,
+        ventasDeAntes: (entradas) => dar(entradas, cantidad: 4),
+      );
+      // VENDER pide la caja al entrar: se vuelve sin abrirla.
+      await tester.tap(find.byKey(const Key('abrir_caja_volver')));
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_devuelve_mas', veces: 4);
+      expect(find.byKey(const Key('rendir_efectivo')), findsNothing);
+      await _tocar(tester, 'rendir_guardar_devolucion');
+      await tester.pumpAndSettle();
+      expect(m.entradas.listaCajas, isEmpty);
+      expect(m.entradas.listaVentas, isEmpty);
+      expect(m.entradas.listaParaRendir.where((x) => x.esDevolvio).single.numeros, '1201-1204');
+      expect(_texto(tester, 'vender_rendicion_guardada_texto'),
+          'Devolución guardada · PÉREZ, JUAN · devolvió 4 · le quedan 0');
+    });
+
+    testWidgets('lo vendido sin caja pide ABRIR LA CAJA, y abierta se cobra',
+        (tester) async {
+      final m = await _montar(
+        tester,
+        conCaja: false,
+        ventasDeAntes: (entradas) => dar(entradas),
+      );
+      await tester.tap(find.byKey(const Key('abrir_caja_volver')));
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: 2);
+      expect(find.byKey(const Key('rendir_sin_caja')), findsOneWidget);
+      expect(find.byKey(const Key('rendir_efectivo')), findsNothing);
+      await _tocar(tester, 'rendir_abrir_caja');
+      await tester.pumpAndSettle();
+      await _poner(tester, 'abrir_caja_cambio', '0');
+      await tester.tap(find.byKey(const Key('abrir_caja_abrir')));
+      await tester.pumpAndSettle();
+      expect(m.entradas.listaCajas, hasLength(1));
+      expect(find.byKey(const Key('rendir_sin_caja')), findsNothing);
+      await _tocar(tester, 'rendir_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas.single.cajaEntradasId, m.entradas.listaCajas.single.id);
+      expect(m.entradas.listaVentas.single.total, 16000);
+    });
+
+    testWidgets('si otro equipo rindió en el medio, no guarda nada y lo dice',
+        (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas, cantidad: 4));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_devuelve_mas', veces: 4);
+      // Mientras tanto, otro equipo le recibió 2.
+      await m.entradas.rendir(
+        bloque: m.entradas.listaParaRendir.single,
+        vendidas: 0,
+        devueltas: 2,
+        numerosDevueltos: const [TramoTalonario(1201, 1202)],
+        quien: 'Romi',
+      );
+      await _tocar(tester, 'rendir_guardar_devolucion');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('cambió algo mientras cargabas la rendición'), findsOneWidget);
+      expect(m.entradas.listaParaRendir.where((x) => x.esDevolvio), hasLength(1));
+    });
+
+    testWidgets('sin el permiso de vender no se rinde (la segunda llave)', (tester) async {
+      // Con el permiso se monta; se lo sacan con RENDIR abierto.
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas, cantidad: 2));
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_devuelve_mas', veces: 2);
+      m.e.operadores.permisos.poner(
+        m.e.operador().id,
+        const PermisosEfectivos(entradas: true),
+      );
+      await m.c.read(appRoleProvider.notifier).entrarComoEntradas(
+            m.e.operador(),
+            const PermisosEfectivos(entradas: true),
+          );
+      await _tocar(tester, 'rendir_guardar_devolucion');
+      await tester.pumpAndSettle();
+      expect(m.entradas.listaParaRendir, hasLength(1), reason: 'no se guardó nada');
+    });
+
+    testWidgets('en un celular RENDIR es una hoja desde abajo, sin cortes', (tester) async {
+      final m = await _montar(
+        tester,
+        tamano: const Size(390, 1300),
+        ventasDeAntes: (entradas) => dar(entradas),
+      );
+      expect(tester.takeException(), isNull);
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await _tocar(tester, 'rendir_vendio_mas', veces: 15);
+      await _tocar(tester, 'rendir_devuelve_mas', veces: 5);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await _tocar(tester, 'rendir_transferencia');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(tester.takeException(), isNull);
+      expect(m.entradas.listaVentas.single.medio, MedioBarra.transferencia);
     });
   });
 

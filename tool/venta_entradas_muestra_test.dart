@@ -51,6 +51,17 @@
 //   • Entradas_36: la entrega del jefe con las partes de cada familia.
 // La planilla por material es otra muestra: tool/planilla_entrega_muestra_test.dart.
 //
+// Las entradas para rendir (21-nov-2026, etapa 5), con cuatro personas:
+//   • Entradas_40 y 40b: PARA RENDIR, con una persona desplegada (PC y celular);
+//   • Entradas_41 a 41e: DAR (a alguien de afuera con un número que ya tiene
+//     otro, a un alumno de la lista, en el celular, la confirmación) y NO
+//     VOLVIERON;
+//   • Entradas_42 y 42b: el aviso de VENDER, sin plata, y un número de un
+//     bloque frenado;
+//   • Entradas_43 a 43e: RENDIR (vendió 15 y devuelve 5; con otro precio hoy;
+//     en el celular; sin caja; y la rendición guardada);
+//   • Entradas_44 a 45: VENTAS con las rendiciones marcadas, y su anular.
+//
 // Los nombres y el precio de $ 10.000 son inventados.
 
 // ignore_for_file: avoid_print, invalid_use_of_visible_for_testing_member
@@ -84,6 +95,7 @@ import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dar
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/imprimir_por_hojas.dart';
+import 'package:arguello_events/features/entradas/widgets/para_rendir_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/precios_de_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
@@ -1428,4 +1440,338 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'nada se desborda');
     await guardar(tester, clave, 'Entradas_36_entrega_jefe.png');
   });
+
+  // ── Las entradas para rendir (21-nov-2026, etapa 5: las pantallas) ─────────
+  //
+  // Las mismas cuatro personas de la maqueta (nombres inventados): PÉREZ (20,
+  // nada rendido), GÓMEZ, ANA (alumna: 10, rindió todo), SOSA (15: vendió 8,
+  // devolvió 5 y 2 no volvieron) y MOLINA (10, nada rendido).
+
+  final hoyConAnticipada = DateTime.utc(2026, 11, 20, 12);
+
+  Future<MovimientoParaRendir> darParaRendir(
+    EntradasEnMemoria e,
+    String persona,
+    int desde,
+    int cantidad, {
+    String? alumno,
+    String? contacto,
+  }) =>
+      e.darParaRendir(
+        eventoId: idFiestaEntrega,
+        personaNombre: persona,
+        personaContacto: contacto,
+        contratoAlumnoId: alumno,
+        cantidad: cantidad,
+        numeros: [TramoTalonario(desde, desde + cantidad - 1)],
+        precio: 8000,
+        nombrePrecio: 'Entrada anticipada',
+        quien: 'Jefe',
+      );
+
+  Future<void> cuatroParaRendir(EntradasEnMemoria e) async {
+    final caja = e.listaCajas.isNotEmpty
+        ? e.listaCajas.first
+        : await e.abrirCaja(eventoId: idFiestaEntrega, operadorNombre: 'Carla');
+    await darParaRendir(e, 'PÉREZ, JUAN', 1201, 20, contacto: '351 555-0101');
+    final gomez = await darParaRendir(e, 'GÓMEZ, ANA', 1221, 10, alumno: EntregaEnMemoria.idGomez);
+    await e.rendir(caja: caja, bloque: gomez, vendidas: 6, efectivo: 48000, quien: 'Carla');
+    await e.rendir(caja: caja, bloque: gomez, vendidas: 4, efectivo: 32000, quien: 'Carla');
+    final sosa = await darParaRendir(e, 'SOSA, DIEGO', 1231, 15, contacto: 'DNI 30.111.222');
+    await e.rendir(
+      caja: caja,
+      bloque: sosa,
+      vendidas: 8,
+      devueltas: 5,
+      numerosDevueltos: const [TramoTalonario(1239, 1243)],
+      efectivo: 64000,
+      quien: 'Carla',
+    );
+    await e.noVolvieron(
+      sosa,
+      cantidad: 2,
+      numeros: const [TramoTalonario(1244, 1245)],
+      motivo: 'Dice que las perdió',
+      quien: 'Jefe',
+    );
+    await darParaRendir(e, 'MOLINA, CARLOS', 1246, 10);
+  }
+
+  for (final (nombre, tamano) in [
+    ('Entradas_40_para_rendir.png', const Size(1100, 1100)),
+    ('Entradas_40b_para_rendir_celular.png', const Size(390, 1700)),
+  ]) {
+    testWidgets('PARA RENDIR · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        jefe: true,
+        conCaja: false,
+        hoy: hoyConAnticipada,
+        tamano: tamano,
+        antes: cuatroParaRendir,
+        pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
+      );
+      // SOSA desplegado: lo que se llevó, lo que rindió, lo que devolvió y lo
+      // que no volvió, con sus botones.
+      await tester.tap(find.byKey(const Key('para_rendir_persona_afuera|sosa diego')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  for (final (nombre, tamano, alumno) in [
+    ('Entradas_41_dar.png', const Size(1100, 1000), false),
+    ('Entradas_41b_dar_alumno.png', const Size(1100, 1000), true),
+    ('Entradas_41c_dar_celular.png', const Size(390, 1250), false),
+  ]) {
+    testWidgets('DAR · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        jefe: true,
+        conCaja: false,
+        hoy: hoyConAnticipada,
+        tamano: tamano,
+        antes: cuatroParaRendir,
+        pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
+      );
+      await tester.tap(find.byKey(const Key('para_rendir_dar')));
+      await tester.pumpAndSettle();
+      if (alumno) {
+        await tester.tap(find.text('Un alumno de la fiesta'));
+        await tester.pump();
+        await poner(tester, 'dar_buscar_alumno', 'lo');
+      } else {
+        await poner(tester, 'dar_nombre', 'LÓPEZ, ANA');
+        await poner(tester, 'dar_contacto', '351 555-0199');
+        // Uno que ya tiene PÉREZ: lo frena con su nombre.
+        await poner(tester, 'dar_del', '1205');
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('DAR · la confirmación', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      jefe: true,
+      conCaja: false,
+      hoy: hoyConAnticipada,
+      tamano: const Size(1100, 900),
+      antes: cuatroParaRendir,
+      pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
+    );
+    await tester.tap(find.byKey(const Key('para_rendir_dar')));
+    await tester.pumpAndSettle();
+    await poner(tester, 'dar_nombre', 'LÓPEZ, ANA');
+    await poner(tester, 'dar_del', '1276');
+    await tester.tap(find.byKey(const Key('dar_dar')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_41d_dar_confirmar.png');
+  });
+
+  // 21-nov-2026: con la ventana abierta otro equipo apretó GENERAL en PRECIOS:
+  // no se da, y el aviso dice el precio de ahora.
+  for (final (nombre, tamano) in [
+    ('Entradas_41f_dar_cambio_el_precio.png', const Size(1100, 900)),
+    ('Entradas_41g_dar_cambio_el_precio_celular.png', const Size(390, 900)),
+  ]) {
+    testWidgets('DAR · cambió el precio · $nombre', (tester) async {
+      final (clave, _, entradas, _) = await montar(
+        tester,
+        jefe: true,
+        conCaja: false,
+        hoy: hoyConAnticipada,
+        tamano: tamano,
+        antes: cuatroParaRendir,
+        pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
+      );
+      await tester.tap(find.byKey(const Key('para_rendir_dar')));
+      await tester.pumpAndSettle();
+      await poner(tester, 'dar_nombre', 'LÓPEZ, ANA');
+      await poner(tester, 'dar_del', '1276');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('dar_dar')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('dar_dar')));
+      await tester.pumpAndSettle();
+      entradas.conPrecio(idFiestaEntrega, valor: 10000);
+      await tester.tap(find.byKey(const Key('dar_confirmar_si')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('el precio cambió mientras cargabas'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('NO VOLVIERON', (tester) async {
+    final (clave, _, entradas, _) = await montar(
+      tester,
+      jefe: true,
+      conCaja: false,
+      hoy: hoyConAnticipada,
+      tamano: const Size(1100, 1000),
+      antes: cuatroParaRendir,
+      pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
+    );
+    final molina = entradas.listaParaRendir
+        .firstWhere((m) => m.esDio && m.personaNombre == 'MOLINA, CARLOS');
+    await tester.tap(find.byKey(const Key('para_rendir_persona_afuera|molina carlos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('para_rendir_no_volvieron_${molina.id}')));
+    await tester.pumpAndSettle();
+    await tocar(tester, 'no_volvieron_mas');
+    await poner(tester, 'no_volvieron_del', '1254');
+    await poner(tester, 'no_volvieron_motivo', 'dice que las perdió');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_41e_no_volvieron.png');
+  });
+
+  for (final (nombre, tamano) in [
+    ('Entradas_42_vender_aviso.png', const Size(1100, 800)),
+    ('Entradas_42b_vender_aviso_celular.png', const Size(390, 1100)),
+  ]) {
+    testWidgets('VENDER · el aviso de las entradas para rendir · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        hoy: hoyConAnticipada,
+        tamano: tamano,
+        antes: cuatroParaRendir,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await tester.tap(find.text('Alguien de afuera'));
+      await tester.pump();
+      await tocar(tester, 'vender_sueltas_mas', veces: 2);
+      await poner(tester, 'vender_comprador', 'GOMEZ, CARLA');
+      // Uno que tiene PÉREZ para rendir: VENDER no lo vende.
+      await poner(tester, 'vender_del', '1205');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('vender_para_rendir')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  for (final (nombre, tamano, hoy) in [
+    ('Entradas_43_rendir.png', const Size(1100, 1000), DateTime.utc(2026, 11, 20, 12)),
+    // El 30-nov ya no rige la anticipada: avisa que rinde al precio de cuando
+    // se las llevó.
+    ('Entradas_43b_rendir_otro_precio.png', const Size(1100, 1000), DateTime.utc(2026, 11, 30, 12)),
+    ('Entradas_43c_rendir_celular.png', const Size(390, 1250), DateTime.utc(2026, 11, 20, 12)),
+  ]) {
+    testWidgets('RENDIR · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        hoy: hoy,
+        tamano: tamano,
+        antes: cuatroParaRendir,
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await poner(tester, 'rendir_buscar', 'perez');
+      final perez = find.byWidgetPredicate((w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('rendir_bloque_'));
+      await tester.tap(perez.first);
+      await tester.pumpAndSettle();
+      await tocar(tester, 'rendir_vendio_mas', veces: 15);
+      await tocar(tester, 'rendir_devuelve_mas', veces: 5);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('RENDIR · sin caja: ABRIR LA CAJA', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      conCaja: false,
+      hoy: hoyConAnticipada,
+      tamano: const Size(1100, 1000),
+      antes: cuatroParaRendir,
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    // VENDER pide la caja al entrar: se vuelve sin abrirla.
+    await tester.tap(find.byKey(const Key('abrir_caja_volver')));
+    await tester.pumpAndSettle();
+    await tocar(tester, 'vender_rendir');
+    await tester.pumpAndSettle();
+    await poner(tester, 'rendir_buscar', 'molina');
+    await tester.tap(find.textContaining('MOLINA, CARLOS').first);
+    await tester.pumpAndSettle();
+    await tocar(tester, 'rendir_vendio_mas', veces: 3);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_43d_rendir_sin_caja.png');
+  });
+
+  testWidgets('RENDIR · guardada', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      hoy: hoyConAnticipada,
+      tamano: const Size(1100, 800),
+      antes: cuatroParaRendir,
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    await tocar(tester, 'vender_rendir');
+    await tester.pumpAndSettle();
+    await poner(tester, 'rendir_buscar', 'perez');
+    await tester.tap(find.textContaining('PÉREZ, JUAN').first);
+    await tester.pumpAndSettle();
+    await tocar(tester, 'rendir_vendio_mas', veces: 15);
+    await tocar(tester, 'rendir_devuelve_mas', veces: 5);
+    await tester.tap(find.byKey(const Key('rendir_efectivo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cobro_confirmar')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('vender_rendicion_guardada')), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'nada se desborda');
+    await guardar(tester, clave, 'Entradas_43e_rendicion_guardada.png');
+  });
+
+  // 21-nov-2026: con la venta de una rendición ya en este equipo y su renglón
+  // "vendió" todavía no (la venta sube antes), VENTAS igual la marca y su
+  // anular no pregunta si devolvieron ni dice a cargo de quién quedan.
+  for (final (nombre, tamano, anular, sinSuVendio) in [
+    ('Entradas_44_ventas_rendicion.png', const Size(1100, 900), false, false),
+    ('Entradas_44b_ventas_rendicion_celular.png', const Size(390, 1100), false, false),
+    ('Entradas_45_anular_rendicion.png', const Size(1100, 900), true, false),
+    ('Entradas_45b_anular_rendicion_sin_su_vendio.png', const Size(1100, 900), true, true),
+    ('Entradas_45c_anular_rendicion_sin_su_vendio_celular.png', const Size(390, 1100), true,
+        true),
+  ]) {
+    testWidgets('VENTAS · una rendición · $nombre', (tester) async {
+      final (clave, _, entradas, _) = await montar(
+        tester,
+        jefe: true,
+        hoy: hoyConAnticipada,
+        tamano: tamano,
+        antes: (e) async {
+          await cuatroParaRendir(e);
+          if (sinSuVendio) e.listaParaRendir.removeWhere((m) => m.esVendio);
+        },
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+      );
+      await tocar(tester, 'vender_ventas');
+      await tester.pumpAndSettle();
+      if (anular) {
+        final sosa = entradas.listaVentas.firstWhere((v) => v.compradorNombre == 'SOSA, DIEGO');
+        await tester.tap(find.byKey(Key('anular_${sosa.id}')));
+        await tester.pumpAndSettle();
+        await poner(tester, 'anular_motivo', 'se cobró dos veces');
+      }
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
 }

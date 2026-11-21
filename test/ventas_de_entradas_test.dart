@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
+import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
@@ -27,8 +28,9 @@ class _Montada {
   final List<DatosDelHistorial> historiales;
   final CajaEntradas carla;
   final VentaEntradas v1, v2, v3;
+  final ProviderContainer c;
   _Montada(this.entradas, this.comprobantes, this.historiales, this.carla,
-      this.v1, this.v2, this.v3);
+      this.v1, this.v2, this.v3, this.c);
 }
 
 Future<VentaEntradas> _vender(
@@ -59,10 +61,15 @@ Future<VentaEntradas> _vender(
 Future<_Montada> _montar(
   WidgetTester tester, {
   bool jefe = false,
+  // El modo jefe, leído de acá cada vez: se cambia con
+  // `c.invalidate(esRolJefeProvider)`, para cerrarlo con un cartel abierto.
+  bool Function()? jefeAhora,
   bool conVentas = true,
   Size tamano = const Size(1200, 1300),
   String? numerosDeRuiz,
   void Function(EntregaEnMemoria)? preparar,
+  // Lo que pasa en la caja de Carla después de sus ventas (una rendición).
+  Future<void> Function(EntradasEnMemoria, CajaEntradas carla)? despues,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = tamano;
@@ -74,7 +81,8 @@ Future<_Montada> _montar(
   final comprobantes = <DatosDelComprobante>[];
   final historiales = <DatosDelHistorial>[];
   final c = ProviderContainer(overrides: [
-    ...e.reemplazos(jefe: jefe),
+    ...e.reemplazos(jefe: jefeAhora == null ? jefe : null),
+    if (jefeAhora != null) esRolJefeProvider.overrideWith((ref) => jefeAhora()),
     ...entradas.reemplazos,
     abrirComprobanteDeEntradasProvider
         .overrideWithValue((datos, {context}) async => comprobantes.add(datos)),
@@ -105,6 +113,7 @@ Future<_Montada> _montar(
         sueltas: 4, medio: MedioBarra.transferencia, numeros: numerosDeRuiz);
     v3 = await _vender(entradas, maxi, 'SOSA DIEGO', sueltas: 1, numeros: '2001');
   }
+  await despues?.call(entradas, carla);
   entradas.escrituras = 0;
   await tester.pumpWidget(UncontrolledProviderScope(
     container: c,
@@ -114,9 +123,9 @@ Future<_Montada> _montar(
   ));
   await tester.pumpAndSettle();
   return conVentas
-      ? _Montada(entradas, comprobantes, historiales, carla, v1, v2, v3)
+      ? _Montada(entradas, comprobantes, historiales, carla, v1, v2, v3, c)
       : _Montada(entradas, comprobantes, historiales, carla,
-          _nada, _nada, _nada);
+          _nada, _nada, _nada, c);
 }
 
 /// Relleno para el caso sin ventas: no se usa.
@@ -331,9 +340,12 @@ void main() {
       expect(_texto(tester, 'anular_problema'), 'Escribí por qué se anula.');
       await tester.enterText(find.byKey(const Key('anular_motivo')), 'se equivocó');
       await tester.pump();
+      // Solo las entradas: la pulsera no se vende (pedido del usuario,
+      // 21-nov-2026), así que no se pregunta por pulseras.
+      expect(_texto(tester, 'anular_pregunta'), '¿Devolvieron las entradas? (2000 al 2001)');
+      expect(find.textContaining('ulsera'), findsNothing);
       await _tocar(tester, 'anular_confirmar');
-      expect(_texto(tester, 'anular_problema'),
-          'Decí si devolvieron las entradas y las pulseras.');
+      expect(_texto(tester, 'anular_problema'), 'Decí si devolvieron las entradas.');
       expect(m.entradas.listaAnulaciones, isEmpty);
 
       await _tocar(tester, 'anular_devolvieron_no');
@@ -365,8 +377,8 @@ void main() {
       await _tocar(tester, 'anular_devolvieron_si');
       await _tocar(tester, 'anular_confirmar');
       expect(m.entradas.listaAnulaciones.single.devueltas, isTrue);
-      expect(_texto(tester, 'anulada_${m.v2.id}'),
-          contains('devolvieron las entradas y pulseras'));
+      expect(_texto(tester, 'anulada_${m.v2.id}'), endsWith('devolvieron las entradas'));
+      expect(find.textContaining('ulsera'), findsNothing);
     });
 
     testWidgets('volver del cartel no anula nada', (tester) async {
@@ -378,6 +390,254 @@ void main() {
       expect(m.entradas.escrituras, 0);
       expect(find.byKey(Key('anular_${m.v1.id}')), findsOneWidget);
     });
+  });
+
+  // 21-nov-2026: la plata de una rendición de entradas para rendir es una venta
+  // más de la caja que cobró, marcada RENDICIÓN. Se anula acá, y solo acá: las
+  // entradas vuelven a quedar a cargo de quien las llevó, así que no se
+  // pregunta si las devolvieron (regla 48, `devueltas: false`).
+  group('una rendición de entradas para rendir', () {
+    /// El jefe le dio 20 a PÉREZ, JUAN (1201 al 1220) a $ 8.000, y Carla le
+    /// cobró 15 en su caja (y él devolvió del 1216 al 1220).
+    ///
+    /// [sinSuVendio]: con la venta ya en este equipo y su renglón `vendio`
+    /// todavía no (la venta sube antes): se lo saca de la lista y se lo deja
+    /// ahí, para que "llegue" después.
+    Future<_Montada> conUnaRendicion(
+      WidgetTester tester, {
+      bool jefe = true,
+      List<MovimientoParaRendir>? sinSuVendio,
+    }) =>
+        _montar(
+          tester,
+          jefe: jefe,
+          despues: (entradas, carla) async {
+            final dio = await entradas.darParaRendir(
+              eventoId: idFiestaEntrega,
+              personaNombre: 'PÉREZ, JUAN',
+              cantidad: 20,
+              numeros: const [TramoTalonario(1201, 1220)],
+              precio: 8000,
+              nombrePrecio: 'Entrada anticipada',
+              quien: 'Jefe',
+            );
+            await entradas.rendir(
+              caja: carla,
+              bloque: dio,
+              vendidas: 15,
+              devueltas: 5,
+              numerosDevueltos: const [TramoTalonario(1216, 1220)],
+              efectivo: 120000,
+              quien: 'Carla',
+            );
+            if (sinSuVendio != null) {
+              sinSuVendio.addAll(entradas.listaParaRendir.where((x) => x.esVendio));
+              entradas.listaParaRendir.removeWhere((x) => x.esVendio);
+            }
+          },
+        );
+
+    String chip(WidgetTester tester, VentaEntradas v) => tester
+        .widget<Text>(find.descendant(
+          of: find.byKey(Key('rendicion_${v.id}')),
+          matching: find.byType(Text),
+        ))
+        .data!;
+
+    testWidgets('va marcada RENDICIÓN; su anular no pregunta si devolvieron y manda '
+        '"no devueltas": las 15 vuelven a quien las llevó', (tester) async {
+      final m = await conUnaRendicion(tester);
+      final rendicion = m.entradas.listaVentas.last;
+      expect(chip(tester, rendicion), 'RENDICIÓN · de PÉREZ, JUAN');
+      expect(find.byKey(Key('rendicion_${m.v1.id}')), findsNothing,
+          reason: 'una venta común no es una rendición');
+
+      await _tocar(tester, 'anular_${rendicion.id}');
+      expect(_texto(tester, 'anular_rendicion'),
+          'Es una rendición: las 15 vuelven a quedar a cargo de PÉREZ, JUAN para rendir.');
+      expect(find.byKey(const Key('anular_pregunta')), findsNothing);
+      expect(find.byKey(const Key('anular_devolvieron_si')), findsNothing);
+      expect(find.byKey(const Key('anular_devolvieron_no')), findsNothing);
+      expect(find.textContaining('ulsera'), findsNothing);
+      // El motivo sigue siendo obligatorio.
+      await _tocar(tester, 'anular_confirmar');
+      expect(_texto(tester, 'anular_problema'), 'Escribí por qué se anula.');
+      expect(m.entradas.listaAnulaciones, isEmpty);
+
+      await tester.enterText(find.byKey(const Key('anular_motivo')), 'se cobró dos veces');
+      await tester.pump();
+      await _tocar(tester, 'anular_confirmar');
+      final a = m.entradas.listaAnulaciones.single;
+      expect(a.ventaId, rendicion.id);
+      expect(a.devueltas, isFalse);
+      expect(a.motivo, 'se cobró dos veces');
+      final fila = _texto(tester, 'anulada_${rendicion.id}');
+      // La fila dice lo que pasó, que es cierto siempre: cuántas le quedaron
+      // depende de lo que había rendido (21-nov-2026).
+      expect(fila, contains('las 15 dejaron de contar como vendidas'));
+      expect(fila, isNot(contains('volvieron a quedar')));
+      expect(fila, isNot(contains('devolvieron')));
+      // Y vuelven a estar sin rendir: le quedan las 15 que había vendido.
+      final cuenta = ParaRendir.de(
+        movimientos: m.entradas.listaParaRendir,
+        ventas: m.entradas.listaVentas,
+        anulaciones: m.entradas.listaAnulaciones,
+      );
+      expect(cuenta.bloques.single.sinRendir, 15);
+      expect(cuenta.bloques.single.vendidas, 0);
+    });
+
+    testWidgets('quien vende también la ve marcada; REIMPRIMIR queda apagado hasta '
+        'que salga su comprobante (el de una venta habla de pulseras)', (tester) async {
+      final m = await conUnaRendicion(tester, jefe: false);
+      final rendicion = m.entradas.listaVentas.last;
+      expect(chip(tester, rendicion), 'RENDICIÓN · de PÉREZ, JUAN');
+      final reimprimir =
+          tester.widget<TextButton>(find.byKey(Key('reimprimir_${rendicion.id}')));
+      expect(reimprimir.onPressed, isNull);
+      expect(
+        tester.widget<TextButton>(find.byKey(Key('reimprimir_${m.v1.id}'))).onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.byKey(Key('reimprimir_${rendicion.id}')), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(m.comprobantes, isEmpty);
+    });
+
+    // 21-nov-2026: la venta sube antes que su renglón `vendio` (prioridad 4
+    // contra 5), así que en la PC del jefe la venta puede bajar sola. Igual es
+    // una rendición: se reconoce por la venta misma.
+    testWidgets('con la venta acá y su "vendió" todavía no: igual va marcada, su anular '
+        'no pregunta si devolvieron y no promete a cargo de quién quedan', (tester) async {
+      final enCamino = <MovimientoParaRendir>[];
+      final m = await conUnaRendicion(tester, sinSuVendio: enCamino);
+      expect(enCamino, hasLength(1));
+      final rendicion = m.entradas.listaVentas.last;
+      expect(
+        ParaRendir.de(
+          movimientos: m.entradas.listaParaRendir,
+          ventas: m.entradas.listaVentas,
+          anulaciones: m.entradas.listaAnulaciones,
+        ).bloqueDeLaVenta(rendicion.id),
+        isNull,
+        reason: 'sin su "vendió", la cuenta no sabe de qué bloque es',
+      );
+      expect(chip(tester, rendicion), 'RENDICIÓN · de PÉREZ, JUAN');
+      expect(find.byKey(Key('rendicion_${m.v1.id}')), findsNothing);
+      expect(
+        tester.widget<TextButton>(find.byKey(Key('reimprimir_${rendicion.id}'))).onPressed,
+        isNull,
+        reason: 'el comprobante de una venta común habla de pulseras',
+      );
+
+      await _tocar(tester, 'anular_${rendicion.id}');
+      // Sin el bloque no se sabe cuántas le quedan: no se promete (21-nov-2026).
+      expect(_texto(tester, 'anular_rendicion'),
+          'Es una rendición de PÉREZ, JUAN: las 15 dejan de contar como vendidas.');
+      expect(find.byKey(const Key('anular_pregunta')), findsNothing);
+      expect(find.byKey(const Key('anular_devolvieron_no')), findsNothing);
+      await tester.enterText(find.byKey(const Key('anular_motivo')), 'se cobró dos veces');
+      await tester.pump();
+      await _tocar(tester, 'anular_confirmar');
+      final a = m.entradas.listaAnulaciones.single;
+      expect(a.ventaId, rendicion.id);
+      expect(a.devueltas, isFalse);
+      final fila = _texto(tester, 'anulada_${rendicion.id}');
+      expect(fila, contains('las 15 dejaron de contar como vendidas'));
+      expect(fila, isNot(contains('a cargo de')));
+      expect(fila, isNot(contains('devolvieron')));
+
+      // Llega el "vendió": las 15 vuelven a estar sin rendir, como si la
+      // anulación se hubiera hecho con todo a la vista.
+      m.entradas.listaParaRendir.addAll(enCamino);
+      final cuenta = ParaRendir.de(
+        movimientos: m.entradas.listaParaRendir,
+        ventas: m.entradas.listaVentas,
+        anulaciones: m.entradas.listaAnulaciones,
+      );
+      expect([cuenta.bloques.single.vendidas, cuenta.bloques.single.sinRendir], [0, 15]);
+    });
+
+    // 21-nov-2026: si rindió de más (otro equipo, sin internet, le cobró 3 de
+    // las mismas), anular la de Carla no le devuelve 15 para rendir sino 12:
+    // el cartel dice la cuenta del bloque, no "las 15 vuelven a quedar".
+    testWidgets('si rindió de más, el cartel dice cuántas le quedan de verdad', (tester) async {
+      final m = await _montar(
+        tester,
+        jefe: true,
+        despues: (entradas, carla) async {
+          final dio = await entradas.darParaRendir(
+            eventoId: idFiestaEntrega,
+            personaNombre: 'PÉREZ, JUAN',
+            cantidad: 20,
+            numeros: const [TramoTalonario(1201, 1220)],
+            precio: 8000,
+            nombrePrecio: 'Entrada anticipada',
+            quien: 'Jefe',
+          );
+          await entradas.rendir(
+            caja: carla,
+            bloque: dio,
+            vendidas: 15,
+            devueltas: 5,
+            numerosDevueltos: const [TramoTalonario(1216, 1220)],
+            efectivo: 120000,
+            quien: 'Carla',
+          );
+          // El "vendió" de otra tablet, con su venta todavía en camino.
+          entradas.listaParaRendir.add(MovimientoParaRendir.vendio(
+            dio,
+            cantidad: 3,
+            ventaId: 'venta-de-otra-tablet',
+            cajaEntradasId: carla.id,
+            ahora: entradas.reloj(),
+          ));
+        },
+      );
+      final rendicion = m.entradas.listaVentas.last;
+      ParaRendir cuenta() => ParaRendir.de(
+            movimientos: m.entradas.listaParaRendir,
+            ventas: m.entradas.listaVentas,
+            anulaciones: m.entradas.listaAnulaciones,
+          );
+      expect(cuenta().bloques.single.rindioDeMas, 3);
+
+      await _tocar(tester, 'anular_${rendicion.id}');
+      expect(
+        _texto(tester, 'anular_rendicion'),
+        'Es una rendición: las 15 dejan de contar como vendidas. PÉREZ, JUAN rindió 3 de '
+        'más, así que le quedan 12 sin rendir.',
+      );
+      expect(find.textContaining('vuelven a quedar'), findsNothing);
+      await tester.enterText(find.byKey(const Key('anular_motivo')), 'se cobró dos veces');
+      await tester.pump();
+      await _tocar(tester, 'anular_confirmar');
+      expect(m.entradas.listaAnulaciones.single.devueltas, isFalse);
+      // Lo que dijo el cartel es lo que quedó.
+      expect(cuenta().bloques.single.sinRendir, 12);
+      expect(cuenta().bloques.single.rindioDeMas, 0);
+    });
+  });
+
+  // 21-nov-2026: ANULAR pregunta por el modo jefe antes de abrir su cartel y
+  // otra vez antes de escribir, como PARA RENDIR: el jefe pudo salir del modo
+  // jefe (o vencerse) con el cartel abierto.
+  testWidgets('ANULAR con el modo jefe cerrado mientras el cartel estaba abierto no anula '
+      'nada', (tester) async {
+    var jefe = true;
+    final m = await _montar(tester, jefeAhora: () => jefe);
+    await _tocar(tester, 'anular_${m.v2.id}');
+    await tester.enterText(find.byKey(const Key('anular_motivo')), 'se equivocó');
+    await tester.pump();
+    await _tocar(tester, 'anular_devolvieron_si');
+    jefe = false;
+    m.c.invalidate(esRolJefeProvider);
+    await tester.pump();
+    await _tocar(tester, 'anular_confirmar');
+    expect(m.entradas.listaAnulaciones, isEmpty);
+    expect(m.entradas.escrituras, 0);
+    expect(find.text('$kSoloEnModoJefe: anular y verificar un pago es del jefe.'),
+        findsOneWidget);
   });
 
   group('los papeles', () {

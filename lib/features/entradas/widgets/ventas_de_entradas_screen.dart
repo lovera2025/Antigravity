@@ -18,6 +18,7 @@ import '../../eventos/repositories/entradas_retiro_repository.dart';
 import '../../eventos/services/entrega_por_partes.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../cuentas/historial_de_entradas.dart';
+import '../cuentas/para_rendir.dart';
 import '../datos/entradas_repositorio.dart';
 import '../pdf/comprobante_entradas_pdf.dart';
 import '../pdf/historial_entradas_pdf.dart';
@@ -25,6 +26,7 @@ import '../pdf/papeles_de_entradas.dart';
 import '../providers/entradas_providers.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'imprimir_por_hojas.dart';
+import 'vender_a_pagar.dart' show ChipDeVender;
 
 /// VENTAS: el historial de la venta de entradas de una fiesta (6.9.0, sección 8
 /// del spec del 13-nov).
@@ -36,6 +38,12 @@ import 'imprimir_por_hojas.dart';
 ///
 /// Una venta nunca se borra ni se edita: anulada sigue en la lista, tachada,
 /// con quién la anuló, el motivo y si devolvieron las entradas.
+///
+/// **Una rendición de entradas para rendir es una venta más** (21-nov-2026),
+/// marcada "RENDICIÓN · de …". Su plata se anula acá, y solo acá: las entradas
+/// vuelven a quedar a cargo de quien las llevó, así que su anular no pregunta
+/// si las devolvieron (manda `devueltas: false`). Se reconoce también antes de
+/// que llegue su renglón `vendio` (`_rendicionDe`).
 class VentasDeEntradasScreen extends ConsumerStatefulWidget {
   final Evento evento;
 
@@ -55,6 +63,10 @@ class _VentasDeEntradasScreenState
   bool _cargando = true;
   String? _errorCarga;
   HistorialDeEntradas? _historial;
+
+  /// Las entradas para rendir de la fiesta: de acá sale qué venta es una
+  /// rendición y de quién (21-nov-2026).
+  ParaRendir? _paraRendir;
   List<ContratoAlumno> _alumnos = [];
   FiltroDeVentas _filtro = FiltroDeVentas.todas;
   bool _ocupado = false;
@@ -76,6 +88,8 @@ class _VentasDeEntradasScreenState
     'entradas_retiro',
     // La entrega por partes (20-nov-2026): sus números de las generales.
     'entradas_entregas',
+    // Las entradas para rendir (21-nov-2026): qué venta es una rendición.
+    'entradas_para_rendir',
   };
 
   @override
@@ -123,10 +137,17 @@ class _VentasDeEntradasScreenState
           await ref.read(entradasRetiroRepositoryProvider).obtenerPorContratoIds(ids);
       final renglones =
           await ref.read(entradasEntregasRepositoryProvider).deContratos(ids);
+      final ventas = await entradas.ventas(id);
+      final anulaciones = await entradas.anulaciones(id);
+      final paraRendir = ParaRendir.de(
+        movimientos: await entradas.paraRendir(id),
+        ventas: ventas,
+        anulaciones: anulaciones,
+      );
       final historial = HistorialDeEntradas.de(
         cajas: await entradas.cajas(id),
-        ventas: await entradas.ventas(id),
-        anulaciones: await entradas.anulaciones(id),
+        ventas: ventas,
+        anulaciones: anulaciones,
         verificaciones: await entradas.verificaciones(id),
         // Las entregas sin cargo se comparan solo entre ellas (el talonario de
         // las generales): nunca con lo vendido, que es el de las anticipadas.
@@ -144,6 +165,7 @@ class _VentasDeEntradasScreenState
       if (!mounted) return;
       setState(() {
         _historial = historial;
+        _paraRendir = paraRendir;
         _alumnos = alumnos;
         _cargando = false;
         _errorCarga = null;
@@ -190,15 +212,37 @@ class _VentasDeEntradasScreenState
     if (mounted) setState(() => _ocupado = false);
   }
 
+  /// Si [venta] es una rendición, y de quién (null: es una venta común).
+  ///
+  /// Se reconoce por su renglón `vendio` (de ahí sale el bloque) **o, si ese
+  /// renglón todavía no llegó, por la venta misma** (21-nov-2026): la venta
+  /// sube antes que su `vendio`, así que en la PC del jefe puede bajar sola. Sin
+  /// esto se veía como una venta común y ANULAR preguntaba "¿Devolvieron las
+  /// entradas?".
+  _Rendicion? _rendicionDe(VentaEntradas venta) {
+    final bloque = _paraRendir?.bloqueDeLaVenta(venta.id);
+    if (bloque != null) return _Rendicion(bloque.persona.trim(), bloque);
+    if (ParaRendir.esVentaDeRendicion(venta)) {
+      return _Rendicion(venta.compradorNombre.trim(), null);
+    }
+    return null;
+  }
+
   Future<void> _anular(VentaDelHistorial v) async {
     if (_frenaSinModoJefe()) return;
     if (v.anulada || _ocupado) return;
+    // Una rendición no pregunta si devolvieron las entradas: deja de contar
+    // como vendida para quien las llevó, y el cartel manda `devueltas: false`.
+    final rendicion = _rendicionDe(v.venta);
     final respuesta = await showDialog<({String motivo, bool devueltas})>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _AnularVentaDialog(venta: v.venta),
+      builder: (_) => _AnularVentaDialog(venta: v.venta, rendicion: rendicion),
     );
     if (respuesta == null || !mounted) return;
+    // Otra vez la llave: el modo jefe pudo cerrarse con el cartel abierto
+    // (21-nov-2026, como en PARA RENDIR).
+    if (_frenaSinModoJefe()) return;
     setState(() => _ocupado = true);
     try {
       await ref.read(entradasDelJefeProvider).anular(
@@ -217,6 +261,9 @@ class _VentasDeEntradasScreenState
   }
 
   Future<void> _reimprimir(VentaDelHistorial v) async {
+    // El comprobante de una rendición llega con los papeles (etapa 6): el de
+    // una venta común diría "Pulseras normales", y quien rinde no las lleva.
+    if (_rendicionDe(v.venta) != null) return;
     ContratoAlumno? alumno;
     for (final a in _alumnos) {
       if (a.id == v.venta.contratoAlumnoId) alumno = a;
@@ -439,6 +486,7 @@ class _VentasDeEntradasScreenState
         : const TextStyle();
     final numeros = TramoTalonario.deTexto(venta.numeros);
     final puedeTocar = esJefe && !v.anulada && !_ocupado;
+    final rendicion = _rendicionDe(venta);
     return Card(
       key: Key('venta_${venta.id}'),
       margin: const EdgeInsets.only(bottom: 8),
@@ -471,6 +519,17 @@ class _VentasDeEntradasScreenState
                     ].join(' · ').replaceAll(r'$ ', '\$ '),
                     style: tachado.copyWith(fontSize: 12.5, color: gris),
                   ),
+                  if (rendicion != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, bottom: 1),
+                      child: ChipDeVender(
+                        rendicion.persona.isEmpty
+                            ? 'RENDICIÓN'
+                            : 'RENDICIÓN · de ${rendicion.persona}',
+                        key: Key('rendicion_${venta.id}'),
+                        color: const Color(0xFF7A610E),
+                      ),
+                    ),
                   if (numeros.isNotEmpty)
                     Text(
                       'Talonario ${TramoTalonario.legible(numeros)}',
@@ -483,9 +542,15 @@ class _VentasDeEntradasScreenState
                             '${(v.anulacion!.hechoPor ?? '').isEmpty ? '' : ' por ${v.anulacion!.hechoPor}'}'
                             ' el ${ComprobanteEntradasPdf.cuando(v.anulacion!.createdAt)}',
                         v.anulacion!.motivo,
-                        v.anulacion!.devueltas
-                            ? 'devolvieron las entradas y pulseras'
-                            : 'NO devolvieron las entradas: esos números quedan anulados',
+                        // Una rendición anulada no devuelve nada a la oficina: deja
+                        // de contar como vendida, y lo que le queda para rendir lo
+                        // dice PARA RENDIR (si rindió de más, no son todas).
+                        if (rendicion != null)
+                          rendicion.anulada(venta.cantidad)
+                        else if (v.anulacion!.devueltas)
+                          'devolvieron las entradas'
+                        else
+                          'NO devolvieron las entradas: esos números quedan anulados',
                       ].join(' · '),
                       key: Key('anulada_${venta.id}'),
                       style: TextStyle(
@@ -527,10 +592,15 @@ class _VentasDeEntradasScreenState
                     ),
                   ),
                 const SizedBox(width: 6),
-                TextButton(
-                  key: Key('reimprimir_${venta.id}'),
-                  onPressed: () => _reimprimir(v),
-                  child: const Text('REIMPRIMIR'),
+                Tooltip(
+                  message: rendicion == null
+                      ? 'El comprobante, como COPIA'
+                      : 'El comprobante de la rendición todavía no se imprime',
+                  child: TextButton(
+                    key: Key('reimprimir_${venta.id}'),
+                    onPressed: rendicion == null ? () => _reimprimir(v) : null,
+                    child: const Text('REIMPRIMIR'),
+                  ),
                 ),
                 if (!v.anulada)
                   Tooltip(
@@ -553,13 +623,86 @@ class _VentasDeEntradasScreenState
   }
 }
 
-/// Anular una venta: el motivo, obligatorio, y si devolvieron las entradas y
-/// las pulseras (también hay que contestarlo). No guarda: devuelve la
-/// respuesta, y guarda quien lo abrió, con su llave.
+/// Una venta que es la rendición de unas entradas para rendir (21-nov-2026).
+class _Rendicion {
+  /// Quién rindió: el del bloque o, si su `vendio` todavía no llegó a este
+  /// equipo, el nombre de la venta. Puede estar vacío.
+  final String persona;
+
+  /// El bloque, si su `vendio` ya está en este equipo; si no, null.
+  final BloqueParaRendir? bloque;
+
+  const _Rendicion(this.persona, this.bloque);
+
+  /// "a cargo de PÉREZ, JUAN " (con el espacio del final) si se sabe el
+  /// bloque; si no, nada: sin el bloque no se sabe a cargo de quién quedan, y
+  /// no se promete.
+  String get aCargoDe =>
+      bloque == null || persona.isEmpty ? '' : 'a cargo de $persona ';
+
+  /// "las 15 dejan de contar como vendidas" ("dejaron", en la fila ya
+  /// anulada): lo único que pasa siempre al anular una rendición.
+  static String _dejanDeContar(int cantidad, {required bool yaPaso}) => cantidad == 1
+      ? 'la entrada ${yaPaso ? 'dejó' : 'deja'} de contar como vendida'
+      : 'las $cantidad ${yaPaso ? 'dejaron' : 'dejan'} de contar como vendidas';
+
+  /// Lo que dice el cartel de ANULAR esta rendición, de [cantidad] entradas.
+  ///
+  /// **No promete de más** (21-nov-2026): "las 15 vuelven a quedar para
+  /// rendir" solo si es así. Si rindió de más (dos equipos cobraron lo mismo),
+  /// la cuenta del bloque dice cuántas le quedan de verdad
+  /// (`sinRendirSiDejanDeContar`); sin el bloque no se sabe, y dice solo que
+  /// dejan de contar como vendidas.
+  String alAnular(int cantidad) {
+    final b = bloque;
+    final dejan = _dejanDeContar(cantidad, yaPaso: false);
+    if (b == null) {
+      return 'Es una rendición${persona.isEmpty ? '' : ' de $persona'}: $dejan.';
+    }
+    if (!b.anulado && b.rindioDeMas == 0) {
+      return 'Es una rendición: '
+          '${cantidad == 1 ? 'la entrada vuelve' : 'las $cantidad vuelven'} '
+          'a quedar ${aCargoDe}para rendir.';
+    }
+    if (b.anulado) {
+      return 'Es una rendición: $dejan. Las entradas que se le dieron'
+          '${persona.isEmpty ? '' : ' a $persona'} están anuladas: no le queda '
+          'ninguna para rendir.';
+    }
+    final quedan = b.sinRendirSiDejanDeContar(cantidad);
+    final leQuedan = switch (quedan) {
+      0 => 'no le queda ninguna sin rendir',
+      1 => 'le queda 1 sin rendir',
+      _ => 'le quedan $quedan sin rendir',
+    };
+    return 'Es una rendición: $dejan. ${persona.isEmpty ? 'Quien las llevó' : persona} '
+        'rindió ${b.rindioDeMas} de más, así que $leQuedan.';
+  }
+
+  /// Lo que dice la fila de la rendición ya anulada. Es lo que pasó, y es
+  /// cierto siempre: cuántas le quedaron sin rendir depende de lo que había
+  /// rendido en ese momento (si rindió de más, no fueron todas), y eso se ve
+  /// en PARA RENDIR.
+  String anulada(int cantidad) => _dejanDeContar(cantidad, yaPaso: true);
+}
+
+/// Anular una venta: el motivo, obligatorio, y si devolvieron las entradas
+/// (también hay que contestarlo). No guarda: devuelve la respuesta, y guarda
+/// quien lo abrió, con su llave.
+///
+/// **Solo las entradas** (21-nov-2026, pedido del usuario): la pulsera no se
+/// vende, así que no se pregunta por pulseras.
+///
+/// **Una rendición** ([rendicion]) no pregunta nada: deja de contar como
+/// vendida (cuántas le quedan para rendir lo dice `_Rendicion.alAnular`), y la
+/// respuesta va con `devueltas: false` (sus números los lleva el bloque, no la
+/// venta). También si su bloque todavía no llegó a este equipo: entonces no
+/// dice a cargo de quién ni cuántas.
 class _AnularVentaDialog extends StatefulWidget {
   final VentaEntradas venta;
+  final _Rendicion? rendicion;
 
-  const _AnularVentaDialog({required this.venta});
+  const _AnularVentaDialog({required this.venta, this.rendicion});
 
   @override
   State<_AnularVentaDialog> createState() => _AnularVentaDialogState();
@@ -582,11 +725,13 @@ class _AnularVentaDialogState extends State<_AnularVentaDialog> {
       setState(() => _problema = 'Escribí por qué se anula.');
       return;
     }
+    if (widget.rendicion != null) {
+      Navigator.pop(context, (motivo: motivo, devueltas: false));
+      return;
+    }
     final devueltas = _devueltas;
     if (devueltas == null) {
-      setState(
-        () => _problema = 'Decí si devolvieron las entradas y las pulseras.',
-      );
+      setState(() => _problema = 'Decí si devolvieron las entradas.');
       return;
     }
     Navigator.pop(context, (motivo: motivo, devueltas: devueltas));
@@ -595,6 +740,7 @@ class _AnularVentaDialogState extends State<_AnularVentaDialog> {
   @override
   Widget build(BuildContext context) {
     final v = widget.venta;
+    final rinde = widget.rendicion;
     final numeros = TramoTalonario.deTexto(v.numeros);
     final gris = Theme.of(context).hintColor;
     return AlertDialog(
@@ -627,38 +773,47 @@ class _AnularVentaDialogState extends State<_AnularVentaDialog> {
                 onChanged: (_) => setState(() => _problema = null),
               ),
               const SizedBox(height: 14),
-              Text(
-                numeros.isEmpty
-                    ? '¿Devolvieron las entradas y las pulseras?'
-                    : '¿Devolvieron las entradas y las pulseras? '
-                        '(${TramoTalonario.legible(numeros)})',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                children: [
-                  ChoiceChip(
-                    key: const Key('anular_devolvieron_si'),
-                    label: const Text('Sí, las devolvieron'),
-                    selected: _devueltas == true,
-                    onSelected: (_) => setState(() {
-                      _devueltas = true;
-                      _problema = null;
-                    }),
-                  ),
-                  ChoiceChip(
-                    key: const Key('anular_devolvieron_no'),
-                    label: const Text('No las devolvieron'),
-                    selected: _devueltas == false,
-                    onSelected: (_) => setState(() {
-                      _devueltas = false;
-                      _problema = null;
-                    }),
-                  ),
-                ],
-              ),
-              if (_devueltas == false)
+              if (rinde != null)
+                Text(
+                  // Qué pasa al anularla, sin prometer de más: `alAnular`.
+                  rinde.alAnular(v.cantidad),
+                  key: const Key('anular_rendicion'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                )
+              else ...[
+                Text(
+                  numeros.isEmpty
+                      ? '¿Devolvieron las entradas?'
+                      : '¿Devolvieron las entradas? (${TramoTalonario.legible(numeros)})',
+                  key: const Key('anular_pregunta'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      key: const Key('anular_devolvieron_si'),
+                      label: const Text('Sí, las devolvieron'),
+                      selected: _devueltas == true,
+                      onSelected: (_) => setState(() {
+                        _devueltas = true;
+                        _problema = null;
+                      }),
+                    ),
+                    ChoiceChip(
+                      key: const Key('anular_devolvieron_no'),
+                      label: const Text('No las devolvieron'),
+                      selected: _devueltas == false,
+                      onSelected: (_) => setState(() {
+                        _devueltas = false;
+                        _problema = null;
+                      }),
+                    ),
+                  ],
+                ),
+              ],
+              if (rinde == null && _devueltas == false)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(

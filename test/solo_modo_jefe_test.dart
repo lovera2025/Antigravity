@@ -531,9 +531,15 @@ void main() {
 
   // ── La venta de entradas (6.9.0) ───────────────────────────────────────────
 
-  test('la venta de entradas: los precios, anular y "Pago verificado" preguntan por '
-      'el modo jefe antes de guardar', () {
-    final escribe = RegExp(r'\.(guardarConfig|anular|verificar)\(');
+  // 21-nov-2026, regla 50 de las entradas para rendir: dar entradas para
+  // rendir, marcar las que no volvieron y anular un bloque, un "devolvió" o un
+  // "no volvieron" (PARA RENDIR) son del jefe, con la misma llave.
+  test('la venta de entradas: los precios, anular, "Pago verificado" y lo de las '
+      'entradas para rendir (dar, no volvieron, anular) preguntan por el modo jefe '
+      'antes de guardar', () {
+    final escribe = RegExp(
+      r'\.(guardarConfig|anular|verificar|darParaRendir|noVolvieron|anularDeParaRendir)\(',
+    );
     final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
     final encontradas = <String>{};
     final carpeta = Directory('lib/features/entradas/widgets');
@@ -567,8 +573,72 @@ void main() {
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá: PRECIOS
-    // (`_guardar`) y, en VENTAS, anular y "Pago verificado".
-    expect(encontradas, {'_guardar', '_anular', '_verificar'});
+    // (`_guardar`); en VENTAS, anular y "Pago verificado"; y en PARA RENDIR,
+    // dar, las que no volvieron y anular.
+    expect(encontradas, {
+      '_guardar',
+      '_anular',
+      '_verificar',
+      '_dar',
+      '_noVolvieron',
+      '_anularMovimiento',
+    });
+  });
+
+  // 21-nov-2026: con una ventana en el medio, la llave del principio no
+  // alcanza: el jefe puede salir del modo jefe (o vencerse el PIN) con la
+  // ventana abierta y confirmar igual. Así que **después de la última ventana,
+  // antes de escribir, la llave otra vez** (como RENDIR en VENDER).
+  test('la venta de entradas: lo del jefe que abre una ventana antes de guardar vuelve '
+      'a preguntar por el modo jefe después de ella', () {
+    final escribe = RegExp(
+      r'\.(guardarConfig|anular|verificar|darParaRendir|noVolvieron|anularDeParaRendir)\(',
+    );
+    final ventana = RegExp(
+      r'await (showDialog|showModalBottomSheet|showDatePicker|mostrar\w*|pedir\w*|elegir\w*)\b',
+    );
+    final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
+    final conVentana = <String>{};
+    for (final f in Directory('lib/features/entradas/widgets').listSync().whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final ruta = f.path.replaceAll('\\', '/');
+      final fuente = leer(ruta);
+      final funciones = funcion.allMatches(fuente).toList();
+      for (final g in escribe.allMatches(fuente)) {
+        final donde = funciones.lastWhere((x) => x.start < g.start);
+        final antes = fuente.substring(donde.start, g.start);
+        final ventanas = ventana.allMatches(antes).toList();
+        if (ventanas.isEmpty) continue;
+        conVentana.add(donde.group(1)!);
+        expect(
+          antes.substring(ventanas.last.end),
+          contains('if (_frenaSinModoJefe()) return;'),
+          reason: '${donde.group(1)} ($ruta) guarda después de una ventana sin volver a '
+              'preguntar por el modo jefe',
+        );
+      }
+    }
+    // Las que abren una ventana: en VENTAS, anular; en PARA RENDIR, dar, las
+    // que no volvieron y anular. Si la regla no encontrara ninguna, no estaría
+    // mirando nada.
+    expect(conVentana, {'_anular', '_dar', '_noVolvieron', '_anularMovimiento'});
+  });
+
+  // 21-nov-2026: las ventanas de las entradas para rendir **no escriben**
+  // (DAR y RENDIR devuelven lo elegido y guarda quien las abrió, con su llave).
+  // Si una se pusiera a guardar, la llave quedaría del lado equivocado.
+  test('las ventanas de DAR y RENDIR no guardan nada', () {
+    final guarda = RegExp(
+      r'\.(darParaRendir|noVolvieron|anularDeParaRendir|rendir|vender|abrirCaja)\(|'
+      r'entradasDelJefeProvider|entradasDeLaCajaProvider',
+    );
+    for (final ruta in [
+      'lib/features/entradas/widgets/dar_para_rendir_dialog.dart',
+      'lib/features/entradas/widgets/rendir_entradas_dialog.dart',
+      'lib/features/entradas/widgets/vender_para_rendir.dart',
+    ]) {
+      expect(guarda.hasMatch(leer(ruta)), isFalse, reason: '$ruta guarda');
+    }
   });
 
   test('quien puede vender entradas es el jefe en modo jefe o quien tiene "Vende '
@@ -595,11 +665,14 @@ void main() {
   // `entradas_retiro` (`EntregarParte.completarLaFila`, `_completarLaFila`), y la
   // regla no lo veía. Es automático (lo llama la lectura), así que su llave va
   // callada, sin cartel: `if (!ref.read(puedeVenderEntradasProvider)) return;`.
+  //
+  // 21-nov-2026, regla 51 de las entradas para rendir: RENDIR (en VENDER,
+  // `_rendir`) guarda una venta y lo devuelto: pide el permiso de vender.
   test('la venta de entradas: abrir una caja, vender, entregar lo sin cargo, poner al '
-      'día la fila de la entrega y cerrarla preguntan por el permiso de vender antes '
-      'de guardar', () {
+      'día la fila de la entrega, rendir y cerrarla preguntan por el permiso de '
+      'vender antes de guardar', () {
     final escribe = RegExp(
-      r'\.(abrirCaja|cerrarCaja|vender|guardarEn|entregar|completarLaFila)\(',
+      r'\.(abrirCaja|cerrarCaja|vender|guardarEn|entregar|completarLaFila|rendir)\(',
     );
     final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
     // Las que corren solas, sin que nadie toque un botón: la llave sin cartel.
@@ -640,7 +713,7 @@ void main() {
     // Si aparece otra función que guarda, que pregunte y se sume acá.
     expect(
       encontradas,
-      {'_abrir', '_cobrar', '_cerrarDeVerdad', '_entregar', '_completarLaFila'},
+      {'_abrir', '_cobrar', '_cerrarDeVerdad', '_entregar', '_completarLaFila', '_rendir'},
     );
   });
 
@@ -670,10 +743,17 @@ void main() {
   // 6.9.0, etapa 7: VENDER, VENDERLE ESAS ENTRADAS y VENTAS se abren desde la
   // entrega con su llave, antes de la pantalla (el botón ya viene apagado: es la
   // segunda llave, por si el permiso cambió con el cartel abierto).
-  test('VENDER, VENDERLE ESAS ENTRADAS y VENTAS se abren desde la entrega con su llave',
-      () {
+  //
+  // 21-nov-2026, regla 52: PARA RENDIR también, con la llave del jefe (como
+  // VENTAS).
+  test('VENDER, VENDERLE ESAS ENTRADAS, VENTAS y PARA RENDIR se abren desde la entrega '
+      'con su llave', () {
     final fuente = leer('lib/features/eventos/retiro_entradas_screen.dart');
     for (final (funcion, llave) in [
+      (
+        'Future<void> _abrirParaRendir() async {',
+        'if (!ref.read(esRolJefeProvider)) return;'
+      ),
       (
         'Future<void> _venderAlCincuenta(ContratoAlumno a) async {',
         'if (!ref.read(puedeVenderEntradasProvider)) return;'
@@ -695,6 +775,38 @@ void main() {
       expect(cuerpo.indexOf('Navigator.of(context).push('), greaterThan(donde),
           reason: '$funcion abre la pantalla antes de la llave');
     }
+  });
+
+  // 21-nov-2026, regla 52: PARA RENDIR tiene una sola puerta, ENTRADAS de la
+  // fiesta, y el botón se prende solo con el modo jefe (y en el equipo). Otra
+  // pantalla que la abriera se saltearía la primera llave.
+  test('PARA RENDIR se abre solo desde ENTRADAS de la fiesta, con el botón del jefe',
+      () {
+    const pantallaEntradas = 'lib/features/eventos/retiro_entradas_screen.dart';
+    final quienes = {
+      for (final f in Directory('lib').listSync(recursive: true))
+        if (f is File &&
+            f.path.endsWith('.dart') &&
+            f.readAsStringSync().contains('ParaRendirScreen('))
+          f.path.replaceAll('\\', '/'),
+    };
+    expect(quienes, {
+      pantallaEntradas,
+      'lib/features/entradas/widgets/para_rendir_screen.dart',
+    });
+    final fuente = leer(pantallaEntradas);
+    final i = fuente.indexOf('get _paraRendir {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+    expect(cuerpo, contains('prendido: esJefe && enElEquipo,'));
+    expect(fuente, contains('onPressed: prendido ? _abrirParaRendir : null,'));
+    // En el mostrador no está: va con PRECIOS, VENDER y VENTAS.
+    final barra = fuente.indexOf('if (!widget.enElMostrador) ...[');
+    expect(barra, greaterThanOrEqualTo(0));
+    expect(
+      fuente.substring(barra, fuente.indexOf('],', barra)),
+      contains('_botonParaRendir()'),
+    );
   });
 
   // 17-nov-2026: aceptar la lista de PRECIOS de una fiesta ya sorteada le

@@ -125,6 +125,12 @@ class MovimientoParaRendir {
   final String createdAt;
   final String updatedAt;
 
+  /// Lo que se le agrega al nombre del precio en el renglón de la venta de una
+  /// rendición: "Entrada anticipada · para rendir". Vive acá, en un solo lugar,
+  /// porque lo escriben los repositorios y lo lee VENTAS para reconocer una
+  /// rendición que llegó sin su "vendió" (21-nov-2026).
+  static const sufijoDelRenglon = ' · para rendir';
+
   const MovimientoParaRendir({
     required this.id,
     required this.eventoId,

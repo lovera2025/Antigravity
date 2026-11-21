@@ -5,6 +5,7 @@ import '../../eventos/services/retiro_entradas.dart';
 import '../datos/anulacion_entradas.dart';
 import '../datos/venta_entradas.dart';
 import 'lugares_de_la_familia.dart';
+import 'para_rendir.dart' show BloqueParaRendir;
 
 /// Un número anotado dos veces **en el mismo talonario**: en dos ventas (el de
 /// las anticipadas) o en dos entregas sin cargo (el de las generales de los
@@ -40,6 +41,51 @@ class NumeroRepetido {
   }
 }
 
+/// Un número de las entradas para rendir que está también en una venta o en
+/// otro bloque (21-nov-2026). Pasa cuando el jefe da sin internet, o cuando una
+/// tablet que no conocía el bloque vende ese número: **no se puede evitar, se
+/// avisa en PARA RENDIR cuando se juntan.**
+class NumeroCruzado {
+  /// El primer número que comparten.
+  final int numero;
+
+  /// El bloque y a quién se le dio.
+  final String bloqueId;
+  final String persona;
+
+  /// El otro: el comprador de la venta, o a quién se le dio el otro bloque.
+  final String otro;
+
+  /// La venta, si el cruce es con una venta.
+  final String? ventaId;
+
+  /// El otro bloque, si el cruce es entre dos bloques.
+  final String? otroBloqueId;
+
+  const NumeroCruzado({
+    required this.numero,
+    required this.bloqueId,
+    required this.persona,
+    required this.otro,
+    this.ventaId,
+    this.otroBloqueId,
+  });
+
+  bool get conUnaVenta => otroBloqueId == null;
+
+  String get texto {
+    if (conUnaVenta) {
+      return 'El $numero se le dio a $persona para rendir y también está en una '
+          'venta a $otro: revisar.';
+    }
+    if (persona == otro) {
+      return 'El $numero está dos veces en las que se le dieron a $persona para '
+          'rendir: revisar.';
+    }
+    return 'El $numero se le dio para rendir a $persona y también a $otro: revisar.';
+  }
+}
+
 /// Los números del talonario de las entradas. **Son dos talonarios, y cada uno
 /// se mira solo consigo mismo** (lo confirmó el usuario el 20-nov, con el audio
 /// del jefe):
@@ -52,6 +98,12 @@ class NumeroRepetido {
 ///
 /// Hasta la 6.9.2 iban juntos, y el 5 de un talonario frenaba el 5 del otro.
 /// **No hay una cuenta que junte los dos grupos**, a propósito: que no vuelva.
+///
+/// **Las entradas para rendir son del talonario de las anticipadas** (21-nov):
+/// los números de un bloque que alguien se llevó para vender por su cuenta
+/// quedan reservados ([ocupadosParaRendir]) y VENDER no los vende
+/// ([ocupadosAlVender]). La entrega sin cargo no los mira: es el otro
+/// talonario.
 ///
 /// Los números **son opcionales**; si se anotan, se validan con las mismas
 /// reglas y las mismas palabras que la entrega (`RetiroEntradas.errorTramos`).
@@ -90,6 +142,122 @@ class NumerosDeEntradas {
       if (nombre == null) continue;
       out.putIfAbsent(nombre, () => []).addAll(TramoTalonario.deTexto(v.numeros));
     }
+    return out;
+  }
+
+  /// Cómo se nombra a quien tiene números para rendir: "PÉREZ, JUAN, para
+  /// rendir". Así VENDER y DAR dicen "El 1205 ya se le dio a PÉREZ, JUAN, para
+  /// rendir (1201 al 1220)." con las palabras de siempre. Con una coma y no
+  /// entre paréntesis (21-nov-2026): el tramo ya va entre paréntesis, y dos
+  /// seguidos se leían mal.
+  static const paraRendir = 'para rendir';
+
+  /// Los números de las anticipadas que están en manos de alguien para rendir
+  /// (nombre → tramos): los de cada bloque menos los que devolvió. **Lo
+  /// vendido y lo que no volvió siguen ocupados**; un bloque anulado no ocupa
+  /// nada (`BloqueParaRendir.numerosOcupados`). Dos bloques de la misma
+  /// persona juntan sus números.
+  static Map<String, List<TramoTalonario>> ocupadosParaRendir(
+    Iterable<BloqueParaRendir> bloques,
+  ) {
+    final out = <String, List<TramoTalonario>>{};
+    for (final b in bloques) {
+      if (b.numerosOcupados.isEmpty) continue;
+      out.putIfAbsent('${b.persona}, $paraRendir', () => []).addAll(b.numerosOcupados);
+    }
+    return out;
+  }
+
+  /// **El `deOtros` de VENDER y de DAR ENTRADAS PARA RENDIR**: todo lo del
+  /// talonario de las anticipadas que ya tiene dueño, lo vendido
+  /// ([ocupadosDeLaVenta]) y lo que está para rendir ([ocupadosParaRendir]).
+  /// No mira lo entregado sin cargo: es el otro talonario.
+  static Map<String, List<TramoTalonario>> ocupadosAlVender(
+    Iterable<VentaEntradas> ventas,
+    Iterable<AnulacionEntradas> anulaciones,
+    Iterable<BloqueParaRendir> bloques,
+  ) {
+    final out = ocupadosDeLaVenta(ventas, anulaciones);
+    for (final e in ocupadosParaRendir(bloques).entries) {
+      out.putIfAbsent(e.key, () => []).addAll(e.value);
+    }
+    return out;
+  }
+
+  /// El primer número desde [desde] (del 1 en adelante) que no tiene dueño en
+  /// [ocupados], con lugar para [cantidad] seguidos. Lo usa VENDER al proponer
+  /// el "del" (21-nov-2026): el que sigue al último de la caja puede ser de un
+  /// bloque para rendir, y entonces propone el primero después.
+  static int primeroLibreDesde(
+    int desde,
+    Map<String, List<TramoTalonario>> ocupados, {
+    int cantidad = 1,
+  }) {
+    final tomados = [for (final l in ocupados.values) ...l];
+    final largo = max(1, cantidad);
+    var n = max(1, desde);
+    while (true) {
+      final pedido = TramoTalonario(n, n + largo - 1);
+      final pisa = [
+        for (final t in tomados)
+          if (pedido.seCruzaCon(t)) t.hasta,
+      ];
+      if (pisa.isEmpty) return n;
+      // Cada vuelta salta detrás de un tramo ocupado: termina siempre.
+      n = pisa.reduce(max) + 1;
+    }
+  }
+
+  /// Los números de los bloques para rendir que están también en una venta o
+  /// en otro bloque, del más bajo al más alto. **Solo avisa** (en PARA
+  /// RENDIR): nada se corrige solo. Cuenta lo mismo que frena VENDER: los
+  /// números que el bloque todavía ocupa, y los de una venta que cuenta o
+  /// anulada sin devolver.
+  static List<NumeroCruzado> repetidosConParaRendir(
+    Iterable<BloqueParaRendir> bloques,
+    Iterable<VentaEntradas> ventas,
+    Iterable<AnulacionEntradas> anulaciones,
+  ) {
+    final anuladas = anulacionesPorVenta(anulaciones);
+    final vendidos = <({String id, String nombre, List<TramoTalonario> tramos})>[];
+    for (final v in ventas) {
+      final nombre = _aNombreDe(v, anuladas[v.id]);
+      if (nombre == null) continue;
+      vendidos.add((id: v.id, nombre: nombre, tramos: TramoTalonario.deTexto(v.numeros)));
+    }
+    final conNumeros = [
+      for (final b in bloques)
+        if (b.numerosOcupados.isNotEmpty) b,
+    ];
+
+    final out = <NumeroCruzado>[];
+    for (var i = 0; i < conNumeros.length; i++) {
+      final b = conNumeros[i];
+      for (final v in vendidos) {
+        final n = _primeroEnComun(b.numerosOcupados, v.tramos);
+        if (n == null) continue;
+        out.add(NumeroCruzado(
+          numero: n,
+          bloqueId: b.id,
+          persona: b.persona,
+          otro: v.nombre,
+          ventaId: v.id,
+        ));
+      }
+      for (var j = i + 1; j < conNumeros.length; j++) {
+        final otro = conNumeros[j];
+        final n = _primeroEnComun(b.numerosOcupados, otro.numerosOcupados);
+        if (n == null) continue;
+        out.add(NumeroCruzado(
+          numero: n,
+          bloqueId: b.id,
+          persona: b.persona,
+          otro: otro.persona,
+          otroBloqueId: otro.id,
+        ));
+      }
+    }
+    out.sort((a, b) => a.numero.compareTo(b.numero));
     return out;
   }
 

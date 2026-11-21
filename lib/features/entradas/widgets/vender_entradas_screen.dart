@@ -31,6 +31,7 @@ import '../../eventos/widgets/carteles_de_la_entrega.dart';
 import '../cuentas/linea_de_subida.dart';
 import '../cuentas/lugares_de_la_familia.dart';
 import '../cuentas/numeros_de_entradas.dart';
+import '../cuentas/para_rendir.dart';
 import '../cuentas/pedido_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
 import '../pdf/comprobante_entradas_pdf.dart';
@@ -40,10 +41,22 @@ import '../services/en_caja.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'abrir_caja_entradas_dialog.dart';
 import 'cerrar_caja_entradas_screen.dart';
+import 'rendir_entradas_dialog.dart';
 import 'vender_a_pagar.dart';
 import 'vender_gratis.dart';
 import 'vender_lista.dart';
+import 'vender_para_rendir.dart';
 import 'ventas_de_entradas_screen.dart';
+
+/// Lo que quedó de la última rendición guardada, para su aviso de arriba.
+typedef _Rendida = ({
+  String bloqueId,
+  String persona,
+  int vendidas,
+  int devueltas,
+  String? ventaId,
+  double? cobrado,
+});
 
 /// VENDER: la pantalla de quien vende entradas en una fiesta (6.9.0; rehecha
 /// el 20-nov-2026 con las maquetas que aprobó el usuario). **Quien tiene "Vende
@@ -63,6 +76,11 @@ import 'ventas_de_entradas_screen.dart';
 ///     **solo lo que ya está pago entero**, con descuento lo que tenía al
 ///     sorteo y al precio del día lo agregado después. Se cobra en esta caja.
 /// - **Alguien de afuera**: entradas al precio del día, como siempre.
+/// - **Entradas para rendir** (21-nov-2026): si alguien se llevó entradas para
+///   venderlas por su cuenta y le queda algo, arriba sale el aviso con
+///   RENDIR ([_rendir]), **sin plata a la vista**. Lo vendido se cobra en esta
+///   caja como una venta más; los números de esas entradas no se venden acá
+///   ([_ocupados]).
 ///
 /// **No cobra cuotas ni toca la cuenta de ningún alumno**: del alumno solo lee.
 /// Lo que escribe es la venta (`PedidoDeEntradas.guardarEn`) y la entrega
@@ -105,6 +123,17 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   Map<String, List<EntregaEntradas>> _renglones = {};
   List<VentaEntradas> _ventas = [];
   List<AnulacionEntradas> _anulaciones = [];
+
+  /// Las entradas para rendir de la fiesta (21-nov-2026): quién tiene algo sin
+  /// rendir (el aviso de arriba) y qué números tiene cada uno (no se venden).
+  ParaRendir? _paraRendir;
+
+  /// La última rendición guardada: su aviso queda arriba hasta la siguiente.
+  _Rendida? _ultimaRendicion;
+
+  /// El "del" propuesto saltó los números que alguien tiene para rendir.
+  bool _propuestaSaltoUnBloque = false;
+
   /// Lo de este equipo que espera subir: ventas, entregas y cambios de la caja.
   PendientesDeEntradas _sinSubir = PendientesDeEntradas.nada;
 
@@ -177,6 +206,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     'entradas_anulaciones',
     'entradas_retiro',
     'entradas_entregas',
+    // Las entradas para rendir (21-nov-2026): un bloque dado o rendido en otro
+    // equipo cambia el aviso de arriba y los números que no se venden.
+    'entradas_para_rendir',
     // El sorteo (o el jefe, al aceptar la lista de PRECIOS) anota qué tenía
     // cada familia: cambia a quién le va el descuento.
     'sorteos_mesas',
@@ -302,6 +334,13 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           .deContratos(idsDeTodos);
       final ventas = await entradas.ventas(id);
       final anulaciones = await entradas.anulaciones(id);
+      // Las entradas para rendir, con las mismas ventas: la plata de lo rendido
+      // es una venta, y anularla le devuelve las entradas a quien las llevó.
+      final paraRendir = ParaRendir.de(
+        movimientos: await entradas.paraRendir(id),
+        ventas: ventas,
+        anulaciones: anulaciones,
+      );
       final caja = await entradas.cajaAbierta(
         eventoId: id,
         operadorId: _quienVende.id,
@@ -356,6 +395,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         if (_ultima != null && anulaciones.any((a) => a.ventaId == _ultima!.id)) {
           _ultima = null;
         }
+        final rendida = _ultimaRendicion?.ventaId;
+        if (rendida != null && anulaciones.any((a) => a.ventaId == rendida)) {
+          _ultimaRendicion = null;
+        }
         _config = config;
         _alumnos = alumnos;
         _todos = todos;
@@ -364,6 +407,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _renglones = renglones;
         _ventas = ventas;
         _anulaciones = anulaciones;
+        _paraRendir = paraRendir;
         _caja = caja;
         _sinSubir = sinSubir;
         _info = info;
@@ -525,11 +569,16 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   double get _descuentoPct =>
       _config?.descuentoLugaresPct ?? ConfigEntradas.kDescuentoDeLosLugares;
 
-  /// Los números de las anticipadas que ya tienen dueño: solo lo vendido. Lo
+  /// Los números de las anticipadas que ya tienen dueño: lo vendido y, desde
+  /// el 21-nov-2026, **lo que alguien se llevó para rendir** (el mismo
+  /// talonario: "El 1205 ya se le dio a PÉREZ, JUAN, para rendir"). Lo
   /// entregado sin cargo es otro talonario (el de las generales de los
   /// alumnos) y no frena una venta (20-nov).
-  Map<String, List<TramoTalonario>> get _ocupados =>
-      NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones);
+  Map<String, List<TramoTalonario>> get _ocupados => NumerosDeEntradas.ocupadosAlVender(
+        _ventas,
+        _anulaciones,
+        _paraRendir?.bloques ?? const [],
+      );
 
   /// Cuántas le quedan de cada línea de A PAGAR de [info], cuántas siguen "a
   /// confirmar" y cuántas lleva.
@@ -608,14 +657,27 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   /// Propone en "del" el número que sigue al último que vendió esta caja
   /// (20-nov-2026), salvo que quien vende ya haya escrito o borrado algo.
+  ///
+  /// **Si ese número (o los que siguen, para las que lleva) lo tiene alguien
+  /// para rendir, propone el primero libre después** (21-nov-2026): si no,
+  /// VENDER propondría un número que ella misma no deja vender. Por eso se
+  /// vuelve a proponer cuando cambia cuántas lleva.
   void _proponerNumero() {
     if (_delTocado || _dosTramos) return;
     final caja = _caja;
-    final n = caja == null
+    final siguiente = caja == null
         ? null
         : NumerosDeEntradas.siguienteDeLaCaja(caja.id, _ventas, _anulaciones);
+    final n = siguiente == null
+        ? null
+        : NumerosDeEntradas.primeroLibreDesde(
+            siguiente,
+            NumerosDeEntradas.ocupadosParaRendir(_paraRendir?.bloques ?? const []),
+            cantidad: _sinNumeros.cantidad < 1 ? 1 : _sinNumeros.cantidad,
+          );
     _del.text = n?.toString() ?? '';
     _hayPropuesta = n != null;
+    _propuestaSaltoUnBloque = n != null && n != siguiente;
   }
 
   void _elegirFamilia(String? id) => setState(() {
@@ -623,6 +685,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _cantidades.clear();
         _parteAbierta = null;
         _busqueda.clear();
+        _proponerNumero();
       });
 
   /// Desde "En caja": abre la tarjeta de esa familia.
@@ -791,6 +854,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     final datos = _datosDelComprobante(guardada);
     setState(() {
       _ultima = guardada;
+      _ultimaRendicion = null;
       _limpiar();
       _guardando = false;
     });
@@ -834,6 +898,133 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         ),
       );
     }
+  }
+
+  // ── Rendir las entradas para rendir ──────────────────────────────────────
+
+  /// RENDIR, desde el aviso de arriba (21-nov-2026, sección 5 de la SPEC):
+  /// quien se llevó entradas para vender por su cuenta trae la plata de lo que
+  /// vendió y las que no vendió. La ventana no escribe; acá se guarda, con la
+  /// llave de vender, **todo junto o nada** (la venta, si vendió algo, en esta
+  /// caja; lo vendido y lo devuelto): lo hace el repositorio en una sola
+  /// transacción, y si otro equipo rindió en el medio, no guarda nada.
+  ///
+  /// Si se vuelve del cobro sin confirmar, la ventana se abre otra vez con lo
+  /// que se había cargado. **El comprobante de la rendición todavía no sale**:
+  /// llega con los papeles (etapa 6). El de una venta común diría "Pulseras
+  /// normales", y quien rinde no se lleva pulseras.
+  Future<void> _rendir() async {
+    if (_frenaSinPermiso()) return;
+    if (_ocupado) return;
+    PedidoDeRendicion? inicial;
+    late final PedidoDeRendicion pedido;
+    CobroBarra? cobro;
+    while (true) {
+      final cuenta = _paraRendir;
+      if (cuenta == null || !mounted) return;
+      final elegido = await mostrarRendirEntradas(
+        context,
+        cuenta: cuenta,
+        hayCaja: _caja != null,
+        abrirLaCaja: _abrirCajaParaRendir,
+        divisiones: {
+          for (final a in _todos)
+            if ((a.cursoDivision ?? '').trim().isNotEmpty) a.id: a.cursoDivision!.trim(),
+        },
+        config: _config,
+        hoyAr: ref.read(hoyEnArgentinaProvider)(),
+        inicial: inicial,
+      );
+      if (elegido == null || !mounted || _ocupado) return;
+      if (elegido.vendidas > 0 && _caja == null) {
+        // La ventana no deja cobrar sin caja; por si se cerró en el medio.
+        await _pedirCaja();
+        if (!mounted || _caja == null) return;
+        inicial = elegido;
+        continue;
+      }
+      if (elegido.vendidas > 0) {
+        // La hoja del cobro de siempre, con el recargo apagado: se puede
+        // prender si paga por transferencia.
+        cobro = await pedirCobro(
+          context,
+          total: elegido.aCobrar,
+          medio: elegido.medio ?? MedioBarra.efectivo,
+          recargoPrendido: false,
+          recargoPct: _config?.recargoPct ?? 0,
+        );
+        if (!mounted) return;
+        if (cobro == null) {
+          inicial = elegido;
+          continue;
+        }
+      }
+      pedido = elegido;
+      break;
+    }
+    // Otra vez la llave: el permiso pudo cambiar con la ventana abierta.
+    if (_frenaSinPermiso()) return;
+    setState(() => _guardando = true);
+    try {
+      final rendicion = await ref.read(entradasDeLaCajaProvider).rendir(
+            caja: _caja,
+            bloque: pedido.bloque.dio,
+            vendidas: pedido.vendidas,
+            devueltas: pedido.devueltas,
+            numerosDevueltos: pedido.numerosDevueltos,
+            medio: cobro?.medio ?? MedioBarra.efectivo,
+            efectivo: cobro?.efectivo ?? 0,
+            transferencia: cobro?.transfiere ?? 0,
+            recibe: cobro?.recibeQueCuenta,
+            recargo: cobro?.recargo ?? 0,
+            recargoPct: cobro?.recargoPctQueQueda,
+            quien: _quienVende.nombre,
+          );
+      avisarQueCambioLaVenta(ref, widget.evento.id);
+      if (!mounted) return;
+      setState(() {
+        _ultima = null;
+        _ultimaRendicion = (
+          bloqueId: pedido.bloque.id,
+          persona: pedido.bloque.persona,
+          vendidas: pedido.vendidas,
+          devueltas: pedido.devueltas,
+          ventaId: rendicion.venta?.id,
+          cobrado: rendicion.venta?.cobrado,
+        );
+        _guardando = false;
+      });
+      await _cargar(silencioso: true);
+    } on StateError {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se guardó: cambió algo mientras cargabas la rendición (otro '
+              'equipo rindió o anuló). Revisá y probá de nuevo.',
+            ),
+          ),
+        );
+        setState(() => _guardando = false);
+        await _cargar(silencioso: true);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se guardó la rendición. Probá de nuevo.')),
+        );
+      }
+    } finally {
+      if (mounted && _guardando) setState(() => _guardando = false);
+      _releerSiQuedoPendiente();
+    }
+  }
+
+  /// ABRIR LA CAJA desde RENDIR: la de VENDER, la misma que se pide al entrar.
+  /// Dice si quedó abierta.
+  Future<bool> _abrirCajaParaRendir() async {
+    await _pedirCaja();
+    return _caja != null;
   }
 
   /// VENTAS: las de esta caja (el jefe ve todas las de la fiesta). Al volver se
@@ -1028,6 +1219,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           children: [
             _linea(),
             _totalDeLaFiesta(),
+            // Solo si alguien tiene entradas sin rendir, y sin plata a la vista.
+            if ((_paraRendir?.personas ?? 0) > 0)
+              AvisoParaRendirEnVender(
+                personas: _paraRendir!.personas,
+                alRendir: _ocupado ? null : _rendir,
+              ),
             if (!_tienePrecio)
               const _AvisoEnLinea(
                 clave: 'vender_sin_precio',
@@ -1036,6 +1233,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                     'se vende. Lo sin cargo se entrega igual.',
               ),
             ..._enCajaArriba(),
+            if (_ultimaRendicion != null) _avisoDeRendicion(_ultimaRendicion!),
             if (_ultima != null) _avisoDeGuardada(_ultima!),
             const SizedBox(height: 10),
             _aQuien(),
@@ -1268,6 +1466,50 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     );
   }
 
+  /// "Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 ·
+  /// $ 120.000". Sin VER EL COMPROBANTE: el papel de la rendición llega con
+  /// los papeles (etapa 6).
+  Widget _avisoDeRendicion(_Rendida r) {
+    final verde = Colors.green.shade700;
+    final quedan = _paraRendir?.bloque(r.bloqueId)?.sinRendir;
+    final texto = [
+      r.vendidas > 0 ? 'Rendición guardada' : 'Devolución guardada',
+      r.persona,
+      if (r.vendidas > 0) 'vendió ${r.vendidas}',
+      if (r.devueltas > 0) 'devolvió ${r.devueltas}',
+      if (quedan != null) 'le quedan $quedan',
+      if (r.cobrado != null) pesos(r.cobrado!),
+    ].join(' · ');
+    return Container(
+      key: const Key('vender_rendicion_guardada'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: verde.withValues(alpha: 0.1),
+        border: Border.all(color: verde.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: verde),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              key: const Key('vender_rendicion_guardada_texto'),
+              style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Sacar el aviso',
+            icon: const Icon(Icons.close),
+            onPressed: () => setState(() => _ultimaRendicion = null),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _aQuien() => SegmentedButton<bool>(
         key: const Key('vender_a_quien'),
         showSelectedIcon: false,
@@ -1281,6 +1523,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           _cantidades.clear();
           _sueltas = null;
           _parteAbierta = null;
+          _proponerNumero();
         }),
       );
 
@@ -1422,8 +1665,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         quedan: cuentas.quedan,
         aConfirmar: cuentas.aConfirmar,
         cantidades: cuentas.lleva,
-        alCambiar: (i, n) =>
-            setState(() => _cantidades[claveDeLinea(lineas[i])] = n),
+        alCambiar: (i, n) => setState(() {
+          _cantidades[claveDeLinea(lineas[i])] = n;
+          _proponerNumero();
+        }),
         precioConDescuento: p.precioDeLugar ?? 0,
         precioEntero: _config?.valorEntrada ?? 0,
         precioDelDia: p.precioDeHoy ?? 0,
@@ -1583,7 +1828,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           cantidad: p.sueltasQueVan,
           subtotal: p.sueltasQueVan *
               RenglonEntradas.precioCon(p.precioDeHoy ?? 0, p.descuentoQueVa),
-          alCambiar: (n) => setState(() => _sueltas = n < 0 ? 0 : n),
+          alCambiar: (n) => setState(() {
+            _sueltas = n < 0 ? 0 : n;
+            _proponerNumero();
+          }),
           antes: conDescuento ? descuento : null,
         );
     return Padding(
@@ -1669,8 +1917,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         ),
         Text(
           _hayPropuesta
-              ? 'Opcional. Viene el número que sigue al último que vendió esta '
-                  'caja: se puede cambiar o borrar.'
+              ? (_propuestaSaltoUnBloque
+                  ? 'Opcional. Viene el primer número libre después del último que '
+                      'vendió esta caja (los del medio los tiene alguien para rendir): '
+                      'se puede cambiar o borrar.'
+                  : 'Opcional. Viene el número que sigue al último que vendió esta '
+                      'caja: se puede cambiar o borrar.')
               : 'Opcional: escribí el primer número de las anticipadas que '
                   'entregás.',
           key: const Key('vender_talonario_ayuda'),

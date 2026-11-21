@@ -6,7 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart'
     show diferenciaEnPalabras;
 import 'package:arguello_events/features/entradas/cuentas/cierre_de_entradas.dart';
+import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
+import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
+
+import 'helpers/entradas_en_memoria.dart';
 
 const _fiesta = 'e0000000-0000-4000-8000-000000000001';
 const _familia = 'c0000000-0000-4000-8000-000000000001';
@@ -411,5 +415,154 @@ void main() {
     expect(c.total, 0);
     expect(c.efectivoEsperado, 3000);
     expect(c.diferenciaCon(3000), 0);
+  });
+
+  // Regla 42 de `docs/SPEC_entradas_para_rendir_2026-11-20.md` (21-nov-2026): la
+  // plata de una rendición es una venta común, así que el cierre de la caja que
+  // la cobró la cuenta **sin saber nada de las entradas para rendir**. Las
+  // rendiciones se arman con el doble de la base (`EntradasEnMemoria`, que hace
+  // lo mismo que `EntradasLocal`), con el renglón de las cuentas, como la
+  // pantalla.
+  group('regla 42: la plata de una rendición entra en el cierre de la caja que la '
+      'cobró', () {
+    late EntradasEnMemoria repo;
+    late CajaEntradas deCarla;
+    late CajaEntradas delJefe;
+    late MovimientoParaRendir bloque;
+
+    setUp(() async {
+      repo = EntradasEnMemoria();
+      deCarla = await repo.abrirCaja(
+        eventoId: _fiesta,
+        operadorId: 'carla',
+        operadorNombre: 'Carla',
+        cambioInicial: 5000,
+      );
+      delJefe = await repo.abrirCaja(eventoId: _fiesta, operadorNombre: 'Jefe');
+      bloque = await repo.darParaRendir(
+        eventoId: _fiesta,
+        personaNombre: 'PÉREZ, JUAN',
+        cantidad: 20,
+        numeros: const [TramoTalonario(1201, 1220)],
+        precio: 8000,
+        nombrePrecio: 'Entrada anticipada',
+        quien: 'Jefe',
+      );
+    });
+
+    /// Rinde [vendidas] en [caja], cobrando lo que dice el renglón de las
+    /// cuentas (en efectivo, o por transferencia con [recargo]).
+    Future<VentaEntradas> rendir(
+      CajaEntradas caja,
+      int vendidas, {
+      bool transferencia = false,
+      double recargo = 0,
+    }) async {
+      final cuentas = ParaRendir.de(
+        movimientos: await repo.paraRendir(_fiesta),
+        ventas: await repo.ventas(_fiesta),
+        anulaciones: await repo.anulaciones(_fiesta),
+      );
+      final plata = ParaRendir.renglon(cuentas.bloque(bloque.id)!, vendidas).subtotal;
+      final r = await repo.rendir(
+        caja: caja,
+        bloque: bloque,
+        vendidas: vendidas,
+        medio: transferencia ? MedioBarra.transferencia : MedioBarra.efectivo,
+        efectivo: transferencia ? 0 : plata,
+        transferencia: transferencia ? plata + recargo : 0,
+        recargo: recargo,
+        recargoPct: recargo > 0 ? 5 : null,
+        quien: caja.operadorNombre ?? 'Jefe',
+      );
+      return r.venta!;
+    }
+
+    test('en el efectivo que tiene que haber y en las sueltas, solo en su caja', () async {
+      await rendir(deCarla, 15);
+      await repo.vender(
+        caja: deCarla,
+        compradorNombre: 'LÓPEZ, ANA',
+        renglones: [
+          RenglonEntradas.suelta(
+              nombre: 'Entrada anticipada', precioLista: 8000, cantidad: 2),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 16000,
+        quien: 'Carla',
+      );
+      final ventas = await repo.ventas(_fiesta);
+
+      final c = CierreDeEntradas.de(deCarla, ventas, const []);
+      expect(c.ventas, 2);
+      expect(c.sueltas, 17, reason: 'las 15 rendidas y las 2 de la venta común');
+      expect(c.plataSueltas, 136000);
+      expect(c.efectivo, 136000);
+      expect(c.efectivoEsperado, 141000, reason: 'con el cambio de \$5.000');
+      expect(c.descuentos, 0, reason: 'rinde toda la plata: sin descuento');
+
+      final delOtro = CierreDeEntradas.de(delJefe, ventas, const []);
+      expect(delOtro.ventas, 0, reason: 'la cobró Carla: no es de la caja del jefe');
+      expect(delOtro.efectivoEsperado, 0);
+
+      final fiesta = CierreDeEntradas.deLaFiesta([deCarla, delJefe], ventas, const []);
+      expect(fiesta.entradas, 17);
+      expect(fiesta.efectivoEsperado, 141000);
+    });
+
+    test('por transferencia: va en la transferencia, con el recargo aparte', () async {
+      await rendir(deCarla, 10, transferencia: true, recargo: 4000);
+      final c = CierreDeEntradas.de(deCarla, await repo.ventas(_fiesta), const []);
+      expect(c.transferencia, 84000);
+      expect(c.recargos, 4000);
+      expect(c.vendido, 80000);
+      expect(c.efectivoEsperado, 5000, reason: 'en la caja queda el cambio, nada más');
+    });
+
+    test('anulada en VENTAS con la caja ya cerrada: el cierre queda como estaba y va '
+        'en "anulado después"', () async {
+      final venta = await rendir(deCarla, 15);
+      final alCerrar = CierreDeEntradas.de(deCarla, await repo.ventas(_fiesta), const []);
+      expect(alCerrar.efectivoEsperado, 125000);
+      final cerrada = await repo.cerrarCaja(
+        deCarla,
+        efectivoContado: 125000,
+        diferencia: alCerrar.diferenciaCon(125000),
+        quien: 'Carla',
+      );
+      // Al otro día el jefe anula la rendición en VENTAS: las 15 vuelven a quedar
+      // a cargo de quien las llevó (sin "devolvieron las entradas").
+      repo.adelantar(const Duration(hours: 14));
+      await repo.anular(venta, motivo: 'la cobró dos veces', devueltas: false, quien: 'Jefe');
+
+      final resumen = ResumenDeCajaEntradas(
+        cerrada,
+        CierreDeEntradas.de(
+          cerrada,
+          await repo.ventas(_fiesta),
+          await repo.anulaciones(_fiesta),
+        ),
+      );
+      expect(resumen.diferencia, 0,
+          reason: 'la diferencia es la que se anotó al cerrar, no una cuenta de ahora');
+      expect(resumen.cuentas.anuladas, 1);
+      expect(resumen.cuentas.efectivoAnuladoDespues, 120000);
+      expect(resumen.cuentas.hayAnuladoDespues, isTrue);
+      expect(resumen.cuentas.efectivoEsperado, 5000);
+    });
+
+    test('anulada con la caja abierta: sale de lo que tiene que haber', () async {
+      final venta = await rendir(deCarla, 15);
+      await repo.anular(venta, motivo: 'se equivocó', devueltas: false, quien: 'Jefe');
+      final c = CierreDeEntradas.de(
+        deCarla,
+        await repo.ventas(_fiesta),
+        await repo.anulaciones(_fiesta),
+      );
+      expect(c.ventas, 0);
+      expect(c.efectivoAnulado, 120000);
+      expect(c.efectivoAnuladoDespues, 0);
+      expect(c.efectivoEsperado, 5000);
+    });
   });
 }

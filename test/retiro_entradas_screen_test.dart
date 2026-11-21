@@ -18,6 +18,7 @@ import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/services/en_caja.dart';
+import 'package:arguello_events/features/entradas/widgets/para_rendir_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
@@ -418,6 +419,94 @@ void main() {
     testWidgets('en el mostrador no está', (tester) async {
       await _montar(tester, entradas: EntradasEnMemoria());
       expect(find.byKey(const Key('entradas_ventas')), findsNothing);
+    });
+  });
+
+  // 21-nov-2026: las entradas para rendir. PARA RENDIR va al lado de VENTAS y
+  // es del jefe, como VENTAS (regla 52).
+  group('PARA RENDIR, en ENTRADAS de la fiesta', () {
+    TextButton boton(WidgetTester tester) =>
+        tester.widget<TextButton>(find.byKey(const Key('entradas_para_rendir')));
+    String? motivo(WidgetTester tester) => tester
+        .widget<Tooltip>(find.ancestor(
+          of: find.byKey(const Key('entradas_para_rendir')),
+          matching: find.byType(Tooltip),
+        ))
+        .message;
+
+    testWidgets('sin modo jefe se ve, apagado y con el motivo', (tester) async {
+      await _montar(tester, mostrador: false, entradas: EntradasEnMemoria());
+      expect(find.text('PARA RENDIR'), findsOneWidget);
+      expect(boton(tester).onPressed, isNull);
+      expect(motivo(tester), kSoloEnModoJefe);
+    });
+
+    testWidgets('en modo jefe abre PARA RENDIR de la fiesta, después de VENTAS',
+        (tester) async {
+      final entradas = EntradasEnMemoria()..conPrecio(idFiestaEntrega);
+      await _montar(tester, mostrador: false, jefe: true, entradas: entradas);
+      expect(boton(tester).onPressed, isNotNull);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('entradas_para_rendir'))).dx,
+        greaterThan(tester.getTopLeft(find.byKey(const Key('entradas_ventas'))).dx),
+      );
+      await tester.tap(find.byKey(const Key('entradas_para_rendir')));
+      await _pasar(tester);
+      await _pasar(tester);
+      final pantalla = tester.widget<ParaRendirScreen>(find.byType(ParaRendirScreen));
+      expect(pantalla.evento.id, idFiestaEntrega);
+      expect(find.text('Nadie tiene entradas para rendir.'), findsOneWidget);
+    });
+
+    testWidgets('en el mostrador no está', (tester) async {
+      await _montar(tester, entradas: EntradasEnMemoria());
+      expect(find.byKey(const Key('entradas_para_rendir')), findsNothing);
+    });
+
+    // Riesgo de la SPEC (sección 10): en el celular la barra de ENTRADAS suma un
+    // botón. No entraba (se desbordaba 233 px): va a un menú, cada opción con
+    // la regla de su botón.
+    testWidgets('en un celular van en un menú, sin desbordarse, y PARA RENDIR abre',
+        (tester) async {
+      await _montar(
+        tester,
+        mostrador: false,
+        jefe: true,
+        entradas: EntradasEnMemoria()..conPrecio(idFiestaEntrega),
+        tamano: const Size(390, 900),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('entradas_para_rendir')), findsNothing);
+      await tester.tap(find.byKey(const Key('entradas_menu_venta')));
+      await _pasar(tester);
+      for (final texto in ['PRECIOS', 'VENDER', 'VENTAS', 'PARA RENDIR']) {
+        expect(find.text(texto), findsOneWidget, reason: texto);
+      }
+      await tester.tap(find.byKey(const Key('entradas_para_rendir_menu')));
+      await _pasar(tester);
+      await _pasar(tester);
+      expect(find.byType(ParaRendirScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('en un celular, sin modo jefe, el menú las muestra apagadas con el motivo',
+        (tester) async {
+      await _montar(
+        tester,
+        mostrador: false,
+        entradas: EntradasEnMemoria(),
+        tamano: const Size(390, 900),
+      );
+      await tester.tap(find.byKey(const Key('entradas_menu_venta')));
+      await _pasar(tester);
+      final item = tester.widget<PopupMenuItem<String>>(
+        find.byKey(const Key('entradas_para_rendir_menu')),
+      );
+      expect(item.enabled, isFalse);
+      expect(find.text(kSoloEnModoJefe), findsWidgets);
+      await tester.tap(find.byKey(const Key('entradas_para_rendir_menu')), warnIfMissed: false);
+      await _pasar(tester);
+      expect(find.byType(ParaRendirScreen), findsNothing);
     });
   });
 

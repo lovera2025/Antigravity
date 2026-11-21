@@ -761,7 +761,8 @@ class EntradasLocal implements EntradasDeLaCaja, EntradasDelJefe {
           compradorNombre: enLaBase.personaNombre ?? '',
           renglones: [
             RenglonEntradas.suelta(
-              nombre: '${enLaBase.nombrePrecio ?? 'Entrada'} · para rendir',
+              nombre: '${enLaBase.nombrePrecio ?? 'Entrada'}'
+                  '${MovimientoParaRendir.sufijoDelRenglon}',
               precioLista: precio,
               descuentoPct: 0,
               cantidad: vendidas,

@@ -2,9 +2,15 @@
 // que le toca a cada familia, el estado de cada parte con los renglones de
 // `entradas_entregas` y la fila de `entradas_retiro`, la cuenta de la fiesta, el
 // grupo del filtro de VENDER y los números de las generales.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/core/utils/uuid_utils.dart';
+import 'package:arguello_events/features/entradas/cuentas/numeros_de_entradas.dart';
+import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
+import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart'
+    show MovimientoParaRendir;
 import 'package:arguello_events/features/eventos/services/entrega_por_partes.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
@@ -77,6 +83,36 @@ DeudaAlumno _deuda(ContratoAlumno a, List<Map<String, dynamic>> pagos) =>
     );
 
 DateTime _h(int hora, [int minuto = 0]) => DateTime.utc(2026, 11, 20, hora, minuto);
+
+/// Lo del talonario de las anticipadas (lo vendido y las entradas para rendir)
+/// que la entrega sin cargo no puede nombrar (regla 45 de
+/// `docs/SPEC_entradas_para_rendir_2026-11-20.md`). `_ocupados` y `_ventas` son
+/// los de VENDER, que juntan lo vendido y los bloques.
+final _delTalonarioDeLasAnticipadas = RegExp(
+  r'ParaRendir|paraRendir|para_rendir|ocupadosAlVender|ocupadosDeLaVenta'
+  r'|ocupadosParaRendir|\b_ocupados\b|\b_ventas\b',
+);
+
+/// Lo que hay en [codigo] desde [desde] hasta el primer cierre que no es suyo
+/// (lo de adentro de una llamada) o, con [conLaComa], también hasta la primera
+/// coma o el primer `;` que no están adentro de nada (un argumento, o el cuerpo
+/// de un `=>`). Cuenta paréntesis, corchetes y llaves; no sabe de textos, y
+/// para estas pantallas alcanza.
+String _hastaElCierre(String codigo, int desde, {bool conLaComa = false}) {
+  var adentro = 0;
+  for (var i = desde; i < codigo.length; i++) {
+    final c = codigo[i];
+    if ('([{'.contains(c)) {
+      adentro++;
+    } else if (')]}'.contains(c)) {
+      if (adentro == 0) return codigo.substring(desde, i);
+      adentro--;
+    } else if (conLaComa && adentro == 0 && (c == ',' || c == ';')) {
+      return codigo.substring(desde, i);
+    }
+  }
+  return codigo.substring(desde);
+}
 
 var _n = 0;
 
@@ -798,6 +834,159 @@ void main() {
       expect(error(ParteEntrega.pulseras, const []), isNull);
       expect(error(ParteEntrega.pulseras, const [TramoTalonario(1, 3)]),
           'Las pulseras van sin número: sacá los números.');
+    });
+
+    // Regla 45 de `docs/SPEC_entradas_para_rendir_2026-11-20.md` (21-nov-2026):
+    // las entradas para rendir son del talonario de las anticipadas. Un bloque
+    // que alguien se llevó para vender no frena la entrega sin cargo (las
+    // generales de los alumnos son otro material, con su propia numeración), y
+    // al revés.
+    group('regla 45: dos talonarios, las entradas para rendir no frenan la entrega',
+        () {
+      final bloque = MovimientoParaRendir.dio(
+        eventoId: _evento,
+        personaNombre: 'PÉREZ, JUAN',
+        cantidad: 20,
+        tramos: const [TramoTalonario(1201, 1220)],
+        precio: 8000,
+        nombrePrecio: 'Entrada anticipada',
+        ahora: _h(9),
+      );
+      final paraRendir =
+          ParaRendir.de(movimientos: [bloque], ventas: const [], anulaciones: const []);
+
+      Map<String, List<TramoTalonario>> deOtrosEnLaEntrega() =>
+          NumerosDeEntradas.ocupadosDeLaEntrega(EntregaPorPartes.numerosDeOtros(
+            [ana, beto],
+            const {},
+            [
+              _entrega(ParteEntrega.generales, 5, _h(11),
+                  alumno: beto, tramos: const [TramoTalonario(1300, 1304)]),
+            ],
+            salvo: ana.id,
+          ));
+
+      test('las generales con los números de un bloque para rendir se entregan igual',
+          () {
+        expect(
+          EntregaPorPartes.errorDeLosNumeros(
+            parte: ParteEntrega.generales,
+            tramos: const [TramoTalonario(1201, 1205)],
+            cantidad: 5,
+            deOtros: deOtrosEnLaEntrega(),
+          ),
+          isNull,
+        );
+        expect(deOtrosEnLaEntrega().keys, ['BETO'],
+            reason: 'en la entrega, solo lo entregado sin cargo');
+        // En su talonario, el de las anticipadas, el bloque sí los ocupa.
+        expect(
+          NumerosDeEntradas.error(
+            tramos: const [TramoTalonario(1201, 1205)],
+            cantidad: 5,
+            ocupados: paraRendir.ocupados,
+          ),
+          'El 1201 ya se le dio a PÉREZ, JUAN, para rendir (1201 al 1220).',
+        );
+        // Y las generales siguen sin repetirse entre ellas.
+        expect(
+          EntregaPorPartes.errorDeLosNumeros(
+            parte: ParteEntrega.generales,
+            tramos: const [TramoTalonario(1300, 1304)],
+            cantidad: 5,
+            deOtros: deOtrosEnLaEntrega(),
+          ),
+          'El 1300 ya se le dio a BETO (1300 al 1304).',
+        );
+      });
+
+      test('lo que valida y guarda una entrega no conoce las entradas para rendir', () {
+        // La regla de los números de la entrega, el único camino que la guarda
+        // (`EntregarParte` y quien escribe sus renglones) y lo que la muestra y
+        // la valida en pantalla (el formulario de cada parte, el diálogo de la
+        // oficina y GRATIS de VENDER). Si alguno empezara a mirar los bloques,
+        // una entrega sin cargo se frenaría por un número del otro talonario.
+        for (final ruta in [
+          'lib/features/eventos/services/entrega_por_partes.dart',
+          'lib/features/eventos/services/entregar_parte.dart',
+          'lib/features/eventos/repositories/entregar_parte_de_la_app.dart',
+          'lib/features/eventos/widgets/formulario_entrega_parte.dart',
+          'lib/features/eventos/widgets/entrega_entradas_dialog.dart',
+          'lib/features/entradas/widgets/vender_gratis.dart',
+        ]) {
+          final codigo = File(ruta).readAsStringSync();
+          final nombra = _delTalonarioDeLasAnticipadas.firstMatch(codigo);
+          expect(nombra, isNull, reason: '$ruta nombra "${nombra?[0]}"');
+        }
+      });
+
+      test('lo que las pantallas le pasan a la entrega como "ya entregado" sale solo '
+          'de lo entregado sin cargo', () {
+        // VENDER y ENTRADAS de la fiesta (la oficina) también muestran las
+        // entradas para rendir (etapa 5 de la SPEC), así que no se las puede
+        // leer enteras: se mira cada `deOtros:` de la entrega. Tiene que salir
+        // de `EntregaPorPartes.numerosDeOtros`, directo o por un método de la
+        // misma pantalla, y no nombrar lo vendido ni los bloques: el `_ocupados`
+        // de VENDER junta los dos, y pasárselo a GRATIS frenaría la entrega.
+        final pantallas = {
+          'lib/features/entradas/widgets/vender_entradas_screen.dart': 'BloqueGratis',
+          'lib/features/eventos/retiro_entradas_screen.dart':
+              'mostrarEntregaEntradasDialog',
+        };
+        for (final MapEntry(key: ruta, value: entrega) in pantallas.entries) {
+          final codigo = File(ruta).readAsStringSync();
+          final llamadas = [
+            for (final m in RegExp('\\b$entrega\\(').allMatches(codigo))
+              _hastaElCierre(codigo, m.end),
+          ];
+          expect(llamadas, isNotEmpty,
+              reason: '$ruta ya no llama a $entrega: revisar esta prueba');
+          for (final argumentos in llamadas) {
+            final deOtros = RegExp(r'\bdeOtros:\s*').firstMatch(argumentos);
+            expect(deOtros, isNotNull,
+                reason: '$ruta: $entrega sin deOtros, revisar esta prueba');
+            var expresion = _hastaElCierre(argumentos, deOtros!.end, conLaComa: true);
+            final metodo = RegExp(r'^(_\w+)\(').firstMatch(expresion.trim());
+            if (metodo != null) {
+              final definicion =
+                  RegExp('\\b${metodo[1]}\\([^)]*\\)\\s*=>').firstMatch(codigo);
+              expect(definicion, isNotNull, reason: '$ruta: no encontré ${metodo[1]}');
+              expresion = _hastaElCierre(codigo, definicion!.end, conLaComa: true);
+            }
+            expect(expresion, contains('EntregaPorPartes.numerosDeOtros('),
+                reason: '$ruta: deOtros de $entrega = $expresion');
+            final nombra = _delTalonarioDeLasAnticipadas.firstMatch(expresion);
+            expect(nombra, isNull,
+                reason: '$ruta: el deOtros de $entrega nombra "${nombra?[0]}"');
+          }
+        }
+      });
+
+      test('y al revés: las cuentas de DAR no conocen lo entregado sin cargo', () {
+        // DAR ENTRADAS PARA RENDIR valida contra `ParaRendir.ocupados`, que
+        // junta lo vendido y los otros bloques (`ocupadosAlVender`). Si las
+        // cuentas empezaran a mirar la entrega, no se podría dar un número que
+        // un alumno se llevó del otro talonario. (Qué le pasa la pantalla de
+        // DAR se prueba con la pantalla, en la etapa 5.)
+        const entrega =
+            r'numerosDeOtros|ocupadosDeLaEntrega|EntregaPorPartes|entrega_por_partes'
+            r'|entradas_entregas|EntregaEntradas|tramosDeOtros|EntradasRetiro\b';
+        final cuentas =
+            File('lib/features/entradas/cuentas/para_rendir.dart').readAsStringSync();
+        final enLasCuentas = RegExp(entrega).firstMatch(cuentas);
+        expect(enLasCuentas, isNull,
+            reason: 'para_rendir.dart nombra "${enLasCuentas?[0]}"');
+        final numeros =
+            File('lib/features/entradas/cuentas/numeros_de_entradas.dart').readAsStringSync();
+        for (final funcion in ['ocupadosParaRendir', 'ocupadosAlVender']) {
+          final inicio = RegExp('static [^;{=]*\\b$funcion\\(').firstMatch(numeros);
+          expect(inicio, isNotNull, reason: 'no encontré $funcion');
+          final fin = numeros.indexOf('\n  ///', inicio!.end);
+          final cuerpo = numeros.substring(inicio.start, fin < 0 ? numeros.length : fin);
+          final nombra = RegExp(entrega).firstMatch(cuerpo);
+          expect(nombra, isNull, reason: '$funcion nombra "${nombra?[0]}"');
+        }
+      });
     });
   });
 

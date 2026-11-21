@@ -488,7 +488,8 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
         compradorNombre: guardado.personaNombre ?? '',
         renglones: [
           RenglonEntradas.suelta(
-            nombre: '${guardado.nombrePrecio ?? 'Entrada'} · para rendir',
+            nombre: '${guardado.nombrePrecio ?? 'Entrada'}'
+                '${MovimientoParaRendir.sufijoDelRenglon}',
             precioLista: precio,
             descuentoPct: 0,
             cantidad: vendidas,
