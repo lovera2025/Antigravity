@@ -336,6 +336,8 @@ void main() {
     await db.close();
   });
 
+  // Con la versión fija: desde las entradas para rendir (20-nov-2026) la app va
+  // por la 82 (lo de la versión de la app lo prueba `migracion_v82_test.dart`).
   group('la copia antes de migrar', () {
     test('una base en 80 se copia antes de pasar a la 81', () async {
       await crearBaseV80();
@@ -343,7 +345,11 @@ void main() {
       final fotoOriginal = await foto(original);
       await original.close();
 
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(
+        path,
+        factory: factory,
+        versionNueva: 81,
+      );
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v81.db'));
       final abierta = await factory.openDatabase(copia.path);
@@ -356,7 +362,10 @@ void main() {
       await crearBaseV80();
       final db = await abrirEnVersion(81);
       await db.close();
-      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory), isNull);
+      expect(
+        await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 81),
+        isNull,
+      );
     });
   });
 }

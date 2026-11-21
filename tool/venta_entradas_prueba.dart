@@ -104,6 +104,7 @@ import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
 import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
@@ -282,6 +283,108 @@ class EntradasDeUnEquipo extends EntradasEnMemoria {
   Future<ConfigEntradas> guardarConfig(ConfigEntradas config, {required String quien}) =>
       _sube('entradas_config', () => super.guardarConfig(config, quien: quien));
 
+  // Las entradas para rendir (v82, 20-nov-2026): cada renglón sube por su tabla,
+  // y la rendición sube su venta y sus renglones juntos.
+
+  @override
+  Future<MovimientoParaRendir> darParaRendir({
+    required String eventoId,
+    required String personaNombre,
+    String? personaContacto,
+    String? contratoAlumnoId,
+    required int cantidad,
+    required List<TramoTalonario> numeros,
+    required double precio,
+    required String nombrePrecio,
+    String? nota,
+    required String quien,
+  }) =>
+      _sube(
+        'entradas_para_rendir',
+        () => super.darParaRendir(
+          eventoId: eventoId,
+          personaNombre: personaNombre,
+          personaContacto: personaContacto,
+          contratoAlumnoId: contratoAlumnoId,
+          cantidad: cantidad,
+          numeros: numeros,
+          precio: precio,
+          nombrePrecio: nombrePrecio,
+          nota: nota,
+          quien: quien,
+        ),
+      );
+
+  @override
+  Future<RendicionDeEntradas> rendir({
+    CajaEntradas? caja,
+    required MovimientoParaRendir bloque,
+    required int vendidas,
+    int devueltas = 0,
+    List<TramoTalonario> numerosDevueltos = const [],
+    MedioBarra medio = MedioBarra.efectivo,
+    double efectivo = 0,
+    double transferencia = 0,
+    double? recibe,
+    double recargo = 0,
+    double? recargoPct,
+    required String quien,
+  }) async {
+    final antes = escrituras;
+    final r = await super.rendir(
+      caja: caja,
+      bloque: bloque,
+      vendidas: vendidas,
+      devueltas: devueltas,
+      numerosDevueltos: numerosDevueltos,
+      medio: medio,
+      efectivo: efectivo,
+      transferencia: transferencia,
+      recibe: recibe,
+      recargo: recargo,
+      recargoPct: recargoPct,
+      quien: quien,
+    );
+    if (escrituras != antes && nube != null) {
+      if (r.venta != null) pendientes.add((tabla: 'entradas_ventas', fila: r.venta!));
+      for (final m in r.movimientos) {
+        pendientes.add((tabla: 'entradas_para_rendir', fila: m));
+      }
+      nube!.escribio(this);
+    }
+    return r;
+  }
+
+  @override
+  Future<MovimientoParaRendir> noVolvieron(
+    MovimientoParaRendir bloque, {
+    required int cantidad,
+    List<TramoTalonario> numeros = const [],
+    required String motivo,
+    required String quien,
+  }) =>
+      _sube(
+        'entradas_para_rendir',
+        () => super.noVolvieron(
+          bloque,
+          cantidad: cantidad,
+          numeros: numeros,
+          motivo: motivo,
+          quien: quien,
+        ),
+      );
+
+  @override
+  Future<MovimientoParaRendir> anularDeParaRendir(
+    MovimientoParaRendir movimiento, {
+    required String motivo,
+    required String quien,
+  }) =>
+      _sube(
+        'entradas_para_rendir',
+        () => super.anularDeParaRendir(movimiento, motivo: motivo, quien: quien),
+      );
+
   /// Lo que bajó del otro equipo. Como `BarraLocal.guardarDeOtroEquipo`: no va a la
   /// cola ni cuenta como escrito acá.
   void ponerDeOtroEquipo(Object fila) {
@@ -305,6 +408,8 @@ class EntradasDeUnEquipo extends EntradasEnMemoria {
         poner(listaAnulaciones, a, (x) => x.id == a.id);
       case VerificacionEntradas v:
         poner(listaVerificaciones, v, (x) => x.ventaId == v.ventaId);
+      case MovimientoParaRendir m:
+        poner(listaParaRendir, m, (x) => x.id == m.id);
     }
   }
 }

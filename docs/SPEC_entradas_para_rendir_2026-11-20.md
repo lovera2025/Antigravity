@@ -1,7 +1,10 @@
 # SPEC — Entradas para rendir (consignación), adentro de la 6.9.3
 
-**Estado (20-nov-2026): diseñado, sin programar.** Falta la maqueta (`docs/maqueta_entradas_para_rendir_2026-11-20.html`)
-y el OK del usuario antes de programar. Plan aprobado: `C:\Users\lover\.claude\plans\que-sigue-fizzy-thompson.md`.
+**Estado (21-nov-2026): aprobado y en programación, sin publicar.** El usuario vio la maqueta
+(`docs/maqueta_entradas_para_rendir_2026-11-20.html`) el 20-nov y dio el OK. La etapa 2 (datos: el modelo, la v82,
+`EntradasLocal`, las interfaces y los dobles, con sus tests) está programada, sin commit; de la 3 en adelante, sin
+programar. **Con la v82 en el código, no correr la app desde esta carpeta contra la base de verdad.** Plan aprobado:
+`C:\Users\lover\.claude\plans\que-sigue-fizzy-thompson.md`.
 
 Sale de una pregunta del usuario (20-nov): "hay veces que se le da y después le rinden, pero no es plata en el momento:
 se le entrega a ciertas personas X cantidad de entradas y ellos venden; después de esas entradas se sabe cuánto
@@ -82,7 +85,7 @@ después"), VENTAS, "Pago verificado", el historial, CERRAR CAJA a ciegas y una 
 | `persona_contacto` | TEXT / text | `dio`: teléfono o DNI, opcional |
 | `contrato_alumno_id` | TEXT / uuid | `dio`: si es un alumno de la fiesta (solo para mostrar y agrupar) |
 | `cantidad` | INTEGER NOT NULL DEFAULT 0 / integer | |
-| `numeros` | TEXT / text | `TramoTalonario.aTexto`. `dio`: el bloque; `devolvio`: los que volvieron; `no_volvieron`: opcional |
+| `numeros` | TEXT / text | `TramoTalonario.aTexto`. `dio`: el bloque; `devolvio`: los que volvieron; `no_volvieron`: opcional; `anulo`: ninguno (los del renglón que anula se leen por `anula_id`) |
 | `precio` | REAL / numeric | `dio`: `PrecioDeEntradas.deHoy(config, hoyAr)`, congelado |
 | `nombre_precio` | TEXT / text | `dio`: el nombre de la anticipada o de la general |
 | `con_pulseras` | INTEGER NOT NULL DEFAULT 0 / integer | **0 siempre** por ahora (el usuario: solo entradas); queda la columna porque después no se puede sumar |
@@ -128,6 +131,10 @@ después"), VENTAS, "Pago verificado", el historial, CERRAR CAJA a ciegas y una 
 
 - **`ParaRendir.de({movimientos, ventas, anulaciones})`** → `bloques`, `porPersona`, totales (personas, sin rendir,
   plata que falta, no volvieron) y `avisos`.
+- **Toda cuenta mira `que` antes de sumar** (revisión del 20-nov): un `anulo` lleva la cantidad del renglón que anula
+  (para que quede escrito) y no lleva números. Los números de un bloque salen de su `dio` y de sus `devolvio` /
+  `no_volvieron` vigentes, **nunca de juntar los tramos de todas las filas con ese `bloque_id`**; si no, "números
+  cruzados entre dos bloques" vería el bloque contra sí mismo.
 - **`BloqueParaRendir`** (uno por `dio`): `vendidas` (los `vendio` cuya venta no está anulada; si la venta todavía no
   bajó, cuenta y marca "plata en camino"); `devueltas` y `noVolvieron` (sin `anulo`); `sinRendir = cantidad − vendidas −
   devueltas − noVolvieron` (si da menos de 0, se muestra 0 y avisa "rindió de más: revisar"); `plataRendida`;

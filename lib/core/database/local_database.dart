@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 81;
+  static const int _version = 82;
 
   /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
   /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
@@ -160,6 +160,11 @@ class LocalDatabase {
       await crearTablasV81(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v81 sin crear: $e');
+    }
+    try {
+      await crearTablasV82(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v82 sin crear: $e');
     }
     return db;
   }
@@ -750,6 +755,7 @@ class LocalDatabase {
     await crearTablasV79(db);
     await crearTablasV80(db);
     await crearTablasV81(db);
+    await crearTablasV82(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1342,6 +1348,59 @@ class LocalDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_entradas_entregas_evento ON entradas_entregas(evento_id)',
+    );
+  }
+
+  /// La tabla de la v82 (20-nov-2026): `entradas_para_rendir`, **las entradas
+  /// que se dan para rendir** (`MovimientoParaRendir`). El jefe le da a alguien
+  /// un bloque numerado de anticipadas; esa persona las vende por su cuenta y
+  /// después rinde la plata y devuelve las que no vendió. Cada cosa que pasa con
+  /// un bloque (darlo, lo rendido, lo devuelto, lo que no volvió, una
+  /// anulación) es un renglón. **Solo se agregan renglones**: nunca se editan ni
+  /// se borran. La plata de una rendición es una venta común de
+  /// `entradas_ventas`: esta tabla solo la nombra.
+  ///
+  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar ninguna tabla que ya exista, y sin índices únicos
+  /// fuera del id. Una versión anterior no la conoce y sigue como siempre (la
+  /// 6.9.2 ve las rendiciones como ventas y su cierre cuadra).
+  static Future<void> crearTablasV82(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_para_rendir (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        bloque_id TEXT NOT NULL,
+        que TEXT NOT NULL,
+        persona_nombre TEXT,
+        persona_contacto TEXT,
+        contrato_alumno_id TEXT,
+        cantidad INTEGER NOT NULL DEFAULT 0,
+        numeros TEXT,
+        precio REAL,
+        nombre_precio TEXT,
+        con_pulseras INTEGER NOT NULL DEFAULT 0,
+        venta_id TEXT,
+        caja_entradas_id TEXT,
+        anula_id TEXT,
+        motivo TEXT,
+        nota TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_para_rendir_evento ON entradas_para_rendir(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_para_rendir_bloque ON entradas_para_rendir(bloque_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_para_rendir_venta ON entradas_para_rendir(venta_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_entradas_para_rendir_updated ON entradas_para_rendir(updated_at)',
     );
   }
 
@@ -3650,6 +3709,18 @@ class LocalDatabase {
         debugPrint('✅ Migración v81 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v81: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 81, la tabla de la v82 no aparece. Una PC
+    // en la 80 (la v81 nunca se instaló) pasa por las dos en el mismo arranque.
+    if (oldVersion < 82 && newVersion >= 82) {
+      debugPrint('  🔧 v82: las entradas para rendir');
+      try {
+        await crearTablasV82(db);
+        debugPrint('✅ Migración v82 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v82: $e');
       }
     }
   }

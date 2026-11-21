@@ -1,9 +1,14 @@
 // La venta de entradas en memoria, para montar sus pantallas sin base ni nube.
 // Hace lo mismo que `EntradasLocal`: guardar sin cambiar nada no escribe, el
 // número del comprobante es por caja, una caja cerrada no se vuelve a cerrar y
-// anular dos veces devuelve la que ya había.
+// anular dos veces devuelve la que ya había. Las entradas para rendir (v82,
+// 20-nov-2026), igual: rendir vuelve a contar lo que le queda al bloque y
+// guarda todo o nada, y un bloque se anula solo sin movimientos en pie.
+import 'dart:math' show max;
+
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
+import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
 import 'package:flutter_riverpod/misc.dart' show Override;
 
 class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
@@ -25,6 +30,7 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
   final listaVentas = <VentaEntradas>[];
   final listaAnulaciones = <AnulacionEntradas>[];
   final listaVerificaciones = <VerificacionEntradas>[];
+  final listaParaRendir = <MovimientoParaRendir>[];
 
   /// Cuántas veces se escribió de verdad (lo que iría a la cola de subida).
   int escrituras = 0;
@@ -92,6 +98,10 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
   @override
   Future<List<VerificacionEntradas>> verificaciones(String eventoId) async =>
       [for (final v in listaVerificaciones) if (v.eventoId == eventoId) v];
+
+  @override
+  Future<List<MovimientoParaRendir>> paraRendir(String eventoId) async =>
+      [for (final m in listaParaRendir) if (m.eventoId == eventoId) m];
 
   @override
   Future<List<VentaEntradas>> ventasDeLaCaja(String cajaId) async => [
@@ -272,6 +282,44 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
     String? numeros,
     required String quien,
   }) async {
+    final venta = _ventaNueva(
+      caja: caja,
+      contratoAlumnoId: contratoAlumnoId,
+      compradorNombre: compradorNombre,
+      compradorDni: compradorDni,
+      renglones: renglones,
+      medio: medio,
+      efectivo: efectivo,
+      transferencia: transferencia,
+      recibe: recibe,
+      recargo: recargo,
+      recargoPct: recargoPct,
+      numeros: numeros,
+      quien: quien,
+    );
+    _escribir();
+    listaVentas.add(venta);
+    sinSubir++;
+    return venta;
+  }
+
+  /// La venta armada, con su número, **sin guardarla**: la usan [vender] y
+  /// [rendir] (que guarda la venta junto con sus renglones, o nada).
+  VentaEntradas _ventaNueva({
+    required CajaEntradas caja,
+    String? contratoAlumnoId,
+    required String compradorNombre,
+    String? compradorDni,
+    required List<RenglonEntradas> renglones,
+    required MedioBarra medio,
+    double efectivo = 0,
+    double transferencia = 0,
+    double? recibe,
+    double recargo = 0,
+    double? recargoPct,
+    String? numeros,
+    required String quien,
+  }) {
     final i = _donde(caja);
     if (!listaCajas[i].abierta) {
       throw StateError('la caja de entradas está cerrada');
@@ -279,7 +327,7 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
     final ultimo = listaVentas
         .where((v) => v.cajaEntradasId == caja.id)
         .fold(0, (m, v) => v.numero > m ? v.numero : m);
-    final venta = VentaEntradas.nueva(
+    return VentaEntradas.nueva(
       cajaEntradasId: caja.id,
       eventoId: caja.eventoId,
       numero: ultimo + 1,
@@ -298,9 +346,243 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
       deviceId: equipo,
       ahora: reloj(),
     );
+  }
+
+  // ── Las entradas para rendir ───────────────────────────────────────────────
+
+  MovimientoParaRendir _bloqueGuardado(MovimientoParaRendir bloque) {
+    for (final m in listaParaRendir) {
+      if (m.id == bloque.id) {
+        if (!m.esDio) {
+          throw StateError('lo que se quiere rendir no es un bloque dado');
+        }
+        return m;
+      }
+    }
+    throw StateError('el bloque para rendir no está en este equipo');
+  }
+
+  Set<String> get _ventasAnuladas => {for (final a in listaAnulaciones) a.ventaId};
+
+  List<MovimientoParaRendir> _vigentes(MovimientoParaRendir bloque) =>
+      MovimientoParaRendir.vigentesDe(
+        bloque,
+        listaParaRendir,
+        ventasAnuladas: _ventasAnuladas,
+      );
+
+  int _quedan(MovimientoParaRendir bloque) => MovimientoParaRendir.quedanSinRendir(
+        bloque,
+        listaParaRendir,
+        ventasAnuladas: _ventasAnuladas,
+      );
+
+  /// Como en `EntradasLocal`: un número que ya volvió o se dio por perdido.
+  int? _yaNoLoTiene(MovimientoParaRendir bloque, List<TramoTalonario> tramos) {
+    for (final m in _vigentes(bloque)) {
+      if (!m.esDevolvio && !m.esNoVolvieron) continue;
+      for (final suyo in m.tramos) {
+        for (final t in tramos) {
+          if (t.seCruzaCon(suyo)) return max(t.desde, suyo.desde);
+        }
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<MovimientoParaRendir> darParaRendir({
+    required String eventoId,
+    required String personaNombre,
+    String? personaContacto,
+    String? contratoAlumnoId,
+    required int cantidad,
+    required List<TramoTalonario> numeros,
+    required double precio,
+    required String nombrePrecio,
+    String? nota,
+    required String quien,
+  }) async {
+    final dio = MovimientoParaRendir.dio(
+      eventoId: eventoId,
+      personaNombre: personaNombre,
+      personaContacto: personaContacto,
+      contratoAlumnoId: contratoAlumnoId,
+      cantidad: cantidad,
+      tramos: numeros,
+      precio: precio,
+      nombrePrecio: nombrePrecio,
+      nota: nota,
+      hechoPor: quien,
+      deviceId: equipo,
+      ahora: reloj(),
+    );
     _escribir();
-    listaVentas.add(venta);
-    sinSubir++;
-    return venta;
+    listaParaRendir.add(dio);
+    return dio;
+  }
+
+  @override
+  Future<RendicionDeEntradas> rendir({
+    CajaEntradas? caja,
+    required MovimientoParaRendir bloque,
+    required int vendidas,
+    int devueltas = 0,
+    List<TramoTalonario> numerosDevueltos = const [],
+    MedioBarra medio = MedioBarra.efectivo,
+    double efectivo = 0,
+    double transferencia = 0,
+    double? recibe,
+    double recargo = 0,
+    double? recargoPct,
+    required String quien,
+  }) async {
+    Never no(String por) => throw ArgumentError('la rendición no cierra: $por');
+    if (vendidas < 0 || devueltas < 0) no('las cantidades van de 0 en adelante');
+    if (vendidas + devueltas < 1) no('no vendió ni devolvió nada');
+    final numeros = numerosDevueltos.fold<int>(0, (s, t) => s + t.cantidad);
+    if (numeros != devueltas) no('devuelve $devueltas y vienen $numeros números');
+    if (vendidas > 0 && caja == null) no('lo vendido se cobra con la caja abierta');
+    if (vendidas == 0 && (efectivo != 0 || transferencia != 0 || recargo != 0)) {
+      no('si solo devuelve, no entra plata');
+    }
+    // Todo se arma antes de guardar nada: si algo no cierra, no queda nada.
+    final guardado = _bloqueGuardado(bloque);
+    // Como en `EntradasLocal`: la caja y la fiesta, como están guardadas. Si
+    // solo devuelve, el renglón lleva la caja solo si está acá y abierta.
+    CajaEntradas? guardada;
+    if (caja != null) {
+      for (final c in listaCajas) {
+        if (c.id == caja.id) guardada = c;
+      }
+    }
+    if (guardada != null && guardada.eventoId != guardado.eventoId) {
+      no('la caja es de otra fiesta');
+    }
+    final cajaQueRecibe = guardada != null && guardada.abierta ? guardada.id : null;
+    final devolvio = devueltas == 0
+        ? null
+        : MovimientoParaRendir.devolvio(
+            guardado,
+            tramos: numerosDevueltos,
+            cajaEntradasId: cajaQueRecibe,
+            hechoPor: quien,
+            deviceId: equipo,
+            ahora: reloj(),
+          );
+    final quedan = _quedan(guardado);
+    if (vendidas + devueltas > quedan) {
+      throw StateError('cambió algo: le quedan $quedan sin rendir');
+    }
+    final yaNo = _yaNoLoTiene(guardado, numerosDevueltos);
+    if (yaNo != null) throw StateError('cambió algo: el $yaNo ya no lo tiene');
+    VentaEntradas? venta;
+    MovimientoParaRendir? vendio;
+    if (vendidas > 0) {
+      final precio = guardado.precio;
+      if (precio == null || precio <= 0) {
+        throw StateError('el bloque para rendir no tiene precio');
+      }
+      venta = _ventaNueva(
+        caja: guardada ?? caja!,
+        compradorNombre: guardado.personaNombre ?? '',
+        renglones: [
+          RenglonEntradas.suelta(
+            nombre: '${guardado.nombrePrecio ?? 'Entrada'} · para rendir',
+            precioLista: precio,
+            descuentoPct: 0,
+            cantidad: vendidas,
+          ),
+        ],
+        medio: medio,
+        efectivo: efectivo,
+        transferencia: transferencia,
+        recibe: recibe,
+        recargo: recargo,
+        recargoPct: recargoPct,
+        quien: quien,
+      );
+      vendio = MovimientoParaRendir.vendio(
+        guardado,
+        cantidad: vendidas,
+        ventaId: venta.id,
+        cajaEntradasId: venta.cajaEntradasId,
+        hechoPor: quien,
+        deviceId: equipo,
+        ahora: reloj(),
+      );
+    }
+    _escribir();
+    if (venta != null) {
+      listaVentas.add(venta);
+      sinSubir++;
+    }
+    if (vendio != null) listaParaRendir.add(vendio);
+    if (devolvio != null) listaParaRendir.add(devolvio);
+    return RendicionDeEntradas(venta: venta, vendio: vendio, devolvio: devolvio);
+  }
+
+  @override
+  Future<MovimientoParaRendir> noVolvieron(
+    MovimientoParaRendir bloque, {
+    required int cantidad,
+    List<TramoTalonario> numeros = const [],
+    required String motivo,
+    required String quien,
+  }) async {
+    final guardado = _bloqueGuardado(bloque);
+    final perdidas = MovimientoParaRendir.noVolvieron(
+      guardado,
+      cantidad: cantidad,
+      tramos: numeros,
+      motivo: motivo,
+      hechoPor: quien,
+      deviceId: equipo,
+      ahora: reloj(),
+    );
+    final quedan = _quedan(guardado);
+    if (cantidad > quedan) {
+      throw StateError('cambió algo: le quedan $quedan sin rendir');
+    }
+    final yaNo = _yaNoLoTiene(guardado, numeros);
+    if (yaNo != null) throw StateError('cambió algo: el $yaNo ya no lo tiene');
+    _escribir();
+    listaParaRendir.add(perdidas);
+    return perdidas;
+  }
+
+  @override
+  Future<MovimientoParaRendir> anularDeParaRendir(
+    MovimientoParaRendir movimiento, {
+    required String motivo,
+    required String quien,
+  }) async {
+    final ahora = reloj();
+    final nueva = MovimientoParaRendir.anulo(
+      movimiento,
+      motivo: motivo,
+      hechoPor: quien,
+      deviceId: equipo,
+      ahora: ahora,
+    );
+    for (final m in listaParaRendir) {
+      if (m.id == nueva.id) return m;
+    }
+    final i = listaParaRendir.indexWhere((m) => m.id == movimiento.id);
+    if (i < 0) throw StateError('lo que se quiere anular no está en este equipo');
+    final guardado = listaParaRendir[i];
+    if (guardado.esDio && _vigentes(guardado).isNotEmpty) {
+      throw StateError('el bloque tiene movimientos: anulá primero lo que tiene');
+    }
+    final anulo = MovimientoParaRendir.anulo(
+      guardado,
+      motivo: motivo,
+      hechoPor: quien,
+      deviceId: equipo,
+      ahora: ahora,
+    );
+    _escribir();
+    listaParaRendir.add(anulo);
+    return anulo;
   }
 }

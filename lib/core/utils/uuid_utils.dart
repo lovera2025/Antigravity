@@ -125,6 +125,12 @@ class UuidUtils {
   static String entradasAnulacionId(String ventaId) =>
       _uuidDe('entradas_anulaciones_v1|$ventaId');
 
+  /// PK estable del `anulo` de `entradas_para_rendir` (v82, 20-nov-2026): uno
+  /// por renglón anulado. Dos equipos que anulan lo mismo (el bloque, un
+  /// "devolvió" o un "no volvieron") escriben la misma fila, no dos.
+  static String entradasParaRendirAnulacionId(String anulaId) =>
+      _uuidDe('entradas_para_rendir_anulo_v1|$anulaId');
+
   /// PK estable para `entradas_verificaciones` (v80): una por venta. Tildar y
   /// destildar "Pago verificado" reescribe la misma fila.
   static String entradasVerificacionId(String ventaId) =>
