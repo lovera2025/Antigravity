@@ -28,8 +28,9 @@ persona hasta que rinda o devuelva.
 **Las recompensas, a mano:** la lista dice cuántas vendió cada uno; si el jefe quiere premiar con una entrada, la da con
 la venta sin cargo que ya existe. Una regla fija (por ejemplo, 1 cada 10) se puede sumar después sin tocar la base.
 
-**A confirmar en la maqueta:** dónde recibe la pulsera quien le compró la entrada a quien rinde (hoy no hay un paso
-para eso; no se agrega sin que lo pida).
+**La pulsera no se vende** (lo aclaró el usuario el 20-nov, al ver la maqueta): lo que se vende son las entradas
+anticipadas, y las pulseras son VIP, para los chicos (llegan aparte, con las generales de los alumnos). Quien le compra
+una entrada a quien rinde se lleva **solo la entrada**: no hace falta ningún paso para una pulsera.
 
 ## 2. Cómo se usa
 

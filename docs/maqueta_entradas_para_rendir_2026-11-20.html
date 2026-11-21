@@ -452,7 +452,7 @@ function p6(){
     <div class="lin"><span>Ahora:</span><span>vendió ${u.vendio}${u.devuelve ? ` · devolvió ${u.devuelve} (${tramo(u.numeros[0], u.numeros[1])})` : ''} · le quedan ${quedan}</span></div><hr>
     <div class="lin"><span>${u.vendio} × ${b.nombrePrecio.toLowerCase()} · para rendir (${fmt(b.precio)}, precio fijo)</span><b>${fmt(u.vendio * b.precio)}</b></div>
     <div class="lin"><span>Pagó en ${u.medio.toLowerCase()}</span><b>TOTAL ${fmt(u.vendio * b.precio)}</b></div></div>
-    <p class="pregunta">Una pregunta para vos: quien le compra una entrada a ${b.persona.split(',')[1] ? b.persona.split(',')[1].trim() : b.persona}, ¿dónde recibe la pulsera? Hoy el programa no tiene un paso para eso, y no lo agrego si no lo pedís.</p></div>`;
+    </div>`;
 }
 function p7(){
   const jefe = esJefe(), conPlata = S.quien !== 'carla';
