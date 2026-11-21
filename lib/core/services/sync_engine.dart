@@ -454,6 +454,7 @@ class SyncEngine {
     'entradas_anulaciones': 'updated_at',
     'entradas_verificaciones': 'updated_at',
     'entradas_entregas': 'updated_at',
+    'entradas_para_rendir': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1635,6 +1636,11 @@ class SyncEngine {
     'entradas_cajas',
     'entradas_ventas',
     'entradas_anulaciones',
+    // Las entradas para rendir (v82, 21-nov-2026): es plata, como la venta. El
+    // bloque que dio el jefe tiene que llegar en segundos a la tablet que vende
+    // (sus números ya tienen dueño), y lo que rindió o devolvió alguien en un
+    // equipo, al otro, para que nadie le cobre dos veces lo mismo.
+    'entradas_para_rendir',
   ];
 
   /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
@@ -2089,6 +2095,10 @@ class SyncEngine {
       // fila, sube en el orden en que se encoló: la entrega encola el renglón
       // antes que la fila, que es su reflejo.
       if (table == 'entradas_entregas') return 4;
+      // Las entradas para rendir (v82): el renglón de lo rendido nombra su
+      // venta, así que la venta (4) sube antes. En la nube no hay claves
+      // foráneas: es para que quien mira no vea un "vendió" sin su plata.
+      if (table == 'entradas_para_rendir') return 5;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -2454,6 +2464,7 @@ class SyncEngine {
       _pullTable(db, 'entradas_anulaciones', 'updated_at'),
       _pullTable(db, 'entradas_verificaciones', 'updated_at'),
       _pullTable(db, 'entradas_entregas', 'updated_at'),
+      _pullTable(db, 'entradas_para_rendir', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2984,6 +2995,11 @@ class SyncEngine {
     // que otro equipo pudo haber dado, y los números de las generales ya
     // entregadas no se repiten.
     'entradas_entregas',
+    // Las entradas para rendir (v82, 21-nov-2026): la tablet que vende sin
+    // internet tiene que saber qué números se llevó cada uno (no los vende) y
+    // a quién le quedan por rendir (rinde sin internet). Sin el SQL de la v82
+    // en la nube, "Lista para trabajar sin internet" no queda lista.
+    'entradas_para_rendir',
     // El registro de sorteos (17-nov-2026): de ahí sale qué tenía cada familia
     // al sorteo, que decide qué entradas van con descuento y cuáles sin él.
     // Sin esto la tablet que vende sin internet le daría el descuento a todo.
@@ -3733,6 +3749,33 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v82, las entradas para rendir: exactamente las de
+      // `MovimientoParaRendir.toMap()` y las del SQL
+      // (`test/sync_tablas_v82_test.dart` las compara). Una que faltara acá
+      // no subiría ni bajaría, y el renglón diría otra cosa en cada equipo.
+      'entradas_para_rendir': [
+        'id',
+        'evento_id',
+        'bloque_id',
+        'que',
+        'persona_nombre',
+        'persona_contacto',
+        'contrato_alumno_id',
+        'cantidad',
+        'numeros',
+        'precio',
+        'nombre_precio',
+        'con_pulseras',
+        'venta_id',
+        'caja_entradas_id',
+        'anula_id',
+        'motivo',
+        'nota',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -3910,6 +3953,7 @@ class SyncEngine {
         'una fila por venta con id fijo: destildar la actualiza, no se borra',
     'entradas_entregas':
         'solo se agregan renglones: anular una parte es otro renglón',
+    'entradas_para_rendir': 'solo se agregan renglones; anular es otro renglón',
   };
 
   /// Para los tests: las tablas que se revisan.
