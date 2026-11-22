@@ -1,14 +1,14 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/entradas_retiro.dart';
 import '../../barra/cuentas/pesos.dart';
+import '../../common/utils/currency_extensions.dart' show numeroALetras;
 import '../cuentas/para_rendir.dart' show BloqueParaRendir;
 import '../datos/entradas_repositorio.dart';
+import 'recibo_de_entradas_pdf.dart';
 
 /// Lo que el comprobante de una **rendición** de entradas para rendir dice de
 /// lo que se llevó quien rinde (21-nov-2026,
@@ -81,7 +81,7 @@ class DatosDelComprobante {
   final AnulacionEntradas? anulacion;
 
   /// La venta es la plata de una rendición de entradas para rendir: el papel es
-  /// el de la rendición ("RENDICIÓN DE ENTRADAS", "Recibió" y "Rinde").
+  /// el de la rendición (el recibo de quien rinde, con "Rinde" y "Recibió").
   final RendicionDelComprobante? rendicion;
 
   const DatosDelComprobante({
@@ -96,26 +96,22 @@ class DatosDelComprobante {
   });
 }
 
-/// El comprobante de una venta de entradas: **media hoja A4**, con lo vendido y
-/// los números del talonario (sección 7.4 del spec del 13-nov). **No habla de
-/// pulseras**: la pulsera no se vende (el usuario, 20-nov-2026); las VIP se
-/// entregan sin cargo, aparte.
+/// El comprobante de una venta de entradas, **con la forma del "RECIBO DE
+/// PAGO" de las cuotas, tal cual** (22-nov-2026, [ReciboDeEntradasPdf]): media
+/// hoja A4, "Recibí de" quien compra, "La suma de pesos" lo cobrado, "Concepto:"
+/// con lo vendido renglón por renglón y los números del talonario, y el
+/// recuadro "TOTAL DE ESTE RECIBO" con el medio de pago (sección 7.4 del spec
+/// del 13-nov). **No habla de pulseras**: la pulsera no se vende (el usuario,
+/// 20-nov-2026); las VIP se entregan sin cargo, aparte.
 ///
 /// Con [DatosDelComprobante.rendicion] es el de una **rendición** de entradas
-/// para rendir: "RENDICIÓN DE ENTRADAS", quién recibió la plata, quién rinde y
-/// cómo quedó lo que se llevó (21-nov-2026).
+/// para rendir: el mismo recibo, de quien rinde, con lo que se llevó, quién
+/// recibió la plata y quién rinde (21-nov-2026).
 ///
 /// Todo lo que dice sale de la venta como quedó guardada: no hace ninguna
 /// cuenta (el total, el recargo y el vuelto ya están en la fila).
 class ComprobanteEntradasPdf {
   ComprobanteEntradasPdf._();
-
-  /// Media A4, para cortar dos por hoja.
-  static PdfPageFormat get hoja => PdfPageFormat(
-        PdfPageFormat.a4.width,
-        PdfPageFormat.a4.height / 2,
-        marginAll: 26,
-      );
 
   static String numero(VentaEntradas v) =>
       'N° ${v.numero.toString().padLeft(4, '0')}';
@@ -151,6 +147,16 @@ class ComprobanteEntradasPdf {
           'Mixto · efectivo ${pesos(v.efectivo)} · transferencia ${pesos(v.transferencia)}',
         MedioBarra.otro => '—',
       };
+
+  /// Lo que dice el recibo debajo del total: "Medio de pago: Efectivo",
+  /// "Medio de pago: Mixto (efectivo $ 10.000 · transferencia $ 50.500)".
+  static String medioDePago(VentaEntradas v) => 'Medio de pago: ${switch (v.medio) {
+        MedioBarra.efectivo => 'Efectivo',
+        MedioBarra.transferencia => 'Transferencia',
+        MedioBarra.mixto =>
+          'Mixto (efectivo ${pesos(v.efectivo)} · transferencia ${pesos(v.transferencia)})',
+        MedioBarra.otro => '—',
+      }}';
 
   /// Los números del talonario, o null si no se anotaron.
   static String? talonario(VentaEntradas v) {
@@ -209,215 +215,104 @@ class ComprobanteEntradasPdf {
     DatosDelComprobante d, {
     (pw.Font, pw.Font)? fuentes,
     pw.ImageProvider? logo,
-  }) async {
+  }) =>
+      ReciboDeEntradasPdf.armar(contenido(d), fuentes: fuentes, logo: logo);
+
+  /// Lo que dice el papel, con la forma del recibo de las cuotas: de quién se
+  /// recibió, la suma, el concepto con sus renglones, el total y el pie.
+  static ContenidoDelRecibo contenido(DatosDelComprobante d) {
     final v = d.venta;
-    final doc = pw.Document(
-      theme: fuentes == null
-          ? null
-          : pw.ThemeData.withFont(base: fuentes.$1, bold: fuentes.$2),
-    );
-    const gris = PdfColor.fromInt(0xFF555555);
-    const linea = PdfColor.fromInt(0xFF999999);
-    final chico = pw.TextStyle(fontSize: 8.5, color: gris);
-    final normal = const pw.TextStyle(fontSize: 9.5);
-    final fuerte = pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold);
-
-    // Lo de la izquierda puede ser largo: va en Expanded para que baje de
-    // renglón en vez de salirse de la hoja.
-    pw.Widget fila(String a, String b, {pw.TextStyle? estilo}) => pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(child: pw.Text(a, style: estilo ?? normal)),
-              pw.SizedBox(width: 10),
-              pw.Text(b, style: estilo ?? fuerte),
-            ],
-          ),
-        );
-    // "Recibió: Carla", "Rinde: PÉREZ, JUAN": el nombre puede ser largo, así
-    // que va en Expanded (baja de renglón en vez de salirse de la hoja).
-    pw.Widget dato(String etiqueta, String valor) => pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('$etiqueta:', style: normal),
-              pw.SizedBox(width: 10),
-              pw.Expanded(
-                child: pw.Text(valor, style: fuerte, textAlign: pw.TextAlign.right),
-              ),
-            ],
-          ),
-        );
-    pw.Widget raya() => pw.Container(
-          margin: const pw.EdgeInsets.symmetric(vertical: 5),
-          height: 0.6,
-          color: linea,
-        );
-
-    final numeros = talonario(v);
     final rinde = d.rendicion;
-    final quienRinde = rinde == null
-        ? ''
-        : (rinde.persona.trim().isEmpty ? v.compradorNombre : rinde.persona.trim());
-    final delBloque = rinde == null ? null : lineaDeLaRendicion(rinde, v.cantidad);
-    final cuerpo = pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      mainAxisSize: pw.MainAxisSize.min,
-      children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            if (logo != null) ...[
-              pw.Image(logo, width: 26, height: 26),
-              pw.SizedBox(width: 8),
-            ],
-            pw.Expanded(
-              child: pw.Text(
-                d.fiesta.toUpperCase(),
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-              ),
-            ),
-            if (d.fechaFiesta != null)
-              pw.Text('Fiesta: ${_dia(d.fechaFiesta!)}', style: normal),
-          ],
-        ),
-        pw.SizedBox(height: 5),
-        pw.Row(
-          children: [
-            pw.Expanded(
-              child: pw.Text(
-                rinde == null
-                    ? 'COMPROBANTE DE ENTRADAS · ${numero(v)}'
-                    : 'RENDICIÓN DE ENTRADAS · ${numero(v)}',
-                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-              ),
-            ),
-            if (d.copia)
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                margin: const pw.EdgeInsets.only(right: 8),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: gris, width: 0.8),
-                ),
-                child: pw.Text('COPIA', style: fuerte),
-              ),
-            pw.Text(cuando(v.createdAt), style: normal),
-          ],
-        ),
-        if (rinde == null && (v.hechoPor ?? '').isNotEmpty)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 2),
-            child: pw.Text('Vendió: ${v.hechoPor}', style: chico),
-          ),
-        raya(),
-        if (rinde == null) ...[
-          fila(
-            'Compra',
-            v.compradorDni == null
-                ? v.compradorNombre
-                : '${v.compradorNombre} · DNI ${v.compradorDni}',
-          ),
-          if ((d.alumno ?? '').isNotEmpty)
-            fila(
-              'Familia',
-              (d.mesa ?? '').isEmpty ? d.alumno! : '${d.alumno} · mesa ${d.mesa}',
-            ),
-        ] else ...[
-          // La plata la recibió quien cobró (el que anotó la venta) y la rinde
-          // quien se llevó las entradas.
-          if ((v.hechoPor ?? '').trim().isNotEmpty) dato('Recibió', v.hechoPor!.trim()),
-          dato('Rinde', quienRinde),
-          if (delBloque != null)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 2),
-              child: pw.Text(delBloque, style: normal),
-            ),
-        ],
-        raya(),
-        for (final r in v.renglones)
-          fila(
-            rinde == null ? renglon(r) : '${renglon(r)} · precio fijo',
-            pesos(r.subtotal),
-          ),
-        if (v.renglones.isEmpty)
-          fila('${v.cantidad} entradas', pesos(v.total)),
-        if (v.recargo > 0)
-          fila(
-            v.recargoPct == null
-                ? 'Recargo por transferencia'
-                : 'Recargo por transferencia (${_pct(v.recargoPct!)} %)',
-            pesos(v.recargo),
-          ),
-        raya(),
-        fila(
-          'TOTAL',
-          pesos(v.cobrado),
-          estilo: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
-        ),
-        fila('Pagó', comoPago(v)),
-        if (v.recibe != null && v.vuelto > 0)
-          fila('Entregó ${pesos(v.recibe!)}', 'Vuelto ${pesos(v.vuelto)}'),
-        // Lo vendido son solo entradas: la pulsera no se vende (20-nov-2026).
-        // En una rendición los números son los del bloque, que ya están arriba:
-        // la venta no los lleva.
-        if (rinde == null) ...[
-          raya(),
-          fila('Entradas', '${v.cantidad}'),
-          numeros == null
-              ? pw.Text('Sin números del talonario anotados', style: chico)
-              : fila('Talonario', numeros),
-        ],
-        if (d.anulacion != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 6),
-            child: pw.Text(
-              'ANULADA el ${cuando(d.anulacion!.createdAt)}'
-              '${(d.anulacion!.hechoPor ?? '').isEmpty ? '' : ' por ${d.anulacion!.hechoPor}'}'
-              ' · ${d.anulacion!.motivo} · '
-              '${rinde != null ? _rendicionAnulada(v.cantidad) : d.anulacion!.devueltas ? 'devolvieron las entradas' : 'NO devolvieron las entradas'}',
-              style: pw.TextStyle(
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.red800,
-              ),
-            ),
-          ),
-      ],
-    );
+    final anulacion = d.anulacion;
+    final fiesta = [
+      d.fiesta.trim().toUpperCase(),
+      if (d.fechaFiesta != null) 'fiesta ${_dia(d.fechaFiesta!)}',
+    ].where((s) => s.isNotEmpty).join(' · ');
 
-    doc.addPage(
-      pw.Page(
-        pageFormat: hoja,
-        build: (_) => d.anulacion == null
-            ? cuerpo
-            : pw.Stack(
-                children: [
-                  cuerpo,
-                  pw.Positioned.fill(
-                    child: pw.Center(
-                      child: pw.Transform.rotate(
-                        angle: math.pi / 9,
-                        child: pw.Opacity(
-                          opacity: 0.22,
-                          child: pw.Text(
-                            'ANULADA',
-                            style: pw.TextStyle(
-                              fontSize: 64,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.red800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
+    final renglones = [
+      for (final r in v.renglones)
+        RenglonDelRecibo(
+          rinde == null ? renglon(r) : '${renglon(r)} · precio fijo',
+          monto: pesos(r.subtotal),
+        ),
+      if (v.renglones.isEmpty)
+        RenglonDelRecibo('${v.cantidad} entradas', monto: pesos(v.total)),
+      if (v.recargo > 0)
+        RenglonDelRecibo(
+          v.recargoPct == null
+              ? 'Recargo por transferencia'
+              : 'Recargo por transferencia (${_pct(v.recargoPct!)} %)',
+          monto: pesos(v.recargo),
+        ),
+    ];
+    final enElTotal = [
+      medioDePago(v),
+      if (v.recibe != null && v.vuelto > 0)
+        'Entregó ${pesos(v.recibe!)} · Vuelto ${pesos(v.vuelto)}',
+    ];
+    final enRojo = [
+      if (anulacion != null)
+        'ANULADA el ${cuando(anulacion.createdAt)}'
+            '${(anulacion.hechoPor ?? '').isEmpty ? '' : ' por ${anulacion.hechoPor}'}'
+            ' · ${anulacion.motivo} · '
+            '${rinde != null ? _rendicionAnulada(v.cantidad) : anulacion.devueltas ? 'devolvieron las entradas' : 'NO devolvieron las entradas'}',
+    ];
+
+    if (rinde == null) {
+      final numeros = talonario(v);
+      final familia = (d.alumno ?? '').trim();
+      final mesa = (d.mesa ?? '').trim();
+      final vendio = (v.hechoPor ?? '').trim();
+      return ContenidoDelRecibo(
+        titulo: 'RECIBO DE PAGO',
+        bajoElTitulo: numero(v),
+        copia: d.copia,
+        fecha: cuando(v.createdAt),
+        recibiDe: v.compradorNombre,
+        alLadoDelNombre: v.compradorDni == null ? null : ' · DNI ${v.compradorDni}',
+        sumaEnLetras: numeroALetras(v.cobrado),
+        concepto: 'Entradas · $fiesta',
+        debajoDelConcepto: [
+          if (familia.isNotEmpty)
+            mesa.isEmpty ? 'Familia: $familia' : 'Familia: $familia · mesa $mesa',
+        ],
+        renglones: renglones,
+        // Lo vendido son solo entradas: la pulsera no se vende (20-nov-2026).
+        notas: [
+          '${v.cantidad == 1 ? '1 entrada' : '${v.cantidad} entradas'} · '
+              '${numeros == null ? 'Sin números del talonario anotados' : 'Talonario: $numeros'}',
+        ],
+        total: pesos(v.cobrado),
+        enElTotal: enElTotal,
+        pie: [if (vendio.isNotEmpty) 'Vendió: $vendio'],
+        enRojo: enRojo,
+        marcaDeAgua: anulacion == null ? null : 'ANULADA',
+      );
+    }
+
+    // Una rendición: se recibe de quien rinde. La plata la recibió quien cobró
+    // (el que anotó la venta) y la rinde quien se llevó las entradas. Los
+    // números son los del bloque, que van en su renglón: la venta no los lleva.
+    final quienRinde =
+        rinde.persona.trim().isEmpty ? v.compradorNombre : rinde.persona.trim();
+    final recibio = (v.hechoPor ?? '').trim();
+    final delBloque = lineaDeLaRendicion(rinde, v.cantidad);
+    return ContenidoDelRecibo(
+      titulo: 'RECIBO DE PAGO',
+      bajoElTitulo: numero(v),
+      copia: d.copia,
+      fecha: cuando(v.createdAt),
+      recibiDe: quienRinde,
+      sumaEnLetras: numeroALetras(v.cobrado),
+      concepto: 'Rendición de entradas para rendir · $fiesta',
+      renglones: renglones,
+      notas: [?delBloque],
+      total: pesos(v.cobrado),
+      enElTotal: enElTotal,
+      pie: ['Rinde: $quienRinde${recibio.isEmpty ? '' : ' · Recibió: $recibio'}'],
+      enRojo: enRojo,
+      marcaDeAgua: anulacion == null ? null : 'ANULADA',
     );
-    return doc.save();
   }
 
   /// Cómo se llama el archivo. El de una rendición, "Rendicion_0007_…".

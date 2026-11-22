@@ -1,18 +1,18 @@
 import 'dart:typed_data';
 
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../../barra/cuentas/cierre_de_barra.dart' show diferenciaEnPalabras;
 import '../../barra/cuentas/pesos.dart';
+import '../../common/utils/currency_extensions.dart' show numeroALetras;
 import '../cuentas/cierre_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
 import 'comprobante_entradas_pdf.dart';
+import 'recibo_de_entradas_pdf.dart';
 
 /// Lo que lleva el papel del cierre de una caja de entradas.
 class DatosDelCierreDeEntradas {
-  /// La caja como quedó guardada al cerrar (lo contado y la diferencia salen de
-  /// acá: no se vuelven a calcular).
+  /// La caja como quedó guardada al cerrar (lo contado sale de acá: no se
+  /// vuelve a calcular).
   final CajaEntradas caja;
   final CierreDeEntradas cuentas;
 
@@ -29,15 +29,21 @@ class DatosDelCierreDeEntradas {
 }
 
 /// El papel del cierre de una caja de entradas (sección 9.1 del spec del
-/// 13-nov): **media hoja A4**, una sola, como el comprobante. La fiesta, quién,
-/// cuándo abrió y cerró, y las cuentas de la caja.
+/// 13-nov), **con la forma del recibo de las cuotas, tal cual** (22-nov-2026,
+/// [ReciboDeEntradasPdf]): "RECIBO DE CAJA", media hoja A4. Es el recibo de lo
+/// que entrega quien cerró la caja: "Recibí de" quien vendió, "La suma de
+/// pesos" el efectivo que contó (con el cambio), y en el concepto lo cobrado
+/// por transferencia y lo vendido.
+///
+/// **No dice la diferencia** (pedido del usuario, 22-nov-2026: "que no diga
+/// 'Justo, sin diferencia'"): ni lo que tenía que haber, ni si sobra o falta.
+/// El jefe la ve en la pantalla (Cierre de caja → ENTRADAS). Lo anulado
+/// después del cierre sí va, en rojo: el cierre no se corrige.
 ///
 /// No hace ninguna cuenta propia: lo vendido sale de [CierreDeEntradas] y lo
-/// contado y la diferencia, de la caja como se guardó al cerrar.
+/// contado, de la caja como se guardó al cerrar.
 class CierreCajaEntradasPdf {
   CierreCajaEntradasPdf._();
-
-  static PdfPageFormat get hoja => ComprobanteEntradasPdf.hoja;
 
   static String _dia(DateTime f) =>
       '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}/${f.year}';
@@ -53,129 +59,76 @@ class CierreCajaEntradasPdf {
     DatosDelCierreDeEntradas d, {
     (pw.Font, pw.Font)? fuentes,
     pw.ImageProvider? logo,
-  }) async {
+  }) =>
+      ReciboDeEntradasPdf.armar(contenido(d), fuentes: fuentes, logo: logo);
+
+  /// Lo que dice el papel, con la forma del recibo de las cuotas.
+  static ContenidoDelRecibo contenido(DatosDelCierreDeEntradas d) {
     final caja = d.caja;
     final c = d.cuentas;
-    final doc = pw.Document(
-      theme: fuentes == null
-          ? null
-          : pw.ThemeData.withFont(base: fuentes.$1, bold: fuentes.$2),
-    );
-    const gris = PdfColor.fromInt(0xFF555555);
-    const linea = PdfColor.fromInt(0xFF999999);
-    final chico = pw.TextStyle(fontSize: 8.5, color: gris);
-    final normal = const pw.TextStyle(fontSize: 9.5);
-    final fuerte = pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold);
-    final grande = pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold);
+    final quien = (caja.operadorNombre ?? '').trim().isEmpty
+        ? 'Jefe'
+        : caja.operadorNombre!.trim();
+    final contado = caja.efectivoContado;
+    final cerrada = caja.cerradaAt;
+    final abierta = ComprobanteEntradasPdf.cuando(caja.abiertaAt);
+    final fiesta = [
+      d.fiesta.trim().toUpperCase(),
+      if (d.fechaFiesta != null) 'fiesta ${_dia(d.fechaFiesta!)}',
+    ].where((s) => s.isNotEmpty).join(' · ');
+    final ventas = [
+      'Ventas: ${c.ventas}',
+      if (c.mixtos > 0) c.mixtos == 1 ? '1 mixta' : '${c.mixtos} mixtas',
+      if (c.anuladas > 0)
+        '${c.anuladas == 1 ? '1 anulada' : '${c.anuladas} anuladas'} (no cuentan)',
+    ].join(' · ');
 
-    // Lo de la izquierda puede ser largo: va en Expanded para que baje de
-    // renglón en vez de salirse de la hoja.
-    pw.Widget fila(String a, String b, {pw.TextStyle? estilo}) => pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(child: pw.Text(a, style: estilo ?? normal)),
-              pw.SizedBox(width: 10),
-              pw.Text(b, style: estilo ?? fuerte),
-            ],
+    return ContenidoDelRecibo(
+      titulo: 'RECIBO DE CAJA',
+      bajoElTitulo: 'Entradas · $quien',
+      fecha: cerrada == null ? abierta : ComprobanteEntradasPdf.cuando(cerrada),
+      debajoDeLaFecha: 'Abierta: $abierta'
+          '${cerrada == null ? ' · sigue abierta' : ' · Cerrada: ${ComprobanteEntradasPdf.cuando(cerrada)}'}',
+      recibiDe: quien,
+      sumaEnLetras: contado == null
+          ? '— (la caja sigue abierta: el efectivo todavía no se entregó)'
+          : numeroALetras(contado),
+      concepto: 'Caja de entradas · $fiesta',
+      renglones: [
+        if (contado != null)
+          RenglonDelRecibo(
+            'Efectivo contado (con ${pesos(c.cambioInicial)} de cambio)',
+            monto: pesos(contado),
           ),
-        );
-    pw.Widget raya() => pw.Container(
-          margin: const pw.EdgeInsets.symmetric(vertical: 5),
-          height: 0.6,
-          color: linea,
-        );
-
-    final quien = (caja.operadorNombre ?? '').isEmpty ? 'Jefe' : caja.operadorNombre!;
-    final diferencia = caja.diferencia;
-    final cuerpo = pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      mainAxisSize: pw.MainAxisSize.min,
-      children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            if (logo != null) ...[
-              pw.Image(logo, width: 26, height: 26),
-              pw.SizedBox(width: 8),
-            ],
-            pw.Expanded(
-              child: pw.Text(
-                d.fiesta.toUpperCase(),
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-              ),
-            ),
-            if (d.fechaFiesta != null)
-              pw.Text('Fiesta: ${_dia(d.fechaFiesta!)}', style: normal),
-          ],
+        RenglonDelRecibo(
+          'Transferencias (con los recargos)',
+          monto: pesos(c.transferencia),
+          nota: c.recargos > 0
+              ? 'De eso, ${pesos(c.recargos)} de recargos por transferencia'
+              : null,
         ),
-        pw.SizedBox(height: 5),
-        pw.Text(
-          'CIERRE DE CAJA DE ENTRADAS · $quien',
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 2),
-          child: pw.Text(
-            'Abierta: ${ComprobanteEntradasPdf.cuando(caja.abiertaAt)}'
-            '${caja.cerradaAt == null ? ' · sigue abierta' : ' · Cerrada: ${ComprobanteEntradasPdf.cuando(caja.cerradaAt!)}'}',
-            style: chico,
-          ),
-        ),
-        raya(),
-        fila(vendidas(c), pesos(c.vendido)),
+        RenglonDelRecibo(vendidas(c), monto: pesos(c.vendido)),
         if (c.descuentos > 0)
-          fila(
+          RenglonDelRecibo(
             'Descuentos a mano (${c.conDescuento == 1 ? '1 venta' : '${c.conDescuento} ventas'})',
-            pesos(c.descuentos),
-          ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-          child: pw.Text(
-            'Ventas: ${c.ventas}'
-            '${c.mixtos > 0 ? ' · ${c.mixtos == 1 ? '1 mixta' : '${c.mixtos} mixtas'}' : ''}'
-            '${c.anuladas > 0 ? ' · ${c.anuladas == 1 ? '1 anulada' : '${c.anuladas} anuladas'} (no cuentan)' : ''}',
-            style: normal,
-          ),
-        ),
-        raya(),
-        fila('Cambio inicial', pesos(c.cambioInicial)),
-        fila('Efectivo', pesos(c.efectivo)),
-        fila('Transferencia (con los recargos)', pesos(c.transferencia)),
-        if (c.recargos > 0) fila('Recargos por transferencia', pesos(c.recargos)),
-        fila('Total cobrado', pesos(c.total), estilo: fuerte),
-        raya(),
-        fila(
-          'Tenía que haber (cambio y efectivo)',
-          pesos(CierreDeEntradas.esperadoAlCerrar(caja) ?? c.efectivoEsperado),
-        ),
-        fila('Contó', caja.efectivoContado == null ? '—' : pesos(caja.efectivoContado!)),
-        if (diferencia != null)
-          fila('Diferencia', diferenciaEnPalabras(diferencia), estilo: grande),
-        if ((caja.notaCierre ?? '').trim().isNotEmpty)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 4),
-            child: pw.Text('Nota: ${caja.notaCierre!.trim()}', style: normal),
-          ),
-        if (c.hayAnuladoDespues)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 4),
-            child: pw.Text(
-              'Anulado después del cierre: ${pesos(c.anuladoDespues)} '
-              '(el cierre no se corrige)',
-              style: pw.TextStyle(
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.red800,
-              ),
-            ),
+            monto: pesos(c.descuentos),
           ),
       ],
+      notas: [ventas],
+      total: contado == null ? '—' : pesos(contado),
+      enElTotal: [
+        'Total cobrado en la caja: ${pesos(c.total)} '
+            '(efectivo ${pesos(c.efectivo)} + transferencia ${pesos(c.transferencia)})',
+      ],
+      pie: [
+        if ((caja.notaCierre ?? '').trim().isNotEmpty) 'Nota: ${caja.notaCierre!.trim()}',
+      ],
+      enRojo: [
+        if (c.hayAnuladoDespues)
+          'Anulado después del cierre: ${pesos(c.anuladoDespues)} '
+              '(el cierre no se corrige)',
+      ],
     );
-
-    doc.addPage(pw.Page(pageFormat: hoja, build: (_) => cuerpo));
-    return doc.save();
   }
 
   /// Cómo se llama el archivo.

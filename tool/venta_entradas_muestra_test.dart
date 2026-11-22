@@ -19,7 +19,8 @@
 //     Entradas_10_ventas_celular.png: VENTAS, con dos cajas, una venta
 //     verificada, un número repetido y una anulada;
 //   • Entradas_11_anular.png: el cartel de anular;
-//   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante;
+//   • Comprobante_0001.pdf y Comprobante_anulado.pdf: el comprobante, con la
+//     forma del recibo de las cuotas (22-nov-2026);
 //   • Historial_de_ventas.pdf: IMPRIMIR HISTORIAL, con las letras de la app;
 //   • historial_1000/: el historial de una fiesta inventada con 1.000 entradas
 //     (el del jefe y el de la caja de Carla, sin sumas) y las hojas 11 a 20 de
@@ -59,7 +60,8 @@
 //   • Entradas_42 y 42b: el aviso de VENDER, sin plata, y un número de un
 //     bloque frenado;
 //   • Entradas_43 a 43e: RENDIR (vendió 15 y devuelve 5; con otro precio hoy;
-//     en el celular; sin caja; y la rendición guardada);
+//     en el celular; sin caja; y la rendición guardada), y Rendicion_0001.pdf,
+//     su recibo;
 //   • Entradas_44 a 45: VENTAS con las rendiciones marcadas, y su anular.
 //
 // Los nombres y el precio de $ 10.000 son inventados.
@@ -1728,7 +1730,7 @@ void main() {
   });
 
   testWidgets('RENDIR · guardada', (tester) async {
-    final (clave, _, _, _) = await montar(
+    final (clave, _, _, comprobantes) = await montar(
       tester,
       hoy: hoyConAnticipada,
       tamano: const Size(1100, 800),
@@ -1749,6 +1751,23 @@ void main() {
     expect(find.byKey(const Key('vender_rendicion_guardada')), findsOneWidget);
     expect(tester.takeException(), isNull, reason: 'nada se desborda');
     await guardar(tester, clave, 'Entradas_43e_rendicion_guardada.png');
+
+    // El recibo de esa rendición, con las letras de la app (22-nov-2026: con la
+    // forma del recibo de las cuotas). No sale solo: lo saca el botón del aviso.
+    expect(comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+    await tocar(tester, 'vender_ver_comprobante_rendicion');
+    await tester.pumpAndSettle();
+    final datos = comprobantes.single;
+    expect(datos.rendicion, isNotNull);
+    await tester.runAsync(() async {
+      final bytes = await ComprobanteEntradasPdf.armar(
+        datos,
+        fuentes: await PdfService.fuentesOutfit(),
+        logo: await isotipoDeLosPapeles(),
+      );
+      File('$carpeta${Platform.pathSeparator}Rendicion_0001.pdf').writeAsBytesSync(bytes);
+      print('── PDF en: $carpeta');
+    });
   });
 
   // 21-nov-2026: con la venta de una rendición ya en este equipo y su renglón

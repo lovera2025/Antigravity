@@ -1,20 +1,24 @@
 // Cerrar la caja de entradas (sección 9.1 del spec del 13-nov): CERRAR CAJA en
 // VENDER, contar a ciegas, cerrar con la diferencia anotada, el papel del
-// cierre (media A4) y la nota. Montada de verdad, con la venta en memoria.
+// cierre (media A4, con la forma del recibo de las cuotas y sin la diferencia,
+// desde el 22-nov-2026) y la nota. Montada de verdad, con la venta en memoria.
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
+import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/entradas/cuentas/cierre_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/pdf/cierre_caja_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
+import 'package:arguello_events/features/entradas/pdf/recibo_de_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/abrir_caja_entradas_dialog.dart';
 import 'package:arguello_events/features/entradas/widgets/cerrar_caja_entradas_screen.dart';
@@ -179,6 +183,9 @@ Future<void> _contar(WidgetTester tester, String monto) async {
 }
 
 void main() {
+  // Para leer las letras de la app (Outfit) y el logo de los assets.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('contar a ciegas: antes de cerrar, la pantalla no muestra ninguna plata de la caja',
       () {
     final c = File('lib/features/entradas/widgets/cerrar_caja_entradas_screen.dart')
@@ -494,27 +501,64 @@ void main() {
     test('media A4, una sola hoja, y nada se sale', () async {
       final bytes = await CierreCajaEntradasPdf.armar(await datos(despues: true, larga: true));
       expect(paginasDelPdf(bytes), 1);
-      final hoja = CierreCajaEntradasPdf.hoja;
-      expect(hoja.height, closeTo(842 / 2, 1));
+      final alto = altoDeLaHoja(bytes);
+      expect(alto, closeTo(ReciboDeEntradasPdf.mediaA4, 0.5));
+      final ancho = PdfPageFormat.a4.width;
+      const costado = ReciboDeEntradasPdf.costado;
       for (final p in palabrasDelPdf(bytes)) {
-        expect(p.x, greaterThanOrEqualTo(hoja.marginLeft - 0.5),
+        expect(p.x, greaterThanOrEqualTo(costado - 0.5),
             reason: '"${p.texto}" empieza antes del margen');
-        expect(p.x + p.ancho, lessThanOrEqualTo(hoja.width - hoja.marginRight + 0.5),
+        expect(p.x + p.ancho, lessThanOrEqualTo(ancho - costado + 0.5),
             reason: '"${p.texto}" termina fuera de la hoja');
-        expect(p.y, greaterThanOrEqualTo(hoja.marginBottom - 0.5),
-            reason: '"${p.texto}" se sale por abajo');
+        expect(p.y, greaterThanOrEqualTo(0), reason: '"${p.texto}" se sale por abajo');
+        expect(p.y, lessThanOrEqualTo(alto), reason: '"${p.texto}" se sale por arriba');
       }
     });
 
-    test('dice la fiesta, quién, lo que tenía que haber, lo contado y la diferencia',
-        () async {
-      final palabras = palabrasDelPdf(await CierreCajaEntradasPdf.armar(await datos()));
+    // Lo que se imprime sale con Outfit, que mide distinto que la letra de
+    // fábrica: el cierre tiene que entrar en media hoja con la letra de verdad.
+    test('con las letras de la app y el logo, entra justo en media hoja', () async {
+      final fuentes = (await PdfService.fuentesOutfit())!;
+      final logo = await isotipoDeLosPapeles();
+      final bytes = await CierreCajaEntradasPdf.armar(
+        await datos(despues: true, larga: true),
+        fuentes: fuentes,
+        logo: logo,
+      );
+      expect(paginasDelPdf(bytes), 1);
+      expect(altoDeLaHoja(bytes), closeTo(ReciboDeEntradasPdf.mediaA4, 0.5));
+    });
+
+    // 22-nov-2026 (el usuario: "hacelo como un recibo tal cual" y "que no diga
+    // 'Justo, sin diferencia'"): el papel es el recibo de lo que entrega quien
+    // cerró. La diferencia la ve el jefe en la pantalla, no en el papel.
+    test('es el recibo de lo que entrega quien cerró: de quién, el efectivo contado en '
+        'letras, lo cobrado y lo vendido', () async {
+      final bytes = await CierreCajaEntradasPdf.armar(await datos());
+      final palabras = palabrasDelPdf(bytes);
       final textos = {for (final p in palabras) p.texto};
       for (final esperada in [
-        'INSTITUTO', 'CIERRE', 'Carla', '04/12/2026', 'Abierta:', 'Cerrada:',
-        '25.000', '24.500', 'Faltan', 'billete', 'anulada',
+        'RECIBO', 'CAJA', 'INSTITUTO', 'Carla', 'CARLA', '04/12/2026', 'Abierta:',
+        'Cerrada:', '24.500', 'billete', 'anulada', 'Victor',
       ]) {
         expect(textos, contains(esperada), reason: 'falta "$esperada"');
+      }
+      final texto = palabras.map((p) => p.texto).join(' ');
+      for (final frase in [
+        'RECIBO DE CAJA',
+        'Entradas · Carla',
+        'Recibí de: CARLA',
+        'La suma de pesos: VEINTICUATRO MIL QUINIENTOS PESOS',
+        'Concepto: Caja de entradas · INSTITUTO SAN LORENZO · fiesta 04/12/2026',
+        r'Efectivo contado (con $ 5.000 de cambio) $ 24.500',
+        r'Transferencias (con los recargos) $ 10.000',
+        r'Entradas vendidas: 3 (3 sueltas y 0 de lugares adicionales) $ 30.000',
+        'Ventas: 2 · 1 anulada (no cuentan)',
+        r'TOTAL DE ESTE RECIBO $ 24.500',
+        r'Total cobrado en la caja: $ 30.000 (efectivo $ 20.000 + transferencia $ 10.000)',
+        'Nota: faltó un billete',
+      ]) {
+        expect(texto, contains(frase), reason: 'falta "$frase"');
       }
       // Cada monto en el renglón de su rótulo.
       Set<String> renglonDe(String rotulo) {
@@ -525,12 +569,32 @@ void main() {
         };
       }
 
-      expect(renglonDe('haber'), contains('25.000'));
-      expect(renglonDe('Contó'), contains('24.500'));
-      expect(renglonDe('Diferencia'), contains('500'));
-      expect(renglonDe('Efectivo'), contains('20.000'));
+      expect(renglonDe('contado'), contains('24.500'));
+      expect(renglonDe('Transferencias'), contains('10.000'));
+      expect(renglonDe('vendidas:'), contains('30.000'));
       expect(textos, isNot(contains('después')),
           reason: 'sin anulado después del cierre no va esa línea');
+    });
+
+    test('no dice la diferencia: ni lo que tenía que haber, ni lo que contó, ni si sobra '
+        'o falta', () async {
+      for (final d in [await datos(), await datos(despues: true, larga: true)]) {
+        expect(d.caja.diferencia, -500, reason: 'la caja cerró con una diferencia');
+        final palabras = palabrasDelPdf(await CierreCajaEntradasPdf.armar(d));
+        for (final p in palabras) {
+          final t = p.texto.toLowerCase();
+          for (final prohibida in [
+            'justo', 'diferencia', 'faltan', 'falta', 'sobran', 'sobra', 'tenía',
+            'contó', 'esperado',
+          ]) {
+            expect(t, isNot(contains(prohibida)),
+                reason: 'el papel dice "${p.texto}": la diferencia la ve el jefe en la '
+                    'pantalla, no va en el papel');
+          }
+        }
+        // Lo que tenía que haber (el cambio más el efectivo: $ 25.000) no está.
+        expect(palabras.map((p) => p.texto), isNot(contains('25.000')));
+      }
     });
 
     test('lo anulado después del cierre va aparte, y el cierre no cambia', () async {

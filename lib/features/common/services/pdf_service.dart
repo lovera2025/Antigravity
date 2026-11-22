@@ -48,6 +48,7 @@ import '../../plano/estilos/fuentes_plano.dart';
 import '../../plano/services/plano_de_la_fiesta.dart';
 import '../utils/currency_extensions.dart';
 import 'ajuste_pdf.dart';
+import 'emisor_del_recibo.dart';
 import 'planilla_entrega_pdf.dart';
 import 'entregas_sin_cargo_pdf.dart';
 import '../../eventos/services/caja_de_entregas.dart';
@@ -2621,7 +2622,7 @@ class PdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                'Victor Adrián Argüello',
+                                EmisorDelRecibo.nombre,
                                 style: pw.TextStyle(
                                   fontWeight: pw.FontWeight.bold,
                                   fontSize: dRecibo.fs(10),
@@ -2629,21 +2630,21 @@ class PdfService {
                                 ),
                               ),
                               pw.Text(
-                                'Dueño, Junior Eventos',
+                                EmisorDelRecibo.cargo,
                                 style: pw.TextStyle(
                                   fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,
                                 ),
                               ),
                               pw.Text(
-                                'CUIT 23-32837670-9',
+                                EmisorDelRecibo.cuit,
                                 style: pw.TextStyle(
                                   fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,
                                 ),
                               ),
                               pw.Text(
-                                'Responsable Inscripto',
+                                EmisorDelRecibo.condicion,
                                 style: pw.TextStyle(
                                   fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,

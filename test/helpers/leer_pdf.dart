@@ -8,6 +8,16 @@ import 'package:pdf/pdf.dart';
 int paginasDelPdf(Uint8List bytes) =>
     RegExp(r'/Type\s*/Page[^s]').allMatches(latin1.decode(bytes)).length;
 
+/// El alto de la primera hoja, en puntos (de su `MediaBox`). Sirve para los
+/// papeles de alto libre, que miden lo que mide lo escrito: "media hoja A4"
+/// es que dé 420,9.
+double altoDeLaHoja(Uint8List bytes) {
+  final m = RegExp(r'/MediaBox\s*\[\s*[-\d.]+\s+[-\d.]+\s+[\d.]+\s+([\d.]+)\s*\]')
+      .firstMatch(latin1.decode(bytes));
+  if (m == null) throw StateError('el PDF no tiene MediaBox');
+  return double.parse(m.group(1)!);
+}
+
 /// Lo que un PDF dibuja y escribe, hoja por hoja pegado en un solo texto: sus
 /// contenidos sin comprimir.
 ///
