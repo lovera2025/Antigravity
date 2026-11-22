@@ -1232,6 +1232,66 @@ void main() {
     });
   });
 
+  // Revisión del 22-nov-2026: dos equipos sin internet anotan los mismos
+  // números, uno como devueltos y otro como que no volvieron (o los dos como
+  // devueltos). En un equipo solo no pasa; juntos, la cuenta no se pasa de lo
+  // que se llevó y nada avisaba.
+  group('los mismos números devueltos o perdidos desde dos equipos, se avisa', () {
+    final dio = _dar(desde: 1201, cantidad: 20);
+    final enLaTablet = MovimientoParaRendir.devolvio(
+      dio,
+      tramos: const [TramoTalonario(1216, 1220)],
+      ahora: DateTime.utc(2026, 11, 21, 3),
+    );
+    final enLaPc = MovimientoParaRendir.noVolvieron(
+      dio,
+      cantidad: 5,
+      tramos: const [TramoTalonario(1216, 1220)],
+      motivo: 'no las trajo',
+      ahora: DateTime.utc(2026, 11, 21, 4),
+    );
+
+    test('devuelto en un equipo y "no volvieron" en el otro: aviso con los números',
+        () {
+      final p = _cuenta([dio, enLaTablet, enLaPc]);
+      final b = p.bloques.single;
+      expect(b.rindioDeMas, 0, reason: 'la cuenta sola no se pasa de las 20');
+      final aviso =
+          p.avisos.singleWhere((a) => a.que == QueAvisoParaRendir.numerosRepetidos);
+      expect(aviso.bloqueId, dio.id);
+      expect(aviso.texto, contains('PÉREZ, JUAN: los 1216 al 1220 figuran dos veces'));
+      expect(aviso.texto, contains('anular acá el que sobra'));
+    });
+
+    test('devuelto dos veces: también', () {
+      final otraVez = MovimientoParaRendir.devolvio(
+        dio,
+        tramos: const [TramoTalonario(1218, 1218)],
+        ahora: DateTime.utc(2026, 11, 21, 5),
+      );
+      final p = _cuenta([dio, enLaTablet, otraVez]);
+      expect(
+        p.avisos.singleWhere((a) => a.que == QueAvisoParaRendir.numerosRepetidos).texto,
+        contains('el 1218 figura dos veces'),
+      );
+    });
+
+    test('anulado el que sobra, no avisa más', () {
+      final anulo = MovimientoParaRendir.anulo(
+        enLaPc,
+        motivo: 'se anotó dos veces',
+        ahora: DateTime.utc(2026, 11, 21, 6),
+      );
+      final p = _cuenta([dio, enLaTablet, enLaPc, anulo]);
+      expect(p.avisos.where((a) => a.que == QueAvisoParaRendir.numerosRepetidos), isEmpty);
+    });
+
+    test('sin repetir, no avisa', () {
+      final p = _cuenta([dio, enLaTablet]);
+      expect(p.avisos, isEmpty);
+    });
+  });
+
   group('regla 49: si rindió de más, se avisa y no se esconde', () {
     final dio = _dar(desde: 1201, cantidad: 20);
     // Carla y Romi, cada una en su tablet sin internet, le cobraron al mismo.

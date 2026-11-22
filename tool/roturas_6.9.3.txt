@@ -418,3 +418,27 @@ test/sync_tablas_v80_test.dart
     'sorteos_mesas',
 
 ---
+72. dos equipos anotan los mismos números devueltos o perdidos y no se avisa
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+        if (e.value > 1) e.key,
+        if (e.value > 99) e.key,
+---
+73. se anula lo devuelto aunque esos números ya se vendieron
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_pantalla_test.dart
+    if (choca == null) return null;
+    return null;
+---
+74. PRECIOS en otras fiestas deja la anticipada vigente la noche de una fiesta que es ese día o antes
+lib/features/entradas/cuentas/precios_en_otras_fiestas.dart
+test/precios_en_otras_fiestas_test.dart
+          ConfigEntradas.diaDe(fechaFiesta).compareTo(hasta!) <= 0) {
+          false) {
+---
+75. PRECIOS en otras fiestas ofrece la fiesta de anoche
+lib/features/entradas/cuentas/precios_en_otras_fiestas.dart
+test/precios_en_otras_fiestas_test.dart
+      ConfigEntradas.diaDe(fechaFiesta).compareTo(ConfigEntradas.diaDe(hoyAr)) >= 0;
+      true;
+---

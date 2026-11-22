@@ -341,6 +341,11 @@ enum QueAvisoParaRendir {
 
   /// Llegaron renglones de un bloque que todavía no está en este equipo.
   deUnBloqueQueNoBajo,
+
+  /// Un mismo número figura dos veces como devuelto o como que no volvió (dos
+  /// equipos sin internet anotaron lo mismo; revisión del 22-nov-2026). Va al
+  /// final: una versión que no lo conoce no se entera.
+  numerosRepetidos,
 }
 
 class AvisoParaRendir {
@@ -567,7 +572,23 @@ class ParaRendir {
           b.id,
           '${b.persona} rindió ${b.cantidad + b.rindioDeMas} de las ${b.cantidad} que '
           'se llevó ($legible): rindió de más, revisar. Si se cobró dos veces desde '
-          'dos equipos, anulá en VENTAS la venta que sobra.',
+          'dos equipos, anulá en VENTAS la venta que sobra'
+          // Revisión del 22-nov-2026: si lo que sobra es un "no volvieron"
+          // anotado mientras otro equipo cobraba, lo que se anula es ese.
+          '${b.noVolvieron > 0 ? '; si se marcaron como que no volvieron entradas que '
+              'sí se rindieron, anulá acá ese "no volvieron"' : ''}.',
+        ));
+      }
+      final repetidos = _repetidos(b);
+      if (repetidos.isNotEmpty) {
+        final cuales = TramoTalonario.legible(repetidos);
+        avisos.add(AvisoParaRendir(
+          QueAvisoParaRendir.numerosRepetidos,
+          b.id,
+          '${b.persona}: ${repetidos.fold<int>(0, (s, t) => s + t.cantidad) == 1 ? 'el' : 'los'} '
+          '$cuales ${repetidos.fold<int>(0, (s, t) => s + t.cantidad) == 1 ? 'figura' : 'figuran'} '
+          'dos veces entre lo devuelto y lo que no volvió (se anotó desde dos '
+          'equipos): revisar y anular acá el que sobra.',
         ));
       }
       if (b.anulado && b.tieneMovimientos) {
@@ -608,6 +629,37 @@ class ParaRendir {
       ));
     }
     return avisos;
+  }
+
+  /// Los números que figuran en más de un "devolvió" o "no volvieron" que
+  /// cuentan del bloque [b] (también uno devuelto y perdido a la vez). En un
+  /// solo equipo no pasa (`EntradasLocal` lo frena en su transacción); con dos
+  /// equipos sin internet, sí.
+  static List<TramoTalonario> _repetidos(BloqueParaRendir b) {
+    final veces = <int, int>{};
+    for (final m in b.movimientos) {
+      if (!m.cuenta || m.movimiento.esVendio) continue;
+      for (final t in m.tramos) {
+        // Un tramo absurdo no se recorre entero.
+        if (t.hasta < t.desde || t.hasta - t.desde > 10000) continue;
+        for (var n = t.desde; n <= t.hasta; n++) {
+          veces[n] = (veces[n] ?? 0) + 1;
+        }
+      }
+    }
+    final dobles = [
+      for (final e in veces.entries)
+        if (e.value > 1) e.key,
+    ]..sort();
+    final out = <TramoTalonario>[];
+    for (final n in dobles) {
+      if (out.isNotEmpty && out.last.hasta == n - 1) {
+        out[out.length - 1] = TramoTalonario(out.last.desde, n);
+      } else {
+        out.add(TramoTalonario(n, n));
+      }
+    }
+    return out;
   }
 
   /// Un bloque por su id, o null.
