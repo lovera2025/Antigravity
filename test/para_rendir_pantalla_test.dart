@@ -64,7 +64,7 @@ Future<MovimientoParaRendir> _dar(
 
 /// Cuatro personas, como la maqueta: PÉREZ (20, nada rendido), GÓMEZ, ANA
 /// (alumna: 10, rindió todo en dos veces), SOSA (15: vendió 8, devolvió 5 y 2
-/// no volvieron) y MOLINA (10, nada rendido). Carla cobró en su caja.
+/// no volvieron) y NIEVA (10, nada rendido). Carla cobró en su caja.
 Future<void> _cuatroPersonas(EntradasEnMemoria e) async {
   final caja = await e.abrirCaja(
     eventoId: idFiestaEntrega,
@@ -92,7 +92,7 @@ Future<void> _cuatroPersonas(EntradasEnMemoria e) async {
     motivo: 'Dice que las perdió',
     quien: 'Jefe',
   );
-  await _dar(e, 'MOLINA, CARLOS', 1246, 10);
+  await _dar(e, 'NIEVA, CARLOS', 1246, 10);
 }
 
 /// [jefeAhora]: el modo jefe se lee de ahí cada vez (y se cambia con
@@ -203,13 +203,13 @@ void main() {
       expect(find.text('entradas · 2 personas'), findsOneWidget);
 
       final perez = _deAfuera('perez juan');
-      final molina = _deAfuera('molina carlos');
+      final nieva = _deAfuera('nieva carlos');
       final sosa = _deAfuera('sosa diego');
       final gomez = 'alumno|${EntregaEnMemoria.idGomez}';
       double arriba(String clave) =>
           tester.getTopLeft(find.byKey(Key('para_rendir_persona_$clave'))).dy;
-      expect(arriba(perez), lessThan(arriba(molina)));
-      expect(arriba(molina), lessThan(arriba(sosa)));
+      expect(arriba(perez), lessThan(arriba(nieva)));
+      expect(arriba(nieva), lessThan(arriba(sosa)));
 
       expect(_chip(tester, 'para_rendir_estado_$perez'), 'sin rendir 20');
       expect(_texto(tester, 'para_rendir_falta_$perez'), r'faltan hasta $ 160.000');
@@ -544,11 +544,11 @@ void main() {
         'dice por qué, con minúscula después de los dos puntos', (tester) async {
       final m = await _montar(tester);
       await hastaLaConfirmacion(tester);
-      await _dar(m.entradas, 'MOLINA, CARLOS', 1300, 5);
+      await _dar(m.entradas, 'NIEVA, CARLOS', 1300, 5);
       await _tocar(tester, 'dar_confirmar_si');
-      expect(m.entradas.listaParaRendir.map((d) => d.personaNombre), ['MOLINA, CARLOS']);
+      expect(m.entradas.listaParaRendir.map((d) => d.personaNombre), ['NIEVA, CARLOS']);
       expect(
-          find.text('No se dieron: el 1300 ya se le dio a MOLINA, CARLOS, para rendir '
+          find.text('No se dieron: el 1300 ya se le dio a NIEVA, CARLOS, para rendir '
               '(1300 al 1304).'),
           findsOneWidget);
     });
@@ -609,10 +609,10 @@ void main() {
     testWidgets('ANULAR: confirma y no se anula nada', (tester) async {
       var jefe = true;
       final m = await _montar(tester, jefeAhora: () => jefe, antes: _cuatroPersonas);
-      final molina = m.bloqueDe('MOLINA, CARLOS');
+      final nieva = m.bloqueDe('NIEVA, CARLOS');
       final antes = m.entradas.listaParaRendir.length;
-      await _tocar(tester, 'para_rendir_persona_${_deAfuera('molina carlos')}');
-      await _tocar(tester, 'para_rendir_anular_${molina.id}');
+      await _tocar(tester, 'para_rendir_persona_${_deAfuera('nieva carlos')}');
+      await _tocar(tester, 'para_rendir_anular_${nieva.id}');
       await tester.enterText(find.byKey(const Key('motivo_texto')), 'se cargó mal');
       await tester.pump();
       await saleDelModoJefe(m, tester, () => jefe = false);
@@ -700,23 +700,23 @@ void main() {
     testWidgets('ANULAR un bloque sin nada rendido: queda tachado y sus números libres',
         (tester) async {
       final m = await _montar(tester, antes: _cuatroPersonas);
-      final molina = m.bloqueDe('MOLINA, CARLOS');
-      expect(m.cuenta.ocupados.keys, contains('MOLINA, CARLOS, para rendir'));
-      await _tocar(tester, 'para_rendir_persona_${_deAfuera('molina carlos')}');
-      expect(_apagado(tester, 'para_rendir_anular_${molina.id}'), isFalse);
-      await _tocar(tester, 'para_rendir_anular_${molina.id}');
-      expect(find.text('Anular las entradas de MOLINA, CARLOS'), findsOneWidget);
+      final nieva = m.bloqueDe('NIEVA, CARLOS');
+      expect(m.cuenta.ocupados.keys, contains('NIEVA, CARLOS, para rendir'));
+      await _tocar(tester, 'para_rendir_persona_${_deAfuera('nieva carlos')}');
+      expect(_apagado(tester, 'para_rendir_anular_${nieva.id}'), isFalse);
+      await _tocar(tester, 'para_rendir_anular_${nieva.id}');
+      expect(find.text('Anular las entradas de NIEVA, CARLOS'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('motivo_texto')), 'se cargó mal');
       await tester.pump();
       await _tocar(tester, 'para_rendir_anular_confirmar');
 
       final anulo = m.entradas.listaParaRendir.last;
       expect(anulo.esAnulo, isTrue);
-      expect(anulo.anulaId, molina.id);
+      expect(anulo.anulaId, nieva.id);
       expect(anulo.motivo, 'se cargó mal');
-      expect(_texto(tester, 'para_rendir_anulado_${molina.id}'), contains('se cargó mal'));
+      expect(_texto(tester, 'para_rendir_anulado_${nieva.id}'), contains('se cargó mal'));
       expect(_texto(tester, 'para_rendir_total_sin_rendir'), '20');
-      expect(m.cuenta.ocupados.keys, isNot(contains('MOLINA, CARLOS, para rendir')));
+      expect(m.cuenta.ocupados.keys, isNot(contains('NIEVA, CARLOS, para rendir')));
     });
 
     testWidgets('ANULAR lo que devolvió: vuelve a quedar a su cargo', (tester) async {

@@ -1461,7 +1461,7 @@ void main() {
       final r = _rendicion(dio, 5);
       final revendida = _venta('LÓPEZ, ANA', [_del(1309, 1310)]);
       final anuladaConTodo = _venta('RUIZ, MARTA', [_del(1201, 1202)]);
-      final anulado = _dar(persona: 'MOLINA, CARLOS', desde: 1203, cantidad: 2);
+      final anulado = _dar(persona: 'NIEVA, CARLOS', desde: 1203, cantidad: 2);
       final p = _cuenta(
         [dio, r.vendio, _devolvio(dio, [_del(1309, 1310)]), anulado, _anulo(anulado)],
         ventas: [r.venta, revendida, anuladaConTodo],
@@ -1537,7 +1537,7 @@ void main() {
       final lucia = _dar(persona: 'GÓMEZ, LUCÍA', desde: 1221, cantidad: 10, precio: 10000,
           nombrePrecio: 'Entrada');
       final sol = _dar(persona: 'FERREYRA, SOL', desde: 1231, cantidad: 8);
-      final anulado = _dar(persona: 'MOLINA, CARLOS', desde: 1241, cantidad: 10);
+      final anulado = _dar(persona: 'NIEVA, CARLOS', desde: 1241, cantidad: 10);
       // Otro bloque de JUAN y otro de SOL, los dos anulados.
       final juanAnulado = _dar(persona: 'PÉREZ, JUAN', desde: 1251, cantidad: 6);
       final solAnulado = _dar(persona: 'FERREYRA, SOL', desde: 1261, cantidad: 3);
@@ -1619,7 +1619,7 @@ void main() {
             per.rindioTodo,
           ];
       final personas = {for (final per in p.porPersona) per.clave: per};
-      final carlos = personas['afuera|molina carlos']!;
+      final carlos = personas['afuera|nieva carlos']!;
       expect(carlos.bloques.single.id, anulado.id, reason: 'sigue en la lista');
       expect(cuentaDe(carlos), [0, 0, 0, 0, 0, 0, 0, 0, 0, false],
           reason: 'solo tiene un bloque anulado: no se llevó nada ni rindió todo');

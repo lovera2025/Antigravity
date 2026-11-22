@@ -750,7 +750,7 @@ void main() {
   ) async {
     const apellidos = [
       'ACOSTA', 'BENITEZ', 'CABRERA', 'DOMINGUEZ', 'ESCOBAR', 'FERREYRA', 'GIMENEZ',
-      'HERRERA', 'IBARRA', 'JUAREZ', 'LEDESMA', 'MOLINA', 'NAVARRO', 'OJEDA', 'PAEZ',
+      'HERRERA', 'IBARRA', 'JUAREZ', 'LEDESMA', 'NIEVA', 'NAVARRO', 'OJEDA', 'PAEZ',
       'QUIROGA', 'RAMIREZ', 'SOSA', 'TOLEDO', 'VERA', 'ZARATE', 'AGUIRRE', 'BRITEZ',
       'CACERES', 'DIAZ', 'FRANCO', 'GODOY', 'LUNA', 'MEDINA', 'ORTIZ', 'PERALTA', 'ROMERO',
     ];
@@ -1459,7 +1459,7 @@ void main() {
   //
   // Las mismas cuatro personas de la maqueta (nombres inventados): PÉREZ (20,
   // nada rendido), GÓMEZ, ANA (alumna: 10, rindió todo), SOSA (15: vendió 8,
-  // devolvió 5 y 2 no volvieron) y MOLINA (10, nada rendido).
+  // devolvió 5 y 2 no volvieron) y NIEVA (10, nada rendido).
 
   final hoyConAnticipada = DateTime.utc(2026, 11, 20, 12);
 
@@ -1508,7 +1508,7 @@ void main() {
       motivo: 'Dice que las perdió',
       quien: 'Jefe',
     );
-    await darParaRendir(e, 'MOLINA, CARLOS', 1246, 10);
+    await darParaRendir(e, 'NIEVA, CARLOS', 1246, 10);
   }
 
   for (final (nombre, tamano) in [
@@ -1633,11 +1633,11 @@ void main() {
       antes: cuatroParaRendir,
       pantalla: ParaRendirScreen(evento: fiestaDeLaEntrega),
     );
-    final molina = entradas.listaParaRendir
-        .firstWhere((m) => m.esDio && m.personaNombre == 'MOLINA, CARLOS');
-    await tester.tap(find.byKey(const Key('para_rendir_persona_afuera|molina carlos')));
+    final nieva = entradas.listaParaRendir
+        .firstWhere((m) => m.esDio && m.personaNombre == 'NIEVA, CARLOS');
+    await tester.tap(find.byKey(const Key('para_rendir_persona_afuera|nieva carlos')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('para_rendir_no_volvieron_${molina.id}')));
+    await tester.tap(find.byKey(Key('para_rendir_no_volvieron_${nieva.id}')));
     await tester.pumpAndSettle();
     await tocar(tester, 'no_volvieron_mas');
     await poner(tester, 'no_volvieron_del', '1254');
@@ -1719,8 +1719,8 @@ void main() {
     await tester.pumpAndSettle();
     await tocar(tester, 'vender_rendir');
     await tester.pumpAndSettle();
-    await poner(tester, 'rendir_buscar', 'molina');
-    await tester.tap(find.textContaining('MOLINA, CARLOS').first);
+    await poner(tester, 'rendir_buscar', 'nieva');
+    await tester.tap(find.textContaining('NIEVA, CARLOS').first);
     await tester.pumpAndSettle();
     await tocar(tester, 'rendir_vendio_mas', veces: 3);
     FocusManager.instance.primaryFocus?.unfocus();
