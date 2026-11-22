@@ -497,6 +497,17 @@ class _CerrarCajaEntradasScreenState
                 ),
               ],
             ),
+            // El papel no sale solo (22-nov-2026): se dice dónde está después,
+            // así nadie sale con LISTO creyendo que lo pierde.
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'El papel sale solo si lo pedís. Después de LISTO lo saca el jefe, en '
+                'Cierre de caja → ENTRADAS.',
+                key: const Key('cierre_papel_despues'),
+                style: TextStyle(fontSize: 12, color: tema.hintColor),
+              ),
+            ),
             if (_aviso != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),

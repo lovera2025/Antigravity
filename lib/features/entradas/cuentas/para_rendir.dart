@@ -650,6 +650,24 @@ class ParaRendir {
   Map<String, List<TramoTalonario>> get ocupados =>
       NumerosDeEntradas.ocupadosAlVender(_ventas, _anulaciones, bloques);
 
+  /// Por qué no se puede ANULAR lo que devolvió alguien ([devolvio]), o null.
+  /// Anularlo le vuelve a poner esos números a su cargo: **si en el medio
+  /// alguno se vendió o se le dio a otro para rendir, no se anula**, porque
+  /// rendirlos después sería cobrar dos veces la misma entrada (revisión del
+  /// 22-nov-2026). Un "no volvieron" no libera números: anularlo no choca.
+  String? errorAlAnularLoDevuelto(MovimientoParaRendir devolvio) {
+    if (!devolvio.esDevolvio) return null;
+    final suyos = devolvio.tramos;
+    if (suyos.isEmpty) return null;
+    final choca = NumerosDeEntradas.error(
+      tramos: suyos,
+      cantidad: suyos.fold<int>(0, (s, t) => s + t.cantidad),
+      ocupados: ocupados,
+    );
+    if (choca == null) return null;
+    return 'No se puede anular: $choca Si se cargó mal, revisalo antes con esa venta.';
+  }
+
   // ── DAR ──────────────────────────────────────────────────────────────────
 
   /// El precio de hoy para dar y su nombre: la anticipada si todavía rige (su

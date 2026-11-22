@@ -10,6 +10,7 @@ import 'package:arguello_events/features/cierre_caja/models/turno_caja.dart';
 import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/cierre_caja/providers/cierre_caja_provider.dart';
 import 'package:arguello_events/features/common/providers/admin_provider.dart';
+import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/eventos/services/caja_de_entregas.dart';
 
 import 'entradas_en_memoria.dart';
@@ -71,8 +72,14 @@ List<Override> reemplazosDelCierre(
   EntradasEnMemoria? entradas,
   CajaDeEntregas Function(String eventoId)? entregas,
   ImprimirEntregasSinCargo? imprimir,
+  AbrirCierreDeEntradas? papelDelCierre,
 }) =>
     [
+      // PAPEL DEL CIERRE de ENTRADAS (22-nov-2026): sin esto, la impresora de
+      // una caja cerrada dejaría el PDF en la carpeta del programa.
+      abrirCierreDeEntradasProvider.overrideWithValue(
+        papelDelCierre ?? (datos, {context}) async {},
+      ),
       cajaDeEntregasDeLaFiestaProvider.overrideWith(
         (ref, eventoId) async => entregas?.call(eventoId) ?? cajaDeEntregasVacia,
       ),

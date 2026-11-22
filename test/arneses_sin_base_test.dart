@@ -155,6 +155,13 @@ void main() {
           !s.contains('imprimirEntregasSinCargoProvider.overrideWith')) {
         faltan.add('$n: imprimirEntregasSinCargoProvider');
       }
+      // 22-nov-2026: ENTRADAS del cierre tiene el papel del cierre de cada caja
+      // cerrada (la impresora de su renglón).
+      if (s.contains('CierreCajaScreen(') &&
+          !conLosDelCierre &&
+          !s.contains('abrirCierreDeEntradasProvider.overrideWith')) {
+        faltan.add('$n: abrirCierreDeEntradasProvider');
+      }
       final muestraLaEntrega = [
         'VenderEntradasScreen',
         'RetiroEntradasScreen',

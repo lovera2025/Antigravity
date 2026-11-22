@@ -56,8 +56,12 @@ class PreciosEnOtrasFiestas {
       );
 
   /// Por qué no se le pueden poner estos precios a esa fiesta, o null si se
-  /// puede. Con "el día anterior de cada fiesta", una fiesta sin fecha o cuyo
-  /// día anterior ya pasó no tiene a qué día ponerle la anticipada.
+  /// puede:
+  /// - con "el día anterior de cada fiesta", una fiesta sin fecha o cuyo día
+  ///   anterior ya pasó no tiene a qué día ponerle la anticipada;
+  /// - con "el mismo día", **una fiesta que es ese día o antes**: la anticipada
+  ///   seguiría vigente su misma noche y en la puerta se cobraría la anticipada
+  ///   en vez de la General (revisión del 22-nov-2026).
   static String? problema(
     EleccionDePrecios elegido, {
     required DateTime? fechaFiesta,
@@ -66,15 +70,31 @@ class PreciosEnOtrasFiestas {
   }) {
     final paraEsa =
         paraLaFiesta(elegido, fechaFiesta: fechaFiesta, dia: dia, hoyAr: hoyAr);
-    if (elegido.queSeVende == QueSeVende.anticipada &&
-        dia == DiaDeLaAnticipada.elAnteriorDeCadaFiesta &&
-        paraEsa.hasta == null) {
-      return fechaFiesta == null
-          ? 'No tiene fecha: no se sabe su día anterior.'
-          : 'Su día anterior ya pasó: la anticipada no tendría días.';
+    if (elegido.queSeVende == QueSeVende.anticipada) {
+      if (dia == DiaDeLaAnticipada.elAnteriorDeCadaFiesta && paraEsa.hasta == null) {
+        return fechaFiesta == null
+            ? 'No tiene fecha: no se sabe su día anterior.'
+            : 'Su día anterior ya pasó: la anticipada no tendría días.';
+      }
+      final hasta = paraEsa.hasta?.trim();
+      if (dia == DiaDeLaAnticipada.elMismo &&
+          fechaFiesta != null &&
+          ConfigEntradas.diaValido(hasta) &&
+          ConfigEntradas.diaDe(fechaFiesta).compareTo(hasta!) <= 0) {
+        return 'Es el ${_diaCorto(hasta)} o antes: la anticipada seguiría la noche '
+            'de la fiesta.';
+      }
     }
     return paraEsa.loQueFalta(hoyAr);
   }
+
+  /// Si [fechaFiesta] se ofrece para poner los precios: de hoy en adelante.
+  /// **La de anoche no** (revisión del 22-nov-2026): sigue en las listas de la
+  /// venta hasta el mediodía, pero cambiarle el precio después de hecha no
+  /// tiene sentido. Una sin fecha, sí: la regla del día la frena si hace falta.
+  static bool seOfrece(DateTime? fechaFiesta, DateTime hoyAr) =>
+      fechaFiesta == null ||
+      ConfigEntradas.diaDe(fechaFiesta).compareTo(ConfigEntradas.diaDe(hoyAr)) >= 0;
 
   /// La opción que viene elegida: si en PRECIOS quedó el día anterior a la
   /// fiesta (lo que se propone), "el día anterior de cada fiesta"; si se

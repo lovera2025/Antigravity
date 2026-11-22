@@ -624,6 +624,42 @@ void main() {
   });
 
   group('NO VOLVIERON y ANULAR', () {
+    // Revisión del 22-nov-2026: anular lo que devolvió SOSA le vuelve a poner
+    // del 1239 al 1243 a su cargo. Si en el medio VENDER vendió alguno, rendirlo
+    // después sería cobrar dos veces la misma entrada: no se anula.
+    testWidgets('ANULAR lo devuelto cuyos números ya se vendieron: no se anula y lo dice',
+        (tester) async {
+      final m = await _montar(tester, antes: (e) async {
+        await _cuatroPersonas(e);
+        final caja = e.listaCajas.first;
+        await e.vender(
+          caja: caja,
+          compradorNombre: 'RUIZ, MARTA',
+          renglones: [
+            RenglonEntradas.suelta(nombre: 'Entrada', precioLista: 8000, cantidad: 2),
+          ],
+          medio: MedioBarra.efectivo,
+          efectivo: 16000,
+          numeros: '1240-1241',
+          quien: 'Carla',
+        );
+      });
+      final sosa = m.bloqueDe('SOSA, DIEGO');
+      final devolvio = m.entradas.listaParaRendir
+          .firstWhere((x) => x.esDevolvio && x.bloqueId == sosa.id);
+      final antes = m.entradas.listaParaRendir.length;
+      await _tocar(tester, 'para_rendir_persona_${_deAfuera('sosa diego')}');
+      await _tocar(tester, 'para_rendir_anular_${devolvio.id}');
+      expect(find.byKey(const Key('motivo_texto')), findsNothing,
+          reason: 'no llega a pedir el motivo');
+      expect(
+        find.textContaining('No se puede anular: El 1240 ya se le dio a RUIZ, MARTA'),
+        findsOneWidget,
+      );
+      expect(m.entradas.listaParaRendir, hasLength(antes));
+      expect(m.entradas.escrituras, 0);
+    });
+
     testWidgets('NO VOLVIERON: cuántas, sus números y el motivo; no entra plata',
         (tester) async {
       final m = await _montar(tester, antes: _cuatroPersonas);

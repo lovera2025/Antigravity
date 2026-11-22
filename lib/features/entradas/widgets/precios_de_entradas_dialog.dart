@@ -10,6 +10,7 @@ import '../../common/utils/solo_jefe.dart';
 import '../../eventos/services/lugares_al_sorteo.dart';
 import '../cuentas/eleccion_de_precios.dart';
 import '../cuentas/precio_de_entradas.dart';
+import '../cuentas/precios_en_otras_fiestas.dart';
 import '../datos/entradas_repositorio.dart';
 import '../providers/entradas_providers.dart';
 import 'precios_en_otras_fiestas_dialog.dart';
@@ -279,15 +280,19 @@ class _PreciosDeEntradasDialogState
     }
   }
 
-  /// Las fiestas que vienen, sin esta. Si no se pueden leer, ninguna: lo de
+  /// Las fiestas que vienen, sin esta ni la de anoche
+  /// ([PreciosEnOtrasFiestas.seOfrece]). Si no se pueden leer, ninguna: lo de
   /// acá ya quedó guardado.
   Future<List<Evento>> _lasOtrasFiestas() async {
     final leer = widget.otrasFiestas;
     if (leer == null) return const [];
+    final hoy = _hoy;
     try {
       return [
         for (final e in await leer())
-          if (e.id != widget.eventoId) e,
+          if (e.id != widget.eventoId &&
+              PreciosEnOtrasFiestas.seOfrece(e.fechaEvento, hoy))
+            e,
       ];
     } catch (_) {
       return const [];

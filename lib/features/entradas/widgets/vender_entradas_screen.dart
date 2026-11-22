@@ -201,6 +201,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// después, VER DE NUEVO, la COPIA. Solo en memoria: VENTAS → REIMPRIMIR
   /// saca siempre la COPIA.
   final Set<String> _comprobantesQueSalieron = {};
+
+  /// Mientras se arma el comprobante pedido: un segundo toque no saca otro
+  /// original (revisión del 22-nov-2026).
+  bool _sacandoComprobante = false;
   StreamSubscription<Set<String>>? _cambiosSub;
   StreamSubscription<int>? _pendienteSub;
 
@@ -841,8 +845,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     setState(() => _guardando = true);
     VentaEntradas? venta;
     try {
-      // La venta se guarda antes de abrir el comprobante: sin impresora,
-      // igual queda.
+      // La venta se guarda sola; el comprobante, solo si se pide (22-nov-2026).
       venta = await pedido.guardarEn(
         ref.read(entradasDeLaCajaProvider),
         caja: caja,
@@ -903,8 +906,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     String ventaId,
     DatosDelComprobante Function({required bool copia}) datos,
   ) async {
+    if (_sacandoComprobante) return;
     final copia = _comprobantesQueSalieron.contains(ventaId);
     final d = datos(copia: copia);
+    _sacandoComprobante = true;
     try {
       await ref.read(abrirComprobanteDeEntradasProvider)(d, context: context);
       if (mounted) setState(() => _comprobantesQueSalieron.add(ventaId));
@@ -918,6 +923,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           ),
         ),
       );
+    } finally {
+      _sacandoComprobante = false;
     }
   }
 
@@ -992,10 +999,10 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// Si se vuelve del cobro sin confirmar, la ventana se abre otra vez con lo
   /// que se había cargado.
   ///
-  /// **Con plata, sale el comprobante de la rendición** (el de la venta, con
-  /// "Recibió" y "Rinde"), como después de una venta: la rendición ya quedó
-  /// guardada antes de abrir el papel, así que sin impresora queda igual. Si
-  /// solo devolvió, no hay plata ni comprobante: queda el aviso de arriba.
+  /// **Con plata, el aviso ofrece el comprobante de la rendición** (el de la
+  /// venta, con "Recibió" y "Rinde"), como después de una venta: no sale solo
+  /// (22-nov-2026). Si solo devolvió, no hay plata ni comprobante: queda el
+  /// aviso de arriba.
   Future<void> _rendir() async {
     if (_frenaSinPermiso()) return;
     if (_ocupado) return;

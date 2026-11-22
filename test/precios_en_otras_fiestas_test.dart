@@ -25,6 +25,7 @@ const _estaId = 'e0000000-0000-4000-8000-000000000001';
 const _otraId = 'e0000000-0000-4000-8000-000000000002';
 const _terceraId = 'e0000000-0000-4000-8000-000000000003';
 const _hoyId = 'e0000000-0000-4000-8000-000000000004';
+const _anocheId = 'e0000000-0000-4000-8000-000000000005';
 
 /// Hoy, en el reloj de Argentina: el 20-nov-2026 al mediodía.
 final _hoy = DateTime.utc(2026, 11, 20, 12);
@@ -118,7 +119,7 @@ void main() {
         ),
         'Su día anterior ya pasó: la anticipada no tendría días.',
       );
-      // Con "el mismo día" sí se puede.
+      // Con "el mismo día" sí se puede, si la fiesta es después de ese día.
       expect(
         PreciosEnOtrasFiestas.problema(
           _anticipada(),
@@ -128,6 +129,48 @@ void main() {
         ),
         isNull,
       );
+      expect(
+        PreciosEnOtrasFiestas.problema(
+          _anticipada(),
+          fechaFiesta: DateTime(2026, 11, 29),
+          dia: DiaDeLaAnticipada.elMismo,
+          hoyAr: _hoy,
+        ),
+        isNull,
+      );
+    });
+
+    // Revisión del 22-nov-2026.
+    test('con "el mismo día", una fiesta que es ese día o antes no puede: la '
+        'anticipada seguiría su misma noche', () {
+      for (final dia in [DateTime(2026, 11, 28), DateTime(2026, 11, 25)]) {
+        expect(
+          PreciosEnOtrasFiestas.problema(
+            _anticipada(),
+            fechaFiesta: dia,
+            dia: DiaDeLaAnticipada.elMismo,
+            hoyAr: _hoy,
+          ),
+          'Es el 28/11 o antes: la anticipada seguiría la noche de la fiesta.',
+        );
+      }
+      // Con la General no hay día que mirar.
+      expect(
+        PreciosEnOtrasFiestas.problema(
+          _general,
+          fechaFiesta: DateTime(2026, 11, 25),
+          dia: DiaDeLaAnticipada.elMismo,
+          hoyAr: _hoy,
+        ),
+        isNull,
+      );
+    });
+
+    test('se ofrecen las de hoy en adelante; la de anoche no', () {
+      expect(PreciosEnOtrasFiestas.seOfrece(DateTime(2026, 11, 20), _hoy), isTrue);
+      expect(PreciosEnOtrasFiestas.seOfrece(DateTime(2026, 12, 6), _hoy), isTrue);
+      expect(PreciosEnOtrasFiestas.seOfrece(DateTime(2026, 11, 19), _hoy), isFalse);
+      expect(PreciosEnOtrasFiestas.seOfrece(null, _hoy), isTrue);
     });
 
     test('viene elegido "el día anterior" si en PRECIOS quedó el propuesto; si no, "el '
@@ -290,24 +333,39 @@ void main() {
       expect(find.text('Precios de las entradas'), findsNothing);
     });
 
-    testWidgets('con "el 28/11", todas terminan ese día; TODAS tilda las que se pueden',
-        (tester) async {
-      otras = [_otra, _tercera, fiestaDePrueba(_hoyId, 'ES HOY', DateTime(2026, 11, 20))];
+    // Revisión del 22-nov-2026: con "el mismo día", una fiesta que es ese día o
+    // antes tendría la anticipada vigente su misma noche (en la puerta se
+    // cobraría la anticipada): no se puede tildar. Y la de anoche no se ofrece.
+    testWidgets('con "el 28/11", todas terminan ese día, salvo la que es antes; TODAS '
+        'tilda las que se pueden, y la de anoche no está', (tester) async {
+      otras = [
+        _otra,
+        _tercera,
+        fiestaDePrueba(_hoyId, 'ES HOY', DateTime(2026, 11, 20)),
+        fiestaDePrueba(_anocheId, 'FUE ANOCHE', DateTime(2026, 11, 19)),
+      ];
       await abrir(tester);
       await guardarAnticipada(tester);
-      // La del 20-nov: su víspera ya pasó, no se puede con "el día anterior".
+      expect(find.byKey(const Key('precios_otras_$_anocheId')), findsNothing,
+          reason: 'la de anoche ya pasó');
+      // La de hoy: su víspera ya pasó, no se puede con "el día anterior".
       expect(texto(tester, 'precios_otras_${_hoyId}_hoy'),
           'Su día anterior ya pasó: la anticipada no tendría días.');
       await tocar(tester, 'precios_otras_todas');
       expect(find.text('PONER EN 2 FIESTAS'), findsOneWidget);
       await tester.tap(find.byKey(const Key('precios_otras_dia_mismo')));
       await tester.pumpAndSettle();
+      // Con "el 28/11", tampoco: es antes del 28.
+      expect(texto(tester, 'precios_otras_${_hoyId}_hoy'),
+          'Es el 28/11 o antes: la anticipada seguiría la noche de la fiesta.');
       await tocar(tester, 'precios_otras_todas');
-      expect(find.text('PONER EN 3 FIESTAS'), findsOneWidget);
+      expect(find.text('PONER EN 2 FIESTAS'), findsOneWidget);
       await tocar(tester, 'precios_otras_poner');
-      for (final id in [_otraId, _terceraId, _hoyId]) {
+      for (final id in [_otraId, _terceraId]) {
         expect(entradas.configs[id]!.anticipadaHasta, '2026-11-28');
       }
+      expect(entradas.configs[_hoyId], isNull);
+      expect(entradas.configs[_anocheId], isNull);
     });
 
     testWidgets('con la General, sin la pregunta del día', (tester) async {

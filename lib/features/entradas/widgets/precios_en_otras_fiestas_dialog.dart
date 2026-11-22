@@ -277,103 +277,108 @@ class _PreciosEnOtrasFiestasDialogState
     final rojo = Theme.of(context).colorScheme.error;
     final terminado = _quedaron != null;
     final cuantas = _aPoner.length;
-    return AlertDialog(
-      title: const Text('¿Poner estos precios también en otras fiestas?'),
-      content: SizedBox(
-        width: 520,
-        child: _cargando
-            ? const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : terminado
-                ? _terminado(rojo)
-                : SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          PreciosEnOtrasFiestas.loQueSePone(widget.elegido, _dia),
-                          key: const Key('precios_otras_que'),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        Text(
-                          'Y lo mismo de la mesa adicional, las sillas, el recargo y '
-                          'los descuentos. Cambiar el precio no toca ninguna venta hecha.',
-                          style: TextStyle(fontSize: 12, color: gris),
-                        ),
-                        if (_esAnticipada) ...[
+    // Mientras pone los precios, Atrás (el del celular) no lo corta: se
+    // perdería en cuáles quedó (revisión del 22-nov-2026).
+    return PopScope(
+      canPop: !_poniendo,
+      child: AlertDialog(
+        title: const Text('¿Poner estos precios también en otras fiestas?'),
+        content: SizedBox(
+          width: 520,
+          child: _cargando
+              ? const SizedBox(
+                  height: 120,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : terminado
+                  ? _terminado(rojo)
+                  : SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            PreciosEnOtrasFiestas.loQueSePone(widget.elegido, _dia),
+                            key: const Key('precios_otras_que'),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            'Y lo mismo de la mesa adicional, las sillas, el recargo y '
+                            'los descuentos. Cambiar el precio no toca ninguna venta hecha.',
+                            style: TextStyle(fontSize: 12, color: gris),
+                          ),
+                          if (_esAnticipada) ...[
+                            const SizedBox(height: 14),
+                            _queDia(),
+                          ],
                           const SizedBox(height: 14),
-                          _queDia(),
-                        ],
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            const Expanded(
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Tildá las que quieras',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              TextButton(
+                                key: const Key('precios_otras_todas'),
+                                onPressed: _poniendo
+                                    ? null
+                                    : () => setState(() {
+                                          for (final f in widget.fiestas) {
+                                            if (_problemaDe(f) == null) {
+                                              _tildadas.add(f.id);
+                                            }
+                                          }
+                                        }),
+                                child: const Text('TODAS'),
+                              ),
+                            ],
+                          ),
+                          for (final f in widget.fiestas) _fiesta(f, gris, rojo),
+                          if (_problema != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 10),
                               child: Text(
-                                'Tildá las que quieras',
-                                style: TextStyle(fontWeight: FontWeight.w700),
+                                _problema!,
+                                key: const Key('precios_otras_problema'),
+                                style: TextStyle(color: rojo, fontWeight: FontWeight.w600),
                               ),
                             ),
-                            TextButton(
-                              key: const Key('precios_otras_todas'),
-                              onPressed: _poniendo
-                                  ? null
-                                  : () => setState(() {
-                                        for (final f in widget.fiestas) {
-                                          if (_problemaDe(f) == null) {
-                                            _tildadas.add(f.id);
-                                          }
-                                        }
-                                      }),
-                              child: const Text('TODAS'),
-                            ),
-                          ],
-                        ),
-                        for (final f in widget.fiestas) _fiesta(f, gris, rojo),
-                        if (_problema != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(
-                              _problema!,
-                              key: const Key('precios_otras_problema'),
-                              style: TextStyle(color: rojo, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
+                    ),
+        ),
+        actions: terminado
+            ? [
+                FilledButton(
+                  key: const Key('precios_otras_listo_cerrar'),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('LISTO'),
+                ),
+              ]
+            : [
+                TextButton(
+                  key: const Key('precios_otras_no'),
+                  onPressed: _poniendo ? null : () => Navigator.pop(context),
+                  child: const Text('NO, SOLO ESTA'),
+                ),
+                Tooltip(
+                  message: esJefe ? 'Poner los precios en las tildadas' : kSoloEnModoJefe,
+                  child: FilledButton(
+                    key: const Key('precios_otras_poner'),
+                    onPressed: !esJefe || _cargando || _poniendo || cuantas == 0
+                        ? null
+                        : _poner,
+                    child: Text(
+                      cuantas == 0
+                          ? 'PONER'
+                          : 'PONER EN ${cuantas == 1 ? '1 FIESTA' : '$cuantas FIESTAS'}',
                     ),
                   ),
-      ),
-      actions: terminado
-          ? [
-              FilledButton(
-                key: const Key('precios_otras_listo_cerrar'),
-                onPressed: () => Navigator.pop(context),
-                child: const Text('LISTO'),
-              ),
-            ]
-          : [
-              TextButton(
-                key: const Key('precios_otras_no'),
-                onPressed: _poniendo ? null : () => Navigator.pop(context),
-                child: const Text('NO, SOLO ESTA'),
-              ),
-              Tooltip(
-                message: esJefe ? 'Poner los precios en las tildadas' : kSoloEnModoJefe,
-                child: FilledButton(
-                  key: const Key('precios_otras_poner'),
-                  onPressed: !esJefe || _cargando || _poniendo || cuantas == 0
-                      ? null
-                      : _poner,
-                  child: Text(
-                    cuantas == 0
-                        ? 'PONER'
-                        : 'PONER EN ${cuantas == 1 ? '1 FIESTA' : '$cuantas FIESTAS'}',
-                  ),
                 ),
-              ),
-            ],
+              ],
+      ),
     );
   }
 }

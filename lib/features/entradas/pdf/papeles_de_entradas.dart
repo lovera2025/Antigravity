@@ -48,8 +48,9 @@ final abrirComprobanteDeEntradasProvider =
 });
 
 /// Arma la constancia "ENTRADAS PARA RENDIR" (una A4 con dos copias de media
-/// hoja, para firmar) y la entrega como los demás papeles. Sale al DAR y desde
-/// PARA RENDIR → CONSTANCIA. Los tests y las ventanas de prueba la reemplazan.
+/// hoja, para firmar) y la entrega como los demás papeles. Sale con IMPRIMIR LA
+/// CONSTANCIA después de DAR y con PARA RENDIR → CONSTANCIA: nunca sola
+/// (22-nov-2026). Los tests y las ventanas de prueba la reemplazan.
 typedef AbrirConstanciaParaRendir = Future<void> Function(
   DatosDeLaConstancia datos, {
   BuildContext? context,

@@ -348,6 +348,10 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
   }) async {
     if (_frenaSinModoJefe()) return;
     if (_ocupado) return;
+    // Lo devuelto cuyos números ya se vendieron (o se dieron) no se anula
+    // (22-nov-2026): se dice antes de pedir el motivo.
+    if (await _choca(movimiento)) return;
+    if (!mounted) return;
     final motivo = await pedirMotivo(
       context,
       titulo: 'Anular $que',
@@ -360,6 +364,9 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
     if (motivo == null || !mounted) return;
     // Otra vez la llave: el modo jefe pudo cerrarse con la ventana abierta.
     if (_frenaSinModoJefe()) return;
+    // Y otra vez los números: con la ventana abierta pudo bajar una venta.
+    if (await _choca(movimiento)) return;
+    if (!mounted) return;
     setState(() => _ocupado = true);
     try {
       await ref.read(entradasDelJefeProvider).anularDeParaRendir(
@@ -381,6 +388,23 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
       _decir('No se pudo anular. Probá de nuevo.');
     } finally {
       if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  /// Si [movimiento] es un "devolvió" cuyos números ya tienen otro dueño
+  /// (`ParaRendir.errorAlAnularLoDevuelto`), con lo de la fiesta recién leído:
+  /// lo dice y devuelve true. Si no se puede leer, deja seguir: el aviso de
+  /// números cruzados de PARA RENDIR sigue ahí.
+  Future<bool> _choca(MovimientoParaRendir movimiento) async {
+    if (!movimiento.esDevolvio) return false;
+    try {
+      final cuenta = await ref.refresh(paraRendirDeLaFiestaProvider(_id).future);
+      final error = cuenta.errorAlAnularLoDevuelto(movimiento);
+      if (error == null) return false;
+      _decir(error);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
