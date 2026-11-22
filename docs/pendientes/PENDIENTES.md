@@ -22,6 +22,11 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 
 ## Los pendientes
 
+### Para la semana del 24-nov-2026
+
+- [Dar entradas para rendir también desde VENDER](dar-para-rendir-desde-vender.md) — que quien vende (la caja de
+  AGOS) pueda darlas, no solo el jefe. Para el martes o miércoles; sin programar.
+
 ### La 6.1.0 (decidida el 16 y el 18-oct-2026)
 
 Una sola versión con todo junto, en este orden. El estado de cada parte está en
