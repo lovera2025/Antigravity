@@ -11,6 +11,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/entradas/cuentas/lugares_de_la_familia.dart';
+import 'package:arguello_events/features/entradas/cuentas/numeros_de_entradas.dart'
+    show kTalonarioObligatorio;
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/eventos/services/adicional_a_confirmar.dart';
@@ -19,6 +21,7 @@ import 'package:arguello_events/features/eventos/services/lugares_pagos.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
 
 const _fiesta = 'e0000000-0000-4000-8000-000000000001';
 const _id = 'c0000000-0000-4000-8000-000000000001';
@@ -197,7 +200,9 @@ void main() {
       final pedido = _pedidoDe(l);
       expect(pedido.deLugar, 8, reason: 'viene con las de lo pago');
       expect(pedido.conDeLugar(16).deLugar, 8, reason: 'lo que no está pago no se vende');
-      expect(pedido.falta, isNull);
+      // Con el número del talonario, obligatorio desde el 22-nov-2026.
+      expect(pedido.falta, kTalonarioObligatorio);
+      expect(pedido.conTramos(const [TramoTalonario(1, 8)]).falta, isNull);
     });
 
     // Revisión del 20-nov-2026: con las adicionales "Al final" (la 12 sola
@@ -242,7 +247,7 @@ void main() {
       expect(l.textoAConfirmar, isNull);
       final pedido = _pedidoDe(l);
       expect(pedido.deLugarQueVan, 8);
-      expect(pedido.falta, isNull);
+      expect(pedido.conTramos(const [TramoTalonario(1, 8)]).falta, isNull);
     });
 
     test('lo pagado sale de los pagos: un pago anulado no cuenta, y los campos '
@@ -465,7 +470,8 @@ void main() {
       final p = PedidoDeEntradas.nuevo(config: _config(), hoyAr: _hoy)
           .conSueltas(6)
           .paraLaFamilia(_id, l)
-          .conComprador('COMPRADORA, UNA');
+          .conComprador('COMPRADORA, UNA')
+          .conTramos(const [TramoTalonario(1, 2)]);
       expect(p.sueltasQueVan, 2);
       expect(p.cantidad, 2);
       expect(p.conSueltas(6).cantidad, 2);
