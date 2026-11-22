@@ -5,8 +5,12 @@ import '../../barra/cuentas/pesos.dart';
 import '../../barra/jefe/barra_jefe_providers.dart';
 import '../../barra/providers/barra_providers.dart' show eventosDeLaBarraProvider;
 import '../../barra/services/fiestas_del_jefe.dart';
+import '../../../models/evento.dart';
 import '../../entradas/cuentas/cierre_de_entradas.dart';
+import '../../entradas/pdf/cierre_caja_entradas_pdf.dart';
+import '../../entradas/pdf/papeles_de_entradas.dart';
 import '../../entradas/providers/entradas_providers.dart';
+import '../../entradas/services/nombre_de_la_fiesta.dart';
 import 'entregas_del_cierre.dart';
 import 'estilo_del_sector.dart';
 
@@ -30,8 +34,10 @@ final fiestasDeEntradasDelCierreProvider = FutureProvider<FiestasDelJefe>((ref) 
 /// descuentos a mano, las anuladas, lo contado y la diferencia; los totales de
 /// la fiesta y lo anulado después de cerrar.
 ///
-/// **Solo para mirar:** anular, verificar y reimprimir están en VENTAS. La web
-/// no tiene la base del equipo: ahí lo dice ([kEntradasDesdeLaPc]).
+/// Anular, verificar y reimprimir una venta están en VENTAS. Lo único que se
+/// hace acá es **sacar el papel del cierre de una caja cerrada** (22-nov-2026:
+/// ningún papel sale solo, y al cerrar se puede salir sin sacarlo). La web no
+/// tiene la base del equipo: ahí lo dice ([kEntradasDesdeLaPc]).
 class SectorEntradasDelCierre extends ConsumerWidget {
   final bool isDark;
 
@@ -77,7 +83,9 @@ class SectorEntradasDelCierre extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               'Las entradas van por fiesta, no por día: la de anoche sigue acá hasta '
-              'mañana. Solo para mirar: anular, verificar y reimprimir están en VENTAS.',
+              'mañana. El papel del cierre de cada caja cerrada sale con la '
+              'impresora de su renglón; anular, verificar y reimprimir una venta '
+              'están en VENTAS.',
               style: TextStyle(fontSize: 12, color: muted),
             ),
             const SizedBox(height: 14),
@@ -99,7 +107,11 @@ class SectorEntradasDelCierre extends ConsumerWidget {
                           'Esta fiesta todavía no tiene precio de entrada: se pone en '
                               'ENTRADAS → PRECIOS.',
                         ))
-                  : _Resumen(datos: d, isDark: isDark),
+                  : _Resumen(
+                      datos: d,
+                      isDark: isDark,
+                      alSacarElPapel: (c) => _papelDelCierre(context, ref, fiesta, c),
+                    ),
             ),
             // La caja de entregas (20-nov-2026): lo sin cargo no necesita caja
             // ni precio, así que va siempre, aunque no haya cajas de venta.
@@ -110,6 +122,35 @@ class SectorEntradasDelCierre extends ConsumerWidget {
       },
     );
   }
+
+  /// PAPEL DEL CIERRE de la caja cerrada [c]: el mismo de IMPRIMIR EL CIERRE,
+  /// con las cuentas de su renglón (lo contado y la diferencia, de lo anotado
+  /// al cerrar). No escribe nada.
+  Future<void> _papelDelCierre(
+    BuildContext context,
+    WidgetRef ref,
+    Evento fiesta,
+    ResumenDeCajaEntradas c,
+  ) async {
+    try {
+      await ref.read(abrirCierreDeEntradasProvider)(
+        DatosDelCierreDeEntradas(
+          caja: c.caja,
+          cuentas: c.cuentas,
+          fiesta: nombreDeLaFiesta(fiesta),
+          fechaFiesta: fiesta.fechaEvento,
+        ),
+        context: context,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo abrir el papel del cierre. Probá de nuevo.'),
+        ),
+      );
+    }
+  }
 }
 
 /// La tabla de cajas, con su línea de totales, y debajo lo vendido, lo anulado
@@ -118,7 +159,14 @@ class _Resumen extends StatelessWidget {
   final CajasDeEntradasDeLaFiesta datos;
   final bool isDark;
 
-  const _Resumen({required this.datos, required this.isDark});
+  /// PAPEL DEL CIERRE de una caja cerrada.
+  final void Function(ResumenDeCajaEntradas caja) alSacarElPapel;
+
+  const _Resumen({
+    required this.datos,
+    required this.isDark,
+    required this.alSacarElPapel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +222,7 @@ class _Resumen extends StatelessWidget {
               titulo('ANUL.'),
               titulo('CONTÓ'),
               titulo('DIFERENCIA'),
+              titulo('PAPEL'),
             ]),
             for (final c in d.cajas)
               TableRow(
@@ -201,6 +250,19 @@ class _Resumen extends StatelessWidget {
                           fuerte: true,
                           key: Key('cierre_entradas_diferencia_${c.caja.id}'),
                         ),
+                  // El papel del cierre, solo de una caja cerrada: el de una
+                  // abierta todavía no existe.
+                  c.caja.abierta
+                      ? celda('—', color: muted)
+                      : Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            key: Key('cierre_entradas_papel_${c.caja.id}'),
+                            tooltip: 'PAPEL DEL CIERRE',
+                            icon: const Icon(Icons.print_outlined, size: 20),
+                            onPressed: () => alSacarElPapel(c),
+                          ),
+                        ),
                 ],
               ),
             TableRow(
@@ -226,6 +288,7 @@ class _Resumen extends StatelessWidget {
                         color: colorDeLaDiferencia(d.diferencia),
                         fuerte: true,
                       ),
+                const SizedBox.shrink(),
               ],
             ),
           ],

@@ -27,7 +27,8 @@ import 'abrir_caja_entradas_dialog.dart' show kSinPermisoParaVender;
 ///    Se confirma viendo el número grande.
 /// 2. **El cierre.** Recién cerrada se ve cuánto tenía que haber, lo contado y
 ///    la diferencia ("Justo", "Sobran $ 500", "Faltan $ 1.500"), y las cuentas
-///    de la caja. Sale su papel (media A4).
+///    de la caja. Su papel (media A4) **no sale solo** (22-nov-2026): IMPRIMIR
+///    EL CIERRE, o después Cierre de caja → ENTRADAS → PAPEL DEL CIERRE.
 ///
 /// **Una caja cerrada no se vuelve a cerrar ni se corrige:** solo se le puede
 /// agregar la nota. Sin el OK de una encargada: eso es de la barra.
@@ -59,10 +60,6 @@ class _CerrarCajaEntradasScreenState
   List<AnulacionEntradas> _anulaciones = const [];
   bool _ocupado = false;
   ({String texto, bool error})? _aviso;
-
-  /// Si el papel del cierre salió. Si no, LISTO pregunta antes de salir: el papel
-  /// se saca solo desde acá.
-  bool _salioElPapel = false;
 
   @override
   void initState() {
@@ -193,16 +190,18 @@ class _CerrarCajaEntradasScreenState
     }
     avisarQueCambioLaVenta(ref, widget.evento.id);
     if (!mounted) return;
+    // El papel no sale solo (pedido del usuario, 22-nov-2026): queda IMPRIMIR
+    // EL CIERRE, y después, en Cierre de caja → ENTRADAS, PAPEL DEL CIERRE.
     setState(() {
       _cerrada = cerrada;
       _ocupado = false;
     });
-    await _imprimir(alCerrar: true);
+    _decir('Caja cerrada.');
   }
 
   // ── 2. El cierre ─────────────────────────────────────────────────────────
 
-  Future<void> _imprimir({bool alCerrar = false}) async {
+  Future<void> _imprimir() async {
     final caja = _cerrada;
     if (caja == null || _ocupado) return;
     setState(() => _ocupado = true);
@@ -216,14 +215,9 @@ class _CerrarCajaEntradasScreenState
         ),
         context: context,
       );
-      _salioElPapel = true;
-      _decir(alCerrar ? 'Caja cerrada. Salió el papel del cierre.' : 'Salió el papel del cierre.');
     } catch (_) {
       // La caja ya quedó cerrada: lo único que falló es el papel.
-      _decir(
-        '${alCerrar ? 'Caja cerrada. ' : ''}No salió el papel: tocá IMPRIMIR EL CIERRE.',
-        error: true,
-      );
+      _decir('No se pudo abrir el papel del cierre. Probá de nuevo.', error: true);
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -255,35 +249,11 @@ class _CerrarCajaEntradasScreenState
     }
   }
 
-  /// LISTO: se va el cierre, y VENDER también. Si el papel no salió, pregunta
-  /// antes: después no se puede volver a sacar.
+  /// LISTO: se va el cierre, y VENDER también. No pregunta por el papel
+  /// (22-nov-2026): si hace falta, se saca después en Cierre de caja →
+  /// ENTRADAS → PAPEL DEL CIERRE.
   Future<void> _listo() async {
     if (_ocupado) return;
-    if (!_salioElPapel) {
-      final salir = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('No salió el papel del cierre'),
-          content: const Text('Después no se puede volver a sacar. ¿Salir igual?'),
-          actions: [
-            TextButton(
-              key: const Key('cierre_salir_igual'),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('SALIR IGUAL'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('IMPRIMIR EL CIERRE'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      if (salir != true) {
-        await _imprimir();
-        return;
-      }
-    }
     Navigator.of(context).pop(true);
   }
 

@@ -441,8 +441,8 @@ void main() {
     expect(find.byKey(const Key('cierre_sector_entradas')), findsNothing);
   });
 
-  testWidgets('Carla, con el mouse: abre la caja, le vende a PÉREZ y sale el comprobante',
-      (tester) async {
+  testWidgets('Carla, con el mouse: abre la caja, le vende a PÉREZ y saca el comprobante '
+      'con su botón', (tester) async {
     await abrir(tester);
     // PÉREZ debe su mesa adicional: desde el 20-nov-2026 lo de A PAGAR se vende
     // solo si está pago entero. La paga antes, en la caja de cuotas.
@@ -457,8 +457,12 @@ void main() {
       await tocar(tester, 'vender_linea_mesa_1_menos');
     }
     await cobrarEnEfectivo(tester, 'PEREZ, MARTA');
+    // Ningún papel sale solo (22-nov-2026): IMPRIMIR EL COMPROBANTE.
+    expect(lados.papeles.comprobantes, isEmpty);
+    await tocar(tester, 'vender_ver_comprobante');
     expect(lados.papeles.comprobantes, hasLength(1));
     expect(lados.papeles.comprobantes.single.venta.cantidad, 3);
+    expect(lados.papeles.comprobantes.single.copia, isFalse);
     expect(enElJefe('3 vendidas de 24'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -599,6 +603,8 @@ void main() {
       expect(venta.numeros, '2001-2008');
       expect(venta.total, 40000);
       expect(venta.contratoAlumnoId, _acosta);
+      expect(lados.papeles.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+      await tocar(tester, 'vender_ver_comprobante');
       expect(lados.papeles.comprobantes.single.venta.id, venta.id);
       // El jefe: la venta, en su entrega y en VENTAS.
       expect(lados.pc.listaVentas.map((v) => v.id), contains(venta.id));

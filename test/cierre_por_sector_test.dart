@@ -16,6 +16,8 @@ import 'package:arguello_events/features/cierre_caja/widgets/sector_barra.dart';
 import 'package:arguello_events/features/cierre_caja/widgets/sector_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart'
     hide MedioBarra;
+import 'package:arguello_events/features/entradas/pdf/cierre_caja_entradas_pdf.dart';
+import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/models/evento.dart';
 
@@ -168,6 +170,7 @@ void main() {
       EntradasEnMemoria entradas, {
       Size tamano = const Size(1100, 900),
       bool enLaWeb = false,
+      List<DatosDelCierreDeEntradas>? papeles,
     }) async {
       tester.view.physicalSize = tamano;
       tester.view.devicePixelRatio = 1;
@@ -175,6 +178,10 @@ void main() {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           ...prueba.reemplazos,
+          // PAPEL DEL CIERRE (22-nov-2026): se anota, no se abre.
+          abrirCierreDeEntradasProvider.overrideWithValue((datos, {context}) async {
+            papeles?.add(datos);
+          }),
           // En la web no hay base del equipo: la pantalla no la tiene que leer.
           if (!enLaWeb) ...entradas.reemplazos,
           if (enLaWeb) entradasEnEsteEquipoProvider.overrideWithValue(false),
@@ -277,6 +284,30 @@ void main() {
       expect(find.text('1 abierta'), findsOneWidget);
       expect(find.text('1 cerrada'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    // 22-nov-2026: el papel del cierre no sale solo y al cerrar se puede salir
+    // sin sacarlo; acá se saca después, solo el de una caja cerrada, con lo
+    // anotado al cerrar.
+    testWidgets('PAPEL DEL CIERRE: solo en la caja cerrada, con lo que se anotó al cerrar',
+        (tester) async {
+      final e = EntradasEnMemoria();
+      final (carla, maxi) = await dosCajas(e);
+      e.escrituras = 0;
+      final papeles = <DatosDelCierreDeEntradas>[];
+      await abrirEntradas(tester, e, papeles: papeles);
+      expect(find.byKey(Key('cierre_entradas_papel_${carla.id}')), findsNothing,
+          reason: 'la caja abierta todavía no tiene cierre');
+      expect(find.byKey(Key('cierre_entradas_papel_${maxi.id}')), findsOneWidget);
+      await tester.tap(find.byKey(Key('cierre_entradas_papel_${maxi.id}')));
+      await tester.pumpAndSettle();
+      final papel = papeles.single;
+      expect(papel.caja.id, maxi.id);
+      expect(papel.caja.efectivoContado, 41500);
+      expect(papel.caja.diferencia, -500);
+      expect(papel.cuentas.entradas, 3, reason: 'solo lo de su caja, sin las anuladas');
+      expect(papel.fiesta, 'TÉCNICA PINAROLI');
+      expect(e.escrituras, 0, reason: 'el papel no escribe nada');
     });
 
     testWidgets('en la web no puede abrir la base del equipo: lo dice', (tester) async {

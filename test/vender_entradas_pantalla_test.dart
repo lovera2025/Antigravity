@@ -1109,7 +1109,11 @@ void main() {
       expect(v.hechoPor, 'Carla');
       expect(v.cajaEntradasId, m.entradas.listaCajas.single.id);
 
-      // El comprobante, de esa venta, con el alumno y su mesa.
+      // El comprobante no sale solo (22-nov-2026): lo saca IMPRIMIR EL
+      // COMPROBANTE del aviso, de esa venta, con el alumno y su mesa.
+      expect(m.comprobantes, isEmpty);
+      await _tocar(tester, 'vender_ver_comprobante');
+      await tester.pumpAndSettle();
       final c = m.comprobantes.single;
       expect(c.venta.id, v.id);
       expect(c.fiesta, 'PUERTO VIEJO');
@@ -1471,19 +1475,40 @@ void main() {
   });
 
   group('cobrar y guardar', () {
-    testWidgets('el comprobante se vuelve a abrir desde el aviso, como COPIA',
-        (tester) async {
+    testWidgets(
+        'el comprobante no sale solo: IMPRIMIR EL COMPROBANTE saca el original y '
+        'después VER DE NUEVO, la COPIA (22-nov-2026)', (tester) async {
       final m = await _montar(tester);
       await _aAlguienDeAfuera(tester);
       await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
       await _tocar(tester, 'vender_efectivo');
       await tester.pumpAndSettle();
       await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas, hasLength(1));
+      expect(m.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('vender_ver_comprobante')),
+          matching: find.text('IMPRIMIR EL COMPROBANTE'),
+        ),
+        findsOneWidget,
+      );
+      await _tocar(tester, 'vender_ver_comprobante');
+      await tester.pumpAndSettle();
+      expect(m.comprobantes, hasLength(1));
+      expect(m.comprobantes.single.copia, isFalse, reason: 'la primera vez, el original');
+      expect(m.comprobantes.single.alumno, isNull, reason: 'compró alguien de afuera');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('vender_ver_comprobante')),
+          matching: find.text('VER DE NUEVO'),
+        ),
+        findsOneWidget,
+      );
       await _tocar(tester, 'vender_ver_comprobante');
       await tester.pumpAndSettle();
       expect(m.comprobantes, hasLength(2));
-      expect(m.comprobantes.last.copia, isTrue);
-      expect(m.comprobantes.last.alumno, isNull, reason: 'compró alguien de afuera');
+      expect(m.comprobantes.last.copia, isTrue, reason: 'después, la COPIA');
     });
 
     testWidgets('volver del cobro no guarda nada', (tester) async {
@@ -1517,8 +1542,8 @@ void main() {
       expect(find.byKey(const Key('vender_guardada')), findsNothing);
     });
 
-    testWidgets('sin impresora la venta igual queda: se guarda antes de abrir el '
-        'comprobante', (tester) async {
+    testWidgets('sin impresora la venta igual queda; el comprobante se puede volver '
+        'a pedir', (tester) async {
       final m = await _montar(tester, fallaElComprobante: true);
       await _aAlguienDeAfuera(tester);
       await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
@@ -1527,7 +1552,17 @@ void main() {
       await _confirmarElCobro(tester);
       expect(m.entradas.listaVentas, hasLength(1));
       expect(find.byKey(const Key('vender_guardada')), findsOneWidget);
-      expect(find.textContaining('La venta quedó guardada'), findsOneWidget);
+      await _tocar(tester, 'vender_ver_comprobante');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('La venta está guardada'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('vender_ver_comprobante')),
+          matching: find.text('IMPRIMIR EL COMPROBANTE'),
+        ),
+        findsOneWidget,
+        reason: 'no salió: el próximo sigue siendo el original',
+      );
     });
   });
 
@@ -1636,7 +1671,7 @@ void main() {
       await _confirmarElCobro(tester);
       expect(find.byKey(const Key('vender_guardada')), findsOneWidget);
       final venta = m.entradas.listaVentas.single;
-      expect(m.comprobantes.single.anulacion, isNull);
+      expect(m.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
       await m.entradas.anular(venta, motivo: 'error de carga', devueltas: true, quien: 'Jefe');
       await _tocar(tester, 'vender_ventas');
       await tester.pumpAndSettle();
@@ -1843,9 +1878,12 @@ void main() {
       expect(find.byKey(const Key('vender_para_rendir')), findsNothing);
       expect(_texto(tester, 'vender_rendicion_guardada_texto'),
           r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 · $ 120.000');
-      // Sale el comprobante de la rendición (no el de una venta), con la
-      // rendición ya guardada: quién rinde, lo que devolvió en este acto y lo
-      // que le quedó.
+      // El comprobante de la rendición (no el de una venta) no sale solo
+      // (22-nov-2026): lo saca IMPRIMIR EL COMPROBANTE del aviso, con quién
+      // rinde, lo que devolvió en este acto y lo que le quedó.
+      expect(m.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+      await _tocar(tester, 'vender_ver_comprobante_rendicion');
+      await tester.pumpAndSettle();
       final c = m.comprobantes.single;
       expect(c.venta.id, venta.id);
       expect(c.copia, isFalse);
@@ -1860,15 +1898,21 @@ void main() {
           'le quedan 0');
       expect(find.byKey(const Key('vender_ver_comprobante')), findsNothing,
           reason: 'el aviso de una venta común no está');
-      // VER EL COMPROBANTE del aviso: el mismo, como COPIA.
+      // VER DE NUEVO: el mismo, como COPIA.
       await _tocar(tester, 'vender_ver_comprobante_rendicion');
       expect(m.comprobantes, hasLength(2));
       expect(m.comprobantes.last.copia, isTrue);
       expect(m.comprobantes.last.rendicion?.devolvio, 5);
     });
 
-    /// RENDIR con [vendio] vendidas y [devuelve] devueltas, en efectivo.
-    Future<void> rendirEnEfectivo(WidgetTester tester, {int vendio = 15, int devuelve = 5}) async {
+    /// RENDIR con [vendio] vendidas y [devuelve] devueltas, en efectivo; con
+    /// [imprimir], después saca el comprobante del aviso (no sale solo).
+    Future<void> rendirEnEfectivo(
+      WidgetTester tester, {
+      int vendio = 15,
+      int devuelve = 5,
+      bool imprimir = true,
+    }) async {
       await _tocar(tester, 'vender_rendir');
       await tester.pumpAndSettle();
       await _tocar(tester, 'rendir_vendio_mas', veces: vendio);
@@ -1876,13 +1920,17 @@ void main() {
       await _tocar(tester, 'rendir_efectivo');
       await tester.pumpAndSettle();
       await _confirmarElCobro(tester);
+      if (imprimir) {
+        await _tocar(tester, 'vender_ver_comprobante_rendicion');
+        await tester.pumpAndSettle();
+      }
     }
 
-    // 22-nov-2026 (revisión de la etapa 6): la COPIA de VER EL COMPROBANTE
-    // salía con lo devuelto en ese acto y "le quedan" de ahora: si después el
-    // jefe anulaba ese "devolvió", decía "vendió 15 · devolvió 5 · le quedan 5"
-    // (25 de 20). Ahora dice cómo quedó en ese acto, igual que el papel que salió.
-    testWidgets('la COPIA de VER EL COMPROBANTE dice cómo quedó en ese acto, aunque '
+    // 22-nov-2026 (revisión de la etapa 6): la COPIA del aviso salía con lo
+    // devuelto en ese acto y "le quedan" de ahora: si después el jefe anulaba
+    // ese "devolvió", decía "vendió 15 · devolvió 5 · le quedan 5" (25 de 20).
+    // Ahora dice cómo quedó en ese acto, igual que el papel que salió.
+    testWidgets('la COPIA de VER DE NUEVO dice cómo quedó en ese acto, aunque '
         'después el jefe anule lo devuelto', (tester) async {
       final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
       await rendirEnEfectivo(tester);
@@ -1944,9 +1992,11 @@ void main() {
       await tester.pumpAndSettle();
       await _confirmarElCobro(tester);
       expect(m.entradas.listaVentas.single.cantidad, 2);
+      await _tocar(tester, 'vender_ver_comprobante_rendicion');
+      await tester.pumpAndSettle();
       expect(
-          find.text('La rendición quedó guardada. No se pudo abrir el comprobante: probá '
-              'de nuevo con VER EL COMPROBANTE.'),
+          find.text('La rendición está guardada. No se pudo abrir el comprobante: probá '
+              'de nuevo.'),
           findsOneWidget);
       expect(find.textContaining('No se guardó'), findsNothing);
       expect(find.byKey(const Key('vender_ver_comprobante_rendicion')), findsOneWidget);

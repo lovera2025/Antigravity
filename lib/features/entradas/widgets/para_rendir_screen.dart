@@ -68,6 +68,9 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
 
   /// Lo último que pasó, arriba: "Se le dieron 20 entradas a …".
   String? _hecho;
+
+  /// Si lo último fue DAR, lo dado: su aviso lleva IMPRIMIR LA CONSTANCIA.
+  MovimientoParaRendir? _recienDado;
   StreamSubscription<Set<String>>? _cambiosSub;
 
   /// Lo que, si baja de otro equipo, cambia lo que se ve: los bloques y lo
@@ -150,9 +153,9 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
   /// último día de la anticipada, el bloque quedaría fijo con un precio que ya
   /// no es el de hoy. Si no es el que se mostró, no se da y se dice cuál es.
   ///
-  /// Dadas, **sale la constancia para firmar** (sección 2 de la SPEC: "confirma
-  /// y sale la constancia"), después de guardar: sin impresora, lo dado queda
-  /// igual.
+  /// Dadas, **la constancia para firmar no sale sola** (pedido del usuario,
+  /// 22-nov-2026: ningún papel se abre solo): el aviso verde lleva IMPRIMIR LA
+  /// CONSTANCIA, y cada bloque, CONSTANCIA.
   Future<void> _dar() async {
     if (_frenaSinModoJefe()) return;
     if (_ocupado) return;
@@ -240,6 +243,7 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
       setState(() {
         _hecho = 'Se le ${dio.cantidad == 1 ? 'dio 1 entrada' : 'dieron ${dio.cantidad} entradas'} '
             'a ${dio.personaNombre} (del ${TramoTalonario.legible(dio.tramos)}) para rendir.';
+        _recienDado = dio;
         _abierta = null;
       });
     } catch (_) {
@@ -248,12 +252,10 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
-    if (dado != null && mounted) await _constanciaDeLoDado(dado);
   }
 
-  /// La constancia de lo recién dado, para firmar. Lo dado ya quedó guardado:
-  /// si el papel no abre, se dice sin asustar y se saca después desde
-  /// CONSTANCIA.
+  /// IMPRIMIR LA CONSTANCIA del aviso de lo recién dado, para firmar. Lo dado
+  /// ya quedó guardado: si el papel no abre, se dice sin asustar.
   Future<void> _constanciaDeLoDado(MovimientoParaRendir dio) async {
     BloqueParaRendir? bloque;
     try {
@@ -268,13 +270,17 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
       anulaciones: const [],
     ).bloque(dio.id);
     if (bloque == null || !mounted) return;
-    await _abrirConstancia(bloque, reimpresa: false);
+    await _abrirConstancia(bloque);
   }
 
-  /// La constancia "ENTRADAS PARA RENDIR" de [bloque]: recién dado, o
-  /// [reimpresa] desde CONSTANCIA, con cómo está ahora y de qué día es eso
-  /// ("Hoy, 22/11: …"). No escribe nada.
-  Future<void> _abrirConstancia(BloqueParaRendir bloque, {required bool reimpresa}) async {
+  /// La constancia "ENTRADAS PARA RENDIR" de [bloque]. **Sale REIMPRESA solo si
+  /// el bloque ya tiene movimientos** (vendió, devolvió, no volvieron), con cómo
+  /// está ahora y de qué día es eso ("Hoy, 22/11: …"); si no, como la de
+  /// recién dado: como ningún papel sale solo (22-nov-2026), la primera puede
+  /// salir desde CONSTANCIA, y la línea de "Hoy" no diría nada. No escribe
+  /// nada.
+  Future<void> _abrirConstancia(BloqueParaRendir bloque) async {
+    final reimpresa = bloque.tieneMovimientos;
     try {
       await ref.read(abrirConstanciaParaRendirProvider)(
         DatosDeLaConstancia(
@@ -288,10 +294,7 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
         context: context,
       );
     } catch (_) {
-      _decir(reimpresa
-          ? 'No se pudo abrir la constancia. Probá de nuevo.'
-          : 'Las entradas quedaron dadas. No se pudo abrir la constancia: sacala '
-              'con CONSTANCIA, en las entradas de ${bloque.persona}.');
+      _decir('No se pudo abrir la constancia. Probá de nuevo.');
     }
   }
 
@@ -319,8 +322,11 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
           );
       avisarQueCambioLaVenta(ref, _id);
       if (mounted) {
-        setState(() => _hecho = '${bloque.persona}: '
-            '${r.cantidad == 1 ? '1 no volvió' : '${r.cantidad} no volvieron'}.');
+        setState(() {
+          _hecho = '${bloque.persona}: '
+              '${r.cantidad == 1 ? '1 no volvió' : '${r.cantidad} no volvieron'}.';
+          _recienDado = null;
+        });
       }
     } on StateError {
       ref.invalidate(paraRendirDeLaFiestaProvider(_id));
@@ -362,7 +368,12 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
             quien: quienOpera(ref),
           );
       avisarQueCambioLaVenta(ref, _id);
-      if (mounted) setState(() => _hecho = 'Anulado: $que.');
+      if (mounted) {
+        setState(() {
+          _hecho = 'Anulado: $que.';
+          _recienDado = null;
+        });
+      }
     } on StateError {
       ref.invalidate(paraRendirDeLaFiestaProvider(_id));
       _decir(_cambioAlgo);
@@ -455,7 +466,19 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
                 color: verde,
                 icono: Icons.check_circle,
                 texto: _hecho!,
-                alCerrar: () => setState(() => _hecho = null),
+                accion: _recienDado == null
+                    ? null
+                    : TextButton(
+                        key: const Key('para_rendir_hecho_constancia'),
+                        onPressed: _ocupado
+                            ? null
+                            : () => _constanciaDeLoDado(_recienDado!),
+                        child: const Text('IMPRIMIR LA CONSTANCIA'),
+                      ),
+                alCerrar: () => setState(() {
+                  _hecho = null;
+                  _recienDado = null;
+                }),
               ),
             const SizedBox(height: 8),
             Card(
@@ -667,7 +690,7 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
               message: 'La constancia para firmar, con cómo está ahora',
               child: OutlinedButton(
                 key: Key('para_rendir_constancia_${b.id}'),
-                onPressed: _ocupado ? null : () => _abrirConstancia(b, reimpresa: true),
+                onPressed: _ocupado ? null : () => _abrirConstancia(b),
                 child: const Text('CONSTANCIA'),
               ),
             ),
@@ -898,6 +921,7 @@ class _Banda extends StatelessWidget {
     required this.color,
     required this.icono,
     required this.texto,
+    this.accion,
     this.alCerrar,
   });
 
@@ -905,6 +929,9 @@ class _Banda extends StatelessWidget {
   final Color color;
   final IconData icono;
   final String texto;
+
+  /// Un botón al lado del texto (IMPRIMIR LA CONSTANCIA), o null.
+  final Widget? accion;
   final VoidCallback? alCerrar;
 
   @override
@@ -921,10 +948,19 @@ class _Banda extends StatelessWidget {
             Icon(icono, size: 18, color: color),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                texto,
-                key: Key(clave),
-                style: TextStyle(fontWeight: FontWeight.w700, color: color),
+              // Un Wrap: en un celular el botón baja de renglón en vez de
+              // apretar el texto.
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                children: [
+                  Text(
+                    texto,
+                    key: Key(clave),
+                    style: TextStyle(fontWeight: FontWeight.w700, color: color),
+                  ),
+                  ?accion,
+                ],
               ),
             ),
             if (alCerrar != null)

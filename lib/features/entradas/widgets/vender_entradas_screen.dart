@@ -194,6 +194,13 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   /// La última venta guardada: su aviso queda arriba hasta la siguiente.
   VentaEntradas? _ultima;
+
+  /// Las ventas (y rendiciones) cuyo comprobante ya se sacó desde su aviso.
+  /// **Ningún papel sale solo** (pedido del usuario, 22-nov-2026): el aviso
+  /// lleva IMPRIMIR EL COMPROBANTE, que la primera vez saca el original y
+  /// después, VER DE NUEVO, la COPIA. Solo en memoria: VENTAS → REIMPRIMIR
+  /// saca siempre la COPIA.
+  final Set<String> _comprobantesQueSalieron = {};
   StreamSubscription<Set<String>>? _cambiosSub;
   StreamSubscription<int>? _pendienteSub;
 
@@ -857,7 +864,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     }
     final guardada = venta;
     avisarQueCambioLaVenta(ref, widget.evento.id);
-    final datos = _datosDelComprobante(guardada);
+    // El comprobante no se abre solo: lo saca IMPRIMIR EL COMPROBANTE del
+    // aviso, si hace falta (22-nov-2026).
     setState(() {
       _ultima = guardada;
       _ultimaRendicion = null;
@@ -865,7 +873,6 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       _guardando = false;
     });
     await _cargar(silencioso: true);
-    await _abrirComprobante(datos);
   }
 
   DatosDelComprobante _datosDelComprobante(VentaEntradas v, {bool copia = false}) {
@@ -890,28 +897,42 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     );
   }
 
-  Future<void> _abrirComprobante(DatosDelComprobante datos) async {
+  /// El comprobante de la venta [ventaId], desde su aviso: el original la
+  /// primera vez y la COPIA después. [datos] lo arma con o sin COPIA.
+  Future<void> _sacarComprobante(
+    String ventaId,
+    DatosDelComprobante Function({required bool copia}) datos,
+  ) async {
+    final copia = _comprobantesQueSalieron.contains(ventaId);
+    final d = datos(copia: copia);
     try {
-      await ref.read(abrirComprobanteDeEntradasProvider)(datos, context: context);
+      await ref.read(abrirComprobanteDeEntradasProvider)(d, context: context);
+      if (mounted) setState(() => _comprobantesQueSalieron.add(ventaId));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${datos.rendicion == null ? 'La venta' : 'La rendición'} quedó guardada. '
-            'No se pudo abrir el comprobante: probá de nuevo con VER EL COMPROBANTE.',
+            '${d.rendicion == null ? 'La venta' : 'La rendición'} está guardada. '
+            'No se pudo abrir el comprobante: probá de nuevo.',
           ),
         ),
       );
     }
   }
 
+  /// El texto del botón del aviso: IMPRIMIR EL COMPROBANTE hasta que salga, y
+  /// después VER DE NUEVO (la COPIA).
+  String _textoDelComprobante(String ventaId) =>
+      _comprobantesQueSalieron.contains(ventaId)
+          ? 'VER DE NUEVO'
+          : 'IMPRIMIR EL COMPROBANTE';
+
   /// El comprobante de la rendición [r]: el de su venta, con quién rinde y
   /// cómo quedó lo que se llevó **en ese acto** (`comoQuedo` de [r], no lo
-  /// de ahora de `_paraRendir`): la COPIA de VER EL COMPROBANTE dice lo mismo
-  /// que el papel que salió, aunque después el jefe anule lo devuelto o marque
-  /// NO VOLVIERON (22-nov-2026). Si la anularon, la copia sale con ANULADA,
-  /// como la de VENTAS.
+  /// de ahora de `_paraRendir`): el original y la COPIA del aviso dicen lo
+  /// mismo, aunque después el jefe anule lo devuelto o marque NO VOLVIERON
+  /// (22-nov-2026). Si la anularon, sale con ANULADA, como la de VENTAS.
   DatosDelComprobante _datosDeLaRendicion(
     _Rendida r,
     VentaEntradas v, {
@@ -1088,13 +1109,9 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       if (mounted && _guardando) setState(() => _guardando = false);
       _releerSiQuedoPendiente();
     }
-    // El comprobante de la rendición, con la plata ya guardada (y cómo quedó
-    // en este acto, leído al guardar). Si solo devolvió, no hay venta ni
+    // El comprobante de la rendición no se abre solo (22-nov-2026): lo saca
+    // IMPRIMIR EL COMPROBANTE del aviso. Si solo devolvió, no hay venta ni
     // comprobante.
-    final hecha = rendida;
-    final venta = hecha?.venta;
-    if (hecha == null || venta == null || !mounted) return;
-    await _abrirComprobante(_datosDeLaRendicion(hecha, venta));
   }
 
   /// ABRIR LA CAJA desde RENDIR: la de VENDER, la misma que se pide al entrar.
@@ -1527,9 +1544,11 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             children: [
               TextButton(
                 key: const Key('vender_ver_comprobante'),
-                onPressed: () =>
-                    _abrirComprobante(_datosDelComprobante(v, copia: true)),
-                child: const Text('VER EL COMPROBANTE'),
+                onPressed: () => _sacarComprobante(
+                  v.id,
+                  ({required copia}) => _datosDelComprobante(v, copia: copia),
+                ),
+                child: Text(_textoDelComprobante(v.id)),
               ),
               IconButton(
                 tooltip: 'Sacar el aviso',
@@ -1544,7 +1563,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   }
 
   /// "Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 ·
-  /// $ 120.000", con VER EL COMPROBANTE si hubo plata (sale como COPIA). Si
+  /// $ 120.000", con IMPRIMIR EL COMPROBANTE si hubo plata (nada sale solo). Si
   /// solo devolvió, "Devolución guardada" y nada más: no hay comprobante. Lo
   /// que le quedó es el de ese acto (`comoQuedo` de [r]), como en el papel:
   /// lo de ahora lo dice el aviso de las entradas para rendir.
@@ -1588,10 +1607,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
                 if (venta != null)
                   TextButton(
                     key: const Key('vender_ver_comprobante_rendicion'),
-                    onPressed: () => _abrirComprobante(
-                      _datosDeLaRendicion(r, venta, copia: true),
+                    onPressed: () => _sacarComprobante(
+                      venta.id,
+                      ({required copia}) =>
+                          _datosDeLaRendicion(r, venta, copia: copia),
                     ),
-                    child: const Text('VER EL COMPROBANTE'),
+                    child: Text(_textoDelComprobante(venta.id)),
                   ),
               ],
             ),

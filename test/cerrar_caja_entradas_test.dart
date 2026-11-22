@@ -214,7 +214,7 @@ void main() {
     });
 
     testWidgets('confirma viendo el número, cierra con la diferencia anotada y recién '
-        'ahí muestra lo que tenía que haber; sale el papel', (tester) async {
+        'ahí muestra lo que tenía que haber; el papel, con su botón', (tester) async {
       final m = await _montar(tester);
       await tester.enterText(find.byKey(const Key('cierre_nota')), 'un billete roto');
       await _contar(tester, '24500');
@@ -232,7 +232,12 @@ void main() {
       expect(_texto(tester, 'cierre_diferencia'), r'Faltan $ 500');
       expect(_texto(tester, 'cierre_vendidas'), '3 (3 sueltas y 0 de lugares)');
       expect(find.textContaining('Anuladas (no cuentan)'), findsOneWidget);
-      // El papel sale solo, con la caja como quedó guardada.
+      // El papel no sale solo (22-nov-2026): IMPRIMIR EL CIERRE lo saca, con
+      // la caja como quedó guardada.
+      expect(m.papeles, isEmpty, reason: 'ningún papel se abre solo');
+      expect(_texto(tester, 'cierre_aviso'), 'Caja cerrada.');
+      await tester.tap(find.byKey(const Key('cierre_imprimir')));
+      await tester.pumpAndSettle();
       expect(m.papeles.single.caja.diferencia, -500);
       expect(m.papeles.single.cuentas.efectivoEsperado, 25000);
       expect(m.papeles.single.fiesta, 'PUERTO VIEJO');
@@ -246,10 +251,11 @@ void main() {
     });
 
     // Revisión del 15-nov: Atrás no sale mientras se cierra la caja ni mientras
-    // sale el papel (la caja se cerraría igual sin que se vea el resultado ni
-    // salga el papel); cerrada y con el papel, Atrás es LISTO (VENDER se va).
-    testWidgets('Atrás espera a que se cierre la caja y salga el papel; después es LISTO',
-        (tester) async {
+    // sale el papel (la caja se cerraría igual sin que se vea el resultado);
+    // cerrada, Atrás es LISTO (VENDER se va). Desde el 22-nov el papel sale
+    // solo con IMPRIMIR EL CIERRE.
+    testWidgets('Atrás espera a que se cierre la caja y a que salga el papel pedido; '
+        'después es LISTO', (tester) async {
       final entradas = _CierreQueTarda();
       final papel = Completer<void>();
       final m = await _montar(tester, entradas: entradas, papelQueTarda: papel);
@@ -263,15 +269,17 @@ void main() {
       expect(find.byType(CerrarCajaEntradasScreen), findsOneWidget);
       expect(m.guardada.abierta, isTrue);
 
-      // 2. Cerrada, mientras sale el papel: Atrás tampoco sale ni pregunta.
+      // 2. Cerrada; mientras sale el papel pedido, Atrás tampoco sale.
       entradas.freno.complete();
       await tester.pumpAndSettle();
       expect(m.guardada.abierta, isFalse);
       expect(find.byKey(const Key('cierre_resultado')), findsOneWidget);
+      expect(m.papeles, isEmpty, reason: 'ningún papel se abre solo');
+      await tester.tap(find.byKey(const Key('cierre_imprimir')));
+      await tester.pump();
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.byType(CerrarCajaEntradasScreen), findsOneWidget);
-      expect(find.text('No salió el papel del cierre'), findsNothing);
 
       // 3. Salió el papel: Atrás es LISTO, y se van el cierre y VENDER.
       papel.complete();
@@ -320,21 +328,33 @@ void main() {
       expect(ahora.cerradas, 1);
     });
 
-    testWidgets('si no salió el papel, LISTO pregunta antes de salir', (tester) async {
+    // 22-nov-2026: el papel es solo si se quiere. Si no se sacó, LISTO sale
+    // igual, sin preguntar (se saca después en Cierre de caja → ENTRADAS).
+    testWidgets('sin sacar el papel, LISTO sale sin preguntar', (tester) async {
+      final m = await _montar(tester);
+      await _contar(tester, '25000');
+      await tester.tap(find.byKey(const Key('cierre_confirmar')));
+      await tester.pumpAndSettle();
+      expect(m.guardada.abierta, isFalse);
+      await tester.tap(find.byKey(const Key('cierre_listo')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(m.papeles, isEmpty);
+      expect(find.byType(CerrarCajaEntradasScreen), findsNothing);
+      expect(find.byType(VenderEntradasScreen), findsNothing);
+    });
+
+    testWidgets('si el papel pedido no abre, la caja queda cerrada y lo dice',
+        (tester) async {
       final m = await _montar(tester, fallaElPapel: true);
       await _contar(tester, '25000');
       await tester.tap(find.byKey(const Key('cierre_confirmar')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cierre_imprimir')));
+      await tester.pumpAndSettle();
       expect(m.guardada.abierta, isFalse, reason: 'la caja quedó cerrada igual');
       expect(_texto(tester, 'cierre_aviso'),
-          'Caja cerrada. No salió el papel: tocá IMPRIMIR EL CIERRE.');
-      await tester.tap(find.byKey(const Key('cierre_listo')));
-      await tester.pumpAndSettle();
-      expect(find.text('No salió el papel del cierre'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('cierre_salir_igual')));
-      await tester.pumpAndSettle();
-      expect(find.byType(CerrarCajaEntradasScreen), findsNothing);
-      expect(find.byType(VenderEntradasScreen), findsNothing);
+          'No se pudo abrir el papel del cierre. Probá de nuevo.');
     });
 
     testWidgets('justo: lo dice así', (tester) async {
@@ -416,13 +436,15 @@ void main() {
       expect(_texto(tester, 'cierre_esperado'), r'$ 25.000');
     });
 
-    testWidgets('IMPRIMIR EL CIERRE lo vuelve a sacar', (tester) async {
+    testWidgets('IMPRIMIR EL CIERRE lo saca las veces que haga falta', (tester) async {
       final m = await _montar(tester);
       await _contar(tester, '25000');
       await tester.tap(find.byKey(const Key('cierre_confirmar')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('cierre_imprimir')));
-      await tester.pumpAndSettle();
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(find.byKey(const Key('cierre_imprimir')));
+        await tester.pumpAndSettle();
+      }
       expect(m.papeles, hasLength(2));
     });
   });

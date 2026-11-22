@@ -356,7 +356,10 @@ void main() {
       expect(_texto(tester, 'para_rendir_total_sin_rendir'), '50');
       expect(_texto(tester, 'para_rendir_hecho'),
           'Se le dieron 20 entradas a LOPEZ ANA (del 1300 al 1319) para rendir.');
-      // Y sale sola la constancia para firmar, de lo recién dado.
+      // La constancia para firmar no sale sola (22-nov-2026): la saca IMPRIMIR
+      // LA CONSTANCIA del aviso, de lo recién dado.
+      expect(m.constancias, isEmpty, reason: 'ningún papel se abre solo');
+      await _tocar(tester, 'para_rendir_hecho_constancia');
       final constancia = m.constancias.single;
       expect(constancia.reimpresa, isFalse);
       expect(constancia.alDia, isNull, reason: 'recién dadas no hay "Hoy"');
@@ -378,11 +381,32 @@ void main() {
       expect(m.entradas.listaParaRendir.single.personaNombre, 'LOPEZ ANA');
       expect(_texto(tester, 'para_rendir_hecho'),
           'Se le dieron 20 entradas a LOPEZ ANA (del 1300 al 1319) para rendir.');
-      expect(
-          find.text('Las entradas quedaron dadas. No se pudo abrir la constancia: sacala '
-              'con CONSTANCIA, en las entradas de LOPEZ ANA.'),
-          findsOneWidget);
+      await _tocar(tester, 'para_rendir_hecho_constancia');
+      expect(find.text('No se pudo abrir la constancia. Probá de nuevo.'), findsOneWidget);
       expect(find.text('No se pudieron dar. Probá de nuevo.'), findsNothing);
+      expect(find.byKey(const Key('para_rendir_hecho_constancia')), findsOneWidget,
+          reason: 'se puede volver a probar');
+    });
+
+    // 22-nov-2026: como la primera constancia puede salir desde CONSTANCIA
+    // (nada sale solo), la de un bloque sin nada rendido sale como la de recién
+    // dado, sin REIMPRESA ni "Hoy".
+    testWidgets('CONSTANCIA de un bloque sin nada rendido sale como la original',
+        (tester) async {
+      final m = await _montar(tester);
+      await _tocar(tester, 'para_rendir_dar');
+      await _poner(tester, 'dar_nombre', 'lopez ana');
+      await _poner(tester, 'dar_del', '1300');
+      await _tocar(tester, 'dar_dar');
+      await _tocar(tester, 'dar_confirmar_si');
+      final dio = m.entradas.listaParaRendir.single;
+      expect(m.constancias, isEmpty);
+      await _tocar(tester, 'para_rendir_persona_${_deAfuera('lopez ana')}');
+      await _tocar(tester, 'para_rendir_constancia_${dio.id}');
+      final constancia = m.constancias.single;
+      expect(constancia.reimpresa, isFalse);
+      expect(constancia.alDia, isNull);
+      expect(constancia.bloque.id, dio.id);
     });
 
     testWidgets('si no se dan (cambió el precio), no sale ninguna constancia', (tester) async {
@@ -417,6 +441,7 @@ void main() {
       expect(dio.numeros, '500-509');
       expect(find.text('alumno · 5° A'), findsOneWidget);
       // La constancia dice que es alumno de la fiesta, con su división.
+      await _tocar(tester, 'para_rendir_hecho_constancia');
       expect(m.constancias.single.bloque.esDeUnAlumno, isTrue);
       expect(m.constancias.single.division, '5° A');
     });
