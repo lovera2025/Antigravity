@@ -54,8 +54,14 @@ typedef _Rendida = ({
   String persona,
   int vendidas,
   int devueltas,
-  String? ventaId,
-  double? cobrado,
+  List<TramoTalonario> numerosDevueltos,
+  // La venta con la plata, si vendió algo (solo devolver no deja venta).
+  VentaEntradas? venta,
+  // Cómo quedó lo que se llevó **justo después de esta rendición**, leído una
+  // vez al guardarla (`_comoQuedo`): de acá salen "le quedan" del aviso y el
+  // renglón del comprobante, también el de la COPIA. Null si no se pudo leer:
+  // sin ese número, nunca uno viejo ni uno de después.
+  BloqueParaRendir? comoQuedo,
 });
 
 /// VENDER: la pantalla de quien vende entradas en una fiesta (6.9.0; rehecha
@@ -395,7 +401,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         if (_ultima != null && anulaciones.any((a) => a.ventaId == _ultima!.id)) {
           _ultima = null;
         }
-        final rendida = _ultimaRendicion?.ventaId;
+        final rendida = _ultimaRendicion?.venta?.id;
         if (rendida != null && anulaciones.any((a) => a.ventaId == rendida)) {
           _ultimaRendicion = null;
         }
@@ -890,13 +896,66 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'La venta quedó guardada. No se pudo abrir el comprobante: '
-            'probá de nuevo con VER EL COMPROBANTE.',
+            '${datos.rendicion == null ? 'La venta' : 'La rendición'} quedó guardada. '
+            'No se pudo abrir el comprobante: probá de nuevo con VER EL COMPROBANTE.',
           ),
         ),
       );
+    }
+  }
+
+  /// El comprobante de la rendición [r]: el de su venta, con quién rinde y
+  /// cómo quedó lo que se llevó **en ese acto** (`comoQuedo` de [r], no lo
+  /// de ahora de `_paraRendir`): la COPIA de VER EL COMPROBANTE dice lo mismo
+  /// que el papel que salió, aunque después el jefe anule lo devuelto o marque
+  /// NO VOLVIERON (22-nov-2026). Si la anularon, la copia sale con ANULADA,
+  /// como la de VENTAS.
+  DatosDelComprobante _datosDeLaRendicion(
+    _Rendida r,
+    VentaEntradas v, {
+    bool copia = false,
+  }) {
+    AnulacionEntradas? anulacion;
+    for (final a in _anulaciones) {
+      if (a.ventaId == v.id) anulacion = a;
+    }
+    return DatosDelComprobante(
+      venta: v,
+      fiesta: _fiesta,
+      fechaFiesta: widget.evento.fechaEvento,
+      copia: copia,
+      anulacion: anulacion,
+      rendicion: RendicionDelComprobante.alRendir(
+        persona: r.persona,
+        bloque: r.comoQuedo,
+        devolvio: r.devueltas,
+        numerosDevueltos: r.numerosDevueltos,
+      ),
+    );
+  }
+
+  /// Cómo quedó lo que se llevó [bloqueId] **justo después de la rendición
+  /// recién guardada**, leído una vez de la base de este equipo, con la cuenta
+  /// de siempre (`ParaRendir.de`). No depende de que la relectura de VENDER
+  /// (`_cargar`, que no avisa si falla) haya andado. Null si no se pudo leer:
+  /// el aviso sale sin "le quedan" y el papel sin el renglón del bloque, nunca
+  /// con el número de antes de rendir.
+  Future<BloqueParaRendir?> _comoQuedo(String bloqueId) async {
+    try {
+      final id = widget.evento.id;
+      final entradas = ref.read(entradasDeLaCajaProvider);
+      final movimientos = await entradas.paraRendir(id);
+      final ventas = await entradas.ventas(id);
+      final anulaciones = await entradas.anulaciones(id);
+      return ParaRendir.de(
+        movimientos: movimientos,
+        ventas: ventas,
+        anulaciones: anulaciones,
+      ).bloque(bloqueId);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -910,9 +969,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   /// transacción, y si otro equipo rindió en el medio, no guarda nada.
   ///
   /// Si se vuelve del cobro sin confirmar, la ventana se abre otra vez con lo
-  /// que se había cargado. **El comprobante de la rendición todavía no sale**:
-  /// llega con los papeles (etapa 6). El de una venta común diría "Pulseras
-  /// normales", y quien rinde no se lleva pulseras.
+  /// que se había cargado.
+  ///
+  /// **Con plata, sale el comprobante de la rendición** (el de la venta, con
+  /// "Recibió" y "Rinde"), como después de una venta: la rendición ya quedó
+  /// guardada antes de abrir el papel, así que sin impresora queda igual. Si
+  /// solo devolvió, no hay plata ni comprobante: queda el aviso de arriba.
   Future<void> _rendir() async {
     if (_frenaSinPermiso()) return;
     if (_ocupado) return;
@@ -965,6 +1027,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
     // Otra vez la llave: el permiso pudo cambiar con la ventana abierta.
     if (_frenaSinPermiso()) return;
     setState(() => _guardando = true);
+    _Rendida? rendida;
     try {
       final rendicion = await ref.read(entradasDeLaCajaProvider).rendir(
             caja: _caja,
@@ -981,22 +1044,29 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
             quien: _quienVende.nombre,
           );
       avisarQueCambioLaVenta(ref, widget.evento.id);
+      final hecha = (
+        bloqueId: pedido.bloque.id,
+        persona: pedido.bloque.persona,
+        vendidas: pedido.vendidas,
+        devueltas: pedido.devueltas,
+        numerosDevueltos: pedido.numerosDevueltos,
+        venta: rendicion.venta,
+        // Cómo quedó, una sola vez y ahora: el aviso y los dos papeles (el de
+        // ahora y la COPIA) dicen lo de este acto. No tira: si no se puede
+        // leer, null.
+        comoQuedo: mounted ? await _comoQuedo(pedido.bloque.id) : null,
+      );
+      rendida = hecha;
       if (!mounted) return;
       setState(() {
         _ultima = null;
-        _ultimaRendicion = (
-          bloqueId: pedido.bloque.id,
-          persona: pedido.bloque.persona,
-          vendidas: pedido.vendidas,
-          devueltas: pedido.devueltas,
-          ventaId: rendicion.venta?.id,
-          cobrado: rendicion.venta?.cobrado,
-        );
+        _ultimaRendicion = hecha;
         _guardando = false;
       });
       await _cargar(silencioso: true);
     } on StateError {
-      if (mounted) {
+      // Si ya quedó guardada, lo que falló fue después: no se dice que no.
+      if (mounted && rendida == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -1009,7 +1079,7 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         await _cargar(silencioso: true);
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && rendida == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No se guardó la rendición. Probá de nuevo.')),
         );
@@ -1018,6 +1088,13 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       if (mounted && _guardando) setState(() => _guardando = false);
       _releerSiQuedoPendiente();
     }
+    // El comprobante de la rendición, con la plata ya guardada (y cómo quedó
+    // en este acto, leído al guardar). Si solo devolvió, no hay venta ni
+    // comprobante.
+    final hecha = rendida;
+    final venta = hecha?.venta;
+    if (hecha == null || venta == null || !mounted) return;
+    await _abrirComprobante(_datosDeLaRendicion(hecha, venta));
   }
 
   /// ABRIR LA CAJA desde RENDIR: la de VENDER, la misma que se pide al entrar.
@@ -1467,18 +1544,21 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
   }
 
   /// "Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 ·
-  /// $ 120.000". Sin VER EL COMPROBANTE: el papel de la rendición llega con
-  /// los papeles (etapa 6).
+  /// $ 120.000", con VER EL COMPROBANTE si hubo plata (sale como COPIA). Si
+  /// solo devolvió, "Devolución guardada" y nada más: no hay comprobante. Lo
+  /// que le quedó es el de ese acto (`comoQuedo` de [r]), como en el papel:
+  /// lo de ahora lo dice el aviso de las entradas para rendir.
   Widget _avisoDeRendicion(_Rendida r) {
     final verde = Colors.green.shade700;
-    final quedan = _paraRendir?.bloque(r.bloqueId)?.sinRendir;
+    final quedan = r.comoQuedo?.sinRendir;
+    final venta = r.venta;
     final texto = [
       r.vendidas > 0 ? 'Rendición guardada' : 'Devolución guardada',
       r.persona,
       if (r.vendidas > 0) 'vendió ${r.vendidas}',
       if (r.devueltas > 0) 'devolvió ${r.devueltas}',
       if (quedan != null) 'le quedan $quedan',
-      if (r.cobrado != null) pesos(r.cobrado!),
+      if (venta != null) pesos(venta.cobrado),
     ].join(' · ');
     return Container(
       key: const Key('vender_rendicion_guardada'),
@@ -1494,10 +1574,26 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
           Icon(Icons.check_circle, color: verde),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              texto,
-              key: const Key('vender_rendicion_guardada_texto'),
-              style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+            // Un Wrap: en un celular el botón baja de renglón en vez de
+            // apretar el texto.
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                Text(
+                  texto,
+                  key: const Key('vender_rendicion_guardada_texto'),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+                ),
+                if (venta != null)
+                  TextButton(
+                    key: const Key('vender_ver_comprobante_rendicion'),
+                    onPressed: () => _abrirComprobante(
+                      _datosDeLaRendicion(r, venta, copia: true),
+                    ),
+                    child: const Text('VER EL COMPROBANTE'),
+                  ),
+              ],
             ),
           ),
           IconButton(

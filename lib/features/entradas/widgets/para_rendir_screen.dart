@@ -18,15 +18,13 @@ import '../../eventos/repositories/contratos_repository.dart';
 import '../cuentas/para_rendir.dart';
 import '../datos/entradas_repositorio.dart';
 import '../pdf/comprobante_entradas_pdf.dart' show ComprobanteEntradasPdf;
+import '../pdf/papeles_de_entradas.dart' show abrirConstanciaParaRendirProvider;
+import '../pdf/para_rendir_pdf.dart' show DatosDeLaConstancia;
 import '../providers/entradas_providers.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'dar_para_rendir_dialog.dart';
 import 'para_rendir_comun.dart';
 import 'vender_a_pagar.dart' show ChipDeVender;
-
-/// Lo que dice el botón de la constancia mientras no se imprime (21-nov-2026:
-/// el papel para firmar llega en la etapa siguiente).
-const kConstanciaTodaviaNo = 'La constancia para firmar todavía no se imprime desde acá';
 
 /// PARA RENDIR (21-nov-2026, `docs/SPEC_entradas_para_rendir_2026-11-20.md`,
 /// sección 5): **quién se llevó entradas para venderlas por su cuenta**, qué
@@ -38,10 +36,11 @@ const kConstanciaTodaviaNo = 'La constancia para firmar todavía no se imprime d
 ///   avisan**: nada se corrige solo.
 /// - Una persona por renglón, primero quien tiene más sin rendir; tocándola se
 ///   ven sus bloques con todo lo que pasó.
-/// - **DAR ENTRADAS PARA RENDIR** ([_dar]); por bloque, **NO VOLVIERON**
-///   ([_noVolvieron]) y **ANULAR** ([_anularMovimiento]: el bloque sin nada
-///   rendido, o un "devolvió" o un "no volvieron"). **La plata de una rendición
-///   se anula en VENTAS**, como cualquier venta.
+/// - **DAR ENTRADAS PARA RENDIR** ([_dar]), que al guardar saca la constancia
+///   para firmar; por bloque, **CONSTANCIA** (reimpresa, con cómo está ahora),
+///   **NO VOLVIERON** ([_noVolvieron]) y **ANULAR** ([_anularMovimiento]: el
+///   bloque sin nada rendido, o un "devolvió" o un "no volvieron"). **La plata de
+///   una rendición se anula en VENTAS**, como cualquier venta.
 ///
 /// **Doble llave**: el botón de ENTRADAS ya llega apagado sin modo jefe, y cada
 /// guardado empieza con `_frenaSinModoJefe()` y la repite después de su ventana,
@@ -150,6 +149,10 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
   /// abierta otro equipo apretó GENERAL en PRECIOS, o pasó la medianoche del
   /// último día de la anticipada, el bloque quedaría fijo con un precio que ya
   /// no es el de hoy. Si no es el que se mostró, no se da y se dice cuál es.
+  ///
+  /// Dadas, **sale la constancia para firmar** (sección 2 de la SPEC: "confirma
+  /// y sale la constancia"), después de guardar: sin impresora, lo dado queda
+  /// igual.
   Future<void> _dar() async {
     if (_frenaSinModoJefe()) return;
     if (_ocupado) return;
@@ -178,6 +181,7 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
       hoyAr: hoy(),
     );
     if (pedido == null || !mounted) return;
+    MovimientoParaRendir? dado;
     setState(() => _ocupado = true);
     try {
       // Lo de la fiesta otra vez, recién leído: si en el medio alguien vendió
@@ -230,6 +234,7 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
         nota: pedido.nota,
         quien: quienOpera(ref),
       );
+      dado = dio;
       avisarQueCambioLaVenta(ref, _id);
       if (!mounted) return;
       setState(() {
@@ -238,9 +243,55 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
         _abierta = null;
       });
     } catch (_) {
-      _decir('No se pudieron dar. Probá de nuevo.');
+      // Si ya quedaron dadas, no se dice que no: lo que falló fue después.
+      if (dado == null) _decir('No se pudieron dar. Probá de nuevo.');
     } finally {
       if (mounted) setState(() => _ocupado = false);
+    }
+    if (dado != null && mounted) await _constanciaDeLoDado(dado);
+  }
+
+  /// La constancia de lo recién dado, para firmar. Lo dado ya quedó guardado:
+  /// si el papel no abre, se dice sin asustar y se saca después desde
+  /// CONSTANCIA.
+  Future<void> _constanciaDeLoDado(MovimientoParaRendir dio) async {
+    BloqueParaRendir? bloque;
+    try {
+      bloque = (await ref.read(paraRendirDeLaFiestaProvider(_id).future)).bloque(dio.id);
+    } catch (_) {
+      // Sin la lista, la cuenta del renglón solo (de abajo): recién dado, no
+      // tiene nada rendido.
+    }
+    bloque ??= ParaRendir.de(
+      movimientos: [dio],
+      ventas: const [],
+      anulaciones: const [],
+    ).bloque(dio.id);
+    if (bloque == null || !mounted) return;
+    await _abrirConstancia(bloque, reimpresa: false);
+  }
+
+  /// La constancia "ENTRADAS PARA RENDIR" de [bloque]: recién dado, o
+  /// [reimpresa] desde CONSTANCIA, con cómo está ahora y de qué día es eso
+  /// ("Hoy, 22/11: …"). No escribe nada.
+  Future<void> _abrirConstancia(BloqueParaRendir bloque, {required bool reimpresa}) async {
+    try {
+      await ref.read(abrirConstanciaParaRendirProvider)(
+        DatosDeLaConstancia(
+          bloque: bloque,
+          fiesta: nombreDeLaFiesta(widget.evento),
+          fechaFiesta: widget.evento.fechaEvento,
+          division: _divisiones[bloque.contratoAlumnoId],
+          reimpresa: reimpresa,
+          alDia: reimpresa ? ref.read(hoyEnArgentinaProvider)() : null,
+        ),
+        context: context,
+      );
+    } catch (_) {
+      _decir(reimpresa
+          ? 'No se pudo abrir la constancia. Probá de nuevo.'
+          : 'Las entradas quedaron dadas. No se pudo abrir la constancia: sacala '
+              'con CONSTANCIA, en las entradas de ${bloque.persona}.');
     }
   }
 
@@ -612,9 +663,13 @@ class _ParaRendirScreenState extends ConsumerState<ParaRendirScreen> {
           runSpacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Tooltip(
-              message: kConstanciaTodaviaNo,
-              child: OutlinedButton(onPressed: null, child: Text('CONSTANCIA')),
+            Tooltip(
+              message: 'La constancia para firmar, con cómo está ahora',
+              child: OutlinedButton(
+                key: Key('para_rendir_constancia_${b.id}'),
+                onPressed: _ocupado ? null : () => _abrirConstancia(b, reimpresa: true),
+                child: const Text('CONSTANCIA'),
+              ),
             ),
             OutlinedButton(
               key: Key('para_rendir_no_volvieron_${b.id}'),

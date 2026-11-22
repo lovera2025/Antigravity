@@ -1,7 +1,7 @@
 # CONTEXTO — la 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo
 
-**Estado (21-nov-2026): SIN PUBLICAR. Lo de VENDER y la entrega en dos partes, programado y probado en el sandbox;
-"Entradas para rendir", sumado adentro de la misma versión, con las etapas 2 a 5 de 9 hechas** (ver "Para retomar").
+**Estado (22-nov-2026): SIN PUBLICAR. Lo de VENDER y la entrega en dos partes, programado y probado en el sandbox;
+"Entradas para rendir", sumado adentro de la misma versión, con las etapas 2 a 6 de 9 hechas** (ver "Para retomar").
 La versión del programa sigue en `6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y
 `installer/junior_eventos_setup.iss`), con las novedades **"Actualizaciones y estabilidad"** (decisión del usuario,
 20-nov). Lleva **dos SQL en la nube, solo de agregar, sin correr**
@@ -15,6 +15,13 @@ madrugada), y el de comprobar y probar, `C:\Users\lover\.claude\plans\hay-que-se
 me tienen que llegar las pulseras para los egresados y acompañantes y las entradas para ellos".
 
 ## Para retomar en otro chat
+
+### Dónde quedó (22-nov-2026)
+
+- **La etapa 6, los papeles: programada, revisada y guardada (22-nov).** El usuario preguntó qué faltaba para quedar
+  seguro de empezar a vender; se hizo una auditoría de solo lectura (abajo, "La auditoría del 21/22-nov") y dijo
+  "seguí". Lo hecho, en "Etapa 6, los papeles (22-nov)", abajo.
+- **Plan general de la 6.9.3: 88 %.** Sigue la etapa 7 (la ventana de prueba con PARA RENDIR y las muestras).
 
 ### Dónde quedó (21-nov-2026)
 
@@ -43,7 +50,8 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 
 ### Lo que falta, en orden (21-nov)
 
-1. **Etapa 6, los papeles** (sección 6 de la SPEC):
+1. ~~**Etapa 6, los papeles**~~ **Hecha el 22-nov** (ver "Etapa 6, los papeles (22-nov)"; queda la pregunta del
+   historial A4). Lo que decía:
    - **La constancia "ENTRADAS PARA RENDIR"** (`pdf/para_rendir_pdf.dart`, `abrirConstanciaParaRendirProvider`, media
      A4 en dos copias para firmar: quién, los números, el precio y "sin pulseras, rinde toda la plata"). Hoy el botón
      CONSTANCIA de cada bloque está apagado con `kConstanciaTodaviaNo`; tiene que salir también después de DAR.
@@ -89,9 +97,83 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
      maqueta decía "ya se le vendió a". Se dejó "ya se le dio a" porque sale de `RetiroEntradas.errorTramos`, que usa
      también la entrega;
    - el historial A4 con "pulseras" (punto 1).
-6. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"): **los dos SQL antes de instalar**,
+6. **Lo que sumó la auditoría del 21/22-nov** (detalle en "La auditoría del 21/22-nov", abajo):
+   - **programar:** que `entradas_config` y `sorteos_mesas` lleguen enseguida a la tablet que vende (hoy están en
+     `_tablasDeCarga`, cada 30 min; pasarlas a `_tablasDelCobro`, o que VENDER las baje al abrir la caja);
+   - **programar:** una prueba de solo lectura sobre una copia nueva de la base que diga, por fiesta, cuántas familias
+     quedan en "puede retirar", "debe", "revisar" y "a confirmar" con las cuentas de VENDER (el 18-nov eran 52
+     adicionales "a confirmar"), con los nombres a `build/`;
+   - opcionales: PRECIOS avisa si la anticipada no es más barata que la General; DAR avisa sin internet; el texto de
+     VENDER antes del sorteo; las ventanas `tool/entradas_prueba.dart` y `tool/operadores_prueba.dart` llegan a VENDER
+     sin reemplazar `abrirComprobanteDeEntradasProvider` (lo vio el agente de la etapa 6: ya pasaba antes);
+   - **preguntarle:** ¿el número del talonario pasa a ser obligatorio en cada venta?; ¿el recargo por transferencia
+     queda fijo para quien vende, y lleva recargo o va en 0? (pregunta 2 de la SPEC de la venta, sin contestar);
+     ¿cómo recibe el comprador el comprobante cuando se vende desde la tablet (ahí se abre "Compartir")?; ¿se vuelve
+     a poder sacar el papel del cierre de entradas después de LISTO?
+7. **Publicar, cuando el usuario lo diga y con él presente** (ver "Al publicar"): **los dos SQL antes de instalar**,
    y **no dar entradas para rendir hasta que todos los equipos que venden tengan la 6.9.3** (una 6.9.x no conoce los
    bloques y vendería sus números).
+
+### Etapa 6, los papeles (22-nov)
+
+Programada por un agente y revisada por otros que no escribían (dos miradas: lo que dice cada papel y el cableado con
+las pruebas; 4 hallazgos chicos, todos arreglados con su test; una segunda vuelta no encontró nada). Los tests de
+entradas y `flutter analyze` sobre lo tocado, en verde.
+- **La constancia "ENTRADAS PARA RENDIR"** (`pdf/para_rendir_pdf.dart`, `ConstanciaParaRendirPdf`,
+  `DatosDeLaConstancia`; `abrirConstanciaParaRendirProvider` en `pdf/papeles_de_entradas.dart`): **una A4 con dos copias
+  de media hoja**, PARA QUIEN LAS LLEVA y PARA LA OFICINA, con la línea de corte punteada. Cada copia: la fiesta y su
+  fecha, "Se lleva: … (de afuera / alumno de la fiesta, 5° A)", el contacto, "Entradas: 20 anticipadas · del 1201 al
+  1220 · sin pulseras" (o generales, según el precio congelado; hasta dos tramos), "Precio: $ 8.000 cada una (precio del
+  20/11, queda fijo)", lo que rinde si las vende todas (`ParaRendir.renglon(b, b.cantidad)`, la misma cuenta de RENDIR),
+  quién se las dio y cuándo, la nota (cortada a 240 letras con "...": una nota enorme no puede dejar afuera la firma) y
+  firma y aclaración en las dos. **Reimpresa** dice REIMPRESA y "Hoy, 22/11: vendió · devolvió · no volvieron · le
+  quedan" (con el día: "Hoy" solo se leía como el día en que se las dieron). Sale sola después de DAR (solo si se
+  guardó) y con CONSTANCIA en cada bloque; `kConstanciaTodaviaNo` ya no existe. Si el papel falla, lo dado queda y lo
+  dice sin asustar.
+- **El comprobante de la rendición:** `ComprobanteEntradasPdf` con `DatosDelComprobante.rendicion`
+  (`RendicionDelComprobante.alRendir` y `.reimpresa`): "RENDICIÓN DE ENTRADAS · N° 0007", "Recibió" (quien cobró) y
+  "Rinde", "Se llevó 20 (1201 al 1220) el 20/11 · vendió 15 · devolvió 5 (1216 al 1220) · le quedan 0"
+  (`lineaDeLaRendicion`), el renglón con "· precio fijo", TOTAL, cómo pagó y el vuelto; sin Talonario ni pulseras.
+  **VENDER lo abre después de rendir con venta** (sin venta, "Devolución guardada" y nada más) y el aviso tiene VER EL
+  COMPROBANTE (la COPIA es fiel a ese acto: lo guarda `_Rendida`, no se relee). **VENTAS → REIMPRIMIR de una
+  rendición** saca la COPIA con lo seguro: se llevó, "vendió N en esta rendición" y "hoy, dd/mm, le quedan N"; sin el
+  bloque bajado, sin ese renglón; anulada, con ANULADA y "las N dejaron de contar como vendidas". Archivo
+  `Rendicion_0007_<nombre>.pdf`.
+- **Sin pulseras en lo vendido:** "Pulseras normales: N" pasó a "Entradas: N" y la anulación dice "devolvieron las
+  entradas". **El historial A4 no se tocó** (sigue "devolvieron las entradas y pulseras"): espera la pregunta del punto 5.
+- **Las pruebas:** `test/comprobante_rendicion_test.dart` (regla 59, con la letra de fábrica, palabra por palabra) y
+  `test/constancia_para_rendir_test.dart` (las dos copias, cada palabra dentro de su media hoja, la aclaración en las
+  dos, con nombre largo, contacto, nota larga y dos tramos); regla 60 en `test/arneses_sin_base_test.dart` (falla si
+  una ventana que llega a PARA RENDIR no reemplaza el provider) y en `test/venta_entradas_prueba_test.dart` (llama al
+  provider de los dos lados y comprueba que no escriba en la carpeta del programa); las pantallas en
+  `para_rendir_pantalla_test`, `vender_entradas_pantalla_test` y `ventas_de_entradas_test`. `PapelesDeLaPrueba` y
+  `tool/venta_entradas_muestra_test.dart` reemplazan la constancia. Las roturas de las reglas 59 y 60 se hicieron a mano
+  y fallaron como debían; **pasarlas a `tool/roturas_6.9.3.txt` en la etapa 8**.
+- **Sin mirar todavía con las letras de la app**: las muestras son de la etapa 7.
+
+### La auditoría del 21/22-nov
+
+El usuario preguntó qué faltaba para "saber que haya quedado todo óptimo para empezar a vender". Un workflow de solo
+lectura con cuatro miradas (lo pedido contra lo hecho, la plata, equipos y versiones, pantallas y arranque), un
+verificador por mirada que intentó refutar cada hallazgo y un crítico de completitud: 25 confirmados, 4 descartados y
+2 del crítico. **Las cuentas están sólidas** (la anticipada hasta la medianoche de Argentina, el descuento sobre la
+General, el recargo solo sobre lo transferido, centavos enteros, una anulada no cuenta, la rendición al precio fijo en
+una transacción), **las llaves también** (ningún camino guarda sin su llave) y **el motor** (columnas iguales en modelo,
+base, motor y SQL; "Todo subido" no miente). Lo nuevo, además de lo del punto 6 de "Lo que falta":
+- **Pasos del usuario antes de la primera venta:** aceptar REVISAR LA LISTA en las 5 fiestas ya sorteadas (**se puede
+  ya con la 6.9.2**; hasta entonces lo agregado después del sorteo se vende con descuento, y aceptada no se corrige);
+  PRECIOS de cada fiesta (sin precio no abre ninguna caja); "Vende entradas" a cada vendedora y que vuelva a entrar con
+  su PIN; en cada tablet, fecha y hora automáticas (el reloj del equipo decide el fin de la anticipada; la zona no
+  importa: `ArTime` resta 3 horas a la universal) y abrir la app con internet después de PRECIOS y los permisos; el
+  talonario físico en tramos, uno por persona; un sobre por fiesta aparte del cajón de cuotas y cerrar la caja de
+  entradas antes de darle la plata al jefe, en el mismo equipo; antes del sorteo, la venta va por "Alguien de afuera";
+  una primera venta vigilada con él, en la tablet y en la PC.
+- **Al publicar:** ningún equipo vende sin la 6.9.3 (una 6.9.2 le vende a quien no pagó su mesa adicional); **en una
+  tablet no hay vuelta atrás** (Android no deja instalar una versión más vieja): actualizarla con "Todo subido" y la
+  caja cerrada.
+- **Descartados:** el talonario de la General que se vende al terminar la anticipada (lo decidió el usuario el 20-nov:
+  todo lo vendido va al de las anticipadas); una lectura de ventas que falla (si la base no abre, VENDER falla antes);
+  instalar antes de los SQL (ya está en el orden de publicar); preparar la tablet con la cuenta Admin (ya se hace).
 
 ### Entradas para rendir: lo programado (21-nov)
 

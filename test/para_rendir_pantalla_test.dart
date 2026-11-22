@@ -13,6 +13,8 @@ import 'package:arguello_events/features/caja_sesiones/providers/app_role_provid
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
+import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
+import 'package:arguello_events/features/entradas/pdf/para_rendir_pdf.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/para_rendir_screen.dart';
 import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
@@ -24,7 +26,10 @@ class _Montada {
   final EntregaEnMemoria e;
   final EntradasEnMemoria entradas;
   final ProviderContainer c;
-  _Montada(this.e, this.entradas, this.c);
+
+  /// Cada constancia que se abrió (al DAR y con CONSTANCIA).
+  final List<DatosDeLaConstancia> constancias;
+  _Montada(this.e, this.entradas, this.c, this.constancias);
 
   ParaRendir get cuenta => ParaRendir.de(
         movimientos: entradas.listaParaRendir,
@@ -99,6 +104,7 @@ Future<_Montada> _montar(
   bool Function()? jefeAhora,
   DateTime Function()? hoy,
   bool conPrecio = true,
+  bool fallaLaConstancia = false,
   Future<void> Function(EntradasEnMemoria)? antes,
   Size tamano = const Size(1100, 1400),
 }) async {
@@ -108,6 +114,7 @@ Future<_Montada> _montar(
   addTearDown(tester.view.reset);
   final e = EntregaEnMemoria();
   final entradas = EntradasEnMemoria();
+  final constancias = <DatosDeLaConstancia>[];
   if (conPrecio) {
     entradas.conPrecio(idFiestaEntrega, anticipada: 8000, hasta: '2026-11-28');
   }
@@ -118,6 +125,11 @@ Future<_Montada> _montar(
     if (jefeAhora != null) esRolJefeProvider.overrideWith((ref) => jefeAhora()),
     ...entradas.reemplazos,
     hoyEnArgentinaProvider.overrideWithValue(hoy ?? () => DateTime.utc(2026, 11, 20, 12)),
+    // La constancia no se abre de verdad: se anota (o falla, como sin impresora).
+    abrirConstanciaParaRendirProvider.overrideWithValue((datos, {context}) async {
+      if (fallaLaConstancia) throw StateError('sin impresora (prueba)');
+      constancias.add(datos);
+    }),
   ]);
   addTearDown(c.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(
@@ -125,7 +137,7 @@ Future<_Montada> _montar(
     child: MaterialApp(home: ParaRendirScreen(evento: fiestaDeLaEntrega)),
   ));
   await tester.pumpAndSettle();
-  return _Montada(e, entradas, c);
+  return _Montada(e, entradas, c, constancias);
 }
 
 String _texto(WidgetTester tester, String clave) {
@@ -236,12 +248,39 @@ void main() {
           'Ya rindió algo: anulá cada movimiento (la plata, en VENTAS)');
       expect(_apagado(tester, 'para_rendir_no_volvieron_${sosa.id}'), isTrue,
           reason: 'no le queda nada');
-      // La constancia llega con los papeles.
+      // CONSTANCIA: la del bloque, reimpresa, con cómo está ahora. No escribe.
       expect(find.text('CONSTANCIA'), findsOneWidget);
-      expect(
-        tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'CONSTANCIA')).onPressed,
-        isNull,
-      );
+      expect(_apagado(tester, 'para_rendir_constancia_${sosa.id}'), isFalse);
+      await _tocar(tester, 'para_rendir_constancia_${sosa.id}');
+      final constancia = m.constancias.single;
+      expect(constancia.reimpresa, isTrue);
+      expect(constancia.bloque.id, sosa.id);
+      expect(constancia.bloque.persona, 'SOSA, DIEGO');
+      expect([constancia.bloque.vendidas, constancia.bloque.devueltas, constancia.bloque.noVolvieron],
+          [8, 5, 2]);
+      expect(constancia.fiesta, isNotEmpty);
+      expect(constancia.fechaFiesta, fiestaDeLaEntrega.fechaEvento);
+      // Con el día en que se saca (22-nov-2026): "Hoy, 20/11: vendió 8 · …".
+      expect(constancia.alDia, DateTime.utc(2026, 11, 20, 12));
+      expect(ConstanciaParaRendirPdf.rotuloDeHoy(constancia.alDia), 'Hoy, 20/11');
+      expect(m.entradas.escrituras, 0, reason: 'la constancia no escribe nada');
+    });
+
+    testWidgets('la constancia de un alumno lleva su división', (tester) async {
+      final m = await _montar(tester, antes: _cuatroPersonas);
+      final gomez = m.bloqueDe('GÓMEZ, ANA');
+      await _tocar(tester, 'para_rendir_persona_alumno|${EntregaEnMemoria.idGomez}');
+      await _tocar(tester, 'para_rendir_constancia_${gomez.id}');
+      expect(m.constancias.single.division, '5° A');
+      expect(m.constancias.single.bloque.esDeUnAlumno, isTrue);
+    });
+
+    testWidgets('si la constancia no se puede abrir, lo dice', (tester) async {
+      final m = await _montar(tester, antes: _cuatroPersonas, fallaLaConstancia: true);
+      final perez = m.bloqueDe('PÉREZ, JUAN');
+      await _tocar(tester, 'para_rendir_persona_${_deAfuera('perez juan')}');
+      await _tocar(tester, 'para_rendir_constancia_${perez.id}');
+      expect(find.text('No se pudo abrir la constancia. Probá de nuevo.'), findsOneWidget);
     });
 
     // Regla 49: dos equipos que rindieron lo mismo sin internet. Se avisa,
@@ -317,6 +356,45 @@ void main() {
       expect(_texto(tester, 'para_rendir_total_sin_rendir'), '50');
       expect(_texto(tester, 'para_rendir_hecho'),
           'Se le dieron 20 entradas a LOPEZ ANA (del 1300 al 1319) para rendir.');
+      // Y sale sola la constancia para firmar, de lo recién dado.
+      final constancia = m.constancias.single;
+      expect(constancia.reimpresa, isFalse);
+      expect(constancia.alDia, isNull, reason: 'recién dadas no hay "Hoy"');
+      expect(constancia.bloque.id, dio.id);
+      expect(constancia.bloque.cantidad, 20);
+      expect(TramoTalonario.legible(constancia.bloque.tramos), '1300 al 1319');
+      expect(constancia.bloque.precioDeCadaUna, 8000);
+      expect(constancia.bloque.sinRendir, 20);
+    });
+
+    testWidgets('si la constancia no se puede abrir, lo dado queda y se dice sin asustar',
+        (tester) async {
+      final m = await _montar(tester, fallaLaConstancia: true);
+      await _tocar(tester, 'para_rendir_dar');
+      await _poner(tester, 'dar_nombre', 'lopez ana');
+      await _poner(tester, 'dar_del', '1300');
+      await _tocar(tester, 'dar_dar');
+      await _tocar(tester, 'dar_confirmar_si');
+      expect(m.entradas.listaParaRendir.single.personaNombre, 'LOPEZ ANA');
+      expect(_texto(tester, 'para_rendir_hecho'),
+          'Se le dieron 20 entradas a LOPEZ ANA (del 1300 al 1319) para rendir.');
+      expect(
+          find.text('Las entradas quedaron dadas. No se pudo abrir la constancia: sacala '
+              'con CONSTANCIA, en las entradas de LOPEZ ANA.'),
+          findsOneWidget);
+      expect(find.text('No se pudieron dar. Probá de nuevo.'), findsNothing);
+    });
+
+    testWidgets('si no se dan (cambió el precio), no sale ninguna constancia', (tester) async {
+      final m = await _montar(tester);
+      await _tocar(tester, 'para_rendir_dar');
+      await _poner(tester, 'dar_nombre', 'lopez ana');
+      await _poner(tester, 'dar_del', '1300');
+      await _tocar(tester, 'dar_dar');
+      m.entradas.conPrecio(idFiestaEntrega, valor: 10000);
+      await _tocar(tester, 'dar_confirmar_si');
+      expect(m.entradas.listaParaRendir, isEmpty);
+      expect(m.constancias, isEmpty);
     });
 
     testWidgets('a un alumno de la fiesta: se elige de la lista y el nombre viene del '
@@ -338,6 +416,9 @@ void main() {
       expect(dio.cantidad, 10);
       expect(dio.numeros, '500-509');
       expect(find.text('alumno · 5° A'), findsOneWidget);
+      // La constancia dice que es alumno de la fiesta, con su división.
+      expect(m.constancias.single.bloque.esDeUnAlumno, isTrue);
+      expect(m.constancias.single.division, '5° A');
     });
 
     testWidgets('sin precio en la fiesta no se da, y al jefe se le dice dónde cargarlo',

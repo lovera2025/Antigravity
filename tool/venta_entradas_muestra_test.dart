@@ -243,6 +243,9 @@ void main() {
       abrirCierreDeEntradasProvider.overrideWithValue(
         (datos, {context}) async => cierres.add(datos),
       ),
+      // La constancia de PARA RENDIR: una muestra no la deja en la carpeta del
+      // programa.
+      abrirConstanciaParaRendirProvider.overrideWithValue((datos, {context}) async {}),
       ...extra,
     ]);
     addTearDown(c.dispose);

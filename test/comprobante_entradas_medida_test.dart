@@ -1,6 +1,7 @@
 // El comprobante de una venta de entradas (sección 7.4 del spec del 13-nov):
 // entra en media hoja A4, con 1 y con 6 renglones, sin que nada se salga, y
-// dice lo que la venta tiene guardado.
+// dice lo que la venta tiene guardado. Sin pulseras: la pulsera no se vende. El
+// de una rendición está en `comprobante_rendicion_test.dart`.
 //
 // Se arma con la letra de fábrica del paquete: con las de la app el texto va en
 // códigos de glifo y no se puede leer. En un PDF el texto sale palabra por
@@ -140,10 +141,14 @@ void main() {
       'COMPROBANTE', 'ENTRADAS', '0017',
       '14/11/2026', '11:32', 'Romi',
       'GOMEZ,', 'CARLA', '30111222', 'LUCIA', 'mesa', '15',
-      'adicional', 'TOTAL', 'Efectivo', 'Pulseras', '10', 'Talonario',
+      'adicional', 'TOTAL', 'Efectivo', 'Entradas', '10', 'Talonario',
       '1043', '1050', '1101', '1102',
     ]) {
       expect(palabras, contains(esperada), reason: 'falta "$esperada"');
+    }
+    // La pulsera no se vende (20-nov-2026): el comprobante no habla de pulseras.
+    for (final p in palabras) {
+      expect(p.toLowerCase(), isNot(contains('pulsera')), reason: 'dice "$p"');
     }
     expect(v.cantidad, 10);
     expect(palabras, isNot(contains('COPIA')));

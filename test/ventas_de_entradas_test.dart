@@ -14,6 +14,7 @@ import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dar
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
+import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
@@ -84,6 +85,9 @@ Future<_Montada> _montar(
     ...e.reemplazos(jefe: jefeAhora == null ? jefe : null),
     if (jefeAhora != null) esRolJefeProvider.overrideWith((ref) => jefeAhora()),
     ...entradas.reemplazos,
+    // Hoy, dos días después de las ventas: lo que dice "al 22/11" en la copia de
+    // una rendición.
+    hoyEnArgentinaProvider.overrideWithValue(() => DateTime.utc(2026, 11, 22, 12)),
     abrirComprobanteDeEntradasProvider
         .overrideWithValue((datos, {context}) async => comprobantes.add(datos)),
     abrirHistorialDeEntradasProvider
@@ -487,21 +491,51 @@ void main() {
       expect(cuenta.bloques.single.vendidas, 0);
     });
 
-    testWidgets('quien vende también la ve marcada; REIMPRIMIR queda apagado hasta '
-        'que salga su comprobante (el de una venta habla de pulseras)', (tester) async {
+    // Regla 59: REIMPRIMIR de una rendición saca el comprobante de la rendición
+    // (Recibió / Rinde, sin pulseras), como COPIA, y del bloque solo lo seguro:
+    // qué devolvió en ese mismo acto no se sabe con certeza.
+    testWidgets('quien vende también la ve marcada; REIMPRIMIR saca la COPIA del '
+        'comprobante de la rendición', (tester) async {
       final m = await conUnaRendicion(tester, jefe: false);
       final rendicion = m.entradas.listaVentas.last;
       expect(chip(tester, rendicion), 'RENDICIÓN · de PÉREZ, JUAN');
-      final reimprimir =
-          tester.widget<TextButton>(find.byKey(Key('reimprimir_${rendicion.id}')));
-      expect(reimprimir.onPressed, isNull);
-      expect(
-        tester.widget<TextButton>(find.byKey(Key('reimprimir_${m.v1.id}'))).onPressed,
-        isNotNull,
-      );
-      await tester.tap(find.byKey(Key('reimprimir_${rendicion.id}')), warnIfMissed: false);
-      await tester.pumpAndSettle();
-      expect(m.comprobantes, isEmpty);
+      await _tocar(tester, 'reimprimir_${rendicion.id}');
+      final c = m.comprobantes.single;
+      expect(c.venta.id, rendicion.id);
+      expect(c.copia, isTrue);
+      expect(c.anulacion, isNull);
+      expect(c.alumno, isNull, reason: 'una rendición no es de ninguna familia');
+      final r = c.rendicion!;
+      expect(r.persona, 'PÉREZ, JUAN');
+      expect(r.bloque, isNotNull);
+      expect(r.devolvio, isNull, reason: 'al reimprimir no se sabe qué devolvió en ese acto');
+      expect(r.leQuedanDeHoy, isTrue);
+      // Lo que le queda va con el día de la copia (22-nov-2026): la fecha de
+      // arriba es la de la rendición, y un "hoy" solo se leería como ese día.
+      expect(r.alDia, DateTime.utc(2026, 11, 22, 12));
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(r, c.venta.cantidad),
+          'Se llevó 20 (1201 al 1220) el 20/11 · vendió 15 en esta rendición · al 22/11 le '
+          'quedan 0');
+      // Y una venta común sigue saliendo como siempre, sin rendición.
+      await _tocar(tester, 'reimprimir_${m.v1.id}');
+      expect(m.comprobantes.last.rendicion, isNull);
+    });
+
+    testWidgets('una rendición anulada se reimprime con ANULADA, y lo que hoy le queda',
+        (tester) async {
+      final m = await conUnaRendicion(tester);
+      final rendicion = m.entradas.listaVentas.last;
+      await _tocar(tester, 'anular_${rendicion.id}');
+      await tester.enterText(find.byKey(const Key('anular_motivo')), 'se cobró dos veces');
+      await tester.pump();
+      await _tocar(tester, 'anular_confirmar');
+      await _tocar(tester, 'reimprimir_${rendicion.id}');
+      final c = m.comprobantes.single;
+      expect(c.anulacion?.motivo, 'se cobró dos veces');
+      expect(c.rendicion, isNotNull);
+      // Anulada, las 15 vuelven a quedarle para rendir.
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(c.rendicion!, c.venta.cantidad),
+          endsWith('al 22/11 le quedan 15'));
     });
 
     // 21-nov-2026: la venta sube antes que su renglón `vendio` (prioridad 4
@@ -524,11 +558,14 @@ void main() {
       );
       expect(chip(tester, rendicion), 'RENDICIÓN · de PÉREZ, JUAN');
       expect(find.byKey(Key('rendicion_${m.v1.id}')), findsNothing);
-      expect(
-        tester.widget<TextButton>(find.byKey(Key('reimprimir_${rendicion.id}'))).onPressed,
-        isNull,
-        reason: 'el comprobante de una venta común habla de pulseras',
-      );
+      // REIMPRIMIR: el comprobante de la rendición, con Recibió y Rinde y lo
+      // vendido, sin el renglón del bloque (todavía no está en este equipo).
+      await _tocar(tester, 'reimprimir_${rendicion.id}');
+      final copia = m.comprobantes.single;
+      expect(copia.copia, isTrue);
+      expect(copia.rendicion?.persona, 'PÉREZ, JUAN');
+      expect(copia.rendicion?.bloque, isNull);
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(copia.rendicion!, 15), isNull);
 
       await _tocar(tester, 'anular_${rendicion.id}');
       // Sin el bloque no se sabe cuántas le quedan: no se promete (21-nov-2026).

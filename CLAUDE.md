@@ -696,7 +696,7 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   dicen se comprueba en los tests con la letra de fábrica.
 
 **La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — SIN
-PUBLICAR** (lo de VENDER y la entrega, programado y probado en el sandbox el 20-nov; Entradas para rendir, a medias) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+PUBLICAR** (lo de VENDER y la entrega, programado y probado en el sandbox el 20-nov; Entradas para rendir, con los papeles hechos el 22-nov y sin la ventana de prueba ni el cierre) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
 ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
 vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
 al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar, SIN
@@ -745,17 +745,18 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121
   - **La planilla de entrega pasa por `imprimirPlanillaDeEntregaProvider`** (VENDER y la impresora de la entrega):
     las ventanas de prueba la reemplazan, igual que `imprimirEntregasSinCargoProvider`; `test/arneses_sin_base_test.dart`
     falla si una ventana con el cierre o la entrega no lo hace.
-- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO (21-nov): de "Entradas para
-  rendir", los papeles (la constancia y el comprobante de la rendición, y sacar las pulseras de lo vendido), la ventana
-  de prueba y las muestras, y el cierre (roturas 36 a 61, la regla 61, `verificar_migracion_v82` sobre una copia, la
+- **Lo que falta de la 6.9.3, en orden**, en "Para retomar en otro chat" del CONTEXTO (22-nov): de "Entradas para
+  rendir", la ventana de prueba y las muestras, y el cierre (roturas 36 a 61, la regla 61, `verificar_migracion_v82` sobre una copia, la
   suite y una revisión independiente); de antes, las muestras de la caja, el recorrido con el mouse (con el permiso del
   usuario), que mire las capturas, preguntarle por "Emitido:" 3 horas antes en otros papeles
   (`docs/pendientes/horas-corridas-en-otros-papeles.md`) y publicar con él. El arreglo 9 y las roturas 21 a 35 quedaron
-  hechos el 20-nov (`ca149c0`).
+  hechos el 20-nov (`ca149c0`). Y lo que sumó la auditoría del 21/22-nov (punto 6 de "Lo que falta"): que PRECIOS y
+  la lista del sorteo lleguen enseguida a la tablet, contar sobre una copia cuántas familias quedan trabadas, y cuatro
+  preguntas para el usuario.
 - **No usar PRECIOS nuevo, entregar por partes ni dar entradas para rendir hasta que todas las PCs y las tablets
   tengan la 6.9.3**: una 6.9.x ve una entrega a medias como "Pendiente", junta los talonarios y vendería los números
   de un bloque para rendir.
-- **Entradas para rendir (21-nov, adentro de la 6.9.3; etapas 2 a 5 de 9 hechas, sin publicar;
+- **Entradas para rendir (21 y 22-nov, adentro de la 6.9.3; etapas 2 a 6 de 9 hechas, sin publicar;
   `docs/SPEC_entradas_para_rendir_2026-11-20.md`, maqueta aprobada; lo programado, en "Entradas para rendir: lo
   programado" del CONTEXTO).** Al que se le dan entradas sin plata (un egresado o alguien de afuera) las vende y rinde
   después: al precio del día en que se las llevó (queda fijo), toda la plata, sin comisión, con los números reservados.
@@ -772,6 +773,12 @@ CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121
     talonarios).
   - Dar, NO VOLVIERON y anular: solo el jefe, con la llave al empezar y **otra vez después de la ventana**; rendir, con
     "Vende entradas" (`_frenaSinPermiso`, también dos veces). Quien vende no ve plata en el aviso de VENDER.
+  - **Los papeles (22-nov):** la constancia para firmar (`pdf/para_rendir_pdf.dart`, una A4 con dos copias de media
+    hoja, "sin pulseras"; sale sola después de DAR y con CONSTANCIA) y el comprobante de la rendición
+    (`DatosDelComprobante.rendicion`: Recibió/Rinde; después de rendir con venta y en VENTAS → REIMPRIMIR). **Ningún
+    papel de lo vendido dice "pulseras"**, salvo el historial A4, que espera una pregunta al usuario (cambiar su texto
+    cambia `firmaDeLasHojas`). **Una ventana de prueba que llegue a PARA RENDIR reemplaza
+    `abrirConstanciaParaRendirProvider`** (`test/arneses_sin_base_test.dart`).
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v83**: la v81 es de la entrega en dos partes y
   la v82 de las entradas para rendir.
 

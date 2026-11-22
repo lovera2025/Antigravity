@@ -49,6 +49,11 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
     escrituras++;
   }
 
+  /// Con esto prendido, después de la próxima rendición leer las entradas para
+  /// rendir tira: la rendición se guarda y la relectura de VENDER no anda.
+  bool fallaLeerDespuesDeRendir = false;
+  bool _leerParaRendirFalla = false;
+
   /// Los providers de la app, apuntando acá.
   List<Override> get reemplazos => [
         entradasDeLaFiestaProvider.overrideWithValue(this),
@@ -100,8 +105,10 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
       [for (final v in listaVerificaciones) if (v.eventoId == eventoId) v];
 
   @override
-  Future<List<MovimientoParaRendir>> paraRendir(String eventoId) async =>
-      [for (final m in listaParaRendir) if (m.eventoId == eventoId) m];
+  Future<List<MovimientoParaRendir>> paraRendir(String eventoId) async {
+    if (_leerParaRendirFalla) throw StateError('no se pudo leer (prueba)');
+    return [for (final m in listaParaRendir) if (m.eventoId == eventoId) m];
+  }
 
   @override
   Future<List<VentaEntradas>> ventasDeLaCaja(String cajaId) async => [
@@ -520,6 +527,7 @@ class EntradasEnMemoria implements EntradasDeLaCaja, EntradasDelJefe {
     }
     if (vendio != null) listaParaRendir.add(vendio);
     if (devolvio != null) listaParaRendir.add(devolvio);
+    if (fallaLeerDespuesDeRendir) _leerParaRendirFalla = true;
     return RendicionDeEntradas(venta: venta, vendio: vendio, devolvio: devolvio);
   }
 

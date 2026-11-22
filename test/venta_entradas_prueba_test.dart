@@ -20,15 +20,19 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
+import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
+import 'package:arguello_events/features/entradas/pdf/para_rendir_pdf.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/entrega_entradas.dart';
 
 import '../tool/venta_entradas_prueba.dart';
+import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
 
 const _perez = EntregaEnMemoria.idPerez;
@@ -382,6 +386,43 @@ void main() {
     await tocar(tester, 'cierre_sector_entradas');
     await tocar(tester, 'cierre_entregas_imprimir');
     expect(lados.papeles.entregasSinCargo, [null]);
+  });
+
+  // Regla 60, de verdad y no solo el texto (22-nov-2026): la constancia de las
+  // entradas para rendir de cada lado queda en la prueba. Si a un lado le faltara
+  // el reemplazo, se llamaría a la de la app; con un contexto que ya no está, la
+  // de la app arma el papel y no lo entrega (no escribe nada), así que la
+  // constancia no llega a la prueba y esto falla sin tocar la carpeta del programa.
+  testWidgets('la constancia de las entradas para rendir queda en la prueba en los dos '
+      'lados: no va a la carpeta del programa', (tester) async {
+    await tester.pumpWidget(const SizedBox());
+    final yaNoEsta = tester.element(find.byType(SizedBox));
+    await tester.pumpWidget(const Placeholder());
+    expect(yaNoEsta.mounted, isFalse);
+    final otra = EntradasEnMemoria();
+    final dio = await otra.darParaRendir(
+      eventoId: idFiestaEntrega,
+      personaNombre: 'PEREZ, JUAN',
+      cantidad: 20,
+      numeros: const [TramoTalonario(1201, 1220)],
+      precio: 8000,
+      nombrePrecio: PedidoDeEntradas.nombreAnticipada,
+      quien: 'Jefe',
+    );
+    final datos = DatosDeLaConstancia(
+      bloque: ParaRendir.de(movimientos: [dio], ventas: const [], anulaciones: const [])
+          .bloque(dio.id)!,
+      fiesta: 'INSTITUTO SAN LORENZO',
+    );
+    await tester.runAsync(() async {
+      // El jefe es el que llega a PARA RENDIR; Carla, por si algún día.
+      for (final lado in [lados.jefe, lados.carla]) {
+        await lado.read(abrirConstanciaParaRendirProvider)(datos, context: yaNoEsta);
+      }
+    });
+    expect(lados.papeles.constancias, hasLength(2), reason: 'una de cada lado');
+    expect(lados.papeles.constancias, everyElement(same(datos)));
+    expect(lados.papeles.archivos, isEmpty, reason: 'sin carpeta, la prueba no escribe');
   });
 
   testWidgets('con MODO JEFE en NO, PRECIOS, VENTAS y VENDER se apagan, y el cierre '

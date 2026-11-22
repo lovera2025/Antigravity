@@ -8,6 +8,7 @@ import '../../common/services/pdf_service.dart';
 import 'cierre_caja_entradas_pdf.dart';
 import 'comprobante_entradas_pdf.dart';
 import 'historial_entradas_pdf.dart';
+import 'para_rendir_pdf.dart';
 
 /// El isotipo de la cabecera de los papeles. Null si no se pudo leer: el papel
 /// sale igual, sin él.
@@ -41,6 +42,31 @@ final abrirComprobanteDeEntradasProvider =
     await PdfService.entregarPdf(
       bytes,
       ComprobanteEntradasPdf.nombreDelArchivo(datos),
+      context: context,
+    );
+  };
+});
+
+/// Arma la constancia "ENTRADAS PARA RENDIR" (una A4 con dos copias de media
+/// hoja, para firmar) y la entrega como los demás papeles. Sale al DAR y desde
+/// PARA RENDIR → CONSTANCIA. Los tests y las ventanas de prueba la reemplazan.
+typedef AbrirConstanciaParaRendir = Future<void> Function(
+  DatosDeLaConstancia datos, {
+  BuildContext? context,
+});
+
+final abrirConstanciaParaRendirProvider =
+    Provider<AbrirConstanciaParaRendir>((ref) {
+  return (datos, {context}) async {
+    final bytes = await ConstanciaParaRendirPdf.armar(
+      datos,
+      fuentes: await PdfService.fuentesOutfit(),
+      logo: await isotipoDeLosPapeles(),
+    );
+    if (context != null && !context.mounted) return;
+    await PdfService.entregarPdf(
+      bytes,
+      ConstanciaParaRendirPdf.nombreDelArchivo(datos),
       context: context,
     );
   };

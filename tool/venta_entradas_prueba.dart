@@ -91,6 +91,7 @@ import 'package:arguello_events/features/entradas/pdf/cierre_caja_entradas_pdf.d
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/historial_entradas_pdf.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
+import 'package:arguello_events/features/entradas/pdf/para_rendir_pdf.dart';
 import 'package:arguello_events/features/entradas/providers/entradas_providers.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/entradas_entregas_repository.dart';
@@ -550,6 +551,9 @@ class PapelesDeLaPrueba {
   final cierres = <DatosDelCierreDeEntradas>[];
   final historiales = <DatosDelHistorial>[];
 
+  /// Cada constancia de las entradas para rendir (al DAR y con CONSTANCIA).
+  final constancias = <DatosDeLaConstancia>[];
+
   /// Cada IMPRIMIR de la caja de entregas: de quién (null, todo).
   final entregasSinCargo = <String?>[];
 
@@ -603,6 +607,20 @@ class PapelesDeLaPrueba {
             lado,
             HistorialEntradasPdf.nombreDelArchivo(d),
             () async => HistorialEntradasPdf.armar(
+              d,
+              fuentes: await PdfService.fuentesOutfit(),
+              logo: await isotipoDeLosPapeles(),
+            ),
+          );
+        }),
+        // La constancia de las entradas para rendir (PARA RENDIR del jefe): al
+        // DAR y con CONSTANCIA. Sin [carpeta], solo se anota.
+        abrirConstanciaParaRendirProvider.overrideWithValue((d, {context}) async {
+          constancias.add(d);
+          await _guardar(
+            lado,
+            ConstanciaParaRendirPdf.nombreDelArchivo(d),
+            () async => ConstanciaParaRendirPdf.armar(
               d,
               fuentes: await PdfService.fuentesOutfit(),
               logo: await isotipoDeLosPapeles(),

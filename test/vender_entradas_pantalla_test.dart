@@ -1843,10 +1843,113 @@ void main() {
       expect(find.byKey(const Key('vender_para_rendir')), findsNothing);
       expect(_texto(tester, 'vender_rendicion_guardada_texto'),
           r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 · $ 120.000');
-      // El comprobante de la rendición llega con los papeles: no se abre el de
-      // una venta, que diría "Pulseras normales".
-      expect(m.comprobantes, isEmpty);
-      expect(find.byKey(const Key('vender_ver_comprobante')), findsNothing);
+      // Sale el comprobante de la rendición (no el de una venta), con la
+      // rendición ya guardada: quién rinde, lo que devolvió en este acto y lo
+      // que le quedó.
+      final c = m.comprobantes.single;
+      expect(c.venta.id, venta.id);
+      expect(c.copia, isFalse);
+      expect(c.alumno, isNull);
+      final rendicion = c.rendicion!;
+      expect(rendicion.persona, 'PÉREZ, JUAN');
+      expect(rendicion.devolvio, 5);
+      expect(rendicion.numerosDevueltos, const [TramoTalonario(1216, 1220)]);
+      expect(rendicion.leQuedanDeHoy, isFalse);
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(rendicion, c.venta.cantidad),
+          'Se llevó 20 (1201 al 1220) el 20/11 · vendió 15 · devolvió 5 (1216 al 1220) · '
+          'le quedan 0');
+      expect(find.byKey(const Key('vender_ver_comprobante')), findsNothing,
+          reason: 'el aviso de una venta común no está');
+      // VER EL COMPROBANTE del aviso: el mismo, como COPIA.
+      await _tocar(tester, 'vender_ver_comprobante_rendicion');
+      expect(m.comprobantes, hasLength(2));
+      expect(m.comprobantes.last.copia, isTrue);
+      expect(m.comprobantes.last.rendicion?.devolvio, 5);
+    });
+
+    /// RENDIR con [vendio] vendidas y [devuelve] devueltas, en efectivo.
+    Future<void> rendirEnEfectivo(WidgetTester tester, {int vendio = 15, int devuelve = 5}) async {
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: vendio);
+      if (devuelve > 0) await _tocar(tester, 'rendir_devuelve_mas', veces: devuelve);
+      await _tocar(tester, 'rendir_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+    }
+
+    // 22-nov-2026 (revisión de la etapa 6): la COPIA de VER EL COMPROBANTE
+    // salía con lo devuelto en ese acto y "le quedan" de ahora: si después el
+    // jefe anulaba ese "devolvió", decía "vendió 15 · devolvió 5 · le quedan 5"
+    // (25 de 20). Ahora dice cómo quedó en ese acto, igual que el papel que salió.
+    testWidgets('la COPIA de VER EL COMPROBANTE dice cómo quedó en ese acto, aunque '
+        'después el jefe anule lo devuelto', (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      await rendirEnEfectivo(tester);
+      const enEseActo = 'Se llevó 20 (1201 al 1220) el 20/11 · vendió 15 · devolvió 5 '
+          '(1216 al 1220) · le quedan 0';
+      expect(
+        ComprobanteEntradasPdf.lineaDeLaRendicion(
+            m.comprobantes.single.rendicion!, m.comprobantes.single.venta.cantidad),
+        enEseActo,
+      );
+
+      // El jefe, desde la PC, anula ese "devolvió", y baja a la tablet: ahora le
+      // quedan 5, y el aviso de arriba vuelve.
+      final devolvio = m.entradas.listaParaRendir.where((x) => x.esDevolvio).single;
+      await m.entradas.anularDeParaRendir(devolvio, motivo: 'no las trajo', quien: 'Jefe');
+      m.e.motor.bajo.add({'entradas_para_rendir'});
+      await tester.pumpAndSettle();
+      expect(_texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+
+      // Lo de esa rendición no cambia: ni el aviso verde ni la COPIA.
+      expect(_texto(tester, 'vender_rendicion_guardada_texto'),
+          r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 · $ 120.000');
+      await _tocar(tester, 'vender_ver_comprobante_rendicion');
+      final copia = m.comprobantes.last;
+      expect(copia.copia, isTrue);
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(copia.rendicion!, copia.venta.cantidad),
+          enEseActo);
+    });
+
+    // Si la relectura de después de rendir no anda (VENDER no avisa: es en
+    // silencio), lo de la pantalla es de antes de rendir. El papel no puede decir
+    // "vendió 15 · devolvió 5 · le quedan 20": sale sin el renglón del bloque.
+    testWidgets('si después de rendir no se puede leer cómo quedó, el papel y el aviso '
+        'van sin "le quedan", nunca con el número de antes', (tester) async {
+      final m = await _montar(tester, ventasDeAntes: (entradas) => dar(entradas));
+      m.entradas.fallaLeerDespuesDeRendir = true;
+      await rendirEnEfectivo(tester);
+      expect(m.entradas.listaVentas.single.cantidad, 15, reason: 'la rendición quedó guardada');
+      final c = m.comprobantes.single;
+      expect(c.rendicion!.persona, 'PÉREZ, JUAN');
+      expect(c.rendicion!.bloque, isNull);
+      expect(ComprobanteEntradasPdf.lineaDeLaRendicion(c.rendicion!, c.venta.cantidad), isNull);
+      expect(_texto(tester, 'vender_rendicion_guardada_texto'),
+          r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · $ 120.000');
+      expect(find.textContaining('No se guardó'), findsNothing);
+    });
+
+    testWidgets('si el comprobante de la rendición no se puede abrir, la rendición queda '
+        'y se dice sin asustar', (tester) async {
+      final m = await _montar(
+        tester,
+        fallaElComprobante: true,
+        ventasDeAntes: (entradas) => dar(entradas),
+      );
+      await _tocar(tester, 'vender_rendir');
+      await tester.pumpAndSettle();
+      await _tocar(tester, 'rendir_vendio_mas', veces: 2);
+      await _tocar(tester, 'rendir_efectivo');
+      await tester.pumpAndSettle();
+      await _confirmarElCobro(tester);
+      expect(m.entradas.listaVentas.single.cantidad, 2);
+      expect(
+          find.text('La rendición quedó guardada. No se pudo abrir el comprobante: probá '
+              'de nuevo con VER EL COMPROBANTE.'),
+          findsOneWidget);
+      expect(find.textContaining('No se guardó'), findsNothing);
+      expect(find.byKey(const Key('vender_ver_comprobante_rendicion')), findsOneWidget);
     });
 
     // 21-nov-2026, sección 2 de la SPEC: el cobro de RENDIR es la hoja de
@@ -1955,6 +2058,9 @@ void main() {
       expect(m.entradas.listaParaRendir.where((x) => x.esDevolvio).single.numeros, '1201-1204');
       expect(_texto(tester, 'vender_rendicion_guardada_texto'),
           'Devolución guardada · PÉREZ, JUAN · devolvió 4 · le quedan 0');
+      // Solo devolvió: no hay plata ni comprobante.
+      expect(m.comprobantes, isEmpty);
+      expect(find.byKey(const Key('vender_ver_comprobante_rendicion')), findsNothing);
     });
 
     testWidgets('lo vendido sin caja pide ABRIR LA CAJA, y abierta se cobra',

@@ -260,13 +260,19 @@ class _VentasDeEntradasScreenState
     if (mounted) setState(() => _ocupado = false);
   }
 
+  /// REIMPRIMIR: el comprobante como COPIA (anulada, con ANULADA). **El de una
+  /// rendición es el de la rendición** (21-nov-2026): "Recibió" y "Rinde", y del
+  /// bloque solo lo seguro: qué se llevó, lo que vendió en esta rendición y lo
+  /// que le queda **hoy, con la fecha** ("al 22/11 le quedan 0": la de arriba
+  /// es la de la rendición). Qué devolvió en ese mismo acto no se sabe con
+  /// certeza. Si el bloque todavía no bajó a este equipo, sin ese renglón.
   Future<void> _reimprimir(VentaDelHistorial v) async {
-    // El comprobante de una rendición llega con los papeles (etapa 6): el de
-    // una venta común diría "Pulseras normales", y quien rinde no las lleva.
-    if (_rendicionDe(v.venta) != null) return;
+    final rinde = _rendicionDe(v.venta);
     ContratoAlumno? alumno;
-    for (final a in _alumnos) {
-      if (a.id == v.venta.contratoAlumnoId) alumno = a;
+    if (rinde == null) {
+      for (final a in _alumnos) {
+        if (a.id == v.venta.contratoAlumnoId) alumno = a;
+      }
     }
     try {
       await ref.read(abrirComprobanteDeEntradasProvider)(
@@ -278,6 +284,13 @@ class _VentasDeEntradasScreenState
           mesa: alumno == null ? null : SalonMesas.textoMesasPuerta(alumno),
           copia: true,
           anulacion: v.anulacion,
+          rendicion: rinde == null
+              ? null
+              : RendicionDelComprobante.reimpresa(
+                  persona: rinde.persona,
+                  bloque: rinde.bloque,
+                  alDia: ref.read(hoyEnArgentinaProvider)(),
+                ),
         ),
         context: context,
       );
@@ -595,10 +608,10 @@ class _VentasDeEntradasScreenState
                 Tooltip(
                   message: rendicion == null
                       ? 'El comprobante, como COPIA'
-                      : 'El comprobante de la rendición todavía no se imprime',
+                      : 'El comprobante de la rendición, como COPIA',
                   child: TextButton(
                     key: Key('reimprimir_${venta.id}'),
-                    onPressed: rendicion == null ? () => _reimprimir(v) : null,
+                    onPressed: () => _reimprimir(v),
                     child: const Text('REIMPRIMIR'),
                   ),
                 ),

@@ -8,6 +8,7 @@
 // - toda ventana con providers usa preferencias en memoria;
 // - las de la venta de entradas y el cierre de caja ponen la venta en memoria;
 // - las de la barra reemplazan la central, el pedido del cierre y los PDF;
+// - las que llegan a PARA RENDIR reemplazan la constancia (regla 60);
 // - la lista de la puerta en memoria reemplaza todo lo que abre la base.
 import 'dart:io';
 
@@ -171,6 +172,47 @@ void main() {
     }
     expect(faltan, isEmpty,
         reason: 'Estas ventanas escriben en la carpeta de PDF del programa: $faltan');
+  });
+
+  // Regla 60 de las entradas para rendir (21-nov-2026): la constancia para firmar
+  // sale al DAR y con CONSTANCIA, en PARA RENDIR (`ParaRendirScreen(`), que se
+  // abre desde ENTRADAS de la fiesta (la oficina, `RetiroEntradasScreen(`, que se
+  // abre desde la pantalla de la fiesta, `DetalleEventoMasivoScreen(`; el
+  // mostrador no la tiene): una ventana con cualquiera de las tres llega ahí, y
+  // sin reemplazarla la dejaría en la
+  // carpeta de PDF del programa. Esto mira el texto; que el reemplazo llegue de
+  // verdad a cada lado de la ventana de la venta lo prueba
+  // `test/venta_entradas_prueba_test.dart`.
+  test('la constancia de las entradas para rendir no va a la carpeta del programa', () {
+    final faltan = <String>[];
+    for (final ruta in ventanas) {
+      final n = _nombre(ruta);
+      final s = _leer(ruta);
+      final llegaAParaRendir = [
+        'RetiroEntradasScreen(',
+        'ParaRendirScreen(',
+        'DetalleEventoMasivoScreen(',
+      ].any(s.contains);
+      if (llegaAParaRendir &&
+          !s.contains('abrirConstanciaParaRendirProvider.overrideWith')) {
+        faltan.add('$n: abrirConstanciaParaRendirProvider');
+      }
+      // Un reemplazo que la entrega por el camino de la app escribe igual en la
+      // carpeta.
+      if (s.contains('ConstanciaParaRendirPdf') && s.contains('PdfService.entregarPdf')) {
+        faltan.add('$n: entrega la constancia con PdfService.entregarPdf');
+      }
+    }
+    expect(faltan, isEmpty,
+        reason: 'Estas ventanas escriben la constancia en la carpeta de PDF del '
+            'programa: $faltan');
+    // Y la regla mira algo: la ventana de la venta de entradas llega a PARA
+    // RENDIR (el jefe, en ENTRADAS de la fiesta).
+    expect(
+      ventanas.map(_nombre),
+      contains('venta_entradas_prueba.dart'),
+    );
+    expect(_leer('tool/venta_entradas_prueba.dart'), contains('RetiroEntradasScreen('));
   });
 
   test('las de la barra en el navegador son del navegador', () {
