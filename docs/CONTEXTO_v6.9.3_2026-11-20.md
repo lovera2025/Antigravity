@@ -1,7 +1,8 @@
 # CONTEXTO — la 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo
 
-**Estado (22-nov-2026): SIN PUBLICAR. Lo de VENDER y la entrega en dos partes, programado y probado en el sandbox;
-"Entradas para rendir", sumado adentro de la misma versión, con las etapas 2 a 6 de 9 hechas** (ver "Para retomar").
+**Estado (22-nov-2026, tarde): SIN PUBLICAR, 96 %. Todo programado y probado en el sandbox, también "Entradas para
+rendir" entera (etapas 2 a 8), los papeles solo con su botón, el talonario obligatorio, "Para el DJ" y PRECIOS en
+otras fiestas. Falta el recorrido con el mouse (con su permiso) y publicar con él** (ver "Para retomar").
 La versión del programa sigue en `6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y
 `installer/junior_eventos_setup.iss`), con las novedades **"Actualizaciones y estabilidad"** (decisión del usuario,
 20-nov). Lleva **dos SQL en la nube, solo de agregar, sin correr**
@@ -15,6 +16,58 @@ madrugada), y el de comprobar y probar, `C:\Users\lover\.claude\plans\hay-que-se
 me tienen que llegar las pulseras para los egresados y acompañantes y las entradas para ellos".
 
 ## Para retomar en otro chat
+
+### Dónde quedó (22-nov-2026, tarde) — 96 %
+
+El usuario pidió repasar lo que le sirve (venderle a los alumnos con contrato, a los de afuera y que puedan
+rendir) y sumó cuatro cosas, todas **programadas, probadas y guardadas** (plan aprobado:
+`C:\Users\lover\.claude\plans\bueno-que-falta-para-encapsulated-blum-of-11f9623c-fd9d-444d-a433-890d20403b77.md`):
+- **Ningún papel sale solo** (eligió "Nada sale solo"): el aviso de VENDER lleva IMPRIMIR EL COMPROBANTE (el
+  original; después VER DE NUEVO, la COPIA), PARA RENDIR → IMPRIMIR LA CONSTANCIA (y CONSTANCIA de cada bloque
+  sale REIMPRESA solo si el bloque tiene movimientos), cerrar la caja → IMPRIMIR EL CIERRE y LISTO no pregunta;
+  el cierre dice que después lo saca el jefe en **Cierre de caja → ENTRADAS**, que tiene la impresora en el
+  renglón de cada caja cerrada (`cc476db`).
+- **El número del talonario es obligatorio en cada venta** (`kTalonarioObligatorio`, en `PedidoDeEntradas.falta`;
+  VENDER lo sigue proponiendo y se escribe a mano). Las generales que se entregan sin cargo siguen con número
+  opcional. El historial A4 ya no dice "pulseras" (`d32b5e3`).
+- **PLANILLAS → "Para el DJ"**: un PDF con cada egresado, sus acompañantes y su música, por división, sin los de
+  baja ni nada más; sin modo jefe (`1b31e7a`, `lib/features/common/services/planilla_dj_pdf.dart`). Muestra en
+  `build/muestras_dj/` (mandada).
+- **PRECIOS en otras fiestas** (pedido a mitad de camino): al GUARDAR, si hay otras fiestas por venir, salta
+  "¿Poner estos precios también en otras fiestas?" (ninguna tildada, TODAS); con la anticipada se elige "el día
+  anterior a cada fiesta" o "el mismo día" (`f58ebeb`, `cuentas/precios_en_otras_fiestas.dart`,
+  `widgets/precios_en_otras_fiestas_dialog.dart`, `fiestasParaLosPreciosProvider`). Con "el mismo día" no deja
+  tildar una fiesta que es ese día o antes, y la de anoche no se ofrece.
+- `entradas_config` y `sorteos_mesas` bajan con lo del cobro (`ba6dee7`): el precio llega enseguida a la tablet.
+
+Y lo que faltaba de antes:
+- **Etapa 7 hecha**: la ventana de prueba recorre los tres casos de punta a punta entre la tablet y la PC, con y
+  sin internet (`3833dde`; `test/venta_entradas_prueba_test.dart`, 23). Muestras en `build/muestras_6.9.3_final/`.
+- **Etapa 8 hecha**: roturas 36 a 75 en `tool/roturas_6.9.3.txt` (todas detectadas); la regla 61 en
+  `test/venta_entradas_no_toca_test.dart`; RENDIR vuelve a pedir el permiso después de su ventana (test nuevo);
+  **la v82 sobre una copia de la base real**, de la 80 a la 82 de una y en dos pasos, con la vuelta a la 6.9.2, la
+  base real IGUAL (`tool/verificar_migracion_v82_test.dart`); el conteo de familias por grupo de VENDER sobre la
+  copia (`tool/familias_para_vender_test.dart`, los nombres fuera de git): de 9 fiestas, entre 0 y 28 "puede
+  retirar" cada una, la mayoría "debe", 17 "revisar" en SAGRADO CORAZON (sin mesa: falta sortear) y 2 a 16 con algo
+  "a confirmar"; **una revisión independiente** de tres miradas (la plata, sin internet y dos equipos, pantallas y
+  llaves): todo lo confirmado, arreglado con su test (`93d12c7`, `100f6d5`).
+- **La suite entera, con todo: 6.118 tests, ninguno falla** (22-nov a la tarde).
+
+**Lo que falta, en orden:**
+1. **El recorrido con el mouse** en `tool/venta_entradas_prueba.dart` (los tres casos, PRECIOS en otras fiestas)
+   y "Para el DJ" en `tool/plano_prueba.dart` o la ventana de la fiesta, con `python -I tool/huella_de_la_base.py`
+   antes y después: **pedirle el permiso de computer-use con aviso al celular y esperarlo**; mandarle las capturas.
+2. Que mire las muestras (`build/muestras_6.9.3_final/`, `build/muestras_6.9.3/`, `build/muestras_dj/`).
+3. Para preguntarle, sin frenar: "Emitido:" 3 horas antes en otros papeles
+   (`docs/pendientes/horas-corridas-en-otros-papeles.md`); el recargo por transferencia para quien vende; cómo
+   recibe el comprador el comprobante desde la tablet (Compartir).
+4. **Publicar con él** ("Al publicar", abajo): los dos SQL antes de instalar; la migración se repite sobre una
+   copia nueva si pasan días.
+
+**Quedó sin arreglar, a propósito:** `entradas_config` es una fila por fiesta que sube entera: si el jefe pone
+precios en varias fiestas desde una PC sin internet y otra PC cambia una de esas mientras tanto, gana la que sube
+última (ya pasaba con una sola fiesta; un solo jefe). El original del comprobante se saca desde el aviso de la
+venta; después, VENTAS → REIMPRIMIR da la COPIA.
 
 ### Dónde quedó (22-nov-2026)
 

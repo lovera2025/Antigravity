@@ -696,13 +696,26 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   dicen se comprueba en los tests con la letra de fábrica.
 
 **La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — SIN
-PUBLICAR** (lo de VENDER y la entrega, programado y probado en el sandbox el 20-nov; Entradas para rendir, con los papeles hechos el 22-nov y sin la ventana de prueba ni el cierre) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+PUBLICAR, 96 %** (todo programado y probado en el sandbox al 22-nov a la tarde, también Entradas para rendir entera;
+falta el recorrido con el mouse, con su permiso, y publicar con él) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
 ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
 vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
 al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar, SIN
 CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121120000_entradas_para_rendir.sql`) y
-**la v81 y la v82 en las PCs, que solo crean una tabla cada una** (la v81 probada sobre una copia de la base real el
-20-nov; la v82, todavía no).
+**la v81 y la v82 en las PCs, que solo crean una tabla cada una** (las dos probadas sobre una copia de la base real:
+la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `tool/verificar_migracion_v82_test.dart`).
+- **Lo que pidió el 22-nov (hecho):**
+  - **Ningún papel de la venta sale solo**: el comprobante (aviso de VENDER: IMPRIMIR EL COMPROBANTE, después VER
+    DE NUEVO con COPIA), la constancia (IMPRIMIR LA CONSTANCIA; CONSTANCIA sale REIMPRESA solo con movimientos) y el
+    cierre (IMPRIMIR EL CIERRE; después de LISTO, Cierre de caja → ENTRADAS, la impresora del renglón). **Un papel
+    nuevo de la venta va con su botón, nunca solo.**
+  - **El número del talonario es obligatorio en cada venta** (`kTalonarioObligatorio`, en `PedidoDeEntradas.falta`);
+    las generales sin cargo siguen opcionales.
+  - **PLANILLAS → "Para el DJ"** (`planilla_dj_pdf.dart`): egresado, acompañantes y música, nada más, sin modo jefe.
+  - **PRECIOS en otras fiestas**: al guardar, "¿Poner estos precios también en otras fiestas?"
+    (`PreciosEnOtrasFiestas`, `fiestasParaLosPreciosProvider`, que las pruebas reemplazan). Con "el mismo día" no
+    se tilda una fiesta que es ese día o antes; la de anoche no se ofrece.
+  - `entradas_config` y `sorteos_mesas` están en `_tablasDelCobro`: el precio llega enseguida a la tablet.
 - **Los dos talonarios:** lo que se vende (las anticipadas, `NumerosDeEntradas.ocupadosDeLaVenta`) y lo que se
   entrega sin cargo (las generales de los alumnos, `ocupadosDeLaEntrega`) ya no se frenan entre sí; cada uno no deja
   repetir lo suyo. **Los números de las generales son opcionales.**
