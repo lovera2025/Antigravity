@@ -719,6 +719,40 @@ void main() {
     );
   });
 
+  // 22-nov-2026 (lo encontró la tanda de roturas): como lo del jefe, lo de quien
+  // vende que abre una ventana antes de guardar vuelve a preguntar después de
+  // ella: el permiso pudo cambiar con la ventana abierta. Hasta hoy nada
+  // vigilaba la llave de RENDIR después de su ventana.
+  test('la venta de entradas: lo de quien vende que abre una ventana antes de guardar '
+      'vuelve a preguntar por el permiso después de ella', () {
+    final escribe = RegExp(r'\.(rendir)\(');
+    final ventana = RegExp(
+      r'await (showDialog|showModalBottomSheet|mostrar\w*|pedir\w*|elegir\w*)\b',
+    );
+    final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
+    final conVentana = <String>{};
+    for (final f in Directory('lib/features/entradas/widgets').listSync().whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final ruta = f.path.replaceAll('\\', '/');
+      final fuente = leer(ruta);
+      final funciones = funcion.allMatches(fuente).toList();
+      for (final g in escribe.allMatches(fuente)) {
+        final donde = funciones.lastWhere((x) => x.start < g.start);
+        final antes = fuente.substring(donde.start, g.start);
+        final ventanas = ventana.allMatches(antes).toList();
+        if (ventanas.isEmpty) continue;
+        conVentana.add(donde.group(1)!);
+        expect(
+          antes.substring(ventanas.last.end),
+          contains('if (_frenaSinPermiso()) return;'),
+          reason: '${donde.group(1)} ($ruta) guarda después de una ventana sin volver a '
+              'preguntar si puede vender',
+        );
+      }
+    }
+    expect(conVentana, {'_rendir'});
+  });
+
   test('PRECIOS se abre solo desde ENTRADAS de la fiesta, y con la llave', () {
     const pantallaEntradas = 'lib/features/eventos/retiro_entradas_screen.dart';
     final fuente = leer(pantallaEntradas);

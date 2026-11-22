@@ -202,3 +202,219 @@ test/entregar_parte_test.dart
       if (!ahora.isAfter(c.createdAt)) {
       if (false && !ahora.isAfter(c.createdAt)) {
 ---
+36. se rinde al precio que trae la pantalla, no al que quedó fijo en el bloque el día que se las llevó
+lib/features/entradas/datos/entradas_local.dart
+test/entradas_repositorio_test.dart
+        final precio = enLaBase.precio;
+        final precio = bloque.precio;
+---
+37. con la anticipada vigente, DAR la nombra "Entrada" (la general)
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+      nombre: PrecioDeEntradas.rigeLaAnticipada(config, hoyAr)
+      nombre: false
+---
+38. la rendición lleva un descuento (una comisión) en vez de rendir toda la plata
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+        descuentoPct: 0,
+        descuentoPct: 10,
+---
+39. la venta de la rendición de un alumno va a su familia
+lib/features/entradas/datos/entradas_local.dart
+test/entradas_repositorio_test.dart test/para_rendir_test.dart
+          contratoAlumnoId: null,
+          contratoAlumnoId: enLaBase.contratoAlumnoId,
+---
+40. rendir no es todo o nada: si falla el renglón de lo devuelto, la venta queda igual
+lib/features/entradas/datos/entradas_local.dart
+test/entradas_repositorio_test.dart
+        await _guardar(txn, tablaParaRendir, devolvio.id, devolvio.toMap());
+        try { await _guardar(txn, tablaParaRendir, devolvio.id, devolvio.toMap()); } catch (_) {}
+---
+41. el repositorio no vuelve a contar lo que le queda: se rinde de más con la cuenta vieja
+lib/features/entradas/datos/entradas_local.dart
+test/entradas_repositorio_test.dart
+      if (vendidas + devueltas > cuenta.quedan) {
+      if (false) {
+---
+42. la plata de una rendición no entra en el cierre de la caja que la cobró
+lib/features/entradas/cuentas/cierre_de_entradas.dart
+test/cierre_de_entradas_test.dart
+      if (soloDe != null && v.cajaEntradasId != soloDe) continue;
+      if (soloDe != null && v.cajaEntradasId != soloDe || v.contratoAlumnoId == null && v.renglones.isNotEmpty && v.renglones.every((r) => r.nombre.endsWith(' · para rendir'))) continue;
+---
+43. VENDER no mira los bloques: vende un número que alguien tiene para rendir
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+        _paraRendir?.bloques ?? const [],
+        const [],
+---
+44. lo devuelto no queda libre: sigue ocupado por el bloque
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+        numerosOcupados: anulado ? const [] : _sin(tramos, devueltos),
+        numerosOcupados: anulado ? const [] : tramos,
+---
+45. VENDER le pasa a la entrega sin cargo lo vendido y los bloques (un talonario frena al otro)
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/entrega_por_partes_test.dart
+                salvo: a.id,
+                salvo: a.id) ..addAll(_ocupados
+---
+46. DAR no mira lo vendido ni los otros bloques: da números que ya tienen dueño
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+      deOtros: ocupados,
+      deOtros: const {},
+---
+47. se devuelve cualquier número del bloque, aunque ya lo haya devuelto o no haya vuelto
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+          if (_esta(n, bloque.numerosQueTiene)) continue;
+          if (_esta(n, bloque.tramos)) continue;
+---
+48. una rendición anulada en VENTAS sigue contando como vendida
+lib/features/entradas/datos/movimiento_para_rendir.dart
+test/para_rendir_test.dart
+          if ((m.esVendio && !ventasAnuladas.contains(m.ventaId)) ||
+          if ((m.esVendio) ||
+---
+49. si rindió de más, no se avisa
+lib/features/entradas/cuentas/para_rendir.dart
+test/para_rendir_test.dart
+      if (b.rindioDeMas > 0) {
+      if (false) {
+---
+50. DAR no vuelve a preguntar por el modo jefe después de su ventana
+lib/features/entradas/widgets/para_rendir_screen.dart
+test/solo_modo_jefe_test.dart
+      if (_frenaSinModoJefe()) return;
+
+---
+51. la llave de VENDER (y de RENDIR) deja pasar a quien solo entrega, sin "Vende entradas"
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/solo_modo_jefe_test.dart
+    if (ref.read(puedeVenderEntradasProvider)) return false;
+    if (ref.read(appRoleProvider).esEntradas) return false;
+---
+52. el botón PARA RENDIR se prende sin modo jefe
+lib/features/eventos/retiro_entradas_screen.dart
+test/solo_modo_jefe_test.dart
+      prendido: esJefe && enElEquipo,
+      prendido: enElEquipo,
+---
+53. el aviso de VENDER muestra la plata que falta rendir
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+                personas: _paraRendir!.personas,
+                personas: _paraRendir!.plataQueFalta.round(),
+---
+54. "Todo subido" no cuenta la tabla de las entradas para rendir
+lib/features/entradas/datos/entradas_local.dart
+test/entradas_repositorio_test.dart
+          tablaParaRendir,
+          tablaConfig,
+---
+55. la anulación de un renglón para rendir lleva un id nuevo: dos equipos dejan dos
+lib/features/entradas/datos/movimiento_para_rendir.dart
+test/entradas_repositorio_test.dart
+      id: UuidUtils.entradasParaRendirAnulacionId(anulado.id),
+      id: UuidUtils.generate(),
+---
+56. el motor no sube ni baja una columna de las entradas para rendir (nombre_precio)
+lib/core/services/sync_engine.dart
+test/sync_tablas_v82_test.dart
+        'nombre_precio',
+
+---
+57. la v82 también le agrega una columna a una tabla que ya existe
+lib/core/database/local_database.dart
+test/migracion_v82_test.dart
+        await crearTablasV82(db);
+        await crearTablasV82(db); await db.execute('ALTER TABLE entradas_ventas ADD COLUMN bloque_id TEXT');
+---
+58. un "que" desconocido se toma por una devolución
+lib/features/entradas/datos/movimiento_para_rendir.dart
+test/para_rendir_test.dart
+    return null;
+    return QueParaRendir.devolvio;
+---
+59. el comprobante de una rendición dice "Compra" en vez de "Rinde"
+lib/features/entradas/pdf/comprobante_entradas_pdf.dart
+test/comprobante_rendicion_test.dart
+          dato('Rinde', quienRinde),
+          dato('Compra', quienRinde),
+---
+60. una ventana de prueba abre ENTRADAS de la fiesta sin reemplazar la constancia
+tool/cierre_sector_prueba.dart
+test/arneses_sin_base_test.dart
+          const Expanded(child: CierreCajaScreen()),
+          const Expanded(child: CierreCajaScreen()), Expanded(child: RetiroEntradasScreen(evento: _fiesta)),
+---
+61. una pantalla escribe la tabla de las entradas para rendir por su cuenta (sin EntradasLocal)
+lib/features/entradas/widgets/para_rendir_screen.dart
+test/venta_entradas_no_toca_test.dart
+      await ref.read(entradasDelJefeProvider).noVolvieron(
+      await SyncQueue.enqueue(executor: db, tabla: 'entradas_para_rendir', operacion: SyncOperation.insert, registroId: bloque.id, payload: bloque.dio.toMap()); await ref.read(entradasDelJefeProvider).noVolvieron(
+---
+62. ningún papel sale solo: VENDER abre el comprobante al guardar una venta
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+    // aviso, si hace falta (22-nov-2026).
+    unawaited(_sacarComprobante(guardada.id, ({required copia}) => _datosDelComprobante(guardada, copia: copia)));
+---
+63. ningún papel sale solo: RENDIR abre el comprobante de la rendición al guardar
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+      rendida = hecha;
+      rendida = hecha; if (hecha.venta != null) unawaited(_sacarComprobante(hecha.venta!.id, ({required copia}) => _datosDeLaRendicion(hecha, hecha.venta!, copia: copia)));
+---
+64. ningún papel sale solo: CERRAR CAJA abre el papel del cierre al cerrar
+lib/features/entradas/widgets/cerrar_caja_entradas_screen.dart
+test/cerrar_caja_entradas_test.dart
+    _decir('Caja cerrada.');
+    _decir('Caja cerrada.'); unawaited(_imprimir());
+---
+65. ningún papel sale solo: DAR abre la constancia al dar
+lib/features/entradas/widgets/para_rendir_screen.dart
+test/para_rendir_pantalla_test.dart
+      dado = dio;
+      dado = dio; unawaited(_constanciaDeLoDado(dio));
+---
+66. VENDER vende sin número del talonario
+lib/features/entradas/cuentas/pedido_de_entradas.dart
+test/entradas_cuentas_test.dart
+    if (tramos.isEmpty) return kTalonarioObligatorio;
+
+---
+67. PRECIOS pone los mismos precios en otras fiestas sin modo jefe
+lib/features/entradas/widgets/precios_en_otras_fiestas_dialog.dart
+test/solo_modo_jefe_test.dart test/precios_en_otras_fiestas_test.dart
+    if (ref.read(esRolJefeProvider)) return false;
+    return false;
+---
+68. PRECIOS en otras fiestas copia el mismo día de la anticipada aunque se eligió la víspera de cada fiesta
+lib/features/entradas/cuentas/precios_en_otras_fiestas.dart
+test/precios_en_otras_fiestas_test.dart
+        dia == DiaDeLaAnticipada.elMismo) {
+        true) {
+---
+69. "Para el DJ" deja pasar a los de baja
+lib/features/common/services/planilla_dj_pdf.dart
+test/planilla_dj_pdf_test.dart
+    for (final a in PlanillaDelegado.alumnosDeLaPlanilla(alumnos)) {
+    for (final a in alumnos) {
+---
+70. el precio de las entradas vuelve a bajar con lo de carga (el primer 'entradas_config', de la lista es el de _tablasDelCobro)
+lib/core/services/sync_engine.dart
+test/sync_tablas_v80_test.dart
+    'entradas_config',
+
+---
+71. el registro de sorteos vuelve a bajar con lo de carga (el primer 'sorteos_mesas', de la lista es el de _tablasDelCobro)
+lib/core/services/sync_engine.dart
+test/sync_tablas_v80_test.dart
+    'sorteos_mesas',
+
+---
