@@ -52,7 +52,9 @@ class PedidoDeEntradas {
   final String comprador;
   final String dni;
 
-  /// Los números del talonario. Vacío: no se anotaron (son opcionales).
+  /// Los números del talonario. **Obligatorios** desde el 22-nov-2026: vacío,
+  /// no se puede confirmar ([falta]). Una venta vieja sin números se sigue
+  /// leyendo igual.
   final List<TramoTalonario> tramos;
 
   /// Los números de las anticipadas que ya tienen dueño
@@ -284,6 +286,9 @@ class PedidoDeEntradas {
         comprador.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
     if (palabras < 2) return 'Escribí nombre y apellido de quien compra';
     if (cantidad < 1) return 'Elegí cuántas entradas lleva';
+    // El número del talonario es obligatorio (pedido del usuario, 22-nov-2026:
+    // "si no, cómo se lleva la cuenta"), con las mismas palabras que DAR.
+    if (tramos.isEmpty) return kTalonarioObligatorio;
     return errorDeLosNumeros;
   }
 

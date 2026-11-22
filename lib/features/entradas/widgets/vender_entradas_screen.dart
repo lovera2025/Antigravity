@@ -1995,7 +1995,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   /// El talonario de las anticipadas: todo lo que se vende sale de ahí. Viene
   /// propuesto el número que sigue al último que vendió esta caja; se puede
-  /// cambiar o borrar (sin número se vende igual).
+  /// cambiar. **Sin número no se vende** (22-nov-2026: lo dice
+  /// `PedidoDeEntradas.falta`).
   Widget _talonario(PedidoDeEntradas p) {
     Widget campo(String clave, TextEditingController c, String rotulo) =>
         SizedBox(
@@ -2035,12 +2036,12 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         Text(
           _hayPropuesta
               ? (_propuestaSaltoUnBloque
-                  ? 'Opcional. Viene el primer número libre después del último que '
+                  ? 'Obligatorio. Viene el primer número libre después del último que '
                       'vendió esta caja (los del medio los tiene alguien para rendir): '
-                      'se puede cambiar o borrar.'
-                  : 'Opcional. Viene el número que sigue al último que vendió esta '
-                      'caja: se puede cambiar o borrar.')
-              : 'Opcional: escribí el primer número de las anticipadas que '
+                      'revisalo con el talonario.'
+                  : 'Obligatorio. Viene el número que sigue al último que vendió esta '
+                      'caja: revisalo con el talonario.')
+              : 'Obligatorio: escribí el primer número de las anticipadas que '
                   'entregás.',
           key: const Key('vender_talonario_ayuda'),
           style: TextStyle(fontSize: 12, color: Colors.grey.shade700),

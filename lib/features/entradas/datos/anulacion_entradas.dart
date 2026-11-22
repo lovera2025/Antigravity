@@ -7,7 +7,7 @@ import 'venta_entradas.dart';
 /// esta fila dice que no cuenta. Una por venta, con id fijo
 /// ([UuidUtils.entradasAnulacionId]). **Solo se agregan filas.**
 ///
-/// [devueltas] dice si devolvieron las entradas y las pulseras. Si no, los
+/// [devueltas] dice si devolvieron las entradas. Si no, los
 /// números de esa venta quedan anulados para siempre: no se vuelven a vender
 /// ni a entregar.
 class AnulacionEntradas {

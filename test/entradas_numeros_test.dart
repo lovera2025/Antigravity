@@ -242,7 +242,8 @@ void main() {
           ).conComprador('OTRO, COMPRADOR').conSueltas(2);
 
       final p = pedido(const []);
-      expect(p.falta, isNull, reason: 'sin números se puede');
+      expect(p.falta, kTalonarioObligatorio,
+          reason: 'desde el 22-nov-2026, sin números no se puede');
       expect(
         p.conTramos(const [TramoTalonario(201, 202)]).falta,
         'El 201 ya se le dio a COMPRADORA, UNA (200 al 201).',

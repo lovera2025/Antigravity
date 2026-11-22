@@ -194,6 +194,12 @@ void main() {
   /// En A PAGAR: quien compra, EFECTIVO y CONFIRMAR en la hoja del cobro.
   Future<void> cobrarEnEfectivo(WidgetTester tester, String comprador) async {
     await poner(tester, 'vender_comprador', comprador);
+    // El número del talonario es obligatorio (22-nov-2026): si no vino
+    // propuesto (la primera venta de la caja), lo escribe Carla.
+    final del = find.byKey(const Key('vender_del'));
+    if (tester.widget<TextField>(del).controller!.text.trim().isEmpty) {
+      await poner(tester, 'vender_del', '7001');
+    }
     expect(find.byKey(const Key('vender_falta')), findsNothing);
     await tocar(tester, 'vender_efectivo');
     await tocar(tester, 'cobro_confirmar');

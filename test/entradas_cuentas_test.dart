@@ -7,6 +7,8 @@ import 'package:arguello_events/core/utils/ar_time.dart';
 import 'package:arguello_events/features/barra/cuentas/cobro_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pesos.dart';
 import 'package:arguello_events/features/entradas/cuentas/lugares_de_la_familia.dart';
+import 'package:arguello_events/features/entradas/cuentas/numeros_de_entradas.dart'
+    show kTalonarioObligatorio;
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/cuentas/precio_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
@@ -156,6 +158,9 @@ PedidoDeEntradas _pedido({
       hoyAr: hoy ?? _dia(11, 20),
       esJefe: esJefe,
     ).conComprador('COMPRADORA, UNA').conSueltas(2);
+
+/// Los números de las 2 de [_pedido]: el talonario es obligatorio.
+const _dosNumeros = [TramoTalonario(1, 2)];
 
 /// Un repositorio que solo anota lo que le mandan a vender.
 class _RepoQueAnota implements EntradasDeLaCaja {
@@ -425,6 +430,10 @@ void main() {
 
       expect(_pedido().conSueltas(0).falta, 'Elegí cuántas entradas lleva');
 
+      // El número del talonario es obligatorio (22-nov-2026).
+      expect(_pedido().falta, kTalonarioObligatorio);
+      expect(_pedido().puedeConfirmar, isFalse);
+
       expect(
         _pedido().conTramos(const [TramoTalonario(1, 5)]).falta,
         'Son 5 números y la venta lleva 2 entradas.',
@@ -451,7 +460,7 @@ void main() {
         );
 
     test('en efectivo, con lo que entrega y el vuelto', () {
-      final p = _pedido();
+      final p = _pedido().conTramos(_dosNumeros);
       final v = p.venta(
         caja: _caja(),
         numero: 17,
@@ -467,11 +476,11 @@ void main() {
       expect(v.vuelto, 30000);
       expect(v.cantidad, 2);
       expect(v.contratoAlumnoId, isNull);
-      expect(v.numeros, isNull);
+      expect(v.numeros, '1-2');
     });
 
     test('por transferencia con recargo: lo transferido lo lleva adentro', () {
-      final p = _pedido(config: _config(recargo: 5));
+      final p = _pedido(config: _config(recargo: 5)).conTramos(_dosNumeros);
       final v = p.venta(
         caja: _caja(),
         numero: 1,
@@ -488,7 +497,7 @@ void main() {
     });
 
     test('mixto con recargo: el recargo va solo sobre lo transferido', () {
-      final p = _pedido(config: _config(recargo: 10));
+      final p = _pedido(config: _config(recargo: 10)).conTramos(_dosNumeros);
       final cobro = p.cobroPor(MedioBarra.mixto).conEfectivoDelMixto(5000);
       final v = p.venta(caja: _caja(), numero: 1, cobro: cobro, ahora: _ahora);
       cierra(v);
@@ -532,7 +541,7 @@ void main() {
     });
 
     test('con el 100 % de descuento vale 0 y se guarda igual', () {
-      final p = _pedido(esJefe: true).conDescuento(100);
+      final p = _pedido(esJefe: true).conDescuento(100).conTramos(_dosNumeros);
       expect(p.esSinCargo, isTrue);
       final v = p.venta(
         caja: _caja(),
@@ -560,7 +569,8 @@ void main() {
         }
       }
 
-      expect(alArmar(_pedido()), isNull);
+      expect(alArmar(_pedido().conTramos(_dosNumeros)), isNull);
+      expect(alArmar(_pedido()), isArgumentError, reason: 'sin el número del talonario');
       expect(alArmar(_pedido().conSueltas(0)), isArgumentError);
       expect(alArmar(_pedido().conComprador('Una')), isArgumentError);
       expect(alArmar(_pedido(config: _config(valor: null))), isArgumentError);

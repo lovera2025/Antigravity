@@ -275,7 +275,9 @@ class HistorialEntradasPdf {
       return [
         'ANULADA${quien.isEmpty ? '' : ' por $quien'} ${cuandoEnLaTabla(a.createdAt)}',
         a.motivo,
-        a.devueltas ? 'devolvieron las entradas y pulseras' : 'NO devolvieron las entradas',
+        // Sin pulseras (22-nov-2026, lo eligió el usuario): la pulsera no se
+        // vende. Cambia la firma de una tanda ya impresa con una anulada.
+        a.devueltas ? 'devolvieron las entradas' : 'NO devolvieron las entradas',
       ];
     }
     final partes = <String>[];

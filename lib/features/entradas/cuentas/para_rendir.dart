@@ -706,9 +706,7 @@ class ParaRendir {
       return 'Elegí al alumno de la lista.';
     }
     if (cantidad < 1) return 'Elegí cuántas entradas se lleva.';
-    if (tramos.isEmpty) {
-      return 'Escribí el primer número del talonario: son obligatorios.';
-    }
+    if (tramos.isEmpty) return kTalonarioObligatorio;
     final bienEscritos = tramos.every((t) => t.desde >= 1 && t.hasta >= t.desde);
     if (bienEscritos) {
       final total = _cuantos(tramos);

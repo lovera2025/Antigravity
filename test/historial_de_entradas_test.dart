@@ -422,6 +422,9 @@ void main() {
       );
       expect(de('SOSA, DIEGO').abajo, contains('ANULADA por Jefe'));
       expect(de('SOSA, DIEGO').abajo, contains('se equivoco de persona'));
+      // Sin pulseras (22-nov-2026): la pulsera no se vende.
+      expect(de('SOSA, DIEGO').abajo, contains('devolvieron las entradas'));
+      expect(de('SOSA, DIEGO').abajo, isNot(contains('pulsera')));
     });
 
     // Un talonario partido no entra en su columna: la columna dice "abajo" y

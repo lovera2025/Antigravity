@@ -18,6 +18,8 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/common/utils/solo_jefe.dart';
+import 'package:arguello_events/features/entradas/cuentas/numeros_de_entradas.dart'
+    show kTalonarioObligatorio;
 import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/pdf/comprobante_entradas_pdf.dart';
@@ -262,6 +264,16 @@ Future<void> _aAlguienDeAfuera(WidgetTester tester, {int sueltas = 2}) async {
   await tester.tap(find.text('Alguien de afuera'));
   await tester.pump();
   await _tocar(tester, 'vender_sueltas_mas', veces: sueltas);
+  await _conNumeroSiFalta(tester);
+}
+
+/// El número del talonario es obligatorio (22-nov-2026): si no vino propuesto,
+/// escribe [numero].
+Future<void> _conNumeroSiFalta(WidgetTester tester, {String numero = '9001'}) async {
+  final del = find.byKey(const Key('vender_del'));
+  if (del.evaluate().isEmpty) return;
+  if (tester.widget<TextField>(del).controller!.text.trim().isNotEmpty) return;
+  await _poner(tester, 'vender_del', numero);
 }
 
 /// Elige al alumno [id] de la lista, con el filtro [filtro] (sin él, el que
@@ -789,6 +801,7 @@ void main() {
       // La mesa adicional está paga entera: esas sí.
       expect(_texto(tester, 'vender_linea_mesa_1_cantidad'), '8');
       await _poner(tester, 'vender_comprador', 'PEREZ MARTA');
+      await _conNumeroSiFalta(tester);
       expect(_falta(tester), isNull);
       await _tocar(tester, 'vender_efectivo');
       await tester.pumpAndSettle();
@@ -981,6 +994,7 @@ void main() {
       expect(_texto(tester, 'vender_talonario_titulo'),
           'Talonario de las anticipadas · las 5 que paga');
       await _poner(tester, 'vender_comprador', 'PEREZ MARTA');
+      await _conNumeroSiFalta(tester);
       expect(_falta(tester), isNull);
     });
 
@@ -1370,13 +1384,21 @@ void main() {
   });
 
   group('el talonario de las anticipadas', () {
-    testWidgets('los números son opcionales, y el "al" se calcula solo', (tester) async {
+    // 22-nov-2026, pedido del usuario: "si no, cómo se lleva la cuenta".
+    testWidgets('los números son obligatorios, y el "al" se calcula solo', (tester) async {
       await _montar(tester);
-      await _aAlguienDeAfuera(tester, sueltas: 4);
+      await tester.tap(find.text('Alguien de afuera'));
+      await tester.pump();
+      await _tocar(tester, 'vender_sueltas_mas', veces: 4);
       await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
-      expect(_falta(tester), isNull);
       expect(_texto(tester, 'vender_al_calculado'), 'al …',
           reason: 'la caja todavía no vendió nada: no hay número propuesto');
+      expect(_falta(tester), kTalonarioObligatorio);
+      expect(
+        tester.widget<ButtonStyleButton>(find.byKey(const Key('vender_efectivo'))).onPressed,
+        isNull,
+        reason: 'sin el número no se cobra',
+      );
       expect(_texto(tester, 'vender_talonario_titulo'),
           'Talonario de las anticipadas · las 4 que paga');
       await _poner(tester, 'vender_del', '3000');
@@ -1391,7 +1413,7 @@ void main() {
       // La primera venta de la caja: no hay número que proponer, y el texto no
       // dice que viene uno (revisión del 20-nov-2026).
       expect(_texto(tester, 'vender_talonario_ayuda'),
-          'Opcional: escribí el primer número de las anticipadas que entregás.');
+          'Obligatorio: escribí el primer número de las anticipadas que entregás.');
       await _poner(tester, 'vender_comprador', 'GOMEZ CARLA');
       await _poner(tester, 'vender_del', '3000');
       await _tocar(tester, 'vender_efectivo');
@@ -1403,22 +1425,24 @@ void main() {
           tester.widget<TextField>(find.byKey(const Key('vender_del'))).controller!.text;
       expect(del(), '3002', reason: 'el que sigue');
       expect(_texto(tester, 'vender_talonario_ayuda'),
-          'Opcional. Viene el número que sigue al último que vendió esta caja: se '
-          'puede cambiar o borrar.');
+          'Obligatorio. Viene el número que sigue al último que vendió esta caja: '
+          'revisalo con el talonario.');
       await _tocar(tester, 'vender_sueltas_mas', veces: 2);
       expect(_texto(tester, 'vender_al_calculado'), 'al 3003');
 
-      // Lo borra: se vende sin números, y no se lo vuelve a proponer.
+      // Lo cambia por el de su talonario: no se lo vuelve a proponer encima.
       await _poner(tester, 'vender_comprador', 'RUIZ MARTA');
       await _poner(tester, 'vender_del', '');
       m.e.motor.bajo.add({'entradas_config'});
       await tester.pumpAndSettle();
       expect(del(), '', reason: 'lo que escribió quien vende no se pisa');
+      expect(_falta(tester), kTalonarioObligatorio, reason: 'borrado, no se vende');
+      await _poner(tester, 'vender_del', '4000');
       await _tocar(tester, 'vender_efectivo');
       await tester.pumpAndSettle();
       await _confirmarElCobro(tester);
-      expect(m.entradas.listaVentas.last.numeros, isNull);
-      expect(del(), '3002', reason: 'después de la venta vuelve a proponer');
+      expect(m.entradas.listaVentas.last.numeros, '4000-4001');
+      expect(del(), '4002', reason: 'después de la venta propone el que sigue');
     });
 
     // Hasta la 6.9.2 este número no se vendía ("El 1006 ya se le dio a GÓMEZ,

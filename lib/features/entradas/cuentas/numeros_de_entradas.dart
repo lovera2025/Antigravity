@@ -7,6 +7,10 @@ import '../datos/venta_entradas.dart';
 import 'lugares_de_la_familia.dart';
 import 'para_rendir.dart' show BloqueParaRendir;
 
+/// Lo que se dice si falta el número del talonario: al vender (desde el
+/// 22-nov-2026, pedido del usuario) y al dar entradas para rendir.
+const kTalonarioObligatorio = 'Escribí el primer número del talonario: son obligatorios.';
+
 /// Un número anotado dos veces **en el mismo talonario**: en dos ventas (el de
 /// las anticipadas) o en dos entregas sin cargo (el de las generales de los
 /// alumnos). Pasa cuando dos equipos venden o entregan sin internet: **no se
@@ -304,8 +308,10 @@ class NumerosDeEntradas {
   }
 
   /// Qué está mal en los números de una venta de [cantidad] entradas, o null
-  /// si están bien. **Sin números está bien**: son opcionales. [ocupados] es
-  /// lo que da [ocupadosDeLaVenta].
+  /// si están bien. **Sin números no hay nada mal escrito**: que en una venta
+  /// nueva son obligatorios lo dice `PedidoDeEntradas.falta`
+  /// ([kTalonarioObligatorio], 22-nov-2026). [ocupados] es lo que da
+  /// [ocupadosDeLaVenta].
   static String? error({
     required List<TramoTalonario> tramos,
     required int cantidad,
