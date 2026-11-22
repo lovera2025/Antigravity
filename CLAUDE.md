@@ -695,13 +695,13 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
   dicen se comprueba en los tests con la letra de fábrica.
 
-**La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — SIN
-PUBLICAR, 98 %** (todo programado y probado en el sandbox al 22-nov a la tarde, también Entradas para rendir entera
-y el recorrido con el mouse; falta publicar con él) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+**La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — PUBLICADA
+el 22-nov a la tarde, con el usuario** (los dos SQL corridos y probados en la nube, tag `v6.9.3`, release con el Setup
+y el APK, y la web; **falta que la instale, primero la PC que sortea, y la foto de la mora "después de 6.9.3"**) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
 ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
 vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
-al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar, SIN
-CORRER** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121120000_entradas_para_rendir.sql`) y
+al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar,
+corridos el 22-nov** (`supabase/migrations/20261120120000_entradas_entregas.sql` y `20261121120000_entradas_para_rendir.sql`) y
 **la v81 y la v82 en las PCs, que solo crean una tabla cada una** (las dos probadas sobre una copia de la base real:
 la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `tool/verificar_migracion_v82_test.dart`).
 - **Lo que pidió el 22-nov (hecho):**

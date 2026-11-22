@@ -1,8 +1,8 @@
 # CONTEXTO — la 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo
 
-**Estado (22-nov-2026, tarde): SIN PUBLICAR, 98 %. Todo programado y probado en el sandbox, también "Entradas para
-rendir" entera (etapas 2 a 8), los papeles solo con su botón, el talonario obligatorio, "Para el DJ" y PRECIOS en
-otras fiestas, y el recorrido con el mouse hecho. Falta publicar con él** (ver "Para retomar").
+**Estado: PUBLICADA el 22-nov-2026 a la tarde, con el usuario** ("zafaría publicar ya"; ver "Cómo se publicó",
+abajo). **Falta que la instale en las PCs y las tablets (primero la PC que sortea) y avise, y la foto de la mora
+"después de 6.9.3".**
 La versión del programa sigue en `6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y
 `installer/junior_eventos_setup.iss`), con las novedades **"Actualizaciones y estabilidad"** (decisión del usuario,
 20-nov). Lleva **dos SQL en la nube, solo de agregar, sin correr**
@@ -14,6 +14,40 @@ Planes aprobados: el de la versión, `C:\Users\lover\.claude\plans\cucha-tema-pe
 madrugada), y el de comprobar y probar, `C:\Users\lover\.claude\plans\hay-que-segur-chequear-synthetic-abelson.md`
 (20-nov, mañana). Sale del audio 6 del jefe: "estas que estamos haciendo son las anticipadas, las ventas al público;
 me tienen que llegar las pulseras para los egresados y acompañantes y las entradas para ellos".
+
+## Cómo se publicó (22-nov-2026, de 14:37 a 15:15)
+
+- **Foto de la mora "antes de 6.9.3"** (`c6543879…`, 642 alumnos, por el conector). Comparada con la de "después de
+  6.9.2" (`e3ea7b63…`): 4 fichas, todas movimientos normales de la 6.9.2 (dos perdones que dejaron la mora en 0,
+  una eximición seguida de un cobro, y un cobro que dejó $1.500 de mora; lo dice `mora_cambios`). Ninguna mora
+  revivida.
+- **Los dos SQL, corridos con su OK en el momento** (`20261120120000_entradas_entregas.sql` y
+  `20261121120000_entradas_para_rendir.sql`, por el conector, las secciones 1 y 2 de cada uno). Antes y después:
+  642 contratos, 5.561 pagos, 250 sesiones, 0 retiros, 0 ventas, 1 caja de entradas, 33 eventos. Las dos tablas
+  quedaron vacías, con RLS, su policy, un disparador de insert y uno de update, fuera de Realtime y sin CHECK, clave
+  foránea ni índice único; las columnas, iguales a los archivos. **Probado en la nube** con un bloque `do` que
+  termina en `raise exception`: un anónimo ve 0 y no escribe (42501); uno con sesión escribe; no quedó ninguna fila.
+- **La migración v82 sobre una copia de la base real**, ese mismo día (ver "Dónde quedó").
+- **Versión `6.9.3+78`** (`39cceff`).
+- **El instalador, por pasos** (`build/armado_693/`, con sus registros): la clave de firma; `flutter build windows
+  --release`; la página del celular de cero (`build/puesto` borrada antes; 151 archivos, con sus tres archivos);
+  `ISCC` (288 renglones "Compressing", 146 de la página, como la 6.9.2); el APK con `apksigner` ("CN=Junior
+  Eventos"). `Setup Junior Eventos v6.9.3.exe` (41.577.645 bytes) y `Junior Eventos v6.9.3.apk` (54.876.664 bytes,
+  arm64).
+- **Antes de subir, lo agregado desde `v6.9.2` se comparó con los 642 nombres de la copia de la base**: una
+  coincidencia, un nombre inventado de las pruebas de las entradas para rendir que coincidía con un alumno real
+  (sin ningún dato de él): se cambió (`NIEVA, CARLOS`) y se rehicieron las muestras. Sigue en commits anteriores,
+  ya subidos. Después, ninguna.
+- **Tag `v6.9.3`. Release** "Junior Eventos 6.9.3" con `Setup.Junior.Eventos.v6.9.3.exe` y
+  `Junior.Eventos.v6.9.3.apk`, el último. Novedades: **"Actualizaciones y estabilidad"** (las eligió él el 20-nov).
+- **Web** en Vercel, producción: `arguello-events-gbnfilymz`; `version.json` da 6.9.3/78 y `/lista` contesta. La
+  anterior, para volver atrás desde Vercel: `arguello-events-mjr990dkp` (la 6.9.2).
+- **El orden fue: la foto, los SQL, el instalador, el release y la web.**
+
+**Al instalar (lo hace él y avisa):** primero la PC que sortea; **en una tablet no hay vuelta atrás** (Android no
+deja instalar una más vieja): actualizarla con "Todo subido" y la caja cerrada. **No usar PRECIOS nuevo, entregar
+por partes ni dar entradas para rendir hasta que todas las PCs y las tablets tengan la 6.9.3.** Después, la foto
+"después de 6.9.3".
 
 ## Para retomar en otro chat
 
