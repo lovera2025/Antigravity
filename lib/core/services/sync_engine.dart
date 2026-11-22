@@ -1641,6 +1641,12 @@ class SyncEngine {
     // (sus números ya tienen dueño), y lo que rindió o devolvió alguien en un
     // equipo, al otro, para que nadie le cobre dos veces lo mismo.
     'entradas_para_rendir',
+    // El precio de la entrada de cada fiesta (v80) y el registro de sorteos:
+    // decide qué se cobra y con qué descuento. Hasta el 22-nov-2026 iban con lo
+    // de carga (30 min): un precio puesto en la oficina tardaba en llegar a la
+    // tablet que vende si el aviso no llegaba (auditoría del 21/22-nov).
+    'entradas_config',
+    'sorteos_mesas',
   ];
 
   /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
@@ -1675,7 +1681,6 @@ class SyncEngine {
     'caja_fuerte_movimientos',
     'rentabilidad_config',
     'compromisos_personal',
-    'sorteos_mesas',
     // El plano de cada fiesta y los cambios de mesa: el pulso los trae en un
     // segundo; esto es la red de seguridad si el aviso no llega.
     'planos_evento',
@@ -1691,9 +1696,8 @@ class SyncEngine {
     'barra_precios',
     // El recargo de cada fiesta (v78): lo pone el jefe con los precios.
     'barra_recargos',
-    // El precio de la entrada de cada fiesta y "Pago verificado" (v80): los
-    // carga el jefe en la oficina.
-    'entradas_config',
+    // "Pago verificado" (v80): lo marca el jefe en la oficina. El precio de la
+    // entrada pasó a lo del cobro el 22-nov-2026.
     'entradas_verificaciones',
   ];
 

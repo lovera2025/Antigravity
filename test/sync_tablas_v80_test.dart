@@ -178,10 +178,18 @@ void main() {
       }
     });
 
-    test('la plata baja con lo del cobro; el precio y "Pago verificado", con lo de carga',
+    // Desde el 22-nov-2026 el precio también baja con lo del cobro: un precio
+    // puesto en la oficina tiene que llegar enseguida a la tablet que vende.
+    test('la plata y el precio bajan con lo del cobro; "Pago verificado", con lo de carga',
         () {
-      const delCobro = ['entradas_cajas', 'entradas_ventas', 'entradas_anulaciones'];
-      const deCarga = ['entradas_config', 'entradas_verificaciones'];
+      const delCobro = [
+        'entradas_cajas',
+        'entradas_ventas',
+        'entradas_anulaciones',
+        'entradas_config',
+        'sorteos_mesas',
+      ];
+      const deCarga = ['entradas_verificaciones'];
       for (final t in delCobro) {
         expect(SyncEngine.tablasDelCobro, contains(t), reason: t);
         expect(SyncEngine.tablasDeCarga, isNot(contains(t)), reason: t);
