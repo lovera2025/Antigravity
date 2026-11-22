@@ -696,8 +696,8 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   dicen se comprueba en los tests con la letra de fábrica.
 
 **La 6.9.3: VENDER con la entrega adentro, la entrega en dos partes, PRECIOS nuevo y Entradas para rendir — SIN
-PUBLICAR, 96 %** (todo programado y probado en el sandbox al 22-nov a la tarde, también Entradas para rendir entera;
-falta el recorrido con el mouse, con su permiso, y publicar con él) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
+PUBLICAR, 98 %** (todo programado y probado en el sandbox al 22-nov a la tarde, también Entradas para rendir entera
+y el recorrido con el mouse; falta publicar con él) (`docs/CONTEXTO_v6.9.3_2026-11-20.md`, que empieza con "Para retomar en otro chat":
 ahí está **lo que falta, lo que no se probó y el paso a paso para publicar**). Sale del audio 6 del jefe (lo que se
 vende son las anticipadas; las pulseras y las generales de los alumnos llegan aparte). La versión sigue en `6.9.2+77`:
 al publicar, `6.9.3+78`, novedades **"Actualizaciones y estabilidad"**. **Dos SQL en la nube, solo de agregar, SIN

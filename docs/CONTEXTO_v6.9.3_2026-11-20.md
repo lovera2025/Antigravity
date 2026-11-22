@@ -1,8 +1,8 @@
 # CONTEXTO — la 6.9.3: VENDER con la entrega adentro, la entrega en dos partes y PRECIOS nuevo
 
-**Estado (22-nov-2026, tarde): SIN PUBLICAR, 96 %. Todo programado y probado en el sandbox, también "Entradas para
+**Estado (22-nov-2026, tarde): SIN PUBLICAR, 98 %. Todo programado y probado en el sandbox, también "Entradas para
 rendir" entera (etapas 2 a 8), los papeles solo con su botón, el talonario obligatorio, "Para el DJ" y PRECIOS en
-otras fiestas. Falta el recorrido con el mouse (con su permiso) y publicar con él** (ver "Para retomar").
+otras fiestas, y el recorrido con el mouse hecho. Falta publicar con él** (ver "Para retomar").
 La versión del programa sigue en `6.9.2+77`; al publicar pasa a `6.9.3+78` (`pubspec.yaml` y
 `installer/junior_eventos_setup.iss`), con las novedades **"Actualizaciones y estabilidad"** (decisión del usuario,
 20-nov). Lleva **dos SQL en la nube, solo de agregar, sin correr**
@@ -17,7 +17,7 @@ me tienen que llegar las pulseras para los egresados y acompañantes y las entra
 
 ## Para retomar en otro chat
 
-### Dónde quedó (22-nov-2026, tarde) — 96 %
+### Dónde quedó (22-nov-2026, tarde) — 98 %
 
 El usuario pidió repasar lo que le sirve (venderle a los alumnos con contrato, a los de afuera y que puedan
 rendir) y sumó cuatro cosas, todas **programadas, probadas y guardadas** (plan aprobado:
@@ -53,15 +53,21 @@ Y lo que faltaba de antes:
   llaves): todo lo confirmado, arreglado con su test (`93d12c7`, `100f6d5`).
 - **La suite entera, con todo: 6.118 tests, ninguno falla** (22-nov a la tarde).
 
+- **El recorrido con el mouse, hecho el 22-nov a la tarde** (con su permiso), en `tool/venta_entradas_prueba.dart`,
+  con la huella de la base IGUAL antes y después: PRECIOS → "otras fiestas" (BAHÍA SERENA, "EL 28/11"); A PAGAR de
+  ACOSTA (mesa adicional, 8 al 50 %, del 2001 al 2008, efectivo; el jefe ve "8 vendidas de 24"); alguien de afuera
+  (2 anticipadas, propuesto el 2009, transferencia); DAR 20 a PEREZ JUAN (1201-1220) y en la tablet "Entradas para
+  rendir: 1 persona"; RENDIR 15 + devuelve 5 (propuestos 1216-1220), $120.000 en efectivo, el jefe ve "rindió todo";
+  CERRAR CAJA justo ($165.000), LISTO sin preguntar, y el papel desde Cierre de caja → ENTRADAS. **Ningún papel salió
+  solo**; cada botón sacó el suyo. Capturas en `build/capturas_6.9.3_mouse/` (mandadas). El primer toque a la
+  impresora del cierre en la ventana solo la activó (la ventana no estaba al frente): no es de la app.
+
 **Lo que falta, en orden:**
-1. **El recorrido con el mouse** en `tool/venta_entradas_prueba.dart` (los tres casos, PRECIOS en otras fiestas)
-   y "Para el DJ" en `tool/plano_prueba.dart` o la ventana de la fiesta, con `python -I tool/huella_de_la_base.py`
-   antes y después: **pedirle el permiso de computer-use con aviso al celular y esperarlo**; mandarle las capturas.
-2. Que mire las muestras (`build/muestras_6.9.3_final/`, `build/muestras_6.9.3/`, `build/muestras_dj/`).
-3. Para preguntarle, sin frenar: "Emitido:" 3 horas antes en otros papeles
+1. Que mire las capturas y las muestras (`build/muestras_6.9.3_final/`, `build/muestras_6.9.3/`, `build/muestras_dj/`).
+2. Para preguntarle, sin frenar: "Emitido:" 3 horas antes en otros papeles
    (`docs/pendientes/horas-corridas-en-otros-papeles.md`); el recargo por transferencia para quien vende; cómo
    recibe el comprador el comprobante desde la tablet (Compartir).
-4. **Publicar con él** ("Al publicar", abajo): los dos SQL antes de instalar; la migración se repite sobre una
+3. **Publicar con él** ("Al publicar", abajo): los dos SQL antes de instalar; la migración se repite sobre una
    copia nueva si pasan días.
 
 **Quedó sin arreglar, a propósito:** `entradas_config` es una fila por fiesta que sube entera: si el jefe pone
