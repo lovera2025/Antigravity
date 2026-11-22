@@ -63,6 +63,11 @@ class GrupoFiestaToolbar extends StatelessWidget {
   /// se trajo (6.8.0): un punto en PLANILLAS, y lo dice el renglón del link.
   final bool hayParaTraer;
 
+  /// La hoja para el DJ (22-nov-2026): cada egresado con sus acompañantes y
+  /// su música, nada más. Solo lee, así que no es del jefe. Null: la fiesta
+  /// no tiene alumnos.
+  final VoidCallback? onParaElDj;
+
   const GrupoFiestaToolbar({
     super.key,
     required this.compacto,
@@ -81,6 +86,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
     required this.onAcompanantesYMusica,
     required this.onLinkDeLosDelegados,
     this.hayParaTraer = false,
+    this.onParaElDj,
   });
 
   /// El ancho que piden los cuatro botones con su nombre. Con menos, van solo
@@ -240,6 +246,15 @@ class GrupoFiestaToolbar extends StatelessWidget {
                 : '$alumnosConMora alumno(s) para llamar',
           ),
           const PopupMenuDivider(),
+          _item(
+            accion: onParaElDj,
+            icono: Icons.headphones_outlined,
+            color: Colors.deepPurple,
+            titulo: 'Para el DJ',
+            detalle: onParaElDj == null
+                ? 'Todavía no hay alumnos'
+                : 'Egresados, acompañantes y música',
+          ),
           _item(
             accion: esJefe ? onAcompanantesYMusica : null,
             icono: Icons.music_note_outlined,

@@ -29,6 +29,7 @@ import '../plano/services/sorteo_con_plano.dart';
 import '../plano/widgets/ver_el_orden_dialog.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
+import '../common/services/planilla_dj_pdf.dart';
 import '../common/utils/quien_opera.dart';
 import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
@@ -1393,6 +1394,7 @@ class _DetalleEventoMasivoScreenState
           onEntradas: _abrirRetiroEntradas,
           onAcompanantesYMusica: _abrirAcompanantesYMusica,
           onLinkDeLosDelegados: _abrirLinkDeLosDelegados,
+          onParaElDj: _alumnos.isEmpty ? null : _imprimirParaElDj,
           hayParaTraer: ref.watch(avisosDelDelegadoProvider).value?.any(
                     (a) => a.eventoId == widget.evento.id,
                   ) ??
@@ -4537,6 +4539,54 @@ class _DetalleEventoMasivoScreenState
       ),
     );
     if (importo == true && mounted) await _fetchDatos(cargaSilenciosa: true);
+  }
+
+  /// PLANILLAS → "Para el DJ" (22-nov-2026): la hoja con cada egresado, sus
+  /// acompañantes y su música, y nada más (`PlanillaDjPdf`). Solo lee, así
+  /// que no pide modo jefe. Se relee la base para que salga lo último que
+  /// se cargó, también lo que trajo el link de los delegados.
+  Future<void> _imprimirParaElDj() async {
+    final List<ContratoAlumno> alumnos;
+    try {
+      alumnos = await ref
+          .read(contratosRepositoryProvider)
+          .getByEvento(widget.evento.id);
+    } catch (e) {
+      debugPrint('No se pudieron leer los alumnos para el DJ: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudieron leer los alumnos. Probá de nuevo.'),
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final institucion = _institucionParaElDelegado(alumnos);
+      final fuentes = await PdfService.fuentesOutfit();
+      final bytes = await PlanillaDjPdf.construir(
+        institucion: institucion,
+        alumnos: alumnos,
+        fechaFiesta: widget.evento.fechaEvento,
+        regular: fuentes?.$1,
+        negrita: fuentes?.$2,
+      );
+      if (!mounted) return;
+      await PdfService.entregarPdf(
+        bytes,
+        PlanillaDjPdf.nombreDelArchivo(institucion),
+        context: context,
+      );
+    } catch (e) {
+      debugPrint('No se pudo armar la hoja para el DJ: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo armar la hoja para el DJ. Probá de nuevo.'),
+        ),
+      );
+    }
   }
 
   /// Lo que se suma al aviso de un cambio del salón sobre la lista de la

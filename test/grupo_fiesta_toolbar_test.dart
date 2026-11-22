@@ -50,6 +50,7 @@ void main() {
                 onEntradas: () => pedidos.add('entradas'),
                 onAcompanantesYMusica: () => pedidos.add('delegado'),
                 onLinkDeLosDelegados: () => pedidos.add('link'),
+                onParaElDj: conAlumnos ? () => pedidos.add('dj') : null,
               ),
             ),
           ),
@@ -187,6 +188,23 @@ void main() {
     expect(pedidos, ['link']);
   });
 
+  // 22-nov-2026: la hoja para el DJ, con los egresados, sus acompañantes y su
+  // música. Va junto a lo del delegado, arriba de todo, y no es del jefe: solo
+  // lee y no tiene plata.
+  testWidgets('PLANILLAS trae "Para el DJ", arriba de Acompañantes y música, '
+      'también sin modo jefe', (tester) async {
+    final pedidos = await mostrar(tester, esJefe: false);
+    await tester.tap(find.byKey(const Key('fiesta_planillas')));
+    await tester.pumpAndSettle();
+    expect(find.text('Egresados, acompañantes y música'), findsOneWidget);
+    final dj = tester.getTopLeft(find.text('Para el DJ')).dy;
+    expect(dj, greaterThan(tester.getTopLeft(find.text('Planilla de mora')).dy));
+    expect(dj, lessThan(tester.getTopLeft(find.text('Acompañantes y música')).dy));
+    await tester.tap(find.text('Para el DJ'));
+    await tester.pumpAndSettle();
+    expect(pedidos, ['dj']);
+  });
+
   testWidgets('lo que no se puede queda apagado y dice por qué',
       (tester) async {
     final pedidos = await mostrar(
@@ -197,14 +215,17 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('fiesta_planillas')));
     await tester.pumpAndSettle();
-    expect(find.text('Todavía no hay alumnos'), findsOneWidget);
+    // La planilla del sorteo y la hoja para el DJ.
+    expect(find.text('Todavía no hay alumnos'), findsNWidgets(2));
     expect(find.text('Todavía no hay plano: armalo en PLANO'), findsOneWidget);
     expect(find.text('Nadie debe mora'), findsOneWidget);
+    expect(find.text('Egresados, acompañantes y música'), findsNothing);
 
     for (final apagado in [
       'Planilla del sorteo',
       'Plano impreso',
       'Planilla de mora',
+      'Para el DJ',
     ]) {
       await tester.tap(find.text(apagado), warnIfMissed: false);
       await tester.pumpAndSettle();

@@ -33,8 +33,10 @@ import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
 /// Alto de la ventana en las muestras con un menú abierto: la barra y, debajo,
-/// lugar para el menú más largo (PLANILLAS, con cinco renglones).
-const double _altoConMenu = 480;
+/// lugar para el menú más largo (PLANILLAS, con siete renglones: las cuatro
+/// para imprimir y, después de la raya, Para el DJ, Acompañantes y música y el
+/// link de los delegados).
+const double _altoConMenu = 560;
 
 Widget _pastilla(String texto, IconData icono, Color color, bool compacto) =>
     Container(
@@ -186,6 +188,7 @@ Widget _barra(
               onEntradas: () {},
               onAcompanantesYMusica: () {},
               onLinkDeLosDelegados: () {},
+              onParaElDj: () {},
             ),
           ),
           SizedBox(width: compacto ? 6 : 8),
