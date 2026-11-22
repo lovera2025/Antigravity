@@ -9,6 +9,7 @@
 // - las de la venta de entradas y el cierre de caja ponen la venta en memoria;
 // - las de la barra reemplazan la central, el pedido del cierre y los PDF;
 // - las que llegan a PARA RENDIR reemplazan la constancia (regla 60);
+// - las que llegan a PRECIOS ponen en memoria las otras fiestas que ofrece;
 // - la lista de la puerta en memoria reemplaza todo lo que abre la base.
 import 'dart:io';
 
@@ -212,6 +213,28 @@ void main() {
       ventanas.map(_nombre),
       contains('venta_entradas_prueba.dart'),
     );
+    expect(_leer('tool/venta_entradas_prueba.dart'), contains('RetiroEntradasScreen('));
+  });
+
+  // PRECIOS → "¿Poner estos precios también en otras fiestas?" (22-nov-2026) lee
+  // las fiestas que vienen de la base (`fiestasParaLosPreciosProvider`). Una
+  // ventana que llega a PRECIOS (ENTRADAS de la fiesta en la oficina,
+  // `RetiroEntradasScreen(`, o la pantalla de la fiesta) las pone en memoria: con
+  // la base cerrada no se rompe nada, pero el cartel no se vería nunca (así estaba
+  // la de la venta de entradas). `EntregaEnMemoria.reemplazos()` ya las pone.
+  test('las que llegan a PRECIOS ponen en memoria las otras fiestas', () {
+    final faltan = <String>[];
+    for (final ruta in ventanas) {
+      final s = _leer(ruta);
+      final llegaAPrecios =
+          ['RetiroEntradasScreen(', 'DetalleEventoMasivoScreen('].any(s.contains);
+      final enMemoria = s.contains('fiestasParaLosPreciosProvider.overrideWith') ||
+          RegExp(r'\b_?(e|entrega)\.reemplazos\(').hasMatch(s);
+      if (llegaAPrecios && !enMemoria) faltan.add(_nombre(ruta));
+    }
+    expect(faltan, isEmpty,
+        reason: 'Estas ventanas leen las fiestas de PRECIOS de la base: $faltan');
+    // Y la regla mira algo: la de la venta de entradas llega a PRECIOS.
     expect(_leer('tool/venta_entradas_prueba.dart'), contains('RetiroEntradasScreen('));
   });
 

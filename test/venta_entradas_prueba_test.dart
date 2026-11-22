@@ -11,6 +11,15 @@
 // caja, el filtro, las pulseras, las generales con números, A PAGAR con el número
 // que sigue, el cobro, y lo que el jefe ve del otro lado; quien debe no retira pero
 // compra lo pago, y quien paga en la caja se destraba solo.
+//
+// **Desde el 22-nov-2026, lo que le importa al usuario, de punta a punta**: (a) la
+// mesa adicional de un alumno con el descuento del sorteo (ACOSTA); (b) alguien de
+// afuera, con el número del talonario, en efectivo y por transferencia; (c) las
+// entradas para rendir: el jefe da en la PC, Carla rinde en la tablet, la plata
+// entra en su caja y en su cierre, el jefe anula la rendición en VENTAS, y sin
+// internet de cada lado (rendir lo mismo en los dos da "rindió de más"). Ningún
+// papel sale solo: cada uno con su botón (`PapelesDeLaPrueba`). Y PRECIOS ofrece
+// la otra fiesta.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,13 +29,18 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/cierre_caja/providers/caja_de_entregas_provider.dart';
 import 'package:arguello_events/features/common/services/imprimir_planilla_de_entrega.dart';
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/entradas/cuentas/cierre_de_entradas.dart';
+import 'package:arguello_events/features/entradas/cuentas/numeros_de_entradas.dart'
+    show kTalonarioObligatorio;
 import 'package:arguello_events/features/entradas/cuentas/para_rendir.dart';
 import 'package:arguello_events/features/entradas/cuentas/pedido_de_entradas.dart';
 import 'package:arguello_events/features/entradas/datos/entradas_repositorio.dart';
 import 'package:arguello_events/features/entradas/entradas_home_screen.dart';
 import 'package:arguello_events/features/entradas/pdf/papeles_de_entradas.dart';
 import 'package:arguello_events/features/entradas/pdf/para_rendir_pdf.dart';
+import 'package:arguello_events/features/entradas/widgets/para_rendir_screen.dart';
 import 'package:arguello_events/features/entradas/widgets/vender_entradas_screen.dart';
+import 'package:arguello_events/features/entradas/widgets/ventas_de_entradas_screen.dart';
 import 'package:arguello_events/features/eventos/retiro_entradas_screen.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/entrega_entradas.dart';
@@ -210,6 +224,92 @@ void main() {
         for (final v in lados.tablet.listaVentas)
           if (v.hechoPor == 'Carla') v,
       ];
+
+  /// La caja de entradas que Carla abrió en la tablet.
+  CajaEntradas cajaDeCarla() =>
+      lados.tablet.listaCajas.firstWhere((c) => c.operadorNombre == 'Carla');
+
+  /// Las entradas para rendir de la fiesta, contadas con lo que tiene [base] (la
+  /// de la tablet o la de la PC): la cuenta de la app, sin pantalla.
+  ParaRendir paraRendirEn(EntradasDeUnEquipo base) => ParaRendir.de(
+        movimientos: base.listaParaRendir,
+        ventas: base.listaVentas,
+        anulaciones: base.listaAnulaciones,
+      );
+
+  /// Cierra la pantalla [pantalla] en el lado donde está. Cada lado es su propia
+  /// app: `pageBack` no sabría de cuál de los dos es la flecha.
+  Future<void> cerrarPantalla(WidgetTester tester, Type pantalla) async {
+    Navigator.of(tester.element(find.byType(pantalla))).pop();
+    // La animación de la salida dura más que [asentar]: mientras tanto tapa los
+    // botones de abajo.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
+  /// El jefe, en ENTRADAS de la fiesta → PARA RENDIR → DAR ENTRADAS PARA RENDIR:
+  /// 20 a PÉREZ, JUAN, de afuera, del 1201 al 1220, al precio de hoy (la
+  /// anticipada). Se llama como un alumno de la fiesta a propósito: lo de afuera
+  /// no es de ninguna familia. Queda en PARA RENDIR.
+  Future<void> elJefeLeDaAJuan(WidgetTester tester) async {
+    await tocar(tester, 'entradas_para_rendir');
+    expect(find.byType(ParaRendirScreen), findsOneWidget);
+    await tocar(tester, 'para_rendir_dar');
+    await poner(tester, 'dar_nombre', 'Pérez, Juan');
+    await poner(tester, 'dar_del', '1201');
+    expect(texto(tester, 'dar_al_calculado'), 'al 1220');
+    expect(texto(tester, 'dar_precio_texto'),
+        r'A $ 8.000 cada una · Entrada anticipada · el precio de hoy (PRECIOS), queda fijo');
+    await tocar(tester, 'dar_dar');
+    expect(texto(tester, 'dar_confirmar_texto'),
+        r'A PÉREZ, JUAN, del 1201 al 1220, a $ 8.000 cada una (entrada anticipada, queda fijo).');
+    await tocar(tester, 'dar_confirmar_si');
+    expect(texto(tester, 'para_rendir_hecho'),
+        'Se le dieron 20 entradas a PÉREZ, JUAN (del 1201 al 1220) para rendir.');
+  }
+
+  /// En VENDER (de la tablet o de la PC): RENDIR de PÉREZ, JUAN, que vendió 15
+  /// y devuelve 5 (los últimos, propuestos: del 1216 al 1220), y se le cobra
+  /// en efectivo con la hoja del cobro.
+  Future<void> rindeJuan(WidgetTester tester) async {
+    await tocar(tester, 'vender_rendir');
+    // Es el único con algo para rendir: viene elegido.
+    expect(texto(tester, 'rendir_tarjeta_texto'),
+        allOf(contains('del 1201 al 1220'), endsWith('le quedan 20')));
+    for (var i = 0; i < 15; i++) {
+      await tocar(tester, 'rendir_vendio_mas');
+    }
+    for (var i = 0; i < 5; i++) {
+      await tocar(tester, 'rendir_devuelve_mas');
+    }
+    expect(texto(tester, 'rendir_le_quedan'), '0');
+    expect(tester.widget<TextField>(find.byKey(const Key('rendir_del'))).controller!.text,
+        '1216');
+    expect(texto(tester, 'rendir_al_calculado'), 'al 1220');
+    expect(texto(tester, 'rendir_a_cobrar'), r'A cobrar: 15 × $ 8.000');
+    expect(texto(tester, 'rendir_total'), r'$ 120.000');
+    await tocar(tester, 'rendir_efectivo');
+    await tocar(tester, 'cobro_confirmar');
+    expect(texto(tester, 'vender_rendicion_guardada_texto'),
+        r'Rendición guardada · PÉREZ, JUAN · vendió 15 · devolvió 5 · le quedan 0 · $ 120.000');
+  }
+
+  /// En VENDER de Carla: "Alguien de afuera".
+  Future<void> aAlguienDeAfuera(WidgetTester tester) async {
+    final boton = find.descendant(
+      of: find.byKey(const Key('vender_a_quien')),
+      matching: find.text('Alguien de afuera'),
+    );
+    await tester.ensureVisible(boton);
+    await tester.pump();
+    await tester.tap(boton);
+    await asentar(tester);
+  }
+
+  /// Si el botón de [clave] está apagado.
+  bool apagado(WidgetTester tester, String clave) =>
+      tester.widget<ButtonStyleButton>(find.byKey(Key(clave))).onPressed == null;
 
   testWidgets('abre sin excepción, y cada lado mide su ancho', (tester) async {
     await abrir(tester);
@@ -447,6 +547,35 @@ void main() {
     expect(find.byKey(const Key('cierre_sector_entradas')), findsNothing);
   });
 
+  // 22-nov-2026: PRECIOS, guardado, pregunta si se ponen los mismos precios en
+  // otras fiestas. En la ventana ofrece BAHÍA SERENA, inventada (sin el reemplazo
+  // leía los eventos de la base, cerrada en la prueba, y el cartel no salía).
+  testWidgets('PRECIOS del jefe: al guardar ofrece BAHÍA SERENA, y NO, SOLO ESTA la deja '
+      'sin precio en los dos equipos', (tester) async {
+    await abrir(tester);
+    final otra = otraFiestaDeLosPrecios.id;
+    await tocar(tester, 'entradas_precios');
+    await tocar(tester, 'precios_guardar');
+    expect(find.text('¿Poner estos precios también en otras fiestas?'), findsOneWidget);
+    expect(find.byKey(Key('precios_otras_$otra')), findsOneWidget);
+    expect(find.byKey(const Key('precios_otras_$idFiestaEntrega')), findsNothing,
+        reason: 'la de acá no se ofrece');
+    expect(texto(tester, 'precios_otras_${otra}_hoy'), 'Hoy: Sin precio');
+    expect(apagado(tester, 'precios_otras_poner'), isTrue, reason: 'ninguna viene tildada');
+    expect(lados.pc.configs[idFiestaEntrega]!.precioAnticipada, 8000,
+        reason: 'PUERTO VIEJO ya quedó guardada');
+
+    final escrituras = lados.pc.escrituras;
+    await tocar(tester, 'precios_otras_no');
+    expect(find.text('¿Poner estos precios también en otras fiestas?'), findsNothing);
+    expect(find.text('Precios de las entradas'), findsNothing, reason: 'PRECIOS se cierra');
+    expect(lados.pc.escrituras, escrituras);
+    expect(lados.pc.configs[otra], isNull);
+    expect(lados.tablet.configs[otra], isNull);
+    expect(lados.pc.pendientes, isEmpty, reason: 'lo de PUERTO VIEJO subió');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Carla, con el mouse: abre la caja, le vende a PÉREZ y saca el comprobante '
       'con su botón', (tester) async {
     await abrir(tester);
@@ -609,9 +738,20 @@ void main() {
       expect(venta.numeros, '2001-2008');
       expect(venta.total, 40000);
       expect(venta.contratoAlumnoId, _acosta);
+      // Lo que importa (22-nov-2026): la mesa que tenía al sorteo, con el
+      // descuento de PRECIOS, en efectivo.
+      expect(venta.medio, MedioBarra.efectivo);
+      expect(venta.efectivo, 40000);
+      expect(venta.renglones.single.descuentoPct, 50);
       expect(lados.papeles.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
       await tocar(tester, 'vender_ver_comprobante');
       expect(lados.papeles.comprobantes.single.venta.id, venta.id);
+      expect(lados.papeles.comprobantes.single.alumno, 'ACOSTA, LUCÍA');
+      expect(lados.papeles.comprobantes.single.copia, isFalse);
+      // VER DE NUEVO: el mismo, como COPIA.
+      await tocar(tester, 'vender_ver_comprobante');
+      expect(lados.papeles.comprobantes, hasLength(2));
+      expect(lados.papeles.comprobantes.last.copia, isTrue);
       // El jefe: la venta, en su entrega y en VENTAS.
       expect(lados.pc.listaVentas.map((v) => v.id), contains(venta.id));
       expect(enElJefe('8 vendidas de 24'), findsOneWidget);
@@ -734,6 +874,341 @@ void main() {
       expect(find.byKey(const Key('vender_linea_mesa_1_mas')), findsOneWidget);
       expect(texto(tester, 'vender_gratis_titulo'), 'GRATIS · SE ENTREGA');
       expect(find.byKey(const Key('vender_entregar_pulseras')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // Lo que le importa al usuario de la venta de entradas, de punta a punta entre
+  // los dos equipos (22-nov-2026): (a) la mesa adicional de un alumno con el
+  // descuento del sorteo, en el grupo de arriba (ACOSTA); (b) alguien de afuera;
+  // (c) las entradas para rendir, también sin internet. En todos, ningún papel
+  // sale solo: cada uno con su botón.
+  group('alguien de afuera y las entradas para rendir, entre los dos equipos (22-nov-2026)',
+      () {
+    testWidgets('(b) Carla le vende a alguien de afuera: con el número del talonario, en '
+        'efectivo y por transferencia (esta, sin internet); el jefe las ve', (tester) async {
+      await abrir(tester, alto: 1400);
+      await entrarAVender(tester);
+      await aAlguienDeAfuera(tester);
+      await tocar(tester, 'vender_sueltas_mas');
+      await tocar(tester, 'vender_sueltas_mas');
+      await poner(tester, 'vender_comprador', 'GÓMEZ, CARLA');
+      // La primera venta de la caja: el número no viene propuesto y es obligatorio.
+      expect(tester.widget<TextField>(find.byKey(const Key('vender_del'))).controller!.text,
+          isEmpty);
+      expect(texto(tester, 'vender_falta'), kTalonarioObligatorio);
+      expect(apagado(tester, 'vender_efectivo'), isTrue);
+      // El 3001 lo vendió Maxi en su caja: no se repite.
+      await poner(tester, 'vender_del', '3001');
+      expect(texto(tester, 'vender_falta'), contains('3001'));
+      expect(apagado(tester, 'vender_efectivo'), isTrue);
+      await poner(tester, 'vender_del', '6001');
+      expect(find.byKey(const Key('vender_falta')), findsNothing);
+      expect(texto(tester, 'vender_al_calculado'), 'al 6002');
+      expect(texto(tester, 'vender_total'), r'$ 16.000', reason: r'2 anticipadas de $ 8.000');
+      await tocar(tester, 'vender_efectivo');
+      await tocar(tester, 'cobro_confirmar');
+
+      final enEfectivo = ventasDeCarla().single;
+      expect(enEfectivo.contratoAlumnoId, isNull, reason: 'no es de ninguna familia');
+      expect(enEfectivo.compradorNombre, 'GÓMEZ, CARLA');
+      expect(enEfectivo.numeros, '6001-6002');
+      expect(enEfectivo.cantidad, 2);
+      expect(enEfectivo.total, 16000);
+      expect(enEfectivo.medio, MedioBarra.efectivo);
+      expect(enEfectivo.efectivo, 16000);
+      // El comprobante, con su botón; la segunda vez, la COPIA.
+      expect(lados.papeles.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+      await tocar(tester, 'vender_ver_comprobante');
+      expect(lados.papeles.comprobantes.single.venta.id, enEfectivo.id);
+      expect(lados.papeles.comprobantes.single.alumno, isNull);
+      expect(lados.papeles.comprobantes.single.copia, isFalse);
+      await tocar(tester, 'vender_ver_comprobante');
+      expect(lados.papeles.comprobantes.last.copia, isTrue);
+      // El jefe: le llegó, y no le suma a ninguna familia.
+      expect(lados.tablet.pendientes, isEmpty);
+      expect(lados.pc.listaVentas.map((v) => v.id), contains(enEfectivo.id));
+      expect(enElJefe('0 vendidas de 24'), findsOneWidget);
+
+      // La segunda, por transferencia y sin internet: queda en la tablet.
+      await tocar(tester, 'prueba_internet');
+      await aAlguienDeAfuera(tester);
+      await tocar(tester, 'vender_sueltas_mas');
+      await poner(tester, 'vender_comprador', 'RUIZ, PEDRO');
+      expect(tester.widget<TextField>(find.byKey(const Key('vender_del'))).controller!.text,
+          '6003', reason: 'el que sigue al último que vendió esta caja');
+      await tocar(tester, 'vender_transferencia');
+      expect(texto(tester, 'cobro_transfiere'), r'$ 8.000');
+      await tocar(tester, 'cobro_confirmar');
+      final porTransferencia = ventasDeCarla().firstWhere((v) => v.id != enEfectivo.id);
+      expect(porTransferencia.compradorNombre, 'RUIZ, PEDRO');
+      expect(TramoTalonario.deTexto(porTransferencia.numeros),
+          const [TramoTalonario(6003, 6003)]);
+      expect(porTransferencia.medio, MedioBarra.transferencia);
+      expect(porTransferencia.transferencia, 8000);
+      expect(porTransferencia.efectivo, 0);
+      expect(lados.tablet.pendientes.map((p) => p.tabla), ['entradas_ventas']);
+      expect(lados.pc.listaVentas.map((v) => v.id), isNot(contains(porTransferencia.id)));
+      expect(texto(tester, 'vender_linea_texto'),
+          'Caja abierta · Carla · Sin internet · 1 venta por subir');
+      await tocar(tester, 'vender_ver_comprobante');
+      expect(lados.papeles.comprobantes.last.venta.id, porTransferencia.id);
+      expect(lados.papeles.comprobantes.last.copia, isFalse);
+
+      // Vuelve el internet: sube, y el jefe la tiene en VENTAS.
+      await tocar(tester, 'prueba_internet');
+      expect(lados.tablet.pendientes, isEmpty);
+      expect(lados.pc.listaVentas.map((v) => v.id), contains(porTransferencia.id));
+      expect(texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
+      await tocar(tester, 'entradas_ventas');
+      expect(find.byKey(Key('venta_${enEfectivo.id}')), findsOneWidget);
+      expect(find.byKey(Key('venta_${porTransferencia.id}')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('(c) el jefe le da 20 a PÉREZ, JUAN en la PC; Carla, en la tablet, le '
+        'cobra 15 y le recibe 5; la plata entra en su caja y en su cierre', (tester) async {
+      await abrir(tester, alto: 1400);
+      await entrarAVender(tester);
+      expect(find.byKey(const Key('vender_para_rendir')), findsNothing,
+          reason: 'nadie tiene entradas para rendir');
+
+      await elJefeLeDaAJuan(tester);
+      // La constancia para firmar no sale sola: IMPRIMIR LA CONSTANCIA.
+      expect(lados.papeles.constancias, isEmpty, reason: 'ningún papel se abre solo');
+      await tocar(tester, 'para_rendir_hecho_constancia');
+      final constancia = lados.papeles.constancias.single;
+      expect(constancia.bloque.persona, 'PÉREZ, JUAN');
+      expect(constancia.bloque.esDeUnAlumno, isFalse);
+      expect(TramoTalonario.legible(constancia.bloque.tramos), '1201 al 1220');
+      expect(constancia.bloque.precioDeCadaUna, 8000);
+      expect(constancia.reimpresa, isFalse);
+
+      // Subió: la tablet lo tiene, y VENDER de Carla lo dice, sin plata.
+      expect(lados.pc.pendientes, isEmpty);
+      final dio = lados.tablet.listaParaRendir.single;
+      expect(dio.esDio, isTrue);
+      expect(dio.contratoAlumnoId, isNull,
+          reason: 'de afuera, aunque se llame como un alumno de la fiesta');
+      expect(texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+
+      await rindeJuan(tester);
+      final venta = ventasDeCarla().single;
+      expect(venta.compradorNombre, 'PÉREZ, JUAN');
+      expect(venta.contratoAlumnoId, isNull);
+      expect(venta.cantidad, 15);
+      expect(venta.total, 120000);
+      expect(venta.medio, MedioBarra.efectivo);
+      expect(venta.cajaEntradasId, cajaDeCarla().id, reason: 'la plata, en la caja de Carla');
+      expect(find.byKey(const Key('vender_para_rendir')), findsNothing,
+          reason: 'ya no le queda ninguna');
+      // El comprobante de la rendición, con su botón; la segunda vez, la COPIA.
+      expect(lados.papeles.comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+      await tocar(tester, 'vender_ver_comprobante_rendicion');
+      final comprobante = lados.papeles.comprobantes.single;
+      expect(comprobante.venta.id, venta.id);
+      expect(comprobante.copia, isFalse);
+      expect(comprobante.rendicion!.persona, 'PÉREZ, JUAN');
+      expect(comprobante.rendicion!.devolvio, 5);
+      expect(comprobante.rendicion!.numerosDevueltos, const [TramoTalonario(1216, 1220)]);
+      await tocar(tester, 'vender_ver_comprobante_rendicion');
+      expect(lados.papeles.comprobantes.last.copia, isTrue);
+
+      // El jefe: le llegó, y PARA RENDIR dice que rindió todo.
+      expect(lados.tablet.pendientes, isEmpty);
+      expect(lados.pc.listaVentas.map((v) => v.id), contains(venta.id));
+      final enLaPc = paraRendirEn(lados.pc);
+      expect(enLaPc.bloques.single.rindioTodo, isTrue);
+      expect(enLaPc.bloques.single.plataRendida, 120000);
+      expect(chip(tester, 'para_rendir_estado_${enLaPc.porPersona.single.clave}'),
+          '✓ rindió todo');
+      // Lo de alguien de afuera no es de ninguna familia (PÉREZ, JUAN alumno sigue
+      // sin vender nada de lo suyo).
+      await cerrarPantalla(tester, ParaRendirScreen);
+      expect(enElJefe('0 vendidas de 24'), findsOneWidget);
+
+      // El cierre de Carla, a ciegas: 5.000 de cambio y 120.000 de la rendición.
+      await tocar(tester, 'vender_cerrar');
+      await poner(tester, 'cierre_contado', '125000');
+      await tocar(tester, 'cierre_cerrar');
+      await tocar(tester, 'cierre_confirmar');
+      expect(texto(tester, 'cierre_esperado'), r'$ 125.000');
+      expect(lados.papeles.cierres, isEmpty, reason: 'ningún papel se abre solo');
+      await tocar(tester, 'cierre_imprimir');
+      expect(lados.papeles.cierres.single.cuentas.efectivoEsperado, 125000);
+      expect(lados.papeles.cierres.single.cuentas.efectivo, 120000);
+      await tocar(tester, 'cierre_listo');
+
+      // El jefe, en el cierre de caja: la de Carla, cerrada y justa, con su papel.
+      final caja = cajaDeCarla();
+      expect(caja.abierta, isFalse);
+      await tocar(tester, 'prueba_jefe_cierre');
+      await tocar(tester, 'cierre_sector_entradas');
+      expect(
+        tester.widget<Text>(find.byKey(Key('cierre_entradas_diferencia_${caja.id}'))).data,
+        'Justo',
+      );
+      await tocar(tester, 'cierre_entradas_papel_${caja.id}');
+      expect(lados.papeles.cierres, hasLength(2));
+      expect(lados.papeles.cierres.last.caja.id, caja.id);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('(c) en VENTAS el jefe anula la rendición: las 15 vuelven a quedar a cargo '
+        'de PÉREZ, JUAN, también en la tablet, y salen de la caja de Carla', (tester) async {
+      await abrir(tester, alto: 1400);
+      await entrarAVender(tester);
+      await elJefeLeDaAJuan(tester);
+      await rindeJuan(tester);
+      final venta = ventasDeCarla().single;
+      await cerrarPantalla(tester, ParaRendirScreen);
+
+      await tocar(tester, 'entradas_ventas');
+      expect(chip(tester, 'rendicion_${venta.id}'), 'RENDICIÓN · de PÉREZ, JUAN');
+      await tocar(tester, 'anular_${venta.id}');
+      expect(texto(tester, 'anular_rendicion'),
+          'Es una rendición: las 15 vuelven a quedar a cargo de PÉREZ, JUAN para rendir.');
+      expect(find.byKey(const Key('anular_pregunta')), findsNothing,
+          reason: 'no pregunta si devolvieron: los números los lleva el bloque');
+      await poner(tester, 'anular_motivo', 'la plata no era de estas');
+      await tocar(tester, 'anular_confirmar');
+      final anulacion = lados.pc.listaAnulaciones.singleWhere((a) => a.ventaId == venta.id);
+      expect(anulacion.devueltas, isFalse);
+      expect(texto(tester, 'anulada_${venta.id}'), contains('las 15 dejaron de contar'));
+
+      // Subió: en la tablet también, y VENDER de Carla vuelve a avisar.
+      expect(lados.pc.pendientes, isEmpty);
+      expect(lados.tablet.listaAnulaciones.map((a) => a.id), contains(anulacion.id));
+      expect(paraRendirEn(lados.tablet).bloques.single.sinRendir, 15);
+      expect(texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+      // La plata ya no cuenta en la caja de Carla: queda el cambio.
+      final caja = cajaDeCarla();
+      expect(
+        CierreDeEntradas.de(
+          caja,
+          [for (final v in lados.tablet.listaVentas) if (v.cajaEntradasId == caja.id) v],
+          [for (final a in lados.tablet.listaAnulaciones) if (a.cajaEntradasId == caja.id) a],
+        ).efectivoEsperado,
+        5000,
+      );
+
+      // En PARA RENDIR del jefe: le quedan 15.
+      await cerrarPantalla(tester, VentasDeEntradasScreen);
+      await tocar(tester, 'entradas_para_rendir');
+      final clave = paraRendirEn(lados.pc).porPersona.single.clave;
+      expect(chip(tester, 'para_rendir_estado_$clave'), 'sin rendir 15');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('(c) sin internet de cada lado: lo que da el jefe y lo que rinde Carla '
+        'se quedan en su equipo hasta que vuelve el internet', (tester) async {
+      await abrir(tester, alto: 1400);
+      await entrarAVender(tester);
+
+      // El jefe da sin internet: queda en la PC y la tablet no lo ve.
+      await tocar(tester, 'prueba_internet');
+      await elJefeLeDaAJuan(tester);
+      expect(lados.pc.pendientes.map((p) => p.tabla), ['entradas_para_rendir']);
+      expect(lados.tablet.listaParaRendir, isEmpty);
+      expect(find.byKey(const Key('vender_para_rendir')), findsNothing);
+      // Vuelve: sube, y VENDER de Carla lo dice.
+      await tocar(tester, 'prueba_internet');
+      expect(lados.pc.pendientes, isEmpty);
+      expect(texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+
+      // Carla rinde sin internet: la venta, lo vendido y lo devuelto quedan en la
+      // tablet, y el jefe sigue viendo las 20 sin rendir.
+      await tocar(tester, 'prueba_internet');
+      await rindeJuan(tester);
+      expect(
+        lados.tablet.pendientes.map((p) => p.tabla),
+        unorderedEquals(['entradas_ventas', 'entradas_para_rendir', 'entradas_para_rendir']),
+      );
+      expect(texto(tester, 'vender_linea_texto'),
+          'Caja abierta · Carla · Sin internet · 1 venta y 2 cambios por subir');
+      final clave = paraRendirEn(lados.pc).porPersona.single.clave;
+      expect(paraRendirEn(lados.pc).bloques.single.sinRendir, 20);
+      expect(chip(tester, 'para_rendir_estado_$clave'), 'sin rendir 20');
+
+      // Vuelve: sube, y el jefe ve que rindió todo.
+      await tocar(tester, 'prueba_internet');
+      expect(lados.tablet.pendientes, isEmpty);
+      expect(paraRendirEn(lados.pc).bloques.single.rindioTodo, isTrue);
+      expect(chip(tester, 'para_rendir_estado_$clave'), '✓ rindió todo');
+      expect(texto(tester, 'vender_linea_texto'), 'Caja abierta · Carla · Todo subido');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('(c) rendir lo mismo en los dos equipos sin internet da "rindió de más"; el '
+        'jefe anula lo que sobra y queda justo en los dos', (tester) async {
+      await abrir(tester, alto: 1400);
+      await entrarAVender(tester);
+      await elJefeLeDaAJuan(tester);
+      await cerrarPantalla(tester, ParaRendirScreen);
+      await tocar(tester, 'prueba_internet');
+
+      // Carla, en la tablet, le rinde 15 y le recibe 5.
+      await rindeJuan(tester);
+      // Vuelve a su inicio: los dos VENDER tienen los mismos botones.
+      await cerrarPantalla(tester, VenderEntradasScreen);
+      // El jefe, en la PC y sin saber nada, le rinde lo mismo con su caja.
+      await tocar(tester, 'entradas_vender');
+      expect(find.text('Abrir la caja de entradas'), findsOneWidget);
+      await poner(tester, 'abrir_caja_cambio', '0');
+      await tocar(tester, 'abrir_caja_abrir');
+      expect(texto(tester, 'vender_para_rendir_texto'), 'Entradas para rendir: 1 persona');
+      await rindeJuan(tester);
+      // Cada equipo, solo, ve justo lo que rindió.
+      expect(paraRendirEn(lados.tablet).bloques.single.rindioDeMas, 0);
+      expect(paraRendirEn(lados.pc).bloques.single.rindioDeMas, 0);
+      expect(lados.papeles.comprobantes, isEmpty,
+          reason: 'ningún comprobante se abrió solo, en ningún equipo');
+
+      // Vuelve el internet: los dos tienen las dos rendiciones.
+      await tocar(tester, 'prueba_internet');
+      for (final base in [lados.tablet, lados.pc]) {
+        expect(base.listaVentas.where(ParaRendir.esVentaDeRendicion), hasLength(2));
+        expect(paraRendirEn(base).bloques.single.rindioDeMas, 20,
+            reason: '15 y 5, dos veces, de las 20 que se llevó');
+      }
+      // PARA RENDIR del jefe lo avisa: nada se corrige solo.
+      await cerrarPantalla(tester, VenderEntradasScreen);
+      await tocar(tester, 'entradas_para_rendir');
+      final clave = paraRendirEn(lados.pc).porPersona.single.clave;
+      expect(chip(tester, 'para_rendir_estado_$clave'), 'rindió de más: revisar');
+      expect(find.textContaining('rindió de más, revisar'), findsWidgets);
+
+      // Como dice el aviso: anula en VENTAS la venta que sobra (la de la PC).
+      final sobra = lados.pc.listaVentas
+          .firstWhere((v) => ParaRendir.esVentaDeRendicion(v) && v.hechoPor != 'Carla');
+      await cerrarPantalla(tester, ParaRendirScreen);
+      await tocar(tester, 'entradas_ventas');
+      await tocar(tester, 'anular_${sobra.id}');
+      expect(texto(tester, 'anular_rendicion'),
+          'Es una rendición: las 15 dejan de contar como vendidas. PÉREZ, JUAN rindió 20 '
+          'de más, así que no le queda ninguna sin rendir.');
+      await poner(tester, 'anular_motivo', 'se cobró dos veces');
+      await tocar(tester, 'anular_confirmar');
+      // Queda lo devuelto dos veces: ese "devolvió" se anula en PARA RENDIR.
+      expect(paraRendirEn(lados.pc).bloques.single.rindioDeMas, 5);
+      final devolvioDeMas = lados.pc.listaParaRendir
+          .singleWhere((m) => m.esDevolvio && m.deviceId == 'pc-oficina');
+      await cerrarPantalla(tester, VentasDeEntradasScreen);
+      await tocar(tester, 'entradas_para_rendir');
+      await tocar(tester, 'para_rendir_persona_$clave');
+      await tocar(tester, 'para_rendir_anular_${devolvioDeMas.id}');
+      await poner(tester, 'motivo_texto', 'se anotó dos veces');
+      await tocar(tester, 'para_rendir_anular_confirmar');
+      expect(chip(tester, 'para_rendir_estado_$clave'), '✓ rindió todo');
+      expect(find.textContaining('rindió de más, revisar'), findsNothing);
+
+      // A la tablet le llega: rindió justo, con la plata de Carla.
+      expect(lados.pc.pendientes, isEmpty);
+      final enLaTablet = paraRendirEn(lados.tablet).bloques.single;
+      expect(enLaTablet.rindioTodo, isTrue);
+      expect(enLaTablet.vendidas, 15);
+      expect(enLaTablet.devueltas, 5);
+      expect(enLaTablet.plataRendida, 120000);
       expect(tester.takeException(), isNull);
     });
   });

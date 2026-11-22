@@ -14,8 +14,21 @@
 //   CORTAR INTERNET, que vale para los dos: sin internet nada cruza, lo de cada equipo
 //   queda en su cola y el otro no lo ve; al volver, sube y le llega;
 // - el jefe: MODO JEFE SÍ / NO (para ver lo apagado con su motivo), ENTRADAS DE LA FIESTA
-//   (la entrega de la oficina, con PRECIOS, VENTAS y VENDER) y CIERRE DE CAJA (COBROS ·
-//   BARRA · ENTRADAS).
+//   (la entrega de la oficina, con PRECIOS, VENTAS, VENDER y PARA RENDIR) y CIERRE DE
+//   CAJA (COBROS · BARRA · ENTRADAS).
+//
+// Las entradas para rendir (21-nov-2026): el jefe, en PARA RENDIR, le da 20 a alguien
+// (por ejemplo a PÉREZ, JUAN, de afuera, del 1201 al 1220); en la tablet, VENDER de
+// Carla dice "Entradas para rendir: 1 persona" y con RENDIR le cobra lo vendido y le
+// recibe lo que devuelve. Una rendición se anula en VENTAS del jefe. Rendir lo mismo
+// en los dos equipos con CORTAR INTERNET da "rindió de más" al volver.
+//
+// PRECIOS, al guardar, pregunta si se ponen los mismos precios en otras fiestas: ofrece
+// BAHÍA SERENA ([otraFiestaDeLosPrecios]), inventada, sin alumnos.
+//
+// **Ningún papel sale solo** (22-nov-2026): el comprobante, la constancia y el cierre
+// salen con su botón (IMPRIMIR EL COMPROBANTE, IMPRIMIR LA CONSTANCIA, IMPRIMIR EL
+// CIERRE).
 //
 // Desde el 20-nov-2026 Carla, que tiene "Vende entradas", ve **un solo botón por fiesta,
 // VENDER**: adentro entrega lo sin cargo en dos partes (las pulseras VIP con cena y las
@@ -46,8 +59,9 @@
 // - la caja de cuotas: LA CAJA COBRA, arriba del jefe (o COBRAR en su entrega), le
 //   cobra a una familia todo lo que debe, como si pagara en la caja de otra PC, y les
 //   llega a los dos lados (con o sin internet);
-// - los papeles de la venta (el comprobante, el historial y el cierre), el de la caja
-//   de entregas (IMPRIMIR en el cierre de caja → ENTRADAS) y la planilla de entrega
+// - los papeles de la venta (el comprobante, el historial, el cierre y la constancia de
+//   las entradas para rendir), el de la caja de entregas (IMPRIMIR en el cierre de
+//   caja → ENTRADAS) y la planilla de entrega
 //   (PLANILLA de VENDER y la impresora de la entrega) son los de la app, pero quedan en
 //   build/venta_entradas_prueba y se abren con el visor, sin el menú de la app (que los
 //   dejaría en la carpeta del programa);
@@ -107,6 +121,7 @@ import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart' show TramoTalonario;
 import 'package:arguello_events/models/entrega_entradas.dart';
+import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import '../test/helpers/barra_en_memoria.dart';
@@ -836,6 +851,12 @@ Future<LadosDeLaVenta> armarLados({
         ...lado.entradas.reemplazos,
         enLaWebProvider.overrideWithValue(false),
         if (hoy != null) hoyEnArgentinaProvider.overrideWithValue(hoy),
+        // PRECIOS → "¿Poner estos precios también en otras fiestas?" (22-nov-2026):
+        // PUERTO VIEJO (PRECIOS la saca sola) y una inventada. Sin esto leería los
+        // eventos de la base de la PC.
+        fiestasParaLosPreciosProvider.overrideWithValue(
+          () async => [fiestaDeLaEntrega, otraFiestaDeLosPrecios],
+        ),
       ];
 
   nube.tablet.c = ProviderContainer(overrides: [
@@ -884,6 +905,15 @@ Future<LadosDeLaVenta> armarLados({
     cajaDeMaxi: cajaDeMaxi,
   );
 }
+
+/// La otra fiesta que ofrece PRECIOS después de GUARDAR ("¿Poner estos precios
+/// también en otras fiestas?", 22-nov-2026). Inventada, sin precio y sin alumnos:
+/// está para ver el cartel. No está en la lista de Carla ni en el cierre de caja.
+final Evento otraFiestaDeLosPrecios = fiestaDePrueba(
+  'e0000000-0000-4000-8000-000000000002',
+  'BAHÍA SERENA',
+  DateTime(2026, 12, 12),
+);
 
 // ── Las familias de la noche ────────────────────────────────────────────────
 

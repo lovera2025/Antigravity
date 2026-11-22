@@ -177,7 +177,8 @@ void main() {
       : Directory.systemTemp.createTempSync('venta_entradas_muestra').path;
   Directory(carpeta).createSync(recursive: true);
 
-  /// Los papeles del cierre que se abrieron (CERRAR CAJA los abre solos).
+  /// Los papeles del cierre que se abrieron (con IMPRIMIR EL CIERRE: desde el
+  /// 22-nov-2026 ningún papel sale solo).
   final cierres = <DatosDelCierreDeEntradas>[];
 
   Future<void> letras() async {
@@ -966,7 +967,11 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'nada se desborda');
     await guardar(tester, clave, 'Entradas_14_cerrada.png');
 
-    // El papel del cierre, con las letras de la app.
+    // El papel del cierre, con las letras de la app. No sale solo (22-nov-2026):
+    // lo saca IMPRIMIR EL CIERRE.
+    expect(cierres, isEmpty, reason: 'ningún papel se abre solo');
+    await tocar(tester, 'cierre_imprimir');
+    await tester.pumpAndSettle();
     final datos = cierres.single;
     await tester.runAsync(() async {
       final bytes = await CierreCajaEntradasPdf.armar(
@@ -1157,7 +1162,11 @@ void main() {
     await tester.pumpAndSettle();
     await guardar(tester, clave, 'Entradas_7_guardada.png');
 
-    // El comprobante de esa venta, con las letras de la app.
+    // El comprobante de esa venta, con las letras de la app. No sale solo
+    // (22-nov-2026): lo saca IMPRIMIR EL COMPROBANTE del aviso.
+    expect(comprobantes, isEmpty, reason: 'ningún papel se abre solo');
+    await tocar(tester, 'vender_ver_comprobante');
+    await tester.pumpAndSettle();
     final datos = comprobantes.single;
     await tester.runAsync(() async {
       final fuentes = await PdfService.fuentesOutfit();
