@@ -62,6 +62,14 @@ Y lo que faltaba de antes:
   solo**; cada botón sacó el suyo. Capturas en `build/capturas_6.9.3_mouse/` (mandadas). El primer toque a la
   impresora del cierre en la ventana solo la activó (la ventana no estaba al frente): no es de la app.
 
+- **Los papeles de la venta, como el recibo de pago** (pedido del 22-nov a la noche: "hacelo como un recibo tal
+  cual"; imprime en media hoja y los recibos de las cuotas le salen perfectos): la venta, la rendición y el cierre
+  tienen el encabezado de Junior Eventos, "Recibí de", "La suma de pesos" en letras, "Concepto" y "TOTAL DE ESTE
+  RECIBO" (`entradas/pdf/recibo_de_entradas_pdf.dart`; los datos del dueño, en `common/services/emisor_del_recibo.dart`,
+  también para el recibo de cuotas). **El papel del cierre no dice la diferencia** (ni "Tenía que haber" ni "Justo");
+  la pantalla de la cajera no cambió. Muestras en `build/muestras_recibo_entradas/` (mandadas). Los montos van sin
+  centavos, como el resto de la venta (el recibo de cuotas lleva ",00").
+
 **Lo que falta, en orden:**
 1. Que mire las capturas y las muestras (`build/muestras_6.9.3_final/`, `build/muestras_6.9.3/`, `build/muestras_dj/`).
 2. Para preguntarle, sin frenar: "Emitido:" 3 horas antes en otros papeles

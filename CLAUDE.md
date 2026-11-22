@@ -716,6 +716,8 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
     (`PreciosEnOtrasFiestas`, `fiestasParaLosPreciosProvider`, que las pruebas reemplazan). Con "el mismo día" no
     se tilda una fiesta que es ese día o antes; la de anoche no se ofrece.
   - `entradas_config` y `sorteos_mesas` están en `_tablasDelCobro`: el precio llega enseguida a la tablet.
+  - **Los papeles de la venta (venta, rendición y cierre) tienen la forma del recibo de pago de las cuotas**
+    (`recibo_de_entradas_pdf.dart`, `EmisorDelRecibo`), en media A4; **el del cierre no dice la diferencia**.
 - **Los dos talonarios:** lo que se vende (las anticipadas, `NumerosDeEntradas.ocupadosDeLaVenta`) y lo que se
   entrega sin cargo (las generales de los alumnos, `ocupadosDeLaEntrega`) ya no se frenan entre sí; cada uno no deja
   repetir lo suyo. **Los números de las generales son opcionales.**
