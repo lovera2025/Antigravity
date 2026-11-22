@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/ar_time.dart';
+import '../../../models/evento.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/solo_jefe.dart';
@@ -11,6 +12,7 @@ import '../cuentas/eleccion_de_precios.dart';
 import '../cuentas/precio_de_entradas.dart';
 import '../datos/entradas_repositorio.dart';
 import '../providers/entradas_providers.dart';
+import 'precios_en_otras_fiestas_dialog.dart';
 
 /// PRECIOS: el jefe pone el precio de la entrada de una fiesta (6.9.0; desde la
 /// 6.9.3, primero "¿Qué se vende ahora? Anticipada · General" y sin nada
@@ -28,6 +30,10 @@ import '../providers/entradas_providers.dart';
 /// [revisarLugares] abre la lista para aceptar y devuelve cómo quedó (null si
 /// no cambió nada). La lista no vive acá: lee los alumnos y sus pagos, que la
 /// venta de entradas no toca.
+///
+/// [otrasFiestas] (22-nov-2026): las fiestas que vienen. Guardado, si hay otras,
+/// salta "¿Poner estos precios también en otras fiestas?"
+/// ([mostrarPreciosEnOtrasFiestas]); la de acá se saca sola de la lista.
 Future<ConfigEntradas?> mostrarPreciosDeEntradas(
   BuildContext context, {
   required String eventoId,
@@ -36,6 +42,7 @@ Future<ConfigEntradas?> mostrarPreciosDeEntradas(
   DateTime? fechaFiesta,
   FotoDeLosLugares? lugares,
   RevisarLugares? revisarLugares,
+  OtrasFiestas? otrasFiestas,
 }) =>
     showDialog<ConfigEntradas>(
       context: context,
@@ -47,8 +54,12 @@ Future<ConfigEntradas?> mostrarPreciosDeEntradas(
         fechaFiesta: fechaFiesta,
         lugares: lugares,
         revisarLugares: revisarLugares,
+        otrasFiestas: otrasFiestas,
       ),
     );
+
+/// Las fiestas que vienen, para ofrecer los mismos precios en otras.
+typedef OtrasFiestas = Future<List<Evento>> Function();
 
 /// Abre la lista de los lugares agregados después del sorteo. Devuelve lo que
 /// rige después, o null si no cambió nada.
@@ -63,6 +74,7 @@ class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
   final DateTime? fechaFiesta;
   final FotoDeLosLugares? lugares;
   final RevisarLugares? revisarLugares;
+  final OtrasFiestas? otrasFiestas;
 
   const PreciosDeEntradasDialog({
     super.key,
@@ -72,6 +84,7 @@ class PreciosDeEntradasDialog extends ConsumerStatefulWidget {
     this.fechaFiesta,
     this.lugares,
     this.revisarLugares,
+    this.otrasFiestas,
   });
 
   @override
@@ -236,6 +249,18 @@ class _PreciosDeEntradasDialogState
           .guardarConfig(nueva, quien: widget.quien);
       ref.invalidate(configDeEntradasProvider(widget.eventoId));
       avisarQueCambioLaVenta(ref, widget.eventoId);
+      // Guardado acá: si hay otras fiestas, se ofrece poner lo mismo
+      // (22-nov-2026). Ese cartel guarda con su propia llave.
+      final otras = await _lasOtrasFiestas();
+      if (otras.isNotEmpty && mounted) {
+        await mostrarPreciosEnOtrasFiestas(
+          context,
+          elegido: escrito,
+          fechaDeEstaFiesta: widget.fechaFiesta,
+          fiestas: otras,
+          quien: widget.quien,
+        );
+      }
       if (mounted) Navigator.pop(context, guardada);
     } on ArgumentError {
       if (mounted) {
@@ -251,6 +276,21 @@ class _PreciosDeEntradasDialogState
           _problema = 'No se pudieron guardar los precios. Probá de nuevo.';
         });
       }
+    }
+  }
+
+  /// Las fiestas que vienen, sin esta. Si no se pueden leer, ninguna: lo de
+  /// acá ya quedó guardado.
+  Future<List<Evento>> _lasOtrasFiestas() async {
+    final leer = widget.otrasFiestas;
+    if (leer == null) return const [];
+    try {
+      return [
+        for (final e in await leer())
+          if (e.id != widget.eventoId) e,
+      ];
+    } catch (_) {
+      return const [];
     }
   }
 

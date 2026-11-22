@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/evento.dart';
 import '../../barra/providers/barra_del_jefe_provider.dart' show enLaWebProvider;
 import '../../common/widgets/operational_sync_coordinator.dart'
     show operationalSyncRevisionProvider;
@@ -8,6 +9,8 @@ import '../cuentas/para_rendir.dart';
 import '../cuentas/precio_de_entradas.dart';
 import '../datos/entradas_local.dart';
 import '../datos/entradas_repositorio.dart';
+import '../../eventos/repositories/eventos_repository.dart' show eventosRepositoryProvider;
+import '../services/fiestas_que_vienen.dart';
 
 /// La venta de entradas de este equipo (la PC o la tablet): la base y la cola
 /// de subida. Los tests la reemplazan por una en memoria.
@@ -42,6 +45,16 @@ const kEntradasDesdeLaPc = 'La venta de entradas se maneja desde la PC o la tabl
 /// Los tests lo fijan.
 final hoyEnArgentinaProvider = Provider<DateTime Function()>(
   (ref) => PrecioDeEntradas.hoyEnArgentina,
+);
+
+/// Las fiestas que vienen (los eventos masivos por hacer), para PRECIOS →
+/// "¿Poner estos precios también en otras fiestas?" (22-nov-2026). Se lee
+/// recién al guardar. Las pruebas lo reemplazan: si no, abriría la base.
+final fiestasParaLosPreciosProvider = Provider<Future<List<Evento>> Function()>(
+  (ref) => () async => fiestasQueVienen(
+        await ref.read(eventosRepositoryProvider).getAll(modalidad: 'masivo'),
+        DateTime.now(),
+      ),
 );
 
 /// El precio de la fiesta, para mostrarlo. Se vuelve a leer con

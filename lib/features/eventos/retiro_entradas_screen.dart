@@ -918,6 +918,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       fechaFiesta: widget.evento.fechaEvento,
       lugares: _foto,
       revisarLugares: _revisarLugares,
+      // Guardado, ofrece los mismos precios en otras fiestas (22-nov-2026).
+      otrasFiestas: ref.read(fiestasParaLosPreciosProvider),
     );
   }
 

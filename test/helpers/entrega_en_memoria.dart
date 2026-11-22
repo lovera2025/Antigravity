@@ -26,6 +26,8 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/entrega_entradas.dart';
 import 'package:arguello_events/models/evento.dart';
+import 'package:arguello_events/features/entradas/providers/entradas_providers.dart'
+    show fiestasParaLosPreciosProvider;
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'barra_en_memoria.dart' show fiestaDePrueba;
@@ -432,5 +434,11 @@ class EntregaEnMemoria {
           (ref) async => const UserRoleState(isLoading: false),
         ),
         if (jefe != null) esRolJefeProvider.overrideWithValue(jefe),
+        // PRECIOS → otras fiestas: sin esto leería los eventos de la base.
+        fiestasParaLosPreciosProvider.overrideWithValue(() async => otrasFiestas),
       ];
+
+  /// Las fiestas que PRECIOS ofrece para poner los mismos precios (22-nov-2026).
+  /// Vacía: el cartel no sale.
+  List<Evento> otrasFiestas = [];
 }

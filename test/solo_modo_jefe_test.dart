@@ -573,10 +573,12 @@ void main() {
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá: PRECIOS
-    // (`_guardar`); en VENTAS, anular y "Pago verificado"; y en PARA RENDIR,
-    // dar, las que no volvieron y anular.
+    // (`_guardar`) y sus mismos precios en otras fiestas (`_poner`, 22-nov-2026);
+    // en VENTAS, anular y "Pago verificado"; y en PARA RENDIR, dar, las que no
+    // volvieron y anular.
     expect(encontradas, {
       '_guardar',
+      '_poner',
       '_anular',
       '_verificar',
       '_dar',
