@@ -797,6 +797,26 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v84**: la v81 es de la entrega en dos partes,
   la v82 de las entradas para rendir y la v83 del stock por barra.
 
+**La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — programada y probada el 25-nov, SIN PUBLICAR; el
+usuario la quiere publicar el 26-nov, con él** (`docs/CONTEXTO_v6.9.4_2026-11-25.md`, que empieza con "Para retomar
+en otro chat"; los nombres del caso, en `build/nombres_6.9.4.md`, fuera de git). Sale de la rama **`release/6.9.x`**
+(desde el tag `v6.9.3`, carpeta `..\arguello_events_6.9.x`): la feature tiene la v83 y lo del 4-dic a medio hacer y
+**no se publica de ahí**. Versión `6.9.4+79`, sin SQL ni migración. Lo de esa rama está también acá con `cherry-pick`.
+- **La planilla:** el cartel suma "Orden: Alfabético · Por número de mesa" (`OrdenPlanillaSorteo`,
+  `PlanillaSorteo.porMesa`): todo el salón de la mesa 1 a la última, cada adicional en su número.
+- **La principal de una familia es la primera mesa anotada** (`SalonMesas.principal`, `enOrdenDelContrato`,
+  `mesasEnOrden`), no la de número más bajo: con "107, 106" es la 107. **`ContratosRepository.asignarNumerosMesa`
+  conserva la principal primera** (`MesasExtraUtils.conLaPrincipalDeAntes`): todo lo que escriba `numero_mesa` pasa
+  por ahí. El plano (`OcupantePlano.principalAnotada`) y la puerta (`GrupoPuerta.principal`) la respetan. Para lo
+  sorteado (todo de menor a mayor) no cambia nada, y mover una sola mesa lo sigue dejando de menor a mayor
+  (`CambiosDeMesa.reemplazar`).
+- **DAR MESA** (solo modo jefe, con internet; `MesaQueDaElJefe`, `_darMesa` en la pantalla de la fiesta, "SIN MESA ·
+  DAR MESA A TODOS"): la fijada, después **una mesa del fondo que quedó vacía**
+  (`MesasNuevasAlFondo.vaciasDelFondo`; primero a quien ya tiene mesa) y si no una nueva. **La mesa sola también usa
+  la vacía**, pero solo si queda de menor a mayor (`soloSiQuedaEnOrden`). El renglón lleva `delJefe` + `automatico`.
+- **No usar DAR MESA hasta que todas las PCs y la notebook de la puerta tengan la 6.9.4**: una 6.9.3 lee "107, 106"
+  con la principal en la 106.
+
 **Para la Técnica del 4-dic (plan aprobado el 25-nov; entrada: `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`, que empieza
 con "Para retomar en otro chat")**: la fiesta es **sin internet** y el usuario quiere todo **sin bugs**; no se publica
 hasta que él lo diga. Cuatro partes: **la tele** (girar, cada tele con su escuela desde el celular sin PIN, todo
