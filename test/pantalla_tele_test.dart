@@ -8,6 +8,7 @@ import 'package:arguello_events/features/totem/widgets/totem_local.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,18 @@ class _ModoFijo extends ModoTeleNotifier {
     puestos.add(modo);
     state = modo;
   }
+}
+
+/// La escuela de la tele, sin escribir las preferencias.
+class _FiestaFija extends FiestaDeLaTeleNotifier {
+  _FiestaFija(this.inicial);
+  final String? inicial;
+
+  @override
+  String? build() => inicial;
+
+  @override
+  Future<void> elegir(String eventoId) async => state = eventoId;
 }
 
 /// El giro de la tele, sin escribir las preferencias.
@@ -57,6 +70,7 @@ void main() {
 
   late _ModoFijo modo;
   late _GiroFijo giro;
+  late _FiestaFija fiestaFija;
   late PuertaEnMemoria mundo;
 
   Future<void> abrir(
@@ -65,6 +79,8 @@ void main() {
     bool conDiagnostico = false,
     Map<String, Object> preferencias = const {},
     int cuartos = 0,
+    List<Evento>? eventos,
+    String? fiesta,
   }) async {
     SharedPreferences.setMockInitialValues(preferencias);
     tester.view.physicalSize = const Size(1920, 1080);
@@ -72,18 +88,20 @@ void main() {
     addTearDown(tester.view.reset);
     modo = _ModoFijo(ModoTele(papel));
     giro = _GiroFijo(cuartos);
+    fiestaFija = _FiestaFija(fiesta);
     mundo = PuertaEnMemoria(
       _supabase,
       alumnos: [alumnoDePrueba('c1000000-0000-4000-8000-000000000001', 'PÉREZ, JUAN', mesas: [12])],
     );
     await tester.pumpWidget(mundo.recepcion(
       PantallaTele(ahora: () => _hoy, conDiagnostico: conDiagnostico),
-      eventos: [eventoDePrueba(eventoMasivo, 'masivo')],
+      eventos: eventos ?? [eventoDePrueba(eventoMasivo, 'masivo')],
       // Como en la app: todo girado como la tele.
       builder: (context, child) => GiroDeLaApp(child: child!),
       extra: [
         modoTeleProvider.overrideWith(() => modo),
         giroDeLaTeleProvider.overrideWith(() => giro),
+        fiestaDeLaTeleProvider.overrideWith(() => fiestaFija),
         // La central de verdad no se prende acá (eso lo prueba
         // `tele_central_test`): solo se mira lo que la tele muestra.
         centralDeLaPuertaProvider.overrideWith(_CentralQuieta.new),
@@ -255,6 +273,57 @@ void main() {
         await tecla(tester, LogicalKeyboardKey.goBack);
         expect(find.text('TELE 2'), findsOneWidget, reason: k);
       }
+    });
+  });
+
+  group('cada tele con su escuela, con el control', () {
+    Future<void> conDos(WidgetTester tester) async {
+      await abrir(tester,
+          eventos: [eventoDePrueba(eventoMasivo, 'masivo'), eventoDePrueba(eventoParticular, 'masivo')],
+          fiesta: eventoMasivo);
+    }
+
+    testWidgets('cambiar la escuela no pide PIN, pero sí un cartel que confirma', (tester) async {
+      await conDos(tester);
+      expect(tester.widget<TotemLocal>(find.byType(TotemLocal)).eventoId, eventoMasivo);
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tester.tap(find.byKey(const ValueKey('tele_fiesta')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('tele_fiesta_$eventoParticular')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('CAMBIAR LA ESCUELA'), findsOneWidget);
+      expect(find.textContaining('¿Pasar la Tele 1 a'), findsOneWidget);
+      expect(find.text('PIN del jefe'), findsNothing);
+      // Volver: no cambia nada.
+      await tester.tap(find.byKey(const ValueKey('tele_escuela_volver')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(fiestaFija.state, eventoMasivo);
+      await tester.tap(find.byKey(const ValueKey('tele_fiesta_$eventoParticular')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('tele_escuela_cambiar')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(fiestaFija.state, eventoParticular);
+      expect(tester.widget<TotemLocal>(find.byType(TotemLocal)).eventoId, eventoParticular);
+    });
+
+    testWidgets('lo que cambian desde un celular se dice en un cartel chico', (tester) async {
+      await conDos(tester);
+      final contenedor = ProviderScope.containerOf(tester.element(find.byType(PantallaTele)));
+      contenedor.read(avisoEnLaTeleProvider.notifier).decir('Caro pasó la Tele 1 a ESCUELA B');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Caro pasó la Tele 1 a ESCUELA B'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 9));
+      expect(find.text('Caro pasó la Tele 1 a ESCUELA B'), findsNothing);
+    });
+
+    testWidgets('el menú explica las dos teles en routers separados', (tester) async {
+      await abrir(tester);
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tester.ensureVisible(find.byKey(const ValueKey('tele_dos_redes')));
+      await tester.tap(find.byKey(const ValueKey('tele_dos_redes')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('poné las dos como Tele 1'), findsOneWidget);
+      expect(find.textContaining('no se ven'), findsWidgets);
     });
   });
 

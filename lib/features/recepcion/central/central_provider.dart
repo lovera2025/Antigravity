@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pc_despierta.dart';
-import '../../barra/central/buscar_central.dart' show RespondeBusqueda;
+import '../../tele/busqueda_de_la_tele.dart';
+import '../../tele/giro_de_la_tele.dart';
+import '../../tele/modo_tele.dart';
 import '../../tele/red_de_la_tele.dart';
 import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
@@ -166,6 +168,14 @@ class EstadoCentral {
   /// La Tele 2: si está conectada.
   final List<TeleConectada> teles;
 
+  /// Las escuelas que atiende la tele (25-nov-2026), la de la Tele 1 primero.
+  final List<String> atiende;
+
+  /// Lo último que se cambió desde un celular ("Caro pasó la Tele 1 a ESCUELA
+  /// B"), para el cartel de la tele, y su número (cada aviso, uno nuevo).
+  final String? aviso;
+  final int avisos;
+
   const EstadoCentral({
     this.eventoId,
     this.codigo,
@@ -175,6 +185,9 @@ class EstadoCentral {
     this.error,
     this.esTele = false,
     this.teles = const [],
+    this.atiende = const [],
+    this.aviso,
+    this.avisos = 0,
   });
 
   /// Los celulares conectados que eligieron la tele [n] (o las dos).
@@ -200,13 +213,16 @@ class EstadoCentral {
   int get conectados => puestos.where((p) => p.conectado).length;
 
   EstadoCentral _con({
+    String? eventoId,
     String? codigo,
     List<String>? direcciones,
     List<PuestoConectado>? puestos,
     List<TeleConectada>? teles,
+    List<String>? atiende,
+    String? aviso,
   }) =>
       EstadoCentral(
-        eventoId: eventoId,
+        eventoId: eventoId ?? this.eventoId,
         codigo: codigo ?? this.codigo,
         puerto: puerto,
         direcciones: direcciones ?? this.direcciones,
@@ -214,6 +230,9 @@ class EstadoCentral {
         error: error,
         esTele: esTele,
         teles: teles ?? this.teles,
+        atiende: atiende ?? this.atiende,
+        aviso: aviso ?? this.aviso,
+        avisos: aviso == null ? avisos : avisos + 1,
       );
 }
 
@@ -221,29 +240,30 @@ class EstadoCentral {
 ///
 /// Se prende con "Sumar un celular" en Recepción ([prender]) y queda prendida
 /// mientras el programa esté abierto: salir de Recepción no deja a los
-/// celulares sin lista. Atiende un evento por vez; prenderla para otro apaga la
-/// del anterior.
+/// celulares sin lista. En la notebook atiende un evento por vez; prenderla
+/// para otro apaga la del anterior. **En la tele (25-nov-2026) atiende las
+/// escuelas de las dos teles a la vez**, y cambiar la escuela de la Tele 1 no
+/// la reinicia: los celulares siguen conectados, con el mismo código.
 class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   CentralPuerta? _central;
-  ProviderSubscription<AsyncValue<PuertaDelEvento>>? _lista;
-  ProviderSubscription<AsyncValue<List<Evento>>>? _evento;
-  ProviderSubscription<TotemConfig>? _tiempos;
-  ProviderSubscription<SalonParaLaPuerta?>? _salon;
+
+  /// Lo que se escucha de cada escuela que atiende: su lista, su nombre, sus
+  /// segundos, su salón y (en la tele) sus filas.
+  final _deCadaEscuela = <String, List<ProviderSubscription<Object?>>>{};
+  ProviderSubscription<AsyncValue<List<Evento>>>? _eventos;
 
   /// El chat de la puerta de esta PC (6.5.0): existe con la central prendida.
   ChatDelPuesto? _chat;
   ChatDelPuesto? get chat => _chat;
   StreamSubscription<List<PuestoConectado>>? _puestos;
 
-  /// La fila de los pedidos del evento: la de la central si está prendida, y
-  /// la misma para lo que se pide desde esta PC aunque esté apagada.
-  ResolvedorDePedidos? _resolvedor;
+  /// La fila de los pedidos de cada evento: la de la central si está
+  /// prendida, y la misma para lo que se pide desde esta PC aunque esté
+  /// apagada.
+  final _resolvedores = <String, ResolvedorDePedidos>{};
 
-  ResolvedorDePedidos _resolvedorDe(String eventoId) {
-    final r = _resolvedor;
-    if (r != null && r.eventoId == eventoId) return r;
-    return _resolvedor = ResolvedorDePedidos(eventoId: eventoId, pc: _pc());
-  }
+  ResolvedorDePedidos _resolvedorDe(String eventoId) =>
+      _resolvedores[eventoId] ??= ResolvedorDePedidos(eventoId: eventoId, pc: _pc());
 
   PuertaDeEstaPc _pc() => PuertaDeEstaPcConBase(
         ref.read(invitadosRepositoryProvider),
@@ -269,11 +289,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
 
   /// Cómo se saluda a [personaId] en las teles, si entró por la central esta
   /// noche (la tele es el tótem, 24-nov-2026).
-  BienvenidaDeLaNoche? bienvenidaDe(String eventoId, String personaId) {
-    final r = _resolvedor;
-    if (r == null || r.eventoId != eventoId) return null;
-    return r.marcas.bienvenida(personaId);
-  }
+  BienvenidaDeLaNoche? bienvenidaDe(String eventoId, String personaId) =>
+      _resolvedores[eventoId]?.marcas.bienvenida(personaId);
 
   /// Lo que se pide desde esta PC (sumar o quitar una silla): por la misma
   /// fila que los celulares, con la central prendida o no. [puerta] es la
@@ -300,36 +317,109 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     return const EstadoCentral();
   }
 
-  /// La lista de la puerta fila por fila, para la Tele 2.
-  ProviderSubscription<AsyncValue<List<Invitado>>>? _filas;
   StreamSubscription<List<TeleConectada>>? _teles;
 
-  /// Para que la Tele 2 la encuentre por el wifi ([RespondeBusqueda]).
-  RespondeBusqueda? _responde;
+  /// Para que la Tele 2 la encuentre por el wifi ([RespondeLaTele1]).
+  RespondeLaTele1? _responde;
+
+  /// Lo de la escuela [eventoId] que va a la central: desde el contenedor y no
+  /// con `ref.listen` (Riverpod pausa lo que escucha un provider cuando nadie
+  /// lo mira, y la central tiene que seguir mandando la lista aunque Recepción
+  /// esté cerrada).
+  void _escucharEscuela(CentralPuerta central, String eventoId) {
+    if (_deCadaEscuela.containsKey(eventoId)) return;
+    final de = central.esTele ? eventoId : null;
+    _deCadaEscuela[eventoId] = [
+      ref.container.listen<AsyncValue<PuertaDelEvento>>(
+        puertaDelEventoProvider(eventoId),
+        (_, lista) {
+          final puerta = lista.value;
+          if (puerta != null) central.ponerPuerta(puerta, de: de);
+        },
+        fireImmediately: true,
+      ),
+      // Los segundos de la llegada de esa noche: el celular los muestra y los
+      // puede cambiar.
+      ref.container.listen<TotemConfig>(
+        totemConfigDeLaNocheProvider(eventoId),
+        (_, cfg) => central.ponerTiempos(TiemposAMano.de(cfg), de: de),
+        fireImmediately: true,
+      ),
+      // El salón, para VER EN EL PLANO del celular (6.5.0): sin la foto ni el
+      // fondo, que están en internet.
+      ref.container.listen<SalonParaLaPuerta?>(
+        salonDeLaPuertaProvider(eventoId),
+        (_, salon) => central.ponerSalon(
+          salon?.armado.toJson(),
+          salon == null ? null : SalonParaLaPuerta.cfgParaElCelular(salon.cfg),
+          de: de,
+        ),
+        fireImmediately: true,
+      ),
+      // La Tele 2 copia la lista de esta: fila por fila, con cómo se saluda.
+      if (central.esTele)
+        ref.container.listen<AsyncValue<List<Invitado>>>(
+          invitadosStreamProvider(eventoId),
+          (_, filas) {
+            final f = filas.value;
+            if (f != null) central.ponerFilas(f, de: de);
+          },
+          fireImmediately: true,
+        ),
+    ];
+    _ponerTitulos(central, ref.read(eventosActivosProvider).value);
+  }
+
+  /// El nombre de cada escuela y, en la tele, las que se pueden elegir desde
+  /// el celular (las que vienen, como LA FIESTA de la tele).
+  void _ponerTitulos(CentralPuerta central, List<Evento>? eventos) {
+    if (eventos == null) return;
+    for (final id in _deCadaEscuela.keys) {
+      final e = eventos.where((e) => e.id == id).firstOrNull;
+      central.ponerTitulo(e == null ? null : etiquetaEventoRecepcion(e), de: central.esTele ? id : null);
+    }
+    if (central.esTele) {
+      central.ponerEscuelasParaElegir([
+        for (final e in FiestaDeLaTele.de(eventos, DateTime.now()).todas)
+          EscuelaParaElegir(e.id, etiquetaEventoRecepcion(e)),
+      ]);
+    }
+  }
 
   /// La central de [eventoId]. Si ya estaba prendida para ese evento, solo
   /// vuelve a mirar las direcciones (la PC pudo haberse conectado al router
   /// recién).
   ///
   /// [comoTele]: la prende la Tele 1 (24-nov-2026). Los celulares eligen "Tu
-  /// tele", la Tele 2 la encuentra por el wifi y se copia la lista.
+  /// tele", la Tele 2 la encuentra por el wifi y se copia la lista. **Si ya
+  /// está prendida como tele, cambiar de escuela no la reinicia** (25-nov-2026):
+  /// la Tele 1 pasa a la otra escuela y sus celulares también, con el mismo
+  /// código.
   Future<void> prender(String eventoId, {bool comoTele = false}) async {
-    if (_central != null &&
-        state.eventoId == eventoId &&
-        _central!.esTele == comoTele) {
-      final direcciones = await ref.read(direccionesDeEstaPcProvider)();
-      state = state._con(direcciones: direcciones);
-      return;
+    final prendida = _central;
+    if (prendida != null && prendida.esTele == comoTele) {
+      if (comoTele && prendida.eventoId != eventoId) {
+        // Con el control: la Tele 1 ya la muestra.
+        prendida.cambiarEscuelaDeTele(1, eventoId, yaCambio: true);
+        state = state._con(eventoId: eventoId, atiende: prendida.atiende);
+      }
+      if (state.eventoId == eventoId) {
+        final direcciones = await ref.read(direccionesDeEstaPcProvider)();
+        state = state._con(direcciones: direcciones);
+        return;
+      }
     }
     await _soltar();
 
-    final codigo = await ref.read(codigoCentralProvider)(eventoId);
-    final resolvedor = _resolvedorDe(eventoId);
+    // En la tele, un código por noche: cambiar de escuela no obliga a volver
+    // a escanear.
+    final codigo = await ref.read(codigoCentralProvider)(comoTele ? CodigoCentral.deLaNoche : eventoId);
     final central = CentralPuerta(
       eventoId: eventoId,
       codigo: codigo,
       pc: _pc(),
-      resolvedor: resolvedor,
+      resolvedor: _resolvedorDe(eventoId),
+      resolvedorDe: _resolvedorDe,
       paginaDelCelular: ref.read(paginaDelCelularProvider),
       esTele: comoTele,
     );
@@ -348,42 +438,12 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     }
     _central = central;
     _despierta?.mantener(true);
-    // Desde el contenedor y no con `ref.listen`: Riverpod pausa lo que escucha
-    // un provider cuando nadie lo mira, y la central tiene que seguir mandando
-    // la lista aunque Recepción esté cerrada.
-    _evento = ref.container.listen<AsyncValue<List<Evento>>>(
+    _eventos = ref.container.listen<AsyncValue<List<Evento>>>(
       eventosActivosProvider,
-      (_, eventos) {
-        final e = eventos.value?.where((e) => e.id == eventoId).firstOrNull;
-        central.ponerTitulo(e == null ? null : etiquetaEventoRecepcion(e));
-      },
+      (_, eventos) => _ponerTitulos(central, eventos.value),
       fireImmediately: true,
     );
-    _lista = ref.container.listen<AsyncValue<PuertaDelEvento>>(
-      puertaDelEventoProvider(eventoId),
-      (_, lista) {
-        final puerta = lista.value;
-        if (puerta != null) central.ponerPuerta(puerta);
-      },
-      fireImmediately: true,
-    );
-    // Los segundos de la llegada de esa noche: el celular los muestra y los
-    // puede cambiar.
-    _tiempos = ref.container.listen<TotemConfig>(
-      totemConfigDeLaNocheProvider(eventoId),
-      (_, cfg) => central.ponerTiempos(TiemposAMano.de(cfg)),
-      fireImmediately: true,
-    );
-    // El salón, para VER EN EL PLANO del celular (6.5.0): sin la foto ni el
-    // fondo, que están en internet.
-    _salon = ref.container.listen<SalonParaLaPuerta?>(
-      salonDeLaPuertaProvider(eventoId),
-      (_, salon) => central.ponerSalon(
-        salon?.armado.toJson(),
-        salon == null ? null : SalonParaLaPuerta.cfgParaElCelular(salon.cfg),
-      ),
-      fireImmediately: true,
-    );
+    _escucharEscuela(central, eventoId);
     // El chat de la puerta: la PC habla con la central sin red de por medio.
     final nombre = quienOperaEnEstaPc(ref);
     final chat = ChatDelPuesto(
@@ -401,21 +461,38 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       if (identical(_central, central)) state = state._con(puestos: puestos);
     });
     if (comoTele) {
-      // La Tele 2 copia la lista de esta: fila por fila, con cómo se saluda.
-      _filas = ref.container.listen<AsyncValue<List<Invitado>>>(
-        invitadosStreamProvider(eventoId),
-        (_, filas) {
-          final f = filas.value;
-          if (f != null) central.ponerFilas(f);
-        },
-        fireImmediately: true,
-      );
+      // Las dos escuelas de la noche: la de la otra tele también.
+      central.alAtender = (id) {
+        _escucharEscuela(central, id);
+      };
+      // Un celular pidió otra escuela para la Tele 1 (o contestó CAMBIAR).
+      central.alCambiarTele1 = (id, por) {
+        unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(id));
+      };
+      central.alGirarTele1 = (como) {
+        final giro = ref.read(giroDeLaTeleProvider);
+        final nuevo = Giro.segun(como, giro);
+        if (nuevo != null) unawaited(ref.read(giroDeLaTeleProvider.notifier).poner(nuevo));
+      };
+      central.alCambiarLasEscuelas = (aviso) {
+        if (!identical(_central, central)) return;
+        // El cartel de la tele: "Caro pasó la Tele 1 a ESCUELA B".
+        if (aviso != null) ref.read(avisoEnLaTeleProvider.notifier).decir(aviso);
+        state = state._con(
+          eventoId: central.eventoId,
+          atiende: central.atiende,
+          teles: central.teles,
+          aviso: aviso,
+        );
+      };
       _teles = central.cambiosDeTeles.listen((teles) {
-        if (identical(_central, central)) state = state._con(teles: teles);
+        if (identical(_central, central)) {
+          state = state._con(teles: teles, atiende: central.atiende);
+        }
       });
-      final responde = RespondeBusqueda(
-        eventoId: eventoId,
+      final responde = RespondeLaTele1(
         puertoCentral: central.puerto!,
+        atiende: () => central.atiende,
       );
       _responde = responde;
       // Android oye la pregunta de la Tele 2 solo con el permiso del
@@ -429,14 +506,29 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     final direcciones = await ref.read(direccionesDeEstaPcProvider)();
     if (!identical(_central, central)) return;
     state = EstadoCentral(
-      eventoId: eventoId,
+      eventoId: central.eventoId,
       codigo: codigo,
       puerto: central.puerto,
       direcciones: direcciones,
       puestos: central.puestos,
       esTele: comoTele,
       teles: central.teles,
+      atiende: comoTele ? central.atiende : const [],
     );
+  }
+
+  /// La tele [n] pasa a la escuela [eventoId], pedido desde esta tele (la
+  /// Tele 1 con el control lo hace por [prender]).
+  void cambiarEscuelaDeTele(int n, String eventoId, {String? por}) =>
+      _central?.cambiarEscuelaDeTele(n, eventoId, por: por);
+
+  /// Que atienda también la escuela [eventoId] (la Tele 2 que pasó a
+  /// principal atiende la de la Tele 1 que se apagó).
+  void atenderTambien(String eventoId) {
+    final central = _central;
+    if (central == null || !central.esTele) return;
+    central.atender(eventoId);
+    state = state._con(atiende: central.atiende);
   }
 
   /// Si la central de [eventoId] se usó esta noche y no está prendida (la
@@ -455,8 +547,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     final central = _central;
     final eventoId = state.eventoId;
     if (central == null || eventoId == null) return;
-    final nuevo =
-        await ref.read(cambiarCodigoCentralProvider)(eventoId, central.codigo);
+    final nuevo = await ref.read(cambiarCodigoCentralProvider)(
+      central.esTele ? CodigoCentral.deLaNoche : eventoId,
+      central.codigo,
+    );
     await central.cambiarCodigo(nuevo);
     if (identical(_central, central)) state = state._con(codigo: nuevo);
   }
@@ -473,16 +567,14 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     final central = _central;
     _central = null;
     _despierta?.mantener(false);
-    _lista?.close();
-    _lista = null;
-    _evento?.close();
-    _evento = null;
-    _tiempos?.close();
-    _tiempos = null;
-    _salon?.close();
-    _salon = null;
-    _filas?.close();
-    _filas = null;
+    for (final subs in _deCadaEscuela.values) {
+      for (final s in subs) {
+        s.close();
+      }
+    }
+    _deCadaEscuela.clear();
+    _eventos?.close();
+    _eventos = null;
     await _teles?.cancel();
     _teles = null;
     final responde = _responde;

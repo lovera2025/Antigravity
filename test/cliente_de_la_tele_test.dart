@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
+import 'package:arguello_events/features/tele/busqueda_de_la_tele.dart';
 import 'package:arguello_events/features/tele/cliente_de_la_tele.dart';
 import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -132,10 +133,89 @@ void main() {
     expect(t.tiempos.single, TiemposAMano(nombre: 4, camino: 8));
   });
 
-  test('de otra fiesta: lo dice y no copia nada', () async {
-    final t = laTele2(evento: 'e0000000-0000-4000-8000-0000000000ff');
+  test('con una central que no es tele (la notebook): lo dice y no copia nada', () async {
+    await central.cerrar();
+    central = CentralPuerta(eventoId: _evento, codigo: _codigo, pc: pc);
+    puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+    conLaBase();
+    final t = laTele2();
     await hasta(() => t.cliente.estado == EstadoDeLaSegunda.otraFiesta);
     expect(t.copiadas, isEmpty);
+  });
+
+  group('cada tele con su escuela (25-nov-2026)', () {
+    const otra = 'e0000000-0000-4000-8000-0000000000ff';
+
+    test('de otra escuela: se conecta y la Tele 1 la atiende', () async {
+      final t = laTele2(evento: otra);
+      await hasta(() => t.cliente.estado == EstadoDeLaSegunda.conectada);
+      expect(central.escuelaDeTele(2), otra);
+      expect(t.cliente.escuelaDeLaTele1, _evento);
+      expect(t.cliente.atiende, [_evento, otra]);
+    });
+
+    test('cambia de escuela sin desconectarse', () async {
+      final t = laTele2();
+      await hasta(() => t.copiadas.isNotEmpty);
+      final conexiones = central.teles.single;
+      t.cliente.cambiarEscuela(otra);
+      await hasta(() => central.escuelaDeTele(2) == otra);
+      expect(t.cliente.estado, EstadoDeLaSegunda.conectada);
+      expect(t.cliente.eventoId, otra);
+      expect(central.teles.single.conectada, conexiones.conectada);
+    });
+
+    test('la Tele 1 le pide otra escuela (un celular): la tele la muestra', () async {
+      final pedidas = <(String, String?)>[];
+      final girada = <String>[];
+      final cliente = ClienteDeLaTele(
+        eventoId: _evento,
+        numero: 2,
+        direccionAMano: '127.0.0.1:$puerto',
+        alRecibirBienvenidas: (_) {},
+        alRecibirFilas: (_) async {},
+        alPedirEscuela: (e, por) => pedidas.add((e, por)),
+        alGirar: girada.add,
+      );
+      clientes.add(cliente);
+      cliente.arrancar();
+      await hasta(() => cliente.estado == EstadoDeLaSegunda.conectada);
+      final caro = await CelularDePrueba.conectar(puerto, codigo: _codigo, id: 'c', nombre: 'Caro', tele: 2);
+      abiertos.add(caro);
+      await caro.espera('puerta');
+      caro.mandar({'t': 'escuela', 'tele': 2, 'evento': otra});
+      caro.mandar({'t': 'girar', 'tele': 2, 'como': 'vertical'});
+      await hasta(() => pedidas.isNotEmpty && girada.isNotEmpty);
+      expect(pedidas.single, (otra, 'Caro'));
+      expect(cliente.eventoId, otra);
+      expect(girada.single, 'vertical');
+    });
+
+    test('la encuentra sola aunque la Tele 1 tenga otra escuela', () async {
+      const puertoDeBusqueda = 28779;
+      final responde = RespondeLaTele1(puertoCentral: puerto, atiende: () => central.atiende);
+      expect(
+        await responde.escuchar(puerto: puertoDeBusqueda, en: InternetAddress.loopbackIPv4),
+        isTrue,
+      );
+      final cliente = ClienteDeLaTele(
+        eventoId: otra,
+        numero: 2,
+        busca: BuscaCentral(
+          eventoId: otra,
+          puerto: puertoDeBusqueda,
+          cada: const Duration(milliseconds: 200),
+          destinos: () async => [InternetAddress.loopbackIPv4],
+        ),
+        alRecibirBienvenidas: (_) {},
+        alRecibirFilas: (_) async {},
+      );
+      clientes.add(cliente);
+      cliente.arrancar();
+      await hasta(() => cliente.estado == EstadoDeLaSegunda.conectada);
+      expect(central.escuelaDeTele(2), otra);
+      responde.cerrar();
+    });
   });
 
   test('se corta la Tele 1: sigue con lo que tenía, y al volver se reengancha', () async {

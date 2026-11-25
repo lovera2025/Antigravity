@@ -61,6 +61,10 @@ class CelularDePrueba {
   /// "Tu tele": cambia la tele de este celular.
   void elegirTele(int n) => ws.add(jsonEncode({'t': 'tele', 'n': n}));
 
+  /// Manda cualquier mensaje (25-nov-2026: CAMBIAR LA ESCUELA, GIRAR, la
+  /// respuesta a MANTENER · CAMBIAR).
+  void mandar(Map<String, Object?> m) => ws.add(jsonEncode(m));
+
   /// El próximo mensaje de tipo [tipo] que todavía no se miró. Con [cumple],
   /// el próximo de ese tipo que cumpla (los anteriores quedan mirados).
   Future<Map<String, dynamic>> espera(
@@ -88,6 +92,7 @@ class CelularDePrueba {
     DatosSilla? silla,
     TiemposAMano? tiempos,
     int? tele,
+    String? evento,
   }) => ws.add(
     jsonEncode(
       PedidoPuerta(
@@ -98,6 +103,7 @@ class CelularDePrueba {
         silla: silla,
         tiempos: tiempos,
         tele: tele,
+        evento: evento,
       ).toJson(),
     ),
   );
@@ -110,8 +116,10 @@ class CelularDePrueba {
     DatosSilla? silla,
     TiemposAMano? tiempos,
     int? tele,
+    String? evento,
   }) {
-    pedir(id, que, persona, hace: hace, silla: silla, tiempos: tiempos, tele: tele);
+    pedir(id, que, persona,
+        hace: hace, silla: silla, tiempos: tiempos, tele: tele, evento: evento);
     return espera('respuesta', cumple: (m) => m['id'] == id);
   }
 

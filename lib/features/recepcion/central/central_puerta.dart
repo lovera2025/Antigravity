@@ -21,6 +21,10 @@ const kPuertoCentral = 8787;
 const kErroresDeCodigo = 5;
 const kFrenoPorErrores = Duration(minutes: 1);
 
+/// Cuánto espera la pregunta "La Tele 1 cambió a ESCUELA B · MANTENER ·
+/// CAMBIAR" (25-nov-2026). Sin respuesta, se mantiene.
+const kEsperaDeLaPregunta = Duration(minutes: 3);
+
 /// Un celular que se conectó a la central esta noche.
 class PuestoConectado {
   /// Lo inventa el celular la primera vez y lo guarda: así se lo reconoce al
@@ -55,7 +59,20 @@ class PuestoConectado {
 class TeleConectada {
   final int numero;
   final bool conectada;
-  const TeleConectada(this.numero, {required this.conectada});
+
+  /// La escuela que muestra (25-nov-2026). Null: no se sabe todavía.
+  final String? evento;
+  const TeleConectada(this.numero, {required this.conectada, this.evento});
+}
+
+/// Una escuela que se puede elegir para una tele desde el celular
+/// (25-nov-2026): las que vienen, como las ve la tele en LA FIESTA.
+class EscuelaParaElegir {
+  final String id;
+  final String titulo;
+  const EscuelaParaElegir(this.id, this.titulo);
+
+  Map<String, Object?> toJson() => {'id': id, 'titulo': titulo};
 }
 
 /// La central de la puerta: una notebook del salón a la que los celulares de
@@ -74,33 +91,56 @@ class TeleConectada {
 /// - También sirve la página del celular ([paginaDelCelular]): sin internet,
 ///   el celular no tiene de dónde más bajarla.
 ///
+/// **En la tele ([esTele], 25-nov-2026) atiende las dos escuelas de la noche a
+/// la vez**: cada una con su fila de pedidos, sus marcas y su lista
+/// ([_Escuela]). Cada tele muestra la suya, y cada celular ve la de su tele
+/// ("Tu tele"). Cambiar la escuela de una tele no reinicia nada: sus celulares
+/// pasan solos ([cambiarEscuelaDeTele]). En la notebook, una sola, como
+/// siempre.
+///
 /// Habla por WebSocket en `/vivo?c=<código>&id=<celular>&p=<nombre>`, con
 /// mensajes JSON que llevan su tipo en `t`.
 class CentralPuerta {
   CentralPuerta({
-    required this.eventoId,
+    required String eventoId,
     required String codigo,
     required PuertaDeEstaPc pc,
     ResolvedorDePedidos? resolvedor,
+    ResolvedorDePedidos Function(String eventoId)? resolvedorDe,
     this.paginaDelCelular,
     DateTime Function()? ahora,
     this.esTele = false,
-  }) : _codigo = codigo,
-       // El mismo reloj para la central y sus marcas: cuánto hace que se
-       // marcó a alguien se cuenta con uno solo.
-       _resolvedor = resolvedor ??
-           ResolvedorDePedidos(eventoId: eventoId, pc: pc, ahora: ahora),
-       _ahora = ahora ?? DateTime.now;
+  })  : _codigo = codigo,
+        _pc = pc,
+        _resolvedorDe = resolvedorDe,
+        // El mismo reloj para la central y sus marcas: cuánto hace que se
+        // marcó a alguien se cuenta con uno solo.
+        _ahora = ahora ?? DateTime.now {
+    _escuelas[eventoId] = _Escuela(eventoId, resolvedor ?? _nuevoResolvedor(eventoId));
+    _deLaTele[1] = eventoId;
+  }
 
-  final String eventoId;
+  /// La escuela de la central: la de la notebook o la que muestra la Tele 1.
+  String get eventoId => _deLaTele[1]!;
 
   /// La central es la Tele 1 (la tele es el tótem, 24-nov-2026): los celulares
   /// eligen "Tu tele" y se le puede conectar la Tele 2. En la notebook, false:
   /// como siempre.
   final bool esTele;
 
-  /// La fila de los pedidos: la misma que usa la PC.
-  final ResolvedorDePedidos _resolvedor;
+  final PuertaDeEstaPc _pc;
+  final ResolvedorDePedidos Function(String eventoId)? _resolvedorDe;
+
+  ResolvedorDePedidos _nuevoResolvedor(String id) =>
+      _resolvedorDe?.call(id) ?? ResolvedorDePedidos(eventoId: id, pc: _pc, ahora: _ahora);
+
+  /// Las escuelas que atiende: en la notebook, una.
+  final _escuelas = <String, _Escuela>{};
+
+  /// La escuela de cada tele: la 1 es la de la central.
+  final _deLaTele = <int, String>{};
+
+  _Escuela get _principal => _escuelas[eventoId]!;
 
   /// La carpeta con la página que abre el celular, o null si no hay (en las
   /// pruebas).
@@ -109,14 +149,67 @@ class CentralPuerta {
 
   String _codigo;
   HttpServer? _servidor;
-  PuertaDelEvento? _puerta;
-  String? _lista;
   var _version = 0;
-  TiemposAMano? _tiempos;
   final _conexiones = <_Conexion>{};
   final _puestos = <String, PuestoConectado>{};
   final _errores = <String, List<DateTime>>{};
   final _cambiosDePuestos = StreamController<List<PuestoConectado>>.broadcast();
+
+  // ── Las escuelas de la tele (25-nov-2026) ─────────────────────────────────
+
+  /// Las que atiende, la de la Tele 1 primero.
+  List<String> get atiende => [eventoId, ..._escuelas.keys.where((e) => e != eventoId)];
+
+  /// La escuela de la tele [n], si se sabe.
+  String? escuelaDeTele(int n) => _deLaTele[n];
+
+  /// Empieza a atender la escuela [id] (si no la atendía): se le avisa a quien
+  /// la arma ([alAtender]) para que le pase su lista, su salón y lo demás.
+  void atender(String id) {
+    if (!esTele || id.length != 36 || _escuelas.containsKey(id)) return;
+    _escuelas[id] = _Escuela(id, _nuevoResolvedor(id));
+    alAtender?.call(id);
+  }
+
+  /// Hay que armarle lo suyo a una escuela nueva.
+  void Function(String eventoId)? alAtender;
+
+  /// La Tele 1 tiene que mostrar otra escuela: la pidió un celular, o la
+  /// respuesta a "MANTENER · CAMBIAR". [por]: quién (null: con el control).
+  void Function(String eventoId, String? por)? alCambiarTele1;
+
+  /// Girar la Tele 1, pedido desde un celular: "horizontal", "vertical" o
+  /// "dar_vuelta" (el celular no sabe cómo está girada).
+  void Function(String como)? alGirarTele1;
+
+  static const _girosQueSePiden = {'horizontal', 'vertical', 'dar_vuelta'};
+
+  /// Cambió la escuela de alguna tele, o se le cambió la escuela a la tele
+  /// desde un celular ([aviso]: lo que se dice).
+  void Function(String? aviso)? alCambiarLasEscuelas;
+
+  /// Las que se pueden elegir desde el celular.
+  var _paraElegir = const <EscuelaParaElegir>[];
+
+  void ponerEscuelasParaElegir(List<EscuelaParaElegir> escuelas) {
+    _paraElegir = List.unmodifiable(escuelas);
+    _avisarTeles();
+  }
+
+  String _tituloDe(String id) =>
+      _escuelas[id]?.titulo ??
+      _paraElegir.where((e) => e.id == id).firstOrNull?.titulo ??
+      'otra escuela';
+
+  /// Si las teles conectadas muestran la misma escuela: "Las dos" vale solo
+  /// así.
+  bool get _mismaEscuela {
+    final una = _deLaTele[1];
+    for (final t in _teles.values) {
+      if (t.escuela != una) return false;
+    }
+    return true;
+  }
 
   // ── Las teles (24-nov-2026) ───────────────────────────────────────────────
 
@@ -124,11 +217,8 @@ class CentralPuerta {
   final _teles = <int, _ConexionTele>{};
 
   /// Los segundos de la llegada de cada otra tele (la 2): cada recepcionista
-  /// controla los de su tele. Los de la Tele 1 son [_tiempos].
+  /// controla los de su tele. Los de la Tele 1 son los de su escuela.
   final _tiemposDeTele = <int, TiemposAMano>{};
-
-  /// La lista de la puerta, fila por fila, para copiarla en la Tele 2.
-  final _filas = <String, Invitado>{};
 
   final _cambiosDeTeles = StreamController<List<TeleConectada>>.broadcast();
 
@@ -137,7 +227,7 @@ class CentralPuerta {
 
   List<TeleConectada> get teles => [
     for (var n = 2; n <= kTelesDeLaNoche; n++)
-      TeleConectada(n, conectada: _teles.containsKey(n)),
+      TeleConectada(n, conectada: _teles.containsKey(n), evento: _deLaTele[n]),
   ];
 
   /// Lo que cambia la Tele 2 en sus segundos lo avisa acá.
@@ -145,7 +235,17 @@ class CentralPuerta {
 
   String get codigo => _codigo;
   int? get puerto => _servidor?.port;
-  MarcasDeLaNoche get marcas => _resolvedor.marcas;
+
+  /// Las marcas de la escuela de la central (en la notebook, las de la
+  /// noche).
+  MarcasDeLaNoche get marcas => _principal.resolvedor.marcas;
+
+  /// Las marcas de la escuela [eventoId], si la atiende.
+  MarcasDeLaNoche? marcasDe(String eventoId) => _escuelas[eventoId]?.resolvedor.marcas;
+
+  /// Cuántos marcó [puesto] esta noche que siguen adentro, en todas.
+  int _marcados(String puesto) =>
+      _escuelas.values.fold(0, (n, e) => n + e.resolvedor.marcas.cuantos(puesto));
 
   /// Los celulares de esta noche: primero los conectados, por nombre.
   List<PuestoConectado> get puestos {
@@ -186,30 +286,34 @@ class CentralPuerta {
     return servidor.port;
   }
 
-  /// Cómo se llama el evento, para el encabezado del celular: "ESCUELA NORMAL —
-  /// Egresados (12/12) · masivo".
-  String? _titulo;
+  _Escuela? _escuela(String? de) => _escuelas[de ?? eventoId];
 
   /// La lista cambió (alguien entró, se sorteó, se cargó un acompañante): se
-  /// les manda a todos los celulares.
-  void ponerPuerta(PuertaDelEvento puerta) {
-    _puerta = puerta;
-    _resolvedor.puerta = puerta;
-    _mandarLista();
+  /// les manda a todos los celulares. [de]: la escuela (null: la de la
+  /// central).
+  void ponerPuerta(PuertaDelEvento puerta, {String? de}) {
+    final e = _escuela(de);
+    if (e == null) return;
+    e.puerta = puerta;
+    e.resolvedor.puerta = puerta;
+    _mandarLista(e);
   }
 
   /// Los segundos de la llegada de esa noche, para que el celular los muestre
   /// y los pueda cambiar.
-  void ponerTiempos(TiemposAMano? tiempos) {
-    if (tiempos == _tiempos) return;
-    _tiempos = tiempos;
-    if (_puerta != null) _mandarLista();
+  void ponerTiempos(TiemposAMano? tiempos, {String? de}) {
+    final e = _escuela(de);
+    if (e == null || tiempos == e.tiempos) return;
+    e.tiempos = tiempos;
+    if (e.puerta != null) _mandarLista(e);
   }
 
-  void ponerTitulo(String? titulo) {
-    if (titulo == _titulo) return;
-    _titulo = titulo;
-    if (_puerta != null) _mandarLista();
+  void ponerTitulo(String? titulo, {String? de}) {
+    final e = _escuela(de);
+    if (e == null || titulo == e.titulo) return;
+    e.titulo = titulo;
+    if (e.puerta != null) _mandarLista(e);
+    if (esTele) _avisarTeles();
   }
 
   /// Los segundos de la llegada de la Tele [tele] (la 2), cambiados desde un
@@ -217,14 +321,19 @@ class CentralPuerta {
   void ponerTiemposDeTele(int tele, TiemposAMano tiempos) {
     _tiemposDeTele[tele] = tiempos;
     _teles[tele]?.mandar(jsonEncode({'t': 'tiempos', 'tiempos': tiempos.toJson()}));
-    if (_puerta != null) _mandarLista();
+    for (final e in _escuelas.values) {
+      if (e.puerta != null) _mandarLista(e);
+    }
   }
 
   /// La lista de la puerta fila por fila (la de la base de esta tele): lo que
   /// cambió se le manda a la Tele 2, que lo copia en la suya. Con cada ingreso
-  /// va cómo se saluda ([MarcasDeLaNoche.bienvenida]).
-  void ponerFilas(List<Invitado> filas) {
-    _filas
+  /// va cómo se saluda ([MarcasDeLaNoche.bienvenida]). La Tele 2 copia las de
+  /// todas las escuelas que se atienden: si la Tele 1 se apaga, tiene todo.
+  void ponerFilas(List<Invitado> filas, {String? de}) {
+    final e = _escuela(de);
+    if (e == null) return;
+    e.filas
       ..clear()
       ..addEntries(filas.map((f) => MapEntry(f.id, f)));
     for (final t in _teles.values) {
@@ -235,27 +344,29 @@ class CentralPuerta {
   /// Lo que la Tele 2 todavía no tiene: todo al conectarse; después, lo que
   /// cambió.
   void _mandarFilas(_ConexionTele t) {
+    final ahora = _ahora();
     final cambiadas = <Invitado>[];
-    for (final f in _filas.values) {
-      final firma = _firma(f);
-      if (t.enviadas[f.id] == firma) continue;
-      t.enviadas[f.id] = firma;
-      cambiadas.add(f);
+    final bienvenidas = <String, Object?>{};
+    final por = <String, String>{};
+    for (final e in _escuelas.values) {
+      por.addAll(e.resolvedor.marcas.todas);
+      for (final f in e.filas.values) {
+        final firma = _firma(f);
+        if (t.enviadas[f.id] == firma) continue;
+        t.enviadas[f.id] = firma;
+        cambiadas.add(f);
+        final b = f.estadoIngreso == EstadoIngreso.ingresado
+            ? e.resolvedor.marcas.bienvenida(f.id)
+            : null;
+        if (b != null) bienvenidas[f.id] = b.toJson(ahora);
+      }
     }
     if (cambiadas.isEmpty) return;
-    final ahora = _ahora();
-    final bienvenidas = <String, Object?>{};
-    for (final f in cambiadas) {
-      final b = f.estadoIngreso == EstadoIngreso.ingresado
-          ? _resolvedor.marcas.bienvenida(f.id)
-          : null;
-      if (b != null) bienvenidas[f.id] = b.toJson(ahora);
-    }
     t.mandar(jsonEncode({
       't': 'filas',
       'filas': [for (final f in cambiadas) Invitado.sinDatosPrivados(f.toJson())],
       'bienvenidas': bienvenidas,
-      'por': _resolvedor.marcas.todas,
+      'por': por,
     }));
   }
 
@@ -280,14 +391,29 @@ class CentralPuerta {
       if (c.tele == n || c.tele == kLasDosTeles) c.nombre,
   ];
 
-  /// Las teles para el celular: cuáles hay y quién maneja cada una.
+  /// Las teles para el celular: cuáles hay, quién maneja cada una, qué escuela
+  /// muestra, y las escuelas que se pueden elegir.
   String _textoDeTeles() => jsonEncode({
     't': 'teles',
     'lista': [
-      {'n': 1, 'conectada': true, 'maneja': _quienesManejan(1)},
+      {
+        'n': 1,
+        'conectada': true,
+        'maneja': _quienesManejan(1),
+        'evento': eventoId,
+        'titulo': _tituloDe(eventoId),
+      },
       for (final t in teles)
-        {'n': t.numero, 'conectada': t.conectada, 'maneja': _quienesManejan(t.numero)},
+        {
+          'n': t.numero,
+          'conectada': t.conectada,
+          'maneja': _quienesManejan(t.numero),
+          if (t.evento != null) 'evento': t.evento,
+          if (t.evento != null) 'titulo': _tituloDe(t.evento!),
+        },
     ],
+    'escuelas': [for (final e in _paraElegir) e.toJson()],
+    'lasDos': _mismaEscuela,
   });
 
   void _avisarTeles() {
@@ -358,49 +484,170 @@ class CentralPuerta {
     }
   }
 
-  /// El salón de la fiesta para VER EN EL PLANO del celular (6.5.0): el armado
-  /// y la config del tótem sin foto ni fondo (`SalonParaLaPuerta`). Va en un
-  /// mensaje aparte de la lista, que se manda muchas veces por noche: el armado
-  /// pesa. Null: sin salón.
-  String? _salon;
-
   /// Pone el salón y se lo manda a todos. [armado] y [cfg] ya en JSON (el de
   /// `ArmadoSalon.toJson` y `SalonParaLaPuerta.cfgParaElCelular`); null: sin
-  /// salón.
-  void ponerSalon(Map<String, dynamic>? armado, Map<String, dynamic>? cfg) {
+  /// salón. El salón de la fiesta para VER EN EL PLANO del celular (6.5.0) va
+  /// en un mensaje aparte de la lista, que se manda muchas veces por noche: el
+  /// armado pesa.
+  void ponerSalon(Map<String, dynamic>? armado, Map<String, dynamic>? cfg, {String? de}) {
+    final e = _escuela(de);
+    if (e == null) return;
     final nuevo = jsonEncode({
       't': 'salon',
       'armado': armado,
       'cfg': armado == null ? null : cfg,
     });
-    if (nuevo == _salon) return;
-    _salon = nuevo;
+    if (nuevo == e.salon) return;
+    e.salon = nuevo;
     for (final c in _conexiones) {
-      c.mandar(nuevo);
+      if (_escuelaDe(c) == e.eventoId) c.mandar(nuevo);
     }
   }
 
-  void _mandarLista() {
+  /// La escuela que ve un celular: la de su tele. "Las dos" va solo con la
+  /// misma escuela; un celular sin tele (o en la notebook), la de la central.
+  String _escuelaDe(_Conexion c) {
+    if (!esTele) return eventoId;
+    final t = c.tele;
+    if (t == null || t == kLasDosTeles) return eventoId;
+    return _deLaTele[t] ?? eventoId;
+  }
+
+  void _mandarLista(_Escuela e) {
     _version++;
-    _lista = jsonEncode({
+    e.lista = jsonEncode({
       't': 'puerta',
       'v': _version,
-      'evento': eventoId,
-      'titulo': _titulo,
-      'puerta': _puerta!.toJson(),
-      'por': _resolvedor.marcas.todas,
-      if (_tiempos != null) 'tiempos': _tiempos!.toJson(),
+      'evento': e.eventoId,
+      'titulo': e.titulo,
+      'puerta': e.puerta!.toJson(),
+      'por': e.resolvedor.marcas.todas,
+      if (e.tiempos != null) 'tiempos': e.tiempos!.toJson(),
       // La tele es el tótem (24-nov-2026): el celular dice "Conectado a la
       // Tele 1" y, con dos teles, muestra los segundos de la suya.
       if (esTele) 'central': 'Tele 1',
       if (_tiemposDeTele.isNotEmpty)
         'tiemposTeles': {
-          for (final e in _tiemposDeTele.entries) '${e.key}': e.value.toJson(),
+          for (final x in _tiemposDeTele.entries) '${x.key}': x.value.toJson(),
         },
     });
     for (final c in _conexiones) {
-      c.mandar(_lista!);
+      if (_escuelaDe(c) == e.eventoId) c.mandar(e.lista!);
     }
+  }
+
+  /// A [c], lo de su escuela: la lista y el salón.
+  void _mandarEscuelaA(_Conexion c) {
+    final e = _escuelas[_escuelaDe(c)];
+    c.mandar(e?.lista ?? jsonEncode({'t': 'esperando'}));
+    // Sin salón también: que no quede el de la escuela de antes.
+    c.mandar(e?.salon ?? jsonEncode({'t': 'salon', 'armado': null, 'cfg': null}));
+  }
+
+  /// **La tele [n] pasa a mostrar la escuela [evento]** (25-nov-2026), sin
+  /// reiniciar nada: la central la atiende (si no la atendía), los celulares
+  /// de esa tele pasan solos con un aviso ("Caro pasó la Tele 1 a ESCUELA B"),
+  /// y si la otra tele tenía la misma escuela, a sus celulares se les pregunta
+  /// MANTENER · CAMBIAR. [por]: quién la cambió (null: con el control de la
+  /// tele). [yaCambio]: la tele ya la cambió (la Tele 2 con su control): no se
+  /// le vuelve a pedir.
+  void cambiarEscuelaDeTele(int n, String evento, {String? por, bool yaCambio = false}) {
+    if (!esTele || n < 1 || n > kTelesDeLaNoche || evento.length != 36) return;
+    final antes = _deLaTele[n];
+    if (antes == evento) return;
+    atender(evento);
+    final conLaMisma = [
+      for (final e in _deLaTele.entries)
+        if (e.key != n && e.value == antes) e.key,
+    ];
+    _deLaTele[n] = evento;
+    if (n == 1) {
+      if (!yaCambio) alCambiarTele1?.call(evento, por);
+    } else {
+      final t = _teles[n];
+      if (t != null) {
+        t.escuela = evento;
+        if (!yaCambio) {
+          t.mandar(jsonEncode({'t': 'escuela', 'evento': evento, 'por': ?por}));
+        }
+      }
+    }
+    final titulo = _tituloDe(evento);
+    final tele = nombreDeLaTele(n);
+    final aviso = por == null ? 'La $tele pasó a $titulo' : '$por pasó la $tele a $titulo';
+    // Sus celulares pasan solos. Los de "Las dos" ya no ven las dos: quedan en
+    // esta tele.
+    for (final c in _conexiones) {
+      if (c.tele == kLasDosTeles) {
+        c.tele = n;
+        c.mandar(jsonEncode({'t': 'tu_tele', 'n': n}));
+      }
+      if (_escuelaDe(c) == evento && (c.tele == n || (c.tele == null && n == 1))) {
+        _mandarEscuelaA(c);
+        c.mandar(jsonEncode({'t': 'aviso', 'texto': aviso}));
+      }
+    }
+    // La otra tele tenía la misma: que lo decidan sus celulares.
+    for (final m in conLaMisma) {
+      _preguntar(m, evento, 'La $tele cambió a $titulo');
+    }
+    _mandarManejan();
+    for (final c in _conexiones) {
+      _anotarPuesto(c, conectado: true, avisar: false);
+    }
+    _avisarPuestos();
+    alCambiarLasEscuelas?.call(por == null ? null : aviso);
+  }
+
+  // ── "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR" ───────────────────
+
+  final _preguntas = <String, _Pregunta>{};
+  var _numeroDePregunta = 0;
+
+  /// Les pregunta a los celulares de la tele [tele] si cambian a [evento]. Vale
+  /// la primera respuesta; sin respuesta, se mantiene.
+  void _preguntar(int tele, String evento, String texto) {
+    final id = 'p${++_numeroDePregunta}';
+    final mensaje = jsonEncode({
+      't': 'pregunta',
+      'id': id,
+      'tele': tele,
+      'evento': evento,
+      'texto': texto,
+    });
+    var alguien = false;
+    for (final c in _conexiones) {
+      if (c.tele == tele) {
+        c.mandar(mensaje);
+        alguien = true;
+      }
+    }
+    // Sin nadie que conteste, se mantiene: no hace falta esperar.
+    if (!alguien) return;
+    final p = _Pregunta(tele, evento);
+    _preguntas[id] = p;
+    p.vence = Timer(kEsperaDeLaPregunta, () => _cerrarPregunta(id, 'Nadie contestó: se mantiene.'));
+  }
+
+  void _cerrarPregunta(String id, String texto) {
+    final p = _preguntas.remove(id);
+    p?.vence?.cancel();
+    final mensaje = jsonEncode({'t': 'pregunta_cerrada', 'id': id, 'texto': texto});
+    for (final c in _conexiones) {
+      if (p == null || c.tele == p.tele) c.mandar(mensaje);
+    }
+  }
+
+  void _contestar(_Conexion c, String id, bool cambiar) {
+    final p = _preguntas[id];
+    if (p == null) {
+      // Ya la contestó otro, o venció.
+      c.mandar(jsonEncode({'t': 'pregunta_cerrada', 'id': id}));
+      return;
+    }
+    if (c.tele != p.tele) return;
+    _cerrarPregunta(id, '${c.nombre} eligió ${cambiar ? 'CAMBIAR' : 'MANTENER'}.');
+    if (cambiar) cambiarEscuelaDeTele(p.tele, p.evento, por: c.nombre);
   }
 
   /// Otro código: los celulares conectados quedan afuera y tienen que volver a
@@ -418,6 +665,10 @@ class CentralPuerta {
   }
 
   Future<void> cerrar() async {
+    for (final p in _preguntas.values) {
+      p.vence?.cancel();
+    }
+    _preguntas.clear();
     final todas = _conexiones.toList();
     _conexiones.clear();
     for (final c in todas) {
@@ -522,10 +773,13 @@ class CentralPuerta {
       nombre,
       tele: esTele && tele != null && esTeleValida(tele) ? tele : null,
     );
+    // "Las dos" va solo con la misma escuela en las dos teles.
+    if (conexion.tele == kLasDosTeles && !_mismaEscuela) conexion.tele = 1;
     _conexiones.add(conexion);
     _anotarPuesto(conexion, conectado: true, salvo: conexion);
-    conexion.mandar(_lista ?? jsonEncode({'t': 'esperando'}));
-    if (_salon != null) conexion.mandar(_salon!);
+    final escuela = _escuelas[_escuelaDe(conexion)];
+    conexion.mandar(escuela?.lista ?? jsonEncode({'t': 'esperando'}));
+    if (escuela?.salon != null) conexion.mandar(escuela!.salon!);
     // El chat: lo que ya hubo esta noche para ese celular, y con quién hablar.
     conexion.mandar(
       jsonEncode({
@@ -537,7 +791,12 @@ class CentralPuerta {
     // mismo celular).
     conexion.mandar(_textoDePuestos());
     // Con la central en una tele: qué teles hay y quién maneja cada una.
-    if (esTele) _mandarManejan();
+    if (esTele) {
+      if (tele == kLasDosTeles && conexion.tele != kLasDosTeles) {
+        conexion.mandar(jsonEncode({'t': 'tu_tele', 'n': conexion.tele}));
+      }
+      _mandarManejan();
+    }
 
     ws.listen(
       (mensaje) => _mensaje(conexion, mensaje),
@@ -553,16 +812,21 @@ class CentralPuerta {
     if (esTele) _mandarManejan();
   }
 
-  void _anotarPuesto(_Conexion c, {required bool conectado, _Conexion? salvo}) {
+  void _anotarPuesto(
+    _Conexion c, {
+    required bool conectado,
+    _Conexion? salvo,
+    bool avisar = true,
+  }) {
     _puestos[c.celular] = PuestoConectado(
       celular: c.celular,
       nombre: c.nombre,
       conectado: conectado,
       ultimaVez: _ahora(),
-      marcados: _resolvedor.marcas.cuantos(c.nombre),
+      marcados: _marcados(c.nombre),
       tele: c.tele,
     );
-    _avisarPuestos(salvo: salvo);
+    if (avisar) _avisarPuestos(salvo: salvo);
   }
 
   void _avisarPuestos({_Conexion? salvo}) {
@@ -573,7 +837,7 @@ class CentralPuerta {
         nombre: p.nombre,
         conectado: p.conectado,
         ultimaVez: p.ultimaVez,
-        marcados: _resolvedor.marcas.cuantos(p.nombre),
+        marcados: _marcados(p.nombre),
         tele: p.tele,
       );
     }
@@ -616,9 +880,47 @@ class CentralPuerta {
         // "Tu tele" (24-nov-2026): el celular cambió de tele.
         final n = json['n'];
         if (!esTele || n is! int || !esTeleValida(n)) return;
+        if (n == kLasDosTeles && !_mismaEscuela) {
+          conexion.mandar(jsonEncode({
+            't': 'aviso',
+            'texto': '"Las dos" va solo con la misma escuela en las dos teles.',
+          }));
+          conexion.mandar(jsonEncode({'t': 'tu_tele', 'n': conexion.tele}));
+          return;
+        }
+        final antes = _escuelaDe(conexion);
         conexion.tele = n;
+        // Otra tele con otra escuela: lo de esa escuela.
+        if (_escuelaDe(conexion) != antes) _mandarEscuelaA(conexion);
         _anotarPuesto(conexion, conectado: true);
         _mandarManejan();
+      case 'escuela':
+        // CAMBIAR LA ESCUELA de una tele, desde el celular (sin PIN).
+        final n = json['tele'];
+        final evento = json['evento'];
+        if (!esTele || n is! int || evento is! String) return;
+        cambiarEscuelaDeTele(n, evento, por: conexion.nombre);
+      case 'girar':
+        // GIRAR desde el celular, sin PIN: Horizontal · Vertical · Dar vuelta.
+        final n = json['tele'];
+        final como = json['como'];
+        if (!esTele || n is! int || como is! String || !_girosQueSePiden.contains(como)) return;
+        if (n == 1) {
+          alGirarTele1?.call(como);
+        } else {
+          _teles[n]?.mandar(jsonEncode({'t': 'girar', 'como': como}));
+        }
+        final aviso = '${conexion.nombre} giró la ${nombreDeLaTele(n)}';
+        for (final c in _conexiones) {
+          if (!identical(c, conexion) && (c.tele == n || c.tele == kLasDosTeles)) {
+            c.mandar(jsonEncode({'t': 'aviso', 'texto': aviso}));
+          }
+        }
+      case 'contesta':
+        final id = json['id'];
+        final cambiar = json['cambiar'];
+        if (!esTele || id is! String || cambiar is! bool) return;
+        _contestar(conexion, id, cambiar);
       case 'pedido':
         final leido = PedidoPuerta.fromJson(json);
         if (leido == null) return;
@@ -627,9 +929,14 @@ class CentralPuerta {
         final pedido = esTele
             ? leido.conTele(leido.tele ?? conexion.tele)
             : leido.conTele(null);
+        // La escuela del pedido: la que miraba el celular al tocarlo (en la
+        // tele), o la de su tele.
+        final evento = esTele ? leido.evento : null;
+        if (evento != null) atender(evento);
+        final escuela = _escuelas[evento] ?? _escuelas[_escuelaDe(conexion)]!;
         // De a uno, con la PC: cada pedido mira la base después del anterior.
         unawaited(
-          _resolvedor.resolver(pedido, conexion.nombre).then((respuesta) {
+          escuela.resolvedor.resolver(pedido, conexion.nombre).then((respuesta) {
             conexion.mandar(jsonEncode(respuesta));
             if (respuesta['ok'] == true && respuesta['hizo'] != 'nada') {
               _avisarPuestos();
@@ -642,7 +949,8 @@ class CentralPuerta {
   // ── La Tele 2 (24-nov-2026) ───────────────────────────────────────────────
 
   /// La Tele 2 se conecta con el número del evento, como las cajas de la barra:
-  /// es la misma app, con la misma fiesta bajada en la oficina.
+  /// es la misma app, con la misma fiesta bajada en la oficina. Desde el
+  /// 25-nov-2026 puede tener otra escuela: la Tele 1 la atiende también.
   Future<void> _conectarTele(HttpRequest pedido) async {
     if (!WebSocketTransformer.isUpgradeRequest(pedido)) {
       pedido.response.statusCode = HttpStatus.badRequest;
@@ -652,8 +960,9 @@ class CentralPuerta {
     final datos = pedido.uri.queryParameters;
     final ws = await WebSocketTransformer.upgrade(pedido);
     final numero = int.tryParse(datos['n'] ?? '');
+    final evento = datos['evento'] ?? '';
     if (!esTele ||
-        datos['evento'] != eventoId ||
+        evento.length != 36 ||
         numero == null ||
         numero < 2 ||
         numero > kTelesDeLaNoche) {
@@ -664,14 +973,28 @@ class CentralPuerta {
     final vieja = _teles.remove(numero);
     if (vieja != null) unawaited(vieja.cerrar(4003, 'reemplazada'));
     ws.pingInterval = const Duration(seconds: 5);
-    final t = _ConexionTele(ws, numero);
+    atender(evento);
+    final antes = _deLaTele[numero];
+    final t = _ConexionTele(ws, numero, evento);
     _teles[numero] = t;
-    t.mandar(jsonEncode({'t': 'central', 'codigo': _codigo, 'evento': eventoId}));
+    _deLaTele[numero] = evento;
+    t.mandar(jsonEncode({
+      't': 'central',
+      'codigo': _codigo,
+      'evento': eventoId,
+      'escuelas': atiende,
+    }));
     final tiempos = _tiemposDeTele[numero];
     if (tiempos != null) {
       t.mandar(jsonEncode({'t': 'tiempos', 'tiempos': tiempos.toJson()}));
     }
     _mandarFilas(t);
+    // Sus celulares, con lo de su escuela si volvió con otra.
+    if (antes != evento) {
+      for (final c in _conexiones) {
+        if (c.tele == numero) _mandarEscuelaA(c);
+      }
+    }
     _mandarManejan();
     ws.listen(
       (mensaje) => _mensajeDeTele(t, mensaje),
@@ -706,7 +1029,16 @@ class CentralPuerta {
         if (tiempos == null || _tiemposDeTele[t.numero] == tiempos) return;
         _tiemposDeTele[t.numero] = tiempos;
         alCambiarTiemposDeTele?.call(t.numero, tiempos);
-        if (_puerta != null) _mandarLista();
+        for (final e in _escuelas.values) {
+          if (e.puerta != null) _mandarLista(e);
+        }
+      case 'escuela':
+        // La Tele 2 cambió de escuela con su control (25-nov-2026).
+        final evento = json['evento'];
+        if (evento is! String) return;
+        final por = json['por'];
+        cambiarEscuelaDeTele(t.numero, evento, por: por is String ? por : null, yaCambio: true);
+        t.mandar(jsonEncode({'t': 'escuelas', 'escuelas': atiende}));
     }
   }
 
@@ -779,6 +1111,38 @@ class CentralPuerta {
   }
 }
 
+/// Lo de cada escuela que atiende la central (25-nov-2026): su fila de
+/// pedidos con sus marcas, su lista, sus segundos, su salón y sus filas.
+class _Escuela {
+  _Escuela(this.eventoId, this.resolvedor);
+
+  final String eventoId;
+  final ResolvedorDePedidos resolvedor;
+  PuertaDelEvento? puerta;
+
+  /// El último mensaje con la lista.
+  String? lista;
+  TiemposAMano? tiempos;
+
+  /// Cómo se llama el evento, para el encabezado del celular: "ESCUELA NORMAL —
+  /// Egresados (12/12) · masivo".
+  String? titulo;
+
+  /// El mensaje del salón, o null.
+  String? salon;
+
+  /// La lista de la puerta fila por fila, para copiarla en la Tele 2.
+  final filas = <String, Invitado>{};
+}
+
+/// "La Tele 1 cambió a ESCUELA B": a qué tele se le pregunta y a qué escuela.
+class _Pregunta {
+  _Pregunta(this.tele, this.evento);
+  final int tele;
+  final String evento;
+  Timer? vence;
+}
+
 class _Conexion {
   _Conexion(this.ws, this.celular, this.nombre, {this.tele});
 
@@ -804,11 +1168,13 @@ class _Conexion {
   }
 }
 
-/// La Tele 2, del lado de la Tele 1: qué filas ya tiene.
+/// La Tele 2, del lado de la Tele 1: qué filas ya tiene y qué escuela muestra.
 class _ConexionTele extends _Conexion {
-  _ConexionTele(WebSocket ws, this.numero) : super(ws, 'tele-$numero', 'Tele $numero');
+  _ConexionTele(WebSocket ws, this.numero, this.escuela)
+      : super(ws, 'tele-$numero', 'Tele $numero');
 
   final int numero;
+  String escuela;
 
   /// La firma de cada fila que ya se le mandó.
   final enviadas = <String, String>{};

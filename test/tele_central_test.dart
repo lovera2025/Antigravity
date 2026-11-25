@@ -209,11 +209,16 @@ void main() {
       expect(seSaludaEnLaTele(b, miTele: 1, ahora: ahora), isFalse);
     });
 
-    test('una tele de otra fiesta no se conecta', () async {
-      final t = await tele2(evento: 'e0000000-0000-4000-8000-0000000000ff');
-      await t.espera('evento');
-      expect(await t.cerro(), 4001);
-      expect(central.teles.single.conectada, isFalse);
+    test('una tele de otra escuela se conecta: la Tele 1 atiende las dos (25-nov)', () async {
+      const otra = 'e0000000-0000-4000-8000-0000000000ff';
+      final t = await tele2(evento: otra);
+      final hola = await t.espera('central');
+      expect(hola['escuelas'], [_evento, otra]);
+      expect(central.teles.single.conectada, isTrue);
+      expect(central.escuelaDeTele(2), otra);
+      // Un evento con otra forma, no.
+      final rara = await tele2(evento: 'otra-fiesta');
+      expect(await rara.cerro(), 4001);
     });
 
     test('los segundos de la Tele 2 van a la Tele 2; los de la 1, a la 1', () async {

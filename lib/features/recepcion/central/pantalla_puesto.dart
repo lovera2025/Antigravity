@@ -92,6 +92,14 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
                   style: _titulo(),
                 ),
               ),
+              // TU TELE (25-nov-2026): la escuela y el giro de la tele, sin PIN.
+              if (conLista && _c.teles.isNotEmpty)
+                IconButton(
+                  key: const ValueKey('tu_tele_hoja'),
+                  tooltip: 'Tu tele: la escuela y el giro',
+                  onPressed: _abrirTuTele,
+                  icon: const Icon(Icons.tv_rounded, color: _perla),
+                ),
               // El chat de la puerta (6.5.0): con la lista, ya conectado una vez.
               if (conLista) BotonChat(chat: _c.chat),
               // Los segundos de la llegada en la tele, como el reloj de la PC:
@@ -124,9 +132,122 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
             const SizedBox(height: 8),
             _tuTele(),
           ],
+          // "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR".
+          if (conLista && _c.pregunta != null) ...[
+            const SizedBox(height: 8),
+            _pregunta(_c.pregunta!),
+          ],
         ],
       ),
     );
+  }
+
+  /// La otra tele cambió de escuela y esta tenía la misma: vale la primera
+  /// respuesta de sus celulares; sin respuesta, se mantiene.
+  Widget _pregunta(PreguntaDeLaTele p) => Container(
+        key: const ValueKey('pregunta_de_la_tele'),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+        decoration: BoxDecoration(
+          color: _ambar.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _ambar),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(p.texto, style: _letra(size: 15, negrita: true)),
+            const SizedBox(height: 2),
+            Text(
+              '¿Tu tele (${nombreDeLaTele(_c.teleQueManeja)}) también? Si nadie contesta, se mantiene.',
+              style: _letra(size: 12, color: Colors.white60),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    key: const ValueKey('pregunta_mantener'),
+                    onPressed: () => _c.contestar(cambiar: false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _perla,
+                      side: const BorderSide(color: Colors.white38),
+                    ),
+                    child: Text('MANTENER', style: _letra(size: 13, negrita: true)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    key: const ValueKey('pregunta_cambiar'),
+                    onPressed: () => _c.contestar(cambiar: true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _ambar,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: Text('CAMBIAR',
+                        style: _letra(size: 13, negrita: true, color: Colors.black)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  /// TU TELE (25-nov-2026): CAMBIAR LA ESCUELA y GIRAR la tele de este
+  /// celular, sin PIN (la tele está con la cuenta del jefe).
+  Future<void> _abrirTuTele() => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF16161A),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        builder: (hoja) => SafeArea(
+          child: ListenableBuilder(
+            listenable: _c,
+            builder: (hoja, _) => _HojaTuTele(
+              cliente: _c,
+              confirmar: (n, e) => _confirmarEscuela(hoja, n, e),
+            ),
+          ),
+        ),
+      );
+
+  /// "¿Pasar la Tele 1 a ESCUELA B?" Sin PIN, pero se confirma.
+  Future<void> _confirmarEscuela(BuildContext hoja, int tele, EscuelaDelCelular e) async {
+    final actual = _c.teles.where((t) => t.numero == tele).firstOrNull?.evento;
+    final otraConLaMisma = _c.teles.any((t) => t.numero != tele && t.conectada && t.evento == actual);
+    final ok = await showDialog<bool>(
+      context: hoja,
+      builder: (d) => AlertDialog(
+        backgroundColor: const Color(0xFF16161A),
+        title: Text('¿Pasar la ${nombreDeLaTele(tele)} a ${e.titulo}?',
+            style: _letra(size: 17, negrita: true)),
+        content: Text(
+          'Sus celulares pasan solos.'
+          '${otraConLaMisma ? ' La otra tele tiene esta misma escuela: a sus celulares se les '
+              'pregunta si la cambian también.' : ''}',
+          style: _letra(size: 14, color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('escuela_volver'),
+            onPressed: () => Navigator.of(d).pop(false),
+            child: const Text('VOLVER'),
+          ),
+          FilledButton(
+            key: const ValueKey('escuela_cambiar'),
+            onPressed: () => Navigator.of(d).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: _ambar, foregroundColor: Colors.black),
+            child: const Text('CAMBIAR'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    _c.cambiarEscuela(tele, e.id);
+    if (hoja.mounted) Navigator.of(hoja).pop();
   }
 
   /// "Tu tele: Tele 1 · Tele 2 · Las dos".
@@ -134,14 +255,20 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
     final elegida = _c.tele;
     Widget opcion(int n) {
       final tele = _c.teles.where((t) => t.numero == n).firstOrNull;
-      final apagada = n != kLasDosTeles && n != 1 && !(tele?.conectada ?? false);
+      // "Las dos" va solo con la misma escuela en las dos teles (25-nov-2026).
+      final apagada = (n != kLasDosTeles && n != 1 && !(tele?.conectada ?? false)) ||
+          (n == kLasDosTeles && !_c.lasDosSePuede);
       final on = elegida == n;
       return Padding(
         padding: const EdgeInsets.only(right: 6, bottom: 4),
         child: ChoiceChip(
           key: ValueKey('tu_tele_$n'),
           label: Text(
-            apagada ? '${nombreDeLaTele(n)} (apagada)' : nombreDeLaTele(n),
+            apagada
+                ? (n == kLasDosTeles
+                    ? 'Las dos (otra escuela)'
+                    : '${nombreDeLaTele(n)} (apagada)')
+                : nombreDeLaTele(n),
             style: _letra(
               size: 13,
               negrita: on,
@@ -529,6 +656,116 @@ class _DatosState extends State<_Datos> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// La hoja TU TELE: la escuela de la tele de este celular y su giro.
+class _HojaTuTele extends StatefulWidget {
+  const _HojaTuTele({required this.cliente, required this.confirmar});
+  final ClienteCentral cliente;
+  final Future<void> Function(int tele, EscuelaDelCelular escuela) confirmar;
+
+  @override
+  State<_HojaTuTele> createState() => _HojaTuTeleState();
+}
+
+class _HojaTuTeleState extends State<_HojaTuTele> {
+  var _eligiendo = false;
+  String? _giro;
+
+  ClienteCentral get _c => widget.cliente;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = _c.teleQueManeja;
+    final tele = _c.teles.where((t) => t.numero == n).firstOrNull;
+    final conectado = _c.estado == EstadoDelPuesto.conectado;
+    final apagada = tele != null && !tele.conectada;
+    Widget giro(String como, String texto) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: OutlinedButton(
+              key: ValueKey('girar_$como'),
+              onPressed: !conectado || apagada
+                  ? null
+                  : () {
+                      if (_c.girarTele(n, como)) setState(() => _giro = texto);
+                    },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _perla,
+                side: const BorderSide(color: Colors.white38),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(texto, textAlign: TextAlign.center, style: _letra(size: 13, negrita: true)),
+            ),
+          ),
+        );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('TU TELE · ${nombreDeLaTele(n).toUpperCase()}', style: _titulo(size: 15, color: _ambar)),
+          const SizedBox(height: 4),
+          Text(
+            apagada
+                ? 'La ${nombreDeLaTele(n)} no está conectada.'
+                : 'Muestra: ${tele?.titulo ?? _c.titulo ?? '—'}',
+            style: _letra(size: 14, color: apagada ? _ambar : Colors.white70),
+          ),
+          if (!conectado) ...[
+            const SizedBox(height: 6),
+            Text('Sin conexión con la tele: se cambia cuando vuelva.',
+                style: _letra(size: 12, color: _ambar)),
+          ],
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            key: const ValueKey('cambiar_la_escuela'),
+            onPressed: !conectado || apagada ? null : () => setState(() => _eligiendo = !_eligiendo),
+            icon: const Icon(Icons.swap_horiz_rounded),
+            label: Text('CAMBIAR LA ESCUELA', style: _letra(size: 14, negrita: true)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _perla,
+              side: const BorderSide(color: _ambar),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+          if (_eligiendo) ...[
+            const SizedBox(height: 6),
+            for (final e in _c.escuelas)
+              ListTile(
+                key: ValueKey('escuela_${e.id}'),
+                dense: true,
+                leading: Icon(
+                  e.id == tele?.evento ? Icons.check_circle_rounded : Icons.circle_outlined,
+                  color: e.id == tele?.evento ? _verde : Colors.white38,
+                ),
+                title: Text(e.titulo, style: _letra(size: 14)),
+                onTap: e.id == tele?.evento ? null : () => widget.confirmar(n, e),
+              ),
+          ],
+          const SizedBox(height: 16),
+          Text('GIRAR', style: _titulo(size: 12, color: Colors.white54)),
+          const SizedBox(height: 6),
+          Row(children: [
+            giro('horizontal', 'Horizontal'),
+            giro('vertical', 'Vertical'),
+            giro('dar_vuelta', 'Dar vuelta'),
+          ]),
+          if (_giro != null) ...[
+            const SizedBox(height: 6),
+            Text('Pedido: $_giro. Mirá la tele.', style: _letra(size: 12, color: _verde)),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Sin PIN: la tele está con la cuenta del jefe. Lo que cambies se avisa '
+            'en los celulares de esa tele.',
+            style: _letra(size: 12, color: Colors.white38),
+          ),
+        ],
       ),
     );
   }

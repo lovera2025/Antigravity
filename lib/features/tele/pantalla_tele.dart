@@ -81,14 +81,16 @@ class PantallaTele extends ConsumerStatefulWidget {
   ConsumerState<PantallaTele> createState() => _PantallaTeleState();
 }
 
-enum _Vista { menu, celulares, fiestas, girar, pin, direccion }
+enum _Vista { menu, celulares, fiestas, confirmarEscuela, girar, pin, direccion, dosRedes }
 
 class _PantallaTeleState extends ConsumerState<PantallaTele> {
   final _foco = FocusNode(debugLabel: 'tele');
   final _fluidez = Fluidez();
   _Vista? _vista;
-  String? _elegida;
   String? _prendidaPara;
+
+  /// La escuela que se eligió en LA FIESTA, esperando el OK del cartel.
+  Evento? _porElegir;
   StreamSubscription<Set<String>>? _bajadas;
   StreamSubscription<Set<String>>? _apariencias;
   Timer? _relectura;
@@ -172,9 +174,6 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         if (mounted) setState(() => _aparato = a);
       }));
     }
-    unawaited(ModoTeleGuardado.fiestaElegida().then((id) {
-      if (mounted && id != null) setState(() => _elegida = id);
-    }));
     // Lo que se bajó en la oficina con internet: una fiesta nueva aparece sola.
     _bajadas = ref.read(syncEngineProvider).cambiosBajadosStream.listen((t) {
       if (t.contains('eventos')) ref.invalidate(eventosActivosProvider);
@@ -205,8 +204,21 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     _relectura?.cancel();
     _ayuda?.cancel();
     _borrarManejan?.cancel();
+    _borrarAviso?.cancel();
     _foco.dispose();
     super.dispose();
+  }
+
+  /// El cartel chico: "Caro pasó la Tele 1 a ESCUELA B" (25-nov-2026).
+  String? _aviso;
+  Timer? _borrarAviso;
+
+  void _mostrarAviso(String texto) {
+    setState(() => _aviso = texto);
+    _borrarAviso?.cancel();
+    _borrarAviso = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => _aviso = null);
+    });
   }
 
   /// Prende la central (Tele 1) o se engancha a la Tele 1 (Tele 2) para la
@@ -222,9 +234,12 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         await PaginaDelCelularEnAndroid.preparar();
         if (!mounted) return;
         ref.invalidate(paginaDelCelularProvider);
-        await ref
-            .read(centralDeLaPuertaProvider.notifier)
-            .prender(eventoId, comoTele: true);
+        final central = ref.read(centralDeLaPuertaProvider.notifier);
+        await central.prender(eventoId, comoTele: true);
+        // Pasó a principal: la escuela de la Tele 1 que se apagó, también.
+        final otra = _atenderTambien;
+        _atenderTambien = null;
+        if (mounted && otra != null && otra != eventoId) central.atenderTambien(otra);
       } else {
         final central = ref.read(centralDeLaPuertaProvider);
         if (central.prendida) {
@@ -300,10 +315,13 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
       case _Vista.pin:
         _soltarPin(false);
         _abrir(_Vista.menu);
+      case _Vista.confirmarEscuela:
+        _abrir(_Vista.fiestas);
       case _Vista.celulares:
       case _Vista.fiestas:
       case _Vista.girar:
       case _Vista.direccion:
+      case _Vista.dosRedes:
         _abrir(_Vista.menu);
     }
   }
@@ -316,11 +334,17 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     if (modo == null) return const SizedBox.shrink();
     // Todas las fiestas que vienen, listas sin internet (25-nov-2026).
     ref.watch(prepararLasFiestasProvider);
+    // La escuela de esta tele: la cambia el control, un celular o la Tele 1.
+    final elegida = ref.watch(fiestaDeLaTeleProvider);
+    // "Caro pasó la Tele 1 a ESCUELA B": un rato, en un cartel chico.
+    ref.listen(avisoEnLaTeleProvider, (_, aviso) {
+      if (aviso != null) _mostrarAviso(aviso.$2);
+    });
     final eventos = ref.watch(eventosActivosProvider);
     final fiesta = FiestaDeLaTele.de(
       eventos.value ?? const [],
       widget.ahora(),
-      elegida: _elegida,
+      elegida: elegida,
     );
     final evento = fiesta.fiesta;
     _hayTotem = evento != null;
@@ -375,7 +399,20 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
                   bottom: 18,
                   child: _estadoAbajo(modo, central, segunda),
                 ),
-                if (_mostrarManejan && manejan.isNotEmpty && _vista == null)
+                if (_aviso != null && _vista == null)
+                  Positioned(
+                    top: 18,
+                    left: 24,
+                    right: 24,
+                    child: Center(
+                      child: _Pastilla(
+                        key: const ValueKey('tele_aviso'),
+                        texto: _aviso!,
+                        color: _oro,
+                      ),
+                    ),
+                  )
+                else if (_mostrarManejan && manejan.isNotEmpty && _vista == null)
                   Positioned(
                     top: 18,
                     right: 24,
@@ -496,9 +533,11 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
       _Vista.menu => _menu(modo, evento, central, segunda, manejan),
       _Vista.celulares => _celulares(modo, central, segunda),
       _Vista.fiestas => _fiestas(fiesta, evento),
+      _Vista.confirmarEscuela => _confirmarEscuela(modo, evento),
       _Vista.girar => _girar(),
       _Vista.pin => _pin(),
       _Vista.direccion => _direccion(modo),
+      _Vista.dosRedes => _dosRedes(),
     };
     // Con la tele parada (540 de ancho) el panel entra entero.
     final ancho = MediaQuery.sizeOf(context).width;
@@ -607,6 +646,12 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             alElegir: () => _pasarAPrincipal(modo),
           ),
         ],
+        _Opcion(
+          key: const ValueKey('tele_dos_redes'),
+          icono: Icons.router_outlined,
+          texto: 'Dos teles en routers separados',
+          alElegir: () => _abrir(_Vista.dosRedes),
+        ),
         // Los números, solo en la app de prueba.
         if (widget.conDiagnostico) ...[
           const SizedBox(height: 8),
@@ -767,11 +812,18 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             detalle: como[e.id]?.texto(ahora),
             detalleBien: como[e.id]?.completa ?? false,
             autofocus: e.id == evento?.id || (evento == null && i == 0),
-            alElegir: () async {
-              await ModoTeleGuardado.elegirFiesta(e.id);
-              if (!mounted) return;
-              setState(() => _elegida = e.id);
-              _abrir(null);
+            alElegir: () {
+              if (e.id == evento?.id) {
+                _abrir(null);
+              } else if (evento == null) {
+                // La primera vez (más de una esta noche): sin cartel.
+                unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(e.id));
+                _abrir(null);
+              } else {
+                // Otra escuela, sin PIN, con un cartel que confirma.
+                setState(() => _porElegir = e);
+                _abrir(_Vista.confirmarEscuela);
+              }
             },
           ),
         const SizedBox(height: 8),
@@ -781,6 +833,90 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
           texto: 'Volver',
           autofocus: lista.isEmpty,
           alElegir: () => _abrir(_Vista.menu),
+        ),
+      ],
+    );
+  }
+
+  /// Las dos teles en routers que no se ven (25-nov-2026): las dos como Tele 1,
+  /// cada una con su escuela y sus celulares.
+  Widget _dosRedes() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('DOS TELES EN ROUTERS SEPARADOS', style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 10),
+          Text(
+            'Si cada tele está en un router distinto y no se ven (la Tele 2 se queda '
+            '"buscando la Tele 1"), poné las dos como Tele 1: salí del modo tele con '
+            'el PIN y elegí Tele 1 en la otra. Cada una trabaja sola, con su escuela '
+            'y sus celulares (cada celular escanea el QR de su tele).',
+            style: _letra(16, color: Colors.white70),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Ojo: si las dos muestran la misma escuela, no se ven. Quién entró por '
+            'una puerta, la otra no lo sabe hasta que vuelve internet: una persona '
+            'podría entrar por las dos.',
+            style: _letra(16, color: _ambar),
+          ),
+          const SizedBox(height: 14),
+          _Opcion(
+            key: const ValueKey('tele_dos_redes_volver'),
+            icono: Icons.arrow_back_rounded,
+            texto: 'Volver',
+            autofocus: true,
+            alElegir: () => _abrir(_Vista.menu),
+          ),
+        ],
+      );
+
+  /// "¿Pasar la Tele 1 a ESCUELA B?": cambiar de escuela no pide PIN (la tele
+  /// está con la cuenta del jefe), pero se confirma.
+  Widget _confirmarEscuela(ModoTele modo, Evento? actual) {
+    final nueva = _porElegir;
+    final central = ref.read(centralDeLaPuertaProvider);
+    final otra = modo.papel == PapelDeLaTele.principal
+        ? central.teles.where((t) => t.conectada && t.evento == actual?.id).isNotEmpty
+        : ref.read(teleSegundaProvider)?.escuelaDeLaTele1 == actual?.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('CAMBIAR LA ESCUELA', style: _letra(26, color: _oro, negrita: true)),
+        const SizedBox(height: 10),
+        Text(
+          nueva == null
+              ? ''
+              : '¿Pasar la ${modo.papel.nombre} a ${etiquetaEventoRecepcion(nueva)}?',
+          style: _letra(20, negrita: true),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Sus celulares pasan solos.'
+          '${otra ? ' La otra tele tiene esta misma escuela: a sus celulares se les pregunta '
+              'si la cambian también.' : ''}',
+          style: _letra(16, color: Colors.white70),
+        ),
+        const SizedBox(height: 16),
+        _Opcion(
+          key: const ValueKey('tele_escuela_cambiar'),
+          icono: Icons.swap_horiz_rounded,
+          texto: 'Cambiar',
+          autofocus: true,
+          alElegir: nueva == null
+              ? null
+              : () {
+                  unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(nueva.id));
+                  setState(() => _porElegir = null);
+                  _abrir(null);
+                },
+        ),
+        _Opcion(
+          key: const ValueKey('tele_escuela_volver'),
+          icono: Icons.arrow_back_rounded,
+          texto: 'Volver',
+          alElegir: () => _abrir(_Vista.fiestas),
         ),
       ],
     );
@@ -908,9 +1044,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     await ref.read(modoTeleProvider.notifier).poner(null);
   }
 
+  /// Al pasar a principal: la escuela que mostraba la Tele 1, para atenderla
+  /// también (25-nov-2026).
+  String? _atenderTambien;
+
+  /// "Pasar a principal" (la Tele 1 se apagó): esta tele lleva la lista y
+  /// **atiende las dos escuelas**, la suya y la que mostraba la Tele 1
+  /// (todas quedaron guardadas sin internet). Los celulares de la Tele 1
+  /// escanean el QR de esta.
   Future<void> _pasarAPrincipal(ModoTele modo) async {
     if (!await _pinDelJefe('Pasar a principal')) return;
-    await ref.read(teleSegundaProvider.notifier).soltarParaSerPrincipal();
+    final segunda = ref.read(teleSegundaProvider.notifier);
+    await segunda.soltarParaSerPrincipal();
+    _atenderTambien = segunda.escuelaDeLaTele1;
     await ref
         .read(modoTeleProvider.notifier)
         .poner(ModoTele(PapelDeLaTele.principal, fondoQuieto: modo.fondoQuieto));
@@ -981,7 +1127,7 @@ class _Vigia extends ConsumerWidget {
 }
 
 class _Pastilla extends StatelessWidget {
-  const _Pastilla({required this.texto, required this.color});
+  const _Pastilla({super.key, required this.texto, required this.color});
   final String texto;
   final Color color;
 

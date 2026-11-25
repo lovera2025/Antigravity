@@ -36,6 +36,19 @@ abstract final class Giro {
   static int darVuelta(int cuartos) => normal(cuartos + 2);
 
   static String nombre(int cuartos) => esParada(cuartos) ? 'Vertical' : 'Horizontal';
+
+  /// Lo que se puede pedir desde el celular (que no sabe cómo está girada
+  /// cada tele): "horizontal", "vertical" o "dar_vuelta".
+  static const comoSePide = {'horizontal', 'vertical', 'dar_vuelta'};
+
+  /// Cómo queda [actual] con lo pedido ([comoSePide]); null si no se
+  /// entiende.
+  static int? segun(String como, int actual) => switch (como) {
+        'horizontal' => horizontal(actual),
+        'vertical' => vertical(actual),
+        'dar_vuelta' => darVuelta(actual),
+        _ => null,
+      };
 }
 
 /// El giro guardado en este equipo (`tele_giro_v1`). Se lee antes de abrir la

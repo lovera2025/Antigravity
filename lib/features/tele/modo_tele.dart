@@ -91,11 +91,16 @@ class ModoTeleGuardado {
   static ModoTele? _leido;
   static ModoTele? get leido => _leido;
 
+  /// La fiesta elegida, leída al abrir.
+  static String? _fiestaLeida;
+  static String? get fiestaLeida => _fiestaLeida;
+
   static Future<void> cargar() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final crudo = prefs.getString(clave);
       _leido = crudo == null ? null : ModoTele.fromJson(jsonDecode(crudo));
+      _fiestaLeida = prefs.getString(claveFiesta);
     } catch (e) {
       debugPrint('El modo tele no se pudo leer: $e');
       _leido = null;
@@ -107,6 +112,7 @@ class ModoTeleGuardado {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (modo == null) {
+        _fiestaLeida = null;
         await prefs.remove(clave);
         await prefs.remove(claveFiesta);
       } else {
@@ -126,10 +132,51 @@ class ModoTeleGuardado {
   }
 
   static Future<void> elegirFiesta(String eventoId) async {
+    _fiestaLeida = eventoId;
     try {
       await (await SharedPreferences.getInstance()).setString(claveFiesta, eventoId);
     } catch (_) {}
   }
+}
+
+/// **La escuela que muestra esta tele** (25-nov-2026), elegida con el control
+/// o desde el celular de la recepción. Null: la que viene ([FiestaDeLaTele]).
+/// Queda guardada en el equipo. Vive acá, y no en la pantalla, porque también
+/// la cambia la central (un celular la pide) y la Tele 2 (se la pide la Tele 1).
+final fiestaDeLaTeleProvider =
+    NotifierProvider<FiestaDeLaTeleNotifier, String?>(FiestaDeLaTeleNotifier.new);
+
+class FiestaDeLaTeleNotifier extends Notifier<String?> {
+  @override
+  String? build() {
+    // Si no se leyó al abrir (las pruebas), se lee ahora.
+    if (ModoTeleGuardado.fiestaLeida == null) {
+      ModoTeleGuardado.fiestaElegida().then((id) {
+        if (id != null && ref.mounted && state == null) state = id;
+      }).ignore();
+    }
+    return ModoTeleGuardado.fiestaLeida;
+  }
+
+  Future<void> elegir(String eventoId) async {
+    state = eventoId;
+    await ModoTeleGuardado.elegirFiesta(eventoId);
+  }
+}
+
+/// Lo que la tele dice un rato en un cartel chico: "Caro pasó la Tele 1 a
+/// ESCUELA B" (25-nov-2026). Con su número: el mismo texto dos veces se
+/// muestra dos veces.
+final avisoEnLaTeleProvider =
+    NotifierProvider<AvisoEnLaTele, (int, String)?>(AvisoEnLaTele.new);
+
+class AvisoEnLaTele extends Notifier<(int, String)?> {
+  var _n = 0;
+
+  @override
+  (int, String)? build() => null;
+
+  void decir(String texto) => state = (++_n, texto);
 }
 
 /// El modo tele de este equipo, o null (lo de siempre). Las pruebas lo

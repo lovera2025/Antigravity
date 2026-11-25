@@ -116,6 +116,41 @@ class ClienteDePrueba extends ClienteCentral {
     notifyListeners();
   }
 
+  /// TU TELE (25-nov-2026): las escuelas, la pregunta y lo que se pidió.
+  List<EscuelaDelCelular> esc = const [];
+  PreguntaDeLaTele? preg;
+  var lasDos = true;
+  final escuelasPedidas = <(int, String)>[];
+  final girosPedidos = <(int, String)>[];
+  final respuestas = <bool>[];
+
+  @override
+  List<EscuelaDelCelular> get escuelas => esc;
+  @override
+  PreguntaDeLaTele? get pregunta => preg;
+  @override
+  bool get lasDosSePuede => lasDos;
+  @override
+  int get teleQueManeja => miTele == null || miTele == kLasDosTeles ? 1 : miTele!;
+  @override
+  bool cambiarEscuela(int tele, String eventoId) {
+    escuelasPedidas.add((tele, eventoId));
+    return true;
+  }
+
+  @override
+  bool girarTele(int tele, String como) {
+    girosPedidos.add((tele, como));
+    return true;
+  }
+
+  @override
+  void contestar({required bool cambiar}) {
+    respuestas.add(cambiar);
+    preg = null;
+    notifyListeners();
+  }
+
   @override
   Future<void> sumarSilla(GrupoPuerta grupo, DatosSilla datos) async =>
       sillasPedidas.add((QuePide.sumarSilla, grupo.titular.id, datos));

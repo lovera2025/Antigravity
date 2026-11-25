@@ -28,8 +28,16 @@ bool codigoVigente(DateTime creado, DateTime ahora) {
 }
 
 /// El código de cada evento, guardado en esta PC.
+///
+/// **En la tele, uno por noche y no por escuela** (25-nov-2026): la Tele 1
+/// atiende las dos escuelas de la noche y cambia de escuela sin que los
+/// celulares vuelvan a escanear. Va guardado como el de un evento más,
+/// [deLaNoche].
 class CodigoCentral {
   static const _prefijo = 'central_puerta_codigo_v1_';
+
+  /// En lugar del id de un evento: el código de la noche de la tele.
+  static const deLaNoche = 'tele';
 
   static String _clave(String eventoId) => '$_prefijo$eventoId';
 
