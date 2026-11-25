@@ -70,10 +70,19 @@ Dart, `..x = (a) => f(a)` seguido de `..y = …` se come la cascada: con llaves.
    `Recepcion_Tablet` parado y acostado (con `--dart-define=giro=1`), "Pasar a principal", y la huella después (IGUAL).
 4. Capturas para el usuario: la tele parada con el menú, Girar, el teclado del PIN, LA FIESTA con cómo quedó cada escuela,
    el cartel de cambiar la escuela; el celular con TU TELE y la pregunta (`tool/celulares_muestra_test.dart` sirve de modelo).
-5. Las roturas a propósito en `tool/roturas_tele.txt` (por ejemplo: quitar la traducción de flechas, el píxel de más de la
-   foto, `atender` en `_conectarTele`, el `yaCambio`, el "Las dos" con escuelas distintas, `evento` del pedido, el aviso del
-   pulso) y una revisión independiente.
-6. Mergear la rama a `feature/v4.6-cierre-por-sesiones` (con el OK del usuario) y el APK de prueba suelto (sin publicar).
+5. Las roturas a propósito en `tool/roturas_tele.txt` (formato de `tool/romper_una_regla.sh`; por ejemplo: quitar la
+   traducción de flechas, el píxel de más de la foto, `atender` en `_conectarTele`, el `yaCambio`, el "Las dos" con escuelas
+   distintas, `evento` del pedido, el aviso del pulso).
+6. **Una revisión independiente** (un subagente que lea el diff `2a0a0d2..HEAD` y el código **sin mi conclusión**, buscando
+   errores de verdad: medianoche, sin red, reconexiones, dos teles con escuelas distintas, la PC sin cambios). Lo que
+   encuentre se arregla con su test.
+7. Mergear la rama a `feature/v4.6-cierre-por-sesiones` (con el OK del usuario) y el APK de prueba suelto (sin publicar).
+
+**Pedido del usuario (25-nov, por la sesión que coordina): "lo importante es que todo esto no tenga bugs, por favor".**
+Ninguna etapa se da por cerrada sin: sus tests y la suite entera en verde, las roturas, la prueba de punta a punta con la
+huella IGUAL y la revisión independiente. **No usar la migración v83** (es del repositor, en otra sesión) **ni tocar
+`lib/features/barra/`** (la barra por día de operación, otra sesión). El 25-nov a la noche el usuario cortó antes de
+correr la suite: se retoma cuando vuelva del trabajo, por el punto 1.
 
 **No probado:** nada con aparatos de verdad (la Quint parada, dos teles por el router, el teclado del control girado).
 
