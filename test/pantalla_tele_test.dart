@@ -57,6 +57,7 @@ void main() {
 
   late _ModoFijo modo;
   late _GiroFijo giro;
+  late PuertaEnMemoria mundo;
 
   Future<void> abrir(
     WidgetTester tester, {
@@ -71,7 +72,7 @@ void main() {
     addTearDown(tester.view.reset);
     modo = _ModoFijo(ModoTele(papel));
     giro = _GiroFijo(cuartos);
-    final mundo = PuertaEnMemoria(
+    mundo = PuertaEnMemoria(
       _supabase,
       alumnos: [alumnoDePrueba('c1000000-0000-4000-8000-000000000001', 'PÉREZ, JUAN', mesas: [12])],
     );
@@ -254,6 +255,31 @@ void main() {
         await tecla(tester, LogicalKeyboardKey.goBack);
         expect(find.text('TELE 2'), findsOneWidget, reason: k);
       }
+    });
+  });
+
+  group('todas las escuelas listas sin internet', () {
+    testWidgets('LA FIESTA dice cómo quedó cada una', (tester) async {
+      await abrir(tester);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 100));
+      // Se preparó sola al abrir, con internet.
+      expect(mundo.sinInternet.listasDeFiestas, [eventoMasivo]);
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tester.tap(find.byKey(const ValueKey('tele_fiesta')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('Lista sin internet · al día'), findsOneWidget);
+    });
+
+    testWidgets('lo guardado en Personalizar en otra PC se vuelve a leer al momento', (tester) async {
+      await abrir(tester);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(mundo.sinInternet.aparienciasLeidas, 1);
+      mundo.motor.apariencias.add({eventoMasivo});
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(mundo.sinInternet.aparienciasLeidas, 2);
     });
   });
 

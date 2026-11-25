@@ -30,6 +30,7 @@ import 'package:arguello_events/features/recepcion/services/lista_puerta.dart'
     show PlanListaPuerta;
 import 'package:arguello_events/features/recepcion/services/lista_sin_internet.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
+import 'package:arguello_events/features/tele/preparar_las_fiestas.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -149,6 +150,50 @@ class SinInternetEnMemoria {
         fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         contarSinSubir: (_) async => sinSubir,
         contarSillasSinSubir: (_) async => sillasSinSubir,
+        leerAlDia: (id) async => alDia[id],
+        anotarAlDia: (id, cuando) async => alDia[id] = cuando,
+        ahora: () => ahora,
+      );
+
+  // ── Las fiestas de la tele (25-nov-2026): todas listas sin internet ──────
+
+  /// La apariencia de cada fiesta en la nube, y la guardada en el equipo.
+  final aparienciasEnLaNube = <String, TotemConfig>{};
+  final aparienciasGuardadas = <String, TotemConfig>{};
+  var leeApariencias = true;
+  var aparienciasLeidas = 0;
+  var listasDeFiestas = <String>[];
+
+  AccesosDeLasFiestas get fiestas => AccesosDeLasFiestas(
+        bajarLista: (id) async {
+          listasBajadas++;
+          listasDeFiestas.add(id);
+          return bajaLista;
+        },
+        bajarParaLaPuerta: () async {
+          alumnosBajados++;
+          return bajanAlumnos;
+        },
+        leerApariencias: (ids) async {
+          aparienciasLeidas++;
+          if (!leeApariencias) throw StateError('sin internet');
+          return {
+            for (final id in ids)
+              if (aparienciasEnLaNube[id] != null) id: aparienciasEnLaNube[id]!,
+          };
+        },
+        guardarApariencia: (cfg) async => aparienciasGuardadas[cfg.eventoId] = cfg,
+        aparienciaGuardada: (id) async => aparienciasGuardadas[id],
+        guardarFoto: (url, _) async {
+          if (bajaFoto) fotosGuardadas.add(url);
+          return fotosGuardadas.contains(url);
+        },
+        fotoGuardada: (url, _) async => fotosGuardadas.contains(url),
+        guardarFondo: (url, _) async {
+          if (bajaFondo) fondosGuardados.add(url);
+          return fondosGuardados.contains(url);
+        },
+        fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,
         ahora: () => ahora,
@@ -524,6 +569,12 @@ class MotorDePrueba implements SyncEngine {
   @override
   Stream<int> get pendingStream => pendiente.stream;
 
+  /// La apariencia que se guardó en otra PC (el pulso, 25-nov-2026).
+  final apariencias = StreamController<Set<String>>.broadcast();
+
+  @override
+  Stream<Set<String>> get aparienciasCambiadasStream => apariencias.stream;
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
@@ -642,6 +693,9 @@ class PuertaEnMemoria {
           syncEngineProvider.overrideWithValue(motor),
           connectivityServiceProvider.overrideWithValue(conexion),
           accesosPuertaProvider.overrideWithValue(sinInternet.accesos),
+          // Las fiestas de la tele, preparadas en memoria (sin la carpeta de
+          // fotos ni la nube).
+          accesosDeLasFiestasProvider.overrideWithValue(sinInternet.fiestas),
           // La central de la puerta no se usó esta noche ([codigoCentral]
           // dice lo contrario), y si se prende, escucha solo en esta PC.
           codigoVigenteCentralProvider

@@ -282,8 +282,7 @@ class _MoverEnLoQueSeVe extends Action<FlechaEnLoQueSeVe> {
     if (desde == null) return null;
     final opciones = <FocusNode, Rect>{
       for (final n in foco.nearestScope?.traversalDescendants ?? const <FocusNode>[])
-        if (n != foco)
-          if (lugar(n) case final r?) n: r,
+        if (n != foco) n: ?lugar(n),
     };
     final siguiente = TeleGirada.siguiente(desde, intent.direccion, opciones);
     if (siguiente == null) return null;

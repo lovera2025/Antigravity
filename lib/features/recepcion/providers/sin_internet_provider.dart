@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
+import '../../../main.dart' show supabaseProvider;
 import '../../totem/estilos/totem_estilo.dart';
 import '../../totem/providers/totem_config_provider.dart';
+import '../../totem/services/apariencia_en_la_pc.dart';
 import '../../totem/services/foto_guardada.dart';
 import '../../totem/widgets/totem_local.dart' show eventoMasivoProvider;
 import '../repositories/invitados_repository.dart';
@@ -19,6 +21,7 @@ final accesosPuertaProvider = Provider<AccesosPuerta>((ref) {
   final invitados = ref.watch(invitadosRepositoryProvider);
   final sillas = ref.watch(sillasPuertaRepositoryProvider);
   final motor = ref.watch(syncEngineProvider);
+  final apariencia = AparienciaEnLaPc(ref.watch(supabaseProvider));
   return AccesosPuerta(
     bajarLista: invitados.bajarListaDelEvento,
     bajarAlumnos: motor.bajarParaLaPuerta,
@@ -35,6 +38,9 @@ final accesosPuertaProvider = Provider<AccesosPuerta>((ref) {
     // Las sillas de la noche también esperan subir: sin contarlas, la línea
     // decía "Todo subido" con sillas en la cola.
     contarSillasSinSubir: sillas.sinSubir,
+    // La apariencia del tótem, guardada en el equipo (25-nov-2026).
+    guardarApariencia: apariencia.guardar,
+    aparienciaGuardada: AparienciaEnLaPc.estaGuardada,
   );
 });
 

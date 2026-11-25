@@ -17,6 +17,7 @@ import '../recepcion/providers/recepcion_provider.dart';
 import '../recepcion/providers/sin_internet_provider.dart';
 import '../recepcion/services/puerta_del_evento.dart';
 import '../recepcion/widgets/linea_sin_internet.dart';
+import '../totem/providers/totem_config_provider.dart';
 import '../totem/widgets/totem_local.dart';
 import 'aparato_de_la_tele.dart';
 import 'calidad_de_la_tele.dart';
@@ -24,6 +25,7 @@ import 'cliente_de_la_tele.dart';
 import 'fluidez.dart';
 import 'giro_de_la_tele.dart';
 import 'modo_tele.dart';
+import 'preparar_las_fiestas.dart';
 import 'red_de_la_tele.dart';
 import 'teclado_de_la_tele.dart';
 import 'tele_segunda_provider.dart';
@@ -88,6 +90,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
   String? _elegida;
   String? _prendidaPara;
   StreamSubscription<Set<String>>? _bajadas;
+  StreamSubscription<Set<String>>? _apariencias;
   Timer? _relectura;
   Timer? _ayuda;
   bool _mostrarAyuda = true;
@@ -176,6 +179,13 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     _bajadas = ref.read(syncEngineProvider).cambiosBajadosStream.listen((t) {
       if (t.contains('eventos')) ref.invalidate(eventosActivosProvider);
     });
+    // Lo que se guardó en Personalizar, en otra PC: la tele lo vuelve a leer
+    // al momento (25-nov-2026).
+    _apariencias = ref.read(syncEngineProvider).aparienciasCambiadasStream.listen((ids) {
+      for (final id in ids) {
+        ref.invalidate(totemConfigProvider(id));
+      }
+    });
     _relectura = Timer.periodic(const Duration(minutes: 10), (_) {
       ref.invalidate(eventosActivosProvider);
     });
@@ -191,6 +201,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     _fluidez.dispose();
     _mirarFluidez?.cancel();
     unawaited(_bajadas?.cancel());
+    unawaited(_apariencias?.cancel());
     _relectura?.cancel();
     _ayuda?.cancel();
     _borrarManejan?.cancel();
@@ -303,6 +314,8 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
   Widget build(BuildContext context) {
     final modo = ref.watch(modoTeleProvider);
     if (modo == null) return const SizedBox.shrink();
+    // Todas las fiestas que vienen, listas sin internet (25-nov-2026).
+    ref.watch(prepararLasFiestasProvider);
     final eventos = ref.watch(eventosActivosProvider);
     final fiesta = FiestaDeLaTele.de(
       eventos.value ?? const [],
@@ -719,6 +732,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
 
   Widget _fiestas(FiestaDeLaTele fiesta, Evento? evento) {
     final lista = fiesta.todas;
+    final preparar = ref.watch(prepararLasFiestasProvider);
+    return ListenableBuilder(
+      listenable: preparar,
+      builder: (context, _) => _listaDeFiestas(lista, evento, preparar.como),
+    );
+  }
+
+  Widget _listaDeFiestas(
+    List<Evento> lista,
+    Evento? evento,
+    Map<String, ComoQuedoLaFiesta> como,
+  ) {
+    final ahora = widget.ahora();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -737,6 +763,9 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             key: ValueKey('tele_fiesta_${e.id}'),
             icono: e.id == evento?.id ? Icons.check_circle_rounded : Icons.circle_outlined,
             texto: etiquetaEventoRecepcion(e),
+            // Cómo quedó para trabajar sin internet.
+            detalle: como[e.id]?.texto(ahora),
+            detalleBien: como[e.id]?.completa ?? false,
             autofocus: e.id == evento?.id || (evento == null && i == 0),
             alElegir: () async {
               await ModoTeleGuardado.elegirFiesta(e.id);
@@ -977,12 +1006,18 @@ class _Opcion extends StatelessWidget {
     required this.texto,
     required this.alElegir,
     this.autofocus = false,
+    this.detalle,
+    this.detalleBien = false,
   });
 
   final IconData icono;
   final String texto;
   final VoidCallback? alElegir;
   final bool autofocus;
+
+  /// Una segunda línea, más chica (cómo quedó la fiesta sin internet).
+  final String? detalle;
+  final bool detalleBien;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1017,7 +1052,23 @@ class _Opcion extends StatelessWidget {
               Icon(icono, size: 26),
               const SizedBox(width: 14),
               // Sin color propio: el del botón (apagado si no se puede).
-              Expanded(child: Text(texto, style: GoogleFonts.outfit(fontSize: 19))),
+              Expanded(
+                child: detalle == null
+                    ? Text(texto, style: GoogleFonts.outfit(fontSize: 19))
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(texto, style: GoogleFonts.outfit(fontSize: 19)),
+                          Text(
+                            detalle!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: detalleBien ? _verde : _ambar,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ],
           ),
         ),
