@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,8 +22,10 @@ import 'aparato_de_la_tele.dart';
 import 'calidad_de_la_tele.dart';
 import 'cliente_de_la_tele.dart';
 import 'fluidez.dart';
+import 'giro_de_la_tele.dart';
 import 'modo_tele.dart';
 import 'red_de_la_tele.dart';
+import 'teclado_de_la_tele.dart';
 import 'tele_segunda_provider.dart';
 
 const _oro = Color(0xFFD4AF37);
@@ -76,7 +79,7 @@ class PantallaTele extends ConsumerStatefulWidget {
   ConsumerState<PantallaTele> createState() => _PantallaTeleState();
 }
 
-enum _Vista { menu, celulares, fiestas }
+enum _Vista { menu, celulares, fiestas, girar, pin, direccion }
 
 class _PantallaTeleState extends ConsumerState<PantallaTele> {
   final _foco = FocusNode(debugLabel: 'tele');
@@ -283,8 +286,13 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         _abrir(_Vista.menu);
       case _Vista.menu:
         _abrir(null);
+      case _Vista.pin:
+        _soltarPin(false);
+        _abrir(_Vista.menu);
       case _Vista.celulares:
       case _Vista.fiestas:
+      case _Vista.girar:
+      case _Vista.direccion:
         _abrir(_Vista.menu);
     }
   }
@@ -475,11 +483,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
       _Vista.menu => _menu(modo, evento, central, segunda, manejan),
       _Vista.celulares => _celulares(modo, central, segunda),
       _Vista.fiestas => _fiestas(fiesta, evento),
+      _Vista.girar => _girar(),
+      _Vista.pin => _pin(),
+      _Vista.direccion => _direccion(modo),
     };
+    // Con la tele parada (540 de ancho) el panel entra entero.
+    final ancho = MediaQuery.sizeOf(context).width;
+    final angosta = ancho < 640;
     return Container(
-      width: 560,
-      margin: const EdgeInsets.all(24),
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      width: math.min(560, ancho - (angosta ? 24 : 48)),
+      margin: EdgeInsets.all(angosta ? 12 : 24),
+      padding: angosta
+          ? const EdgeInsets.fromLTRB(20, 20, 20, 16)
+          : const EdgeInsets.fromLTRB(28, 24, 28, 20),
       decoration: BoxDecoration(
         color: _panel,
         borderRadius: BorderRadius.circular(24),
@@ -544,6 +560,12 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
           alElegir: () => _abrir(_Vista.fiestas),
         ),
         _Opcion(
+          key: const ValueKey('tele_girar'),
+          icono: Icons.screen_rotation_rounded,
+          texto: 'Girar la pantalla · ${Giro.nombre(ref.watch(giroDeLaTeleProvider))}',
+          alElegir: () => _abrir(_Vista.girar),
+        ),
+        _Opcion(
           key: const ValueKey('tele_fondo'),
           icono: quieto ? Icons.pause_circle_outline : Icons.play_circle_outline,
           texto: quieto ? 'Fondo quieto · tocá para animarlo' : 'Fondo animado · tocá para dejarlo quieto',
@@ -563,7 +585,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             texto: modo.direccionAMano == null
                 ? 'Escribir la dirección de la Tele 1'
                 : 'Tele 1 en ${modo.direccionAMano} · cambiar',
-            alElegir: () => _escribirDireccion(modo),
+            alElegir: () => _abrir(_Vista.direccion),
           ),
           _Opcion(
             key: const ValueKey('tele_pasar_a_principal'),
@@ -737,44 +759,117 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
 
   // ── Lo que pide el PIN ────────────────────────────────────────────────────
 
-  Future<bool> _pinDelJefe(String para) async {
-    final controlador = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1A2A),
-        title: Text(para, style: _letra(20, negrita: true)),
-        content: TextField(
-          controller: controlador,
-          autofocus: true,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: _letra(22),
-          decoration: const InputDecoration(labelText: 'PIN del jefe'),
-          onSubmitted: (_) => Navigator.of(context).pop(true),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('LISTO'),
+  /// El PIN que se está pidiendo: para qué, y quién espera la respuesta.
+  Completer<bool>? _esperaPin;
+  String _paraQuePin = '';
+  String? _errorDelPin;
+
+  /// El PIN del jefe, **con el teclado de la tele** (el de Google TV no gira:
+  /// con la tele parada salía acostado). Contesta true solo con el PIN bien;
+  /// Atrás o CANCELAR, false.
+  Future<bool> _pinDelJefe(String para) {
+    _soltarPin(false);
+    final espera = _esperaPin = Completer<bool>();
+    setState(() {
+      _paraQuePin = para;
+      _errorDelPin = null;
+    });
+    _abrir(_Vista.pin);
+    return espera.future;
+  }
+
+  void _soltarPin(bool bien) {
+    final espera = _esperaPin;
+    _esperaPin = null;
+    if (espera != null && !espera.isCompleted) espera.complete(bien);
+  }
+
+  Future<void> _probarPin(String pin) async {
+    if (pin.isEmpty) return;
+    final bien = await ref.read(adminAuthProvider.notifier).esPinMaestro(pin);
+    if (!mounted) return;
+    if (!bien) {
+      setState(() => _errorDelPin = 'Ese no es el PIN del jefe.');
+      return;
+    }
+    _abrir(_Vista.menu);
+    _soltarPin(true);
+  }
+
+  Widget _pin() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_paraQuePin.toUpperCase(), style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 6),
+          Text('PIN del jefe', style: _letra(16, color: Colors.white70)),
+          const SizedBox(height: 12),
+          TecladoDeLaTele(
+            key: ValueKey('tele_pin_$_paraQuePin'),
+            oculto: true,
+            error: _errorDelPin,
+            alEscribir: () {
+              if (_errorDelPin != null) setState(() => _errorDelPin = null);
+            },
+            alListo: _probarPin,
+            alCancelar: () {
+              _soltarPin(false);
+              _abrir(_Vista.menu);
+            },
           ),
         ],
-      ),
-    );
-    final pin = controlador.text.trim();
-    controlador.dispose();
-    if (ok != true || pin.isEmpty) return false;
-    final bien = await ref.read(adminAuthProvider.notifier).esPinMaestro(pin);
-    if (!bien && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ese no es el PIN del jefe.')),
       );
-    }
-    return bien;
+
+  // ── Girar ─────────────────────────────────────────────────────────────────
+
+  /// Horizontal · Vertical · Dar vuelta, **sin PIN**: cada tele recuerda la
+  /// suya ([GiroGuardado]).
+  Widget _girar() {
+    final giro = ref.watch(giroDeLaTeleProvider);
+    final parada = Giro.esParada(giro);
+    void poner(int cuartos) =>
+        unawaited(ref.read(giroDeLaTeleProvider.notifier).poner(cuartos));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('GIRAR LA PANTALLA', style: _letra(26, color: _oro, negrita: true)),
+        const SizedBox(height: 6),
+        Text(
+          'Vertical: para la tele colgada parada. Si se ve cabeza abajo, '
+          '"Dar vuelta". Cada tele recuerda la suya.',
+          style: _letra(16, color: Colors.white70),
+        ),
+        const SizedBox(height: 14),
+        _Opcion(
+          key: const ValueKey('tele_giro_horizontal'),
+          icono: parada ? Icons.circle_outlined : Icons.check_circle_rounded,
+          texto: 'Horizontal',
+          autofocus: !parada,
+          alElegir: () => poner(Giro.horizontal(giro)),
+        ),
+        _Opcion(
+          key: const ValueKey('tele_giro_vertical'),
+          icono: parada ? Icons.check_circle_rounded : Icons.circle_outlined,
+          texto: 'Vertical',
+          autofocus: parada,
+          alElegir: () => poner(Giro.vertical(giro)),
+        ),
+        _Opcion(
+          key: const ValueKey('tele_giro_dar_vuelta'),
+          icono: Icons.flip_camera_android_rounded,
+          texto: 'Dar vuelta (se ve cabeza abajo)',
+          alElegir: () => poner(Giro.darVuelta(giro)),
+        ),
+        const SizedBox(height: 8),
+        _Opcion(
+          key: const ValueKey('tele_girar_volver'),
+          icono: Icons.arrow_back_rounded,
+          texto: 'Volver',
+          alElegir: () => _abrir(_Vista.menu),
+        ),
+      ],
+    );
   }
 
   Future<void> _salirDelModoTele() async {
@@ -793,50 +888,34 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     if (mounted) _abrir(_Vista.celulares);
   }
 
-  Future<void> _escribirDireccion(ModoTele modo) async {
-    final controlador = TextEditingController(text: modo.direccionAMano ?? '');
-    final texto = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1A2A),
-        title: Text('La dirección de la Tele 1', style: _letra(20, negrita: true)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'La que muestra la Tele 1 en "Sumar un celular", por ejemplo '
-              '192.168.0.10:8787. Vacía: la busca sola.',
-              style: _letra(15, color: Colors.white70),
-            ),
-            TextField(
-              controller: controlador,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              style: _letra(22),
-              onSubmitted: (v) => Navigator.of(context).pop(v),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('CANCELAR'),
+  /// La dirección de la Tele 1, **con el teclado de la tele** (el de Google TV
+  /// no gira). Vacía: la busca sola.
+  Widget _direccion(ModoTele modo) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('LA DIRECCIÓN DE LA TELE 1', style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 6),
+          Text(
+            'La que muestra la Tele 1 en "Sumar un celular", por ejemplo '
+            '192.168.0.10:8787. Vacía: la busca sola.',
+            style: _letra(16, color: Colors.white70),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controlador.text),
-            child: const Text('LISTO'),
+          const SizedBox(height: 12),
+          TecladoDeLaTele(
+            key: const ValueKey('tele_teclado_direccion'),
+            inicial: modo.direccionAMano ?? '',
+            conPuntos: true,
+            alListo: (t) async {
+              final texto = t.trim();
+              _abrir(_Vista.menu);
+              await ref.read(modoTeleProvider.notifier).poner(
+                  texto.isEmpty ? modo.con(sinDireccion: true) : modo.con(direccionAMano: texto));
+            },
+            alCancelar: () => _abrir(_Vista.menu),
           ),
         ],
-      ),
-    );
-    controlador.dispose();
-    if (texto == null) return;
-    final t = texto.trim();
-    await ref
-        .read(modoTeleProvider.notifier)
-        .poner(t.isEmpty ? modo.con(sinDireccion: true) : modo.con(direccionAMano: t));
-  }
+      );
 }
 
 /// "Lista para trabajar sin internet" de la fiesta: la misma línea de

@@ -230,6 +230,16 @@ class RenderFotoDeLoQuieto extends RenderProxyBox {
     return _pixeles * (s.isFinite && s > 0 ? s : 1.0);
   }
 
+  /// Como [_escalaEnPantalla], con el más chico de los dos lados: lo que mide
+  /// un píxel de la pantalla, acá, es como mucho 1 / esto.
+  double _escalaMenor(Matrix4 transformacion) {
+    final m = transformacion.storage;
+    final sx = math.sqrt(m[0] * m[0] + m[1] * m[1]);
+    final sy = math.sqrt(m[4] * m[4] + m[5] * m[5]);
+    final s = math.min(sx, sy);
+    return _pixeles * (s.isFinite && s > 1e-3 ? s : 1.0);
+  }
+
   /// Si va en vivo ahora (lo de adentro se está moviendo).
   bool get enVivo => _seguidos >= 2;
 
@@ -286,7 +296,7 @@ class RenderFotoDeLoQuieto extends RenderProxyBox {
       _fotos.remove(_huella)?.soltar();
       foto = null;
     }
-    foto ??= _sacar(escala, fase);
+    foto ??= _sacar(escala, fase, m);
     if (foto == null) {
       super.paint(context, offset);
       return;
@@ -298,16 +308,39 @@ class RenderFotoDeLoQuieto extends RenderProxyBox {
   Offset _faseEnPantalla(Matrix4 m) {
     final p = MatrixUtils.transformPoint(m, Offset(-_margen, -_margen)) * _pixeles;
     if (!p.dx.isFinite || !p.dy.isFinite) return Offset.zero;
-    return Offset(p.dx - p.dx.floorToDouble(), p.dy - p.dy.floorToDouble());
+    // Un borde que cae justo en un píxel, aunque la cuenta lo deje apenas
+    // antes (la tele girada pasa por un giro de 0: 99,9999999 era 0,9999).
+    double resto(double v) => (v - v.roundToDouble()).abs() < 1e-4 ? 0 : v - v.floorToDouble();
+    return Offset(resto(p.dx), resto(p.dy));
   }
 
-  _Foto? _sacar(double escala, Offset fase) {
+  /// Cuánto hay que correr la foto, en el lugar del hijo, para que su borde
+  /// caiga justo en un píxel de la pantalla: [fase] está en píxeles de la
+  /// pantalla, y se lleva al lugar del hijo con la inversa de [m]. Con la tele
+  /// girada (`TeleGirada`), lo que en la pantalla es correr a la derecha, en
+  /// el hijo es correr para abajo: dividir por la escala lo corría para el
+  /// otro lado y los bordes salían apenas corridos.
+  Offset _corrimiento(double escala, Offset fase, Matrix4 m) {
+    final recto = Offset(-fase.dx / escala, -fase.dy / escala);
+    final inversa = Matrix4.tryInvert(m);
+    if (inversa == null) return recto;
+    final borde = MatrixUtils.transformPoint(m, Offset(-_margen, -_margen));
+    final corrido = borde - fase / _pixeles;
+    final d = MatrixUtils.transformPoint(inversa, corrido) -
+        MatrixUtils.transformPoint(inversa, borde);
+    return d.dx.isFinite && d.dy.isFinite ? d : recto;
+  }
+
+  _Foto? _sacar(double escala, Offset fase, Matrix4 m) {
     // Corrido lo que le falta al borde para caer justo en un píxel: así cada
     // píxel de la foto es uno de la pantalla, y los bordes quedan como en
-    // vivo.
+    // vivo. Con un píxel de más alrededor: corrida, la foto dejaba afuera el
+    // píxel a medio pintar del borde del lado contrario (la línea de arriba
+    // del salón, con la tele girada).
+    final unPixel = 1 / _escalaMenor(m);
     final rect = (Offset.zero & size)
-        .inflate(_margen)
-        .shift(Offset(-fase.dx / escala, -fase.dy / escala));
+        .inflate(_margen + unPixel)
+        .shift(_corrimiento(escala, fase, m));
     // Que no pase de lo que aguanta una placa chica.
     final porPunto = math.min(escala, 4096 / math.max(rect.width, rect.height));
     final capa = OffsetLayer();

@@ -1,6 +1,7 @@
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/recepcion/central/central_provider.dart';
 import 'package:arguello_events/features/tele/calidad_de_la_tele.dart';
+import 'package:arguello_events/features/tele/giro_de_la_tele.dart';
 import 'package:arguello_events/features/tele/modo_tele.dart';
 import 'package:arguello_events/features/tele/pantalla_tele.dart';
 import 'package:arguello_events/features/totem/widgets/totem_local.dart';
@@ -31,6 +32,18 @@ class _ModoFijo extends ModoTeleNotifier {
   }
 }
 
+/// El giro de la tele, sin escribir las preferencias.
+class _GiroFijo extends GiroDeLaTeleNotifier {
+  _GiroFijo(this.inicial);
+  final int inicial;
+
+  @override
+  int build() => inicial;
+
+  @override
+  Future<void> poner(int cuartos) async => state = Giro.normal(cuartos);
+}
+
 final _hoy = DateTime(2026, 12, 12, 21, 40);
 late SupabaseClient _supabase;
 
@@ -43,18 +56,21 @@ void main() {
   });
 
   late _ModoFijo modo;
+  late _GiroFijo giro;
 
   Future<void> abrir(
     WidgetTester tester, {
     PapelDeLaTele papel = PapelDeLaTele.principal,
     bool conDiagnostico = false,
     Map<String, Object> preferencias = const {},
+    int cuartos = 0,
   }) async {
     SharedPreferences.setMockInitialValues(preferencias);
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     modo = _ModoFijo(ModoTele(papel));
+    giro = _GiroFijo(cuartos);
     final mundo = PuertaEnMemoria(
       _supabase,
       alumnos: [alumnoDePrueba('c1000000-0000-4000-8000-000000000001', 'PÉREZ, JUAN', mesas: [12])],
@@ -62,8 +78,11 @@ void main() {
     await tester.pumpWidget(mundo.recepcion(
       PantallaTele(ahora: () => _hoy, conDiagnostico: conDiagnostico),
       eventos: [eventoDePrueba(eventoMasivo, 'masivo')],
+      // Como en la app: todo girado como la tele.
+      builder: (context, child) => GiroDeLaApp(child: child!),
       extra: [
         modoTeleProvider.overrideWith(() => modo),
+        giroDeLaTeleProvider.overrideWith(() => giro),
         // La central de verdad no se prende acá (eso lo prueba
         // `tele_central_test`): solo se mira lo que la tele muestra.
         centralDeLaPuertaProvider.overrideWith(_CentralQuieta.new),
@@ -109,6 +128,26 @@ void main() {
     expect(find.text('TELE 1'), findsOneWidget);
   });
 
+  /// Escribe [texto] con el teclado de la tele (tocando sus teclas).
+  Future<void> escribir(WidgetTester tester, String texto) async {
+    for (final c in texto.split('')) {
+      final k = switch (c) {
+        '.' => 'tecla_punto',
+        ':' => 'tecla_dos_puntos',
+        _ => 'tecla_$c',
+      };
+      await tester.ensureVisible(find.byKey(ValueKey(k)));
+      await tester.tap(find.byKey(ValueKey(k)));
+      await tester.pump();
+    }
+  }
+
+  Future<void> listo(WidgetTester tester) async {
+    await tester.ensureVisible(find.byKey(const ValueKey('tecla_listo')));
+    await tester.tap(find.byKey(const ValueKey('tecla_listo')));
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
   testWidgets('salir del modo tele pide el PIN del jefe: con otro, la tele sigue', (tester) async {
     await abrir(tester);
     await tecla(tester, LogicalKeyboardKey.select);
@@ -116,10 +155,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tele_salir')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('PIN del jefe'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '1111');
-    await tester.tap(find.text('LISTO'));
-    await tester.pump(const Duration(milliseconds: 300));
+    // Con el teclado de la tele, no el del sistema (el de Google TV no gira).
+    expect(find.byType(TextField), findsNothing);
+    await escribir(tester, '1111');
+    expect(find.text('••••'), findsOneWidget, reason: 'el PIN no se ve');
+    await listo(tester);
     expect(find.text('Ese no es el PIN del jefe.'), findsOneWidget);
+    expect(modo.puestos, isEmpty);
+    // Atrás vuelve al menú, sin salir.
+    await tecla(tester, LogicalKeyboardKey.goBack);
+    expect(find.text('TELE 1'), findsOneWidget);
     expect(modo.puestos, isEmpty);
   });
 
@@ -129,10 +174,108 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('tele_salir')));
     await tester.tap(find.byKey(const ValueKey('tele_salir')));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(find.byType(TextField), '2026');
-    await tester.tap(find.text('LISTO'));
-    await tester.pump(const Duration(milliseconds: 300));
+    await escribir(tester, '2026');
+    await listo(tester);
     expect(modo.puestos, [null]);
+  });
+
+  testWidgets('el PIN se escribe también con las flechas y OK del control', (tester) async {
+    await abrir(tester);
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tester.ensureVisible(find.byKey(const ValueKey('tele_salir')));
+    await tester.tap(find.byKey(const ValueKey('tele_salir')));
+    await tester.pump(const Duration(milliseconds: 300));
+    // Arranca en el 1: OK, derecha (2), abajo (5), OK.
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tecla(tester, LogicalKeyboardKey.arrowRight);
+    await tecla(tester, LogicalKeyboardKey.arrowDown);
+    await tecla(tester, LogicalKeyboardKey.select);
+    expect(find.text('••'), findsOneWidget);
+  });
+
+  group('girar la pantalla, sin PIN', () {
+    testWidgets('Vertical gira todo y deja la tele parada (540 × 960)', (tester) async {
+      await abrir(tester);
+      expect(giro.state, 0);
+      expect(MediaQuery.sizeOf(tester.element(find.byType(PantallaTele))), const Size(960, 540));
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tester.ensureVisible(find.byKey(const ValueKey('tele_girar')));
+      await tester.tap(find.byKey(const ValueKey('tele_girar')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('GIRAR LA PANTALLA'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tele_giro_vertical')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(giro.state, 1);
+      // Quien mira la ve parada: 540 de ancho y 960 de alto.
+      expect(MediaQuery.sizeOf(tester.element(find.byType(PantallaTele))), const Size(540, 960));
+      // El panel sigue abierto y entra entero en lo parado.
+      expect(find.text('GIRAR LA PANTALLA'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      // Dar vuelta: para el otro lado.
+      await tester.tap(find.byKey(const ValueKey('tele_giro_dar_vuelta')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(giro.state, 3);
+      // Vertical otra vez no la cambia: ya está parada.
+      await tester.tap(find.byKey(const ValueKey('tele_giro_vertical')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(giro.state, 3);
+      await tester.tap(find.byKey(const ValueKey('tele_giro_horizontal')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(giro.state, 0);
+      expect(MediaQuery.sizeOf(tester.element(find.byType(PantallaTele))), const Size(960, 540));
+    });
+
+    testWidgets('parada, la flecha de abajo baja en lo que se ve', (tester) async {
+      await abrir(tester, cuartos: 1);
+      await tecla(tester, LogicalKeyboardKey.select);
+      // Arranca en "Sumar un celular"; abajo es "La fiesta", como acostada.
+      await tecla(tester, LogicalKeyboardKey.arrowDown);
+      await tecla(tester, LogicalKeyboardKey.select);
+      expect(find.text('LA FIESTA'), findsOneWidget);
+    });
+
+    testWidgets('dada vuelta del otro lado (3), también', (tester) async {
+      await abrir(tester, cuartos: 3);
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tecla(tester, LogicalKeyboardKey.arrowDown);
+      await tecla(tester, LogicalKeyboardKey.arrowDown);
+      await tecla(tester, LogicalKeyboardKey.select);
+      expect(find.text('GIRAR LA PANTALLA'), findsOneWidget);
+    });
+
+    testWidgets('parada, todos los paneles entran sin desbordar', (tester) async {
+      await abrir(tester, cuartos: 1, papel: PapelDeLaTele.segunda);
+      await tecla(tester, LogicalKeyboardKey.select);
+      for (final k in ['tele_sumar_celular', 'tele_fiesta', 'tele_girar', 'tele_direccion', 'tele_salir']) {
+        await tester.ensureVisible(find.byKey(ValueKey(k)));
+        await tester.tap(find.byKey(ValueKey(k)));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull, reason: k);
+        await tecla(tester, LogicalKeyboardKey.goBack);
+        expect(find.text('TELE 2'), findsOneWidget, reason: k);
+      }
+    });
+  });
+
+  testWidgets('la dirección de la Tele 1 se escribe con el teclado de la tele', (tester) async {
+    await abrir(tester, papel: PapelDeLaTele.segunda);
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tester.ensureVisible(find.byKey(const ValueKey('tele_direccion')));
+    await tester.tap(find.byKey(const ValueKey('tele_direccion')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(TextField), findsNothing);
+    await escribir(tester, '192.168.0.10:8787');
+    await listo(tester);
+    expect(modo.puestos.single?.direccionAMano, '192.168.0.10:8787');
+    // VACIAR: que la busque sola.
+    await tester.ensureVisible(find.byKey(const ValueKey('tele_direccion')));
+    await tester.tap(find.byKey(const ValueKey('tele_direccion')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.byKey(const ValueKey('tecla_vaciar')));
+    await tester.tap(find.byKey(const ValueKey('tecla_vaciar')));
+    await tester.pump();
+    await listo(tester);
+    expect(modo.puestos.last?.direccionAMano, isNull);
   });
 
   testWidgets('en la app de verdad el menú no muestra ningún número (25-nov)', (tester) async {

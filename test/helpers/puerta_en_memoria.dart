@@ -621,6 +621,7 @@ class PuertaEnMemoria {
     bool puedeTotem = true,
     List<Override> extra = const [],
     List<Evento>? eventos,
+    TransitionBuilder? builder,
   }) =>
       ProviderScope(
         overrides: [
@@ -671,6 +672,8 @@ class PuertaEnMemoria {
           debugShowCheckedModeBanner: false,
           theme: tema ??
               ThemeData(brightness: Brightness.dark, useMaterial3: true),
+          // La tele: girada como en la app (`GiroDeLaApp`).
+          builder: builder,
           home: home,
         ),
       );

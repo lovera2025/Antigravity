@@ -41,6 +41,7 @@ import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/tele/aparato_de_la_tele.dart';
+import 'package:arguello_events/features/tele/giro_de_la_tele.dart';
 import 'package:arguello_events/features/tele/modo_tele.dart';
 import 'package:arguello_events/features/tele/pantalla_tele.dart';
 import 'package:arguello_events/features/tele/red_de_la_tele.dart';
@@ -258,6 +259,16 @@ class _ModoFijo extends ModoTeleNotifier {
   Future<void> poner(ModoTele? modo) async => state = modo;
 }
 
+/// El giro de cada tele de la prueba: sin escribir las preferencias del
+/// programa. `--dart-define=giro=1` arranca parada (el emulador).
+class _GiroDePrueba extends GiroDeLaTeleNotifier {
+  @override
+  int build() => Giro.normal(int.tryParse(const String.fromEnvironment('giro')) ?? 0);
+
+  @override
+  Future<void> poner(int cuartos) async => state = Giro.normal(cuartos);
+}
+
 /// Una tele de la prueba: su lista, sus alumnos y su central, en memoria.
 Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
   final salon = elegido.armado;
@@ -310,8 +321,11 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
       ),
     ],
     config: {eventoMasivo: TotemConfig.defaults(eventoMasivo)},
+    // Girada como en la app.
+    builder: (context, child) => GiroDeLaApp(child: child ?? const SizedBox.shrink()),
     extra: [
       modoTeleProvider.overrideWith(() => _ModoFijo(ModoTele(papel, fondoQuieto: _fondoQuieto))),
+      giroDeLaTeleProvider.overrideWith(_GiroDePrueba.new),
       totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria()),
       // En esta PC la Tele 2 pregunta solo acá; en el wifi, a toda la red.
       if (!enAndroid && !_red)
