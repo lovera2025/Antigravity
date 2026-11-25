@@ -154,7 +154,7 @@ let sonido = false;
 let dispositivo = 'tablet'; // repositor: 'tablet' | 'celular'
 let tabBarra = 'b1';     // 'b1' | 'b2' | 'dep'
 let dialogo = null;      // null | 'reponer' | 'faltante'
-let rep = { prod:'Cerveza lata', cant:12, barra:'b1', nota:'' };
+let rep = { prod:'Cerveza lata', cant:12, barra:'b1', nota:'', desde:'dep', porque:'' };
 let fal = { prod:'Cerveza lata', cant:2, motivo:'Congelada', nota:'' };
 let permisoBarra = 'repositor';
 
@@ -172,18 +172,20 @@ const cajas = {
 const productos = ['Cerveza lata','Fernet con Coca','Vodka trago','Speed','Agua'];
 const deposito = { 'Cerveza lata':240, 'Fernet con Coca':150, 'Vodka trago':120, 'Speed':96, 'Agua':96 };
 const stock = {
-  b1: { 'Cerveza lata':{dio:72,vendio:61,falto:2}, 'Fernet con Coca':{dio:48,vendio:40,falto:0}, 'Vodka trago':{dio:36,vendio:30,falto:1}, 'Speed':{dio:24,vendio:12,falto:0}, 'Agua':{dio:24,vendio:9,falto:0} },
-  b2: { 'Cerveza lata':{dio:60,vendio:38,falto:0}, 'Fernet con Coca':{dio:40,vendio:31,falto:0}, 'Vodka trago':{dio:30,vendio:18,falto:0}, 'Speed':{dio:24,vendio:20,falto:0}, 'Agua':{dio:24,vendio:6,falto:0} },
+  b1: { 'Cerveza lata':{dio:72,vendio:61,falto:2}, 'Fernet con Coca':{dio:48,vendio:40,falto:0}, 'Vodka trago':{dio:36,vendio:30,falto:1}, 'Speed':{dio:24,vendio:12,falto:0}, 'Agua':{dio:30,vendio:9,falto:0} },
+  b2: { 'Cerveza lata':{dio:60,vendio:38,falto:0}, 'Fernet con Coca':{dio:40,vendio:31,falto:0}, 'Vodka trago':{dio:30,vendio:18,falto:0}, 'Speed':{dio:24,vendio:20,falto:0}, 'Agua':{dio:18,vendio:6,falto:0} },
 };
 const aviso = 10;
 const nombreBarra = { b1:'Barra 1', b2:'Barra 2' };
 const movimientos = [
-  { h:'01:42', quien:'Nico', x:'+12', clase:'mas', que:'Cerveza lata → Barra 1', n:'Se las llevé de la heladera del fondo.' },
+  { h:'02:10', quien:'Nico', x:'6', clase:'mas', que:'Agua · Barra 2 → Barra 1', n:'En la Barra 2 casi no piden agua.' },
+  { h:'01:42', quien:'Nico', x:'+12', clase:'mas', que:'Cerveza lata · depósito → Barra 1', n:'Se las llevé de la heladera del fondo.' },
   { h:'01:15', quien:'Nico', x:'−2', clase:'menos', que:'Cerveza lata · Barra 1 · Congelada', n:'Quedaron en el freezer, explotaron.' },
-  { h:'00:30', quien:'Nico', x:'+24', clase:'mas', que:'Speed → Barra 2', n:'' },
+  { h:'00:30', quien:'Nico', x:'+8', clase:'mas', que:'Fernet con Coca · depósito → Barra 1', n:'' },
+  { h:'00:05', quien:'Nico', x:'+6', clase:'mas', que:'Vodka trago · depósito → Barra 1', n:'' },
   { h:'23:50', quien:'Nico', x:'−1', clase:'menos', que:'Vodka trago · Barra 1 · Rota', n:'Se cayó la botella al servir.' },
-  { h:'18:00', quien:'Nico', x:'+60', clase:'mas', que:'Cerveza lata → Barra 2', n:'Lo de arranque.' },
-  { h:'17:55', quien:'Nico', x:'+60', clase:'mas', que:'Cerveza lata → Barra 1', n:'Lo de arranque.' },
+  { h:'17:30', quien:'el jefe', x:'60', clase:'mas', que:'Cerveza lata · arranque de la Barra 2', n:'El reparto del jefe.' },
+  { h:'17:30', quien:'el jefe', x:'60', clase:'mas', que:'Cerveza lata · arranque de la Barra 1', n:'El reparto del jefe.' },
 ];
 
 // ── Los pasos ───────────────────────────────────────────────────────────────
@@ -198,6 +200,7 @@ const recorridos = {
   ]},
   rep: { nombre:'El repositor de la barra', pasos:[
     { t:'Darle el permiso', s:'En OPERADORES' },
+    { t:'El jefe reparte', s:'El stock general y el arranque' },
     { t:'Dónde trabaja', s:'Tablet o celular' },
     { t:'El stock de cada barra', s:'Lo que le diste y lo que queda' },
     { t:'REPONER', s:'Llevarle a una barra' },
@@ -218,9 +221,10 @@ const notas = {
   ],
   rep: [
     `<b>El jefe le da el permiso en OPERADORES</b>, como a la encargada: en Barra, una opción más, <b>Repositor</b>. El repositor no vende ni cierra cajas: solo anota el stock. Sin SQL para el permiso.`,
+    `<b>El jefe carga el stock general y lo reparte</b>, en PRECIOS de la fiesta, como hoy: por producto, cuánto hay en total y con cuánto <b>arranca cada barra</b>. Lo que no reparte queda en el depósito. También pone el <b>aviso</b>: cuando a una barra le quedan esas o menos, el repositor recibe "Está quedando poco". Desde ahí, el stock queda en manos del repositor.<span class="donde">Dónde: Centro de Comando → BARRA → la fiesta → PRECIOS (modo jefe).</span>`,
     `<b>¿Dónde trabaja el repositor?</b> Dos formas, lado a lado. Con <b>una tablet</b> (la app, como las cajeras) o con <b>su celular</b> por el wifi, como la encargada (escanea el QR de la notebook). Elegí la que prefieras en "Para decidir".`,
-    `<b>El stock de cada barra</b>: lo que le diste, lo que vendió, lo que faltó y lo que le queda. En ámbar, lo que está por terminarse (el aviso que pone el jefe en PRECIOS). En DEPÓSITO, lo que cargó el jefe menos lo que ya se llevó a las barras. <b>Con las barras unidas se ven las dos; si cada barra está sola, cada una sabe lo suyo</b> y el depósito se completa cuando se juntan (o con internet).`,
-    `<b>REPONER</b>: qué producto, cuánto, a qué barra y una nota si quiere. Arriba ve <b>lo que cargó el jefe al principio</b> y lo que queda en el depósito. Abajo <b>deja dicho cuántas quedan en la barra</b> después de reponer: viene la cuenta del programa y, si contó otra cosa, la corrige (la diferencia queda anotada). Al guardar, a las cajeras de esa barra y a la encargada les sale el cartel <b>"Se repusieron…"</b>. <b>Solo se agregan renglones</b>: nada se borra ni se pisa.`,
+    `<b>El stock de cada barra</b>: lo que le diste, lo que vendió, lo que faltó y lo que le queda. <b>Arriba, "Está quedando poco"</b>: lo que llegó al aviso que puso el jefe, en cualquier barra, con REPONER al lado (y suena cuando aparece algo nuevo). En DEPÓSITO, lo que cargó el jefe menos lo que ya se llevó a las barras. <b>Con las barras unidas se ven las dos; si cada barra está sola, cada una sabe lo suyo</b> y el depósito se completa cuando se juntan (o con internet).`,
+    `<b>REPONER</b>: qué producto, cuánto, <b>de dónde</b> y a qué barra. <b>Del depósito</b>, como mucho lo que queda: más no deja. <b>De la otra barra</b> también se puede, explicando por qué (la nota es obligatoria), y como mucho lo que esa barra tiene. Arriba ve <b>lo que cargó el jefe al principio</b> y lo que queda en el depósito. Abajo <b>deja dicho cuántas quedan en la barra</b> después de reponer: viene la cuenta del programa y, si contó otra cosa, la corrige (la diferencia queda anotada). Al guardar, a las cajeras de esa barra y a la encargada les sale el cartel <b>"Se repusieron…"</b>. <b>Solo se agregan renglones</b>: nada se borra ni se pisa.`,
     `<b>FALTANTE</b>: lo que falta y no es una venta. Qué producto, cuántas, el motivo (rota, congelada, vencida, se perdió u otro) y una nota. Ejemplo que me diste: "hubo tantas cervezas y faltan dos porque se congelaron". Queda escrito con su hora y quién lo anotó.`,
     `<b>Lo que ven los demás.</b> La cajera ve en VENDER lo que le queda <b>a su barra</b> (avisa, no frena). La encargada ve el stock de las barras pero <b>ya no toca nada</b>. El jefe, al final de la noche, ve y puede imprimir el resumen por producto: lo del depósito, lo repuesto a cada barra, lo vendido, los faltantes y lo que quedó.`,
     null,
@@ -407,14 +411,22 @@ function contenidoStock(conMarco){
     cuerpo = (unidas ? productos.map(p => `<div class="prod"><span class="nom">${p}</span><span class="quedan">Quedan ${dep(p)}</span>
       <span class="det">El jefe cargó <b style="color:var(--texto)">${deposito[p]}</b> al principio · a la Barra 1 ${stock.b1[p].dio} · a la Barra 2 ${stock.b2[p].dio}</span></div>`).join('')
       : `<div class="franja ambar">La Barra 2 está en otro wifi: el depósito se completa cuando las barras se juntan o con internet. Acá: lo que salió para la Barra 1.</div>`)
-      + `<div class="nuevo" style="margin-top:8px;padding:4px;display:grid;gap:4px"><button class="b linea chico" style="justify-self:start">ANOTAR LO QUE HAY EN EL DEPÓSITO</button>
-         <span class="gris chica">Si lo contaste o te acordás cuánto había: se anota al lado de la cuenta, con la diferencia y tu nota. La cuenta no se pisa.</span></div>`;
+      + `<div class="nuevo" style="margin-top:8px;padding:4px;display:grid;gap:6px">
+         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="b linea chico">ANOTAR LO QUE HAY EN EL DEPÓSITO</button><button class="b linea chico">ENTRÓ MERCADERÍA</button></div>
+         <span class="gris chica"><b>Anotar lo que hay:</b> si lo contaste o te acordás cuánto había; queda al lado de la cuenta, con la diferencia y tu nota. <b>Entró mercadería:</b> si llegó más, cuánto y de dónde vino (hace falta decirlo); recién ahí se puede reponer más. El jefe lo ve.</span></div>`;
   } else {
     cuerpo = productos.map(p => filaStock(tabBarra, p)).join('');
   }
+  const pocos = ['b1','b2'].flatMap(b => productos.map(p => { const s = stock[b][p]; return { b, p, q: s.dio - s.vendio - s.falto }; }))
+    .filter(x => x.q <= aviso && (unidas || x.b === 'b1'));
+  const alertas = pocos.length ? `<div class="pedido nuevo" style="border-color:var(--ambar);background:#1d1810">
+      <b style="color:var(--ambar)">⚠ Está quedando poco</b>
+      ${pocos.map(x => `<div class="r" style="align-items:center"><span style="color:var(--texto)">${x.p} · <span class="gris">${nombreBarra[x.b]}</span> · quedan <b>${x.q}</b></span><button class="b chico linea" data-alerta="${x.b}|${x.p}">REPONER</button></div>`).join('')}
+      <span class="gris chica">Suena cuando aparece algo nuevo. El aviso lo pone el jefe: ${aviso} o menos.</span></div>` : '';
   return `
     <div class="barraApp"><span class="tit">STOCK</span><span class="gris chica">Nico · repositor</span></div>
     <div class="isla">TÉCNICA PINAROLI · jue 4/12</div>
+    ${alertas}
     <div class="seg nuevo">${tab('b1','BARRA 1')}${tab('b2','BARRA 2')}${tab('dep','DEPÓSITO')}</div>
     <div class="card nuevo">${cuerpo}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" class="nuevo">
@@ -422,6 +434,24 @@ function contenidoStock(conMarco){
       <button class="b rojo" id="faltante">− FALTANTE</button>
     </div>
     <button class="b chico" id="ver_movs" style="justify-self:start">VER LOS MOVIMIENTOS</button>`;
+}
+
+function pantallaReparto(){
+  const arranque = { b1:{'Cerveza lata':60,'Fernet con Coca':40,'Vodka trago':30,'Speed':24,'Agua':24}, b2:{'Cerveza lata':60,'Fernet con Coca':40,'Vodka trago':30,'Speed':24,'Agua':24} };
+  const filas = productos.map(p => {
+    const dep = deposito[p] - arranque.b1[p] - arranque.b2[p];
+    return `<tr><td>${p}</td><td>$ ${({'Cerveza lata':'4.000','Fernet con Coca':'8.000','Vodka trago':'7.000','Speed':'5.000','Agua':'2.500'})[p]}</td>
+      <td><b>${deposito[p]}</b></td><td class="nuevo">${arranque.b1[p]}</td><td class="nuevo">${arranque.b2[p]}</td><td>${dep}</td><td>${aviso}</td></tr>`;
+  }).join('');
+  return `<div class="lado"><div class="app pc">
+    <div class="barraApp"><span class="tit">PRECIOS · <span class="gris">TÉCNICA PINAROLI</span></span><span class="gris chica">Modo jefe</span></div>
+    <div class="scrollx"><table class="tabla">
+      <tr><th>PRODUCTO</th><th>PRECIO</th><th>STOCK GENERAL</th><th>ARRANCA BARRA 1<span class="tag">NUEVO</span></th><th>ARRANCA BARRA 2<span class="tag">NUEVO</span></th><th>QUEDA EN EL DEPÓSITO</th><th>AVISO</th></tr>
+      ${filas}
+    </table></div>
+    <span class="gris chica">Lo que el jefe no reparte queda en el depósito. Si reparte más de lo que hay, no lo deja guardar. Con una sola barra, la columna de la Barra 2 no aparece.</span>
+    <div><button class="b dorado">GUARDAR</button></div>
+  </div></div>`;
 }
 
 function pantallaDonde(){
@@ -446,28 +476,40 @@ function pantallaStock(){
 function pantallaReponer(){
   const chipsProd = productos.map(p => `<button class="chip ${rep.prod===p?'on':''}" data-rprod="${p}">${p}</button>`).join('');
   const barra = b => `<button class="chip ${rep.barra===b?'on':''}" data-rbarra="${b}">${nombreBarra[b]}</button>`;
-  const s = stock[rep.barra][rep.prod]; const q = s.dio - s.vendio - s.falto;
+  const quedanEn = b => { const x = stock[b][rep.prod]; return x.dio - x.vendio - x.falto; };
+  const q = quedanEn(rep.barra);
   const enDep = deposito[rep.prod] - stock.b1[rep.prod].dio - stock.b2[rep.prod].dio;
+  const otra = rep.barra === 'b1' ? 'b2' : 'b1';
+  const desdeOtra = rep.desde !== 'dep';
+  const tope = desdeOtra ? quedanEn(otra) : enDep;
+  const pasa = rep.cant > tope;
+  const faltaPorque = desdeOtra && !rep.porque.trim();
   const quedaria = q + rep.cant;
   const contadas = rep.contadas ?? quedaria;
   const dif = contadas - quedaria;
+  const desde = (v, t) => `<button class="chip ${rep.desde===v?'on':''}" data-rdesde="${v}">${t}</button>`;
   return `<div class="lado"><div class="app tablet">
     <div class="barraApp"><span class="tit">REPONER</span></div>
     <div class="dialogo nuevo">
       <div class="campo"><label>QUÉ</label><div class="chips">${chipsProd}</div></div>
-      <div class="franja celeste">${rep.prod}: el jefe cargó <b>${deposito[rep.prod]}</b> al principio · en el depósito quedan <b>${enDep - rep.cant}</b> después de esto</div>
-      <div class="campo"><label>CUÁNTO</label><div class="cant">
-        <button class="b" id="menos">−</button><span class="num">${rep.cant}</span><button class="b" id="mas">＋</button>
-        <div class="chips">${[6,12,24].map(n=>`<button class="chip" data-rsuma="${n}">+${n}</button>`).join('')}</div></div></div>
+      <div class="franja celeste">${rep.prod}: el jefe cargó <b>${deposito[rep.prod]}</b> al principio · en el depósito quedan <b>${enDep}</b></div>
       <div class="campo"><label>A QUÉ BARRA</label><div class="chips">${barra('b1')}${barra('b2')}</div></div>
-      <div class="campo"><label>NOTA (SI QUERÉS)</label><input class="caja-txt" placeholder="Ej.: de la heladera del fondo" value="${rep.nota}" id="rnota"></div>
+      <div class="campo"><label>DE DÓNDE</label><div class="chips">${desde('dep','Del depósito')}${desde('otra','De la '+nombreBarra[otra])}</div>
+        <span class="gris chica">${desdeOtra ? `La ${nombreBarra[otra]} tiene ${quedanEn(otra)}: pasa de ahí a la ${nombreBarra[rep.barra]}.` : `Como mucho, lo que queda en el depósito (${enDep}).`}</span></div>
+      <div class="campo"><label>CUÁNTO</label><div class="cant">
+        <button class="b" id="menos">−</button><span class="num" style="${pasa?'color:var(--rojo)':''}">${rep.cant}</span><button class="b" id="mas">＋</button>
+        <div class="chips">${[6,12,24].map(n=>`<button class="chip" data-rsuma="${n}">+${n}</button>`).join('')}</div></div>
+        ${pasa ? `<span class="franja" style="background:rgba(255,143,130,.14);color:var(--rojo)">${desdeOtra ? `La ${nombreBarra[otra]} tiene ${tope}: no se puede pasar más.` : `En el depósito quedan ${tope}: no se puede reponer más. Si entró mercadería, se anota primero en DEPÓSITO → ENTRÓ MERCADERÍA, diciendo de dónde vino.`}</span>` : ''}</div>
+      <div class="campo"><label>${desdeOtra ? '¿POR QUÉ? (HACE FALTA)' : 'NOTA (SI QUERÉS)'}</label>
+        <input class="caja-txt" id="rporque" placeholder="${desdeOtra ? 'Ej.: en la Barra 2 casi no piden cerveza' : 'Ej.: de la heladera del fondo'}" value="${desdeOtra ? rep.porque : rep.nota}"></div>
       <div class="campo"><label>¿CUÁNTAS QUEDAN AHORA EN LA ${nombreBarra[rep.barra].toUpperCase()}?</label>
         <div class="cant"><button class="b" id="cmenos">−</button><span class="num">${contadas}</span><button class="b" id="cmas">＋</button>
         <span class="gris chica">La cuenta da ${quedaria} (tenía ${q} + ${rep.cant})</span></div>
         ${dif!==0 ? `<span class="franja ambar">Contaste ${dif>0?dif+' más':(-dif)+' menos'} de lo que da la cuenta: la diferencia queda anotada con esta reposición.</span>` : ''}
       </div>
-      <button class="b dorado ancho">GUARDAR</button>
-      <span class="gris chica">Al guardar, a las cajeras de la ${nombreBarra[rep.barra]} y a la encargada les sale: "Se repusieron ${rep.cant} ${rep.prod} · quedan ${contadas}".</span>
+      <button class="b dorado ancho" id="rguardar" data-pasa="${pasa?1:0}" ${pasa||faltaPorque?'disabled':''}>GUARDAR</button>
+      ${desdeOtra && !pasa ? '<span class="gris chica">Para pasar de una barra a otra hace falta decir por qué.</span>' : ''}
+      <span class="gris chica">Al guardar, a las cajeras de la ${nombreBarra[rep.barra]} y a la encargada les sale: "Se repusieron ${rep.cant} ${rep.prod} · quedan ${contadas}".${desdeOtra ? ` A las de la ${nombreBarra[otra]}: "Se llevaron ${rep.cant} ${rep.prod} a la ${nombreBarra[rep.barra]}".` : ''}</span>
     </div></div></div>`;
 }
 
@@ -536,11 +578,10 @@ function pantallaDecidirRep(){
     <b>Lo que te pregunto del repositor</b>
     <ol>
       <li><b>¿Con tablet (A) o con su celular por el wifi (B)?</b> Con tablet puede imprimir; con el celular no necesita una tablet.</li>
-      <li><b>¿El stock arranca en cero en cada barra</b> y el repositor anota lo que le lleva al principio (como en el ejemplo: "lo de arranque")? Lo que carga el jefe en PRECIOS es el depósito, y el repositor lo ve.</li>
-      <li><b>Al reponer, ¿está bien que confirme cuántas quedan en la barra</b> (viene la cuenta y la corrige si contó otra cosa, con la diferencia anotada)?</li>
+      <li><b>"Entró mercadería" en el depósito</b> (si llega más de lo que cargó el jefe, diciendo de dónde vino): ¿lo puede anotar el repositor, o solo el jefe?</li>
+      <li><b>El aviso de "Está quedando poco":</b> ¿un mismo número para las dos barras (el que pone el jefe por producto), o uno distinto por barra?</li>
       <li><b>Los motivos del faltante:</b> Rota · Congelada · Vencida · Se perdió · Otro. ¿Falta alguno?</li>
       <li><b>Si una barra se queda sin algo</b>, ¿la cajera sigue pudiendo VENDER IGUAL (como hoy) o la frenamos?</li>
-      <li><b>¿El repositor puede pasar stock de una barra a otra</b> (por ejemplo, 6 cervezas de la Barra 2 a la Barra 1), o siempre va del depósito a una barra?</li>
     </ol>
   </div>`;
 }
@@ -562,8 +603,9 @@ function enlazarRed(){
 }
 function enlazarStock(){
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { if (!unidas && b.dataset.tab==='b2'){ return; } tabBarra = b.dataset.tab; dibujar(); });
-  const r = $('#reponer'); if (r) r.onclick = () => { paso = 3; dibujar(); };
-  const f = $('#faltante'); if (f) f.onclick = () => { paso = 4; dibujar(); };
+  const r = $('#reponer'); if (r) r.onclick = () => { paso = 4; dibujar(); };
+  const f = $('#faltante'); if (f) f.onclick = () => { paso = 5; dibujar(); };
+  document.querySelectorAll('[data-alerta]').forEach(b => b.onclick = () => { const [bb, pp] = b.dataset.alerta.split('|'); rep.barra = bb; rep.prod = pp; rep.desde = 'dep'; rep.contadas = undefined; paso = 4; dibujar(); });
   const m = $('#ver_movs'); if (m) m.onclick = () => { dialogo = 'movs'; dibujar(); };
 }
 
@@ -584,9 +626,11 @@ function dibujar(){
     else p.innerHTML = pantallaDecidirEnc();
   } else {
     if (paso === 0){ p.innerHTML = pantallaOperadores(); document.querySelectorAll('[data-perm]').forEach(b => b.onclick = () => { permisoBarra = b.dataset.perm; dibujar(); }); }
-    else if (paso === 1){ p.innerHTML = pantallaDonde(); enlazarStock(); }
-    else if (paso === 2){ p.innerHTML = dialogo==='movs' ? pantallaMovs() : pantallaStock(); enlazarRed(); enlazarStock(); }
-    else if (paso === 3){ p.innerHTML = pantallaReponer();
+    else if (paso === 1) p.innerHTML = pantallaReparto();
+    else if (paso === 2){ p.innerHTML = pantallaDonde(); enlazarStock(); }
+    else if (paso === 3){ p.innerHTML = dialogo==='movs' ? pantallaMovs() : pantallaStock(); enlazarRed(); enlazarStock(); }
+    else if (paso === 4){ p.innerHTML = pantallaReponer();
+      document.querySelectorAll('[data-rdesde]').forEach(b => b.onclick = () => { rep.desde = b.dataset.rdesde; rep.contadas = undefined; dibujar(); });
       document.querySelectorAll('[data-rprod]').forEach(b => b.onclick = () => { rep.prod = b.dataset.rprod; rep.contadas = undefined; dibujar(); });
       document.querySelectorAll('[data-rbarra]').forEach(b => b.onclick = () => { rep.barra = b.dataset.rbarra; rep.contadas = undefined; dibujar(); });
       document.querySelectorAll('[data-rsuma]').forEach(b => b.onclick = () => { rep.cant += +b.dataset.rsuma; rep.contadas = undefined; dibujar(); });
@@ -595,14 +639,16 @@ function dibujar(){
       const base = () => { const s = stock[rep.barra][rep.prod]; return s.dio - s.vendio - s.falto + rep.cant; };
       $('#cmas').onclick = () => { rep.contadas = (rep.contadas ?? base()) + 1; dibujar(); };
       $('#cmenos').onclick = () => { rep.contadas = Math.max(0, (rep.contadas ?? base()) - 1); dibujar(); };
-      $('#rnota').oninput = e => { rep.nota = e.target.value; }; }
-    else if (paso === 4){ p.innerHTML = pantallaFaltante();
+      $('#rporque').oninput = e => {
+        if (rep.desde !== 'dep'){ rep.porque = e.target.value; const g = $('#rguardar'); g.disabled = g.dataset.pasa === '1' || !rep.porque.trim(); }
+        else rep.nota = e.target.value; }; }
+    else if (paso === 5){ p.innerHTML = pantallaFaltante();
       document.querySelectorAll('[data-fprod]').forEach(b => b.onclick = () => { fal.prod = b.dataset.fprod; dibujar(); });
       document.querySelectorAll('[data-fmot]').forEach(b => b.onclick = () => { fal.motivo = b.dataset.fmot; dibujar(); });
       $('#fmas').onclick = () => { fal.cant++; dibujar(); };
       $('#fmenos').onclick = () => { fal.cant = Math.max(1, fal.cant-1); dibujar(); };
       $('#fnota').oninput = e => { fal.nota = e.target.value; }; }
-    else if (paso === 5) p.innerHTML = pantallaLoQueVen();
+    else if (paso === 6) p.innerHTML = pantallaLoQueVen();
     else p.innerHTML = pantallaDecidirRep();
   }
 }
