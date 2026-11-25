@@ -201,7 +201,7 @@ const recorridos = {
   rep: { nombre:'El repositor de la barra', pasos:[
     { t:'Darle el permiso', s:'En OPERADORES' },
     { t:'El jefe reparte', s:'El stock general y el arranque' },
-    { t:'Dónde trabaja', s:'Tablet o celular' },
+    { t:'Dónde trabaja', s:'Android: la app · iPhone: la página' },
     { t:'El stock de cada barra', s:'Lo que le diste y lo que queda' },
     { t:'REPONER', s:'Llevarle a una barra' },
     { t:'FALTANTE', s:'Rotas, congeladas…' },
@@ -222,7 +222,7 @@ const notas = {
   rep: [
     `<b>El jefe le da el permiso en OPERADORES</b>, como a la encargada: en Barra, una opción más, <b>Repositor</b>. El repositor no vende ni cierra cajas: solo anota el stock. Sin SQL para el permiso.`,
     `<b>El jefe carga el stock general y lo reparte</b>, en PRECIOS de la fiesta, como hoy: por producto, cuánto hay en total y con cuánto <b>arranca cada barra</b>. Lo que no reparte queda en el depósito. También pone el <b>aviso</b>: cuando a una barra le quedan esas o menos, el repositor recibe "Está quedando poco". Desde ahí, el stock queda en manos del repositor.<span class="donde">Dónde: Centro de Comando → BARRA → la fiesta → PRECIOS (modo jefe).</span>`,
-    `<b>¿Dónde trabaja el repositor?</b> Dos formas, lado a lado. Con <b>una tablet</b> (la app, como las cajeras) o con <b>su celular</b> por el wifi, como la encargada (escanea el QR de la notebook). Elegí la que prefieras en "Para decidir".`,
+    `<b>Dónde trabaja el repositor (decidido el 25-nov): con su celular, de las dos formas.</b> Si es <b>Android</b>, se baja la app y entra con su PIN y el permiso que le da el jefe (A). Si es <b>iPhone</b>, escanea el QR de la notebook y usa la página por el wifi, como la encargada (B). Ve y hace lo mismo en las dos.`,
     `<b>El stock de cada barra</b>: lo que le diste, lo que vendió, lo que faltó y lo que le queda. <b>Arriba, "Está quedando poco"</b>: lo que llegó al aviso que puso el jefe, en cualquier barra, con REPONER al lado (y suena cuando aparece algo nuevo). En DEPÓSITO, lo que cargó el jefe menos lo que ya se llevó a las barras. <b>Con las barras unidas se ven las dos; si cada barra está sola, cada una sabe lo suyo</b> y el depósito se completa cuando se juntan (o con internet).`,
     `<b>REPONER</b>: qué producto, cuánto, <b>de dónde</b> y a qué barra. <b>Del depósito</b>, como mucho lo que queda: más no deja. <b>De la otra barra</b> también se puede, explicando por qué (la nota es obligatoria), y como mucho lo que esa barra tiene. Arriba ve <b>lo que cargó el jefe al principio</b> y lo que queda en el depósito. Abajo <b>deja dicho cuántas quedan en la barra</b> después de reponer: viene la cuenta del programa y, si contó otra cosa, la corrige (la diferencia queda anotada). Al guardar, a las cajeras de esa barra y a la encargada les sale el cartel <b>"Se repusieron…"</b>. <b>Solo se agregan renglones</b>: nada se borra ni se pisa.`,
     `<b>FALTANTE</b>: lo que falta y no es una venta. Qué producto, cuántas, el motivo (rota, congelada, vencida, se perdió u otro) y una nota. Ejemplo que me diste: "hubo tantas cervezas y faltan dos porque se congelaron". Queda escrito con su hora y quién lo anotó.`,
@@ -456,12 +456,12 @@ function pantallaReparto(){
 
 function pantallaDonde(){
   return `<div class="lado">
-    <div><div class="etiqueta">A · CON UNA TABLET (LA APP)</div>
+    <div><div class="etiqueta">A · CELULAR ANDROID O TABLET: LA APP</div>
       <div class="app tablet">${contenidoStock()}</div>
-      <p class="sub" style="max-width:520px;margin-top:8px">Como las cajeras: entra con su PIN en BARRA. Puede imprimir el resumen. Necesita una de las tablets.</p></div>
-    <div><div class="etiqueta">B · CON SU CELULAR, POR EL WIFI</div>
+      <p class="sub" style="max-width:520px;margin-top:8px">Se baja la app, entra con su PIN en BARRA y ve STOCK (el permiso Repositor se lo da el jefe). Si tiene impresora elegida, puede imprimir.</p></div>
+    <div><div class="etiqueta">B · IPHONE: LA PÁGINA POR EL WIFI</div>
       ${tel(contenidoStock())}
-      <p class="sub" style="max-width:360px;margin-top:8px">Como la encargada: escanea el QR de la notebook y pone su PIN. Sin tablet, pero no imprime. Al ir a la otra barra, se conecta a su wifi si las barras no están unidas.</p></div>
+      <p class="sub" style="max-width:360px;margin-top:8px">Como la encargada: escanea el QR de la notebook y pone su PIN. Lo mismo que en la app, sin imprimir. Al ir a la otra barra, se conecta a su wifi si las barras no están unidas.</p></div>
   </div>`;
 }
 
@@ -577,7 +577,6 @@ function pantallaDecidirRep(){
   return `<div class="decidir">
     <b>Lo que te pregunto del repositor</b>
     <ol>
-      <li><b>¿Con tablet (A) o con su celular por el wifi (B)?</b> Con tablet puede imprimir; con el celular no necesita una tablet.</li>
       <li><b>"Entró mercadería" en el depósito</b> (si llega más de lo que cargó el jefe, diciendo de dónde vino): ¿lo puede anotar el repositor, o solo el jefe?</li>
       <li><b>El aviso de "Está quedando poco":</b> ¿un mismo número para las dos barras (el que pone el jefe por producto), o uno distinto por barra?</li>
       <li><b>Los motivos del faltante:</b> Rota · Congelada · Vencida · Se perdió · Otro. ¿Falta alguno?</li>
