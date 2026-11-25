@@ -60,8 +60,10 @@ void main() {
       ];
 
   /// El código sin los comentarios: ahí se explica justamente qué no se toca.
+  /// Sin los fines de renglón de Windows: un checkout nuevo los trae.
   String codigoDe(File f) => f
       .readAsStringSync()
+      .replaceAll('\r\n', '\n')
       .split('\n')
       .where((l) => !l.trimLeft().startsWith('//'))
       .join('\n');

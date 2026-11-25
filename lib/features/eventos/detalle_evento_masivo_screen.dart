@@ -22,6 +22,9 @@ import '../plano/repositories/mesas_movimientos_repository.dart';
 import '../plano/services/historial_sorteo.dart';
 import '../plano/services/mesa_nueva_sola.dart';
 import '../plano/services/mesa_nueva_sola_de_la_app.dart';
+import '../plano/services/cambios_de_mesa.dart';
+import '../plano/services/mesa_que_da_el_jefe.dart';
+import '../plano/services/mesas_nuevas_al_fondo.dart';
 import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
@@ -79,6 +82,7 @@ import 'widgets/acompanantes_musica_dialog.dart';
 import 'widgets/link_del_delegado_ventana.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
+import 'widgets/dar_mesa_a_todos_dialog.dart';
 import 'widgets/chip_mesas_sillas.dart';
 import 'widgets/grupo_fiesta_toolbar.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
@@ -159,6 +163,9 @@ class _DetalleEventoMasivoScreenState
   /// La fiesta ya tiene su plano: en la columna Mesa, los números se tocan y
   /// lo abren con la familia resaltada.
   bool _fiestaTienePlano = false;
+
+  /// DAR MESA A TODOS se está abriendo: un segundo toque no abre otro cartel.
+  bool _abriendoDarMesa = false;
 
   /// Las mesas y sillas de cada alumno con lo que pagó de cada cosa, leído de
   /// sus pagos ([ExtrasSegunPago]). Es lo que muestra la columna Mesa antes del
@@ -1158,6 +1165,12 @@ class _DetalleEventoMasivoScreenState
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
     final bool puedeCambiarSalon = ref.watch(esRolJefeProvider);
+    // DAR MESA (6.9.4): con el sorteo hecho, a quién le falta alguna mesa.
+    final haySorteo = MesasNuevasAlFondo.haySorteo(_alumnos);
+    final aDarMesa = _fiestaTienePlano
+        ? MesaQueDaElJefe.aQuienes(_alumnos)
+        : const <ContratoAlumno>[];
+    final idsDarMesa = {for (final a in aDarMesa) a.id};
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1511,6 +1524,14 @@ class _DetalleEventoMasivoScreenState
                 ),
                 totales: totalesDeExtras(alumnosALaVista, _extrasPorContrato),
                 compacto: layoutCompact,
+              ),
+            ],
+            if (aDarMesa.isNotEmpty) ...[
+              SizedBox(width: layoutCompact ? 6 : 10),
+              _chipDarMesa(
+                cantidad: aDarMesa.length,
+                layoutCompact: layoutCompact,
+                habilitado: puedeCambiarSalon,
               ),
             ],
             if (sillasAConfirmar > 0 || _soloSillasAConfirmar) ...[
@@ -2281,6 +2302,11 @@ class _DetalleEventoMasivoScreenState
                                     sillasDeLaPuerta:
                                         _sillasPuertaPorContrato[a.id] ??
                                             const [],
+                                    sorteoHecho: haySorteo,
+                                    darMesa: idsDarMesa.contains(a.id),
+                                    onDarMesa: puedeCambiarSalon
+                                        ? () => _darMesa({a.id})
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -3031,6 +3057,288 @@ class _DetalleEventoMasivoScreenState
 
   /// Chip "Sillas a confirmar": cuántas familias tienen que elegir dónde van sus
   /// sillas extra. Tocarlo deja en la grilla solo a esas, para llamarlas.
+  /// DAR MESA A TODOS (6.9.4): cuántas familias esperan mesa. Sin modo jefe
+  /// se ve apagado y dice por qué.
+  Widget _chipDarMesa({
+    required int cantidad,
+    required bool layoutCompact,
+    required bool habilitado,
+  }) {
+    final color = habilitado ? Colors.indigo : Colors.grey.shade500;
+    return Tooltip(
+      message: habilitado
+          ? 'Familias sin todas sus mesas. Tocá para darles la mesa a todas '
+              'juntas.'
+          : '$kSoloEnModoJefe: la mesa la da el jefe.',
+      child: InkWell(
+        key: const Key('dar_mesa_a_todos'),
+        borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+        onTap: habilitado ? _darMesaATodos : null,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: layoutCompact ? 6 : 10,
+            vertical: layoutCompact ? 2 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_open_rounded,
+                size: layoutCompact ? 13 : 14,
+                color: color,
+              ),
+              SizedBox(width: layoutCompact ? 4 : 6),
+              Text(
+                '$cantidad',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: layoutCompact ? 12 : 13,
+                  color: color,
+                ),
+              ),
+              SizedBox(width: layoutCompact ? 3 : 5),
+              Text(
+                'SIN MESA · DAR MESA A TODOS',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: layoutCompact ? 9 : 10,
+                  letterSpacing: 0.4,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// DAR MESA A TODOS: el cartel con las familias tildadas y qué recibiría cada
+  /// una (con lo de esta PC), y después [_darMesa] con las elegidas.
+  Future<void> _darMesaATodos() async {
+    if (_frenaSinModoJefe()) return;
+    if (_abriendoDarMesa) return;
+    _abriendoDarMesa = true;
+    try {
+      await _darMesaATodosSinRepetir();
+    } finally {
+      _abriendoDarMesa = false;
+    }
+  }
+
+  Future<void> _darMesaATodosSinRepetir() async {
+    final eventoId = widget.evento.id;
+    final repo = ref.read(contratosRepositoryProvider);
+    final alumnos = await repo.getByEvento(eventoId);
+    final familias = MesaQueDaElJefe.aQuienes(alumnos);
+    if (familias.isEmpty || !mounted) return;
+    final pagosCrudos = await _pagosPorContrato(repo, alumnos);
+    final pagos = pagosPorAlumno(alumnos, pagosCrudos);
+    final registros =
+        await ref.read(sorteosMesasRepositoryProvider).delEvento(eventoId);
+    final plano = await ref.read(planosEventoRepositoryProvider).obtener(eventoId);
+    final semilla = math.Random().nextInt(1 << 31);
+    if (!mounted) return;
+    final elegidos = await mostrarDarMesaATodosDialog(
+      context: context,
+      familias: [
+        for (final a in familias)
+          (alumno: a, noPago: !(pagos[a.id] ?? PagoAlumno.nada).pagoBase),
+      ],
+      previa: plano == null
+          ? null
+          : (ids) => MesaQueDaElJefe.calcular(
+                plano: plano,
+                alumnos: alumnos,
+                pagos: pagosCrudos,
+                registros: registros,
+                elegidos: ids,
+                azar: math.Random(semilla),
+              )?.dadas,
+    );
+    if (elegidos == null || elegidos.isEmpty || !mounted) return;
+    await _darMesa(elegidos, semilla: semilla);
+  }
+
+  /// DAR MESA (6.9.4): el jefe le da la mesa a [ids] aunque no hayan pagado, y
+  /// el número aparece al instante (`MesaQueDaElJefe`). Como el sorteo: con
+  /// internet, sin mesas de otra PC por bajar y con el plano de la nube; los
+  /// números, el renglón y el plano en una sola transacción, la puerta al día
+  /// y a subir.
+  Future<void> _darMesa(Set<String> ids, {int? semilla}) async {
+    if (_frenaSinModoJefe()) return;
+    final repo = ref.read(contratosRepositoryProvider);
+    final eventoId = widget.evento.id;
+    final checkpoint = DateTime.now().toUtc();
+    var guardado = false;
+    setState(() => _isLoading = true);
+    try {
+      final distintos = await repo.mesasDeOtraPcSinBajar(eventoId);
+      if (!mounted) return;
+      if (distintos == null) {
+        setState(() => _isLoading = false);
+        await _avisarSorteo(
+          'Sin internet',
+          'Para dar una mesa hace falta internet: la otra PC podría dar la '
+              'misma mesa a otra familia. Probá cuando vuelva la conexión.',
+        );
+        return;
+      }
+      if (distintos > 0) {
+        setState(() => _isLoading = false);
+        await _avisarSorteo(
+          'La otra PC tiene mesas sin bajar',
+          'En la nube hay números de mesa de $distintos alumno(s) que todavía '
+              'no llegaron a esta PC. Esperá unos segundos y volvé a tocar DAR '
+              'MESA.',
+        );
+        return;
+      }
+      final lectura = await _leerPlano(eventoId, nube: true);
+      final plano = lectura.plano;
+      if (!mounted) return;
+      if (plano == null) {
+        setState(() => _isLoading = false);
+        await _avisarSorteo(
+          'No se dio ninguna mesa',
+          'No se pudo leer el plano de la fiesta. Probá de nuevo.',
+        );
+        return;
+      }
+      final alumnos = await repo.getByEvento(eventoId);
+      final pagosCrudos = await _pagosPorContrato(repo, alumnos);
+      final registros =
+          await ref.read(sorteosMesasRepositoryProvider).delEvento(eventoId);
+      final ahora = ArTime.nowUtc();
+      final CuentaMesaNueva? cuenta;
+      try {
+        cuenta = MesaQueDaElJefe.calcular(
+          plano: plano,
+          alumnos: alumnos,
+          pagos: pagosCrudos,
+          registros: registros,
+          elegidos: ids,
+          azar: math.Random(semilla ?? math.Random().nextInt(1 << 31)),
+          por: quienOpera(ref),
+          ahora: ahora,
+        );
+      } on StateError catch (e) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        await _avisarSorteo('No se dio ninguna mesa', e.message);
+        return;
+      }
+      if (!mounted) return;
+      if (cuenta == null) {
+        setState(() => _isLoading = false);
+        await _avisarSorteo(
+          'No hay mesa para dar',
+          'Ya tiene todas sus mesas, o su número no está en el plano (eso se '
+              'acomoda en PLANO). No se cambió nada.',
+        );
+        return;
+      }
+      final numeros = {
+        for (final e in cuenta.asignaciones.entries)
+          e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
+      };
+      final registro = SorteoMesasRegistro(
+        id: UuidUtils.generate(),
+        eventoId: eventoId,
+        tipo: TipoRegistroSorteo.sorteo,
+        resultado: numeros,
+        antes: {
+          for (final e in cuenta.antes.entries)
+            if (e.value.isNotEmpty)
+              e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
+        },
+        nuevas: cuenta.nuevas.vacio
+            ? null
+            : {
+                for (final e in cuenta.nuevas.porAlumno.entries)
+                  if (numeros.containsKey(e.key)) e.key: e.value.join(', '),
+              },
+        // No cuenta como "el último sorteo": quien pague después sigue
+        // recibiendo su mesa sola.
+        automatico: true,
+        delJefe: true,
+        hechoPor: quienOpera(ref),
+        createdAt: ahora,
+      );
+      final planoNuevo = cuenta.nuevas.vacio
+          ? null
+          : plano.copyWith(
+              armado: cuenta.nuevas.armado,
+              config: cuenta.nuevas.config,
+              hechoPor: quienOpera(ref),
+              ahora: ahora,
+            );
+      await repo.asignarNumerosMesa(
+        numeros,
+        registro: registro,
+        plano: planoNuevo,
+      );
+      guardado = true;
+      // La puerta sigue al salón. Antes de subir, para que viaje junto.
+      final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
+      final subio = await subirYa(
+            ref.read(syncEngineProvider),
+            tabla: 'sorteos_mesas',
+            registroId: registro.id,
+            desde: checkpoint,
+          ) &&
+          !await quedaEnCola({
+            if (planoNuevo != null) 'planos_evento': [planoNuevo.id],
+            'contratos_alumnos': numeros.keys,
+          });
+      await _fetchDatos(cargaSilenciosa: true);
+      if (!mounted) return;
+      final porId = {for (final a in alumnos) a.id: a};
+      final dadas = [
+        for (final e in cuenta.dadas.entries)
+          if (e.value.isNotEmpty && porId[e.key] != null)
+            'A ${CambiosDeMesa.apellido(porId[e.key]!)} '
+                '${e.value.length == 1 ? 'la ${e.value.single}' : 'las ${e.value.join(' y ')}'}',
+      ];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 12),
+          action: SnackBarAction(
+            label: 'DESHACER',
+            onPressed: _deshacerSorteoMesas,
+          ),
+          content: Text(
+            'Mesa dada. ${dadas.join('. ')}'
+            '${_renglonPuerta(puerta)}'
+            '${subio ? '' : ' · guardado en esta PC; sube cuando vuelva la conexión'}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('DAR MESA: $e');
+      if (guardado) await _fetchDatos(cargaSilenciosa: true);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        await _avisarSorteo(
+          guardado ? 'La mesa quedó dada' : 'No se dio ninguna mesa',
+          guardado
+              ? 'Quedó guardada en esta PC, pero no se pudo terminar de '
+                  'avisar a la puerta o a la nube: sube con la cola cuando '
+                  'vuelva la conexión.'
+              : 'Algo falló antes de guardar: no se cambió nada. Probá de '
+                  'nuevo.',
+        );
+      }
+    } finally {
+      if (mounted && _isLoading) setState(() => _isLoading = false);
+    }
+  }
+
   Widget _chipSillasAConfirmar({
     required int cantidad,
     required bool layoutCompact,
@@ -3657,6 +3965,7 @@ class _DetalleEventoMasivoScreenState
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
         vertical: opciones.vertical,
+        orden: opciones.orden,
         // Las entradas que se compran aparte: con descuento las de lo que la
         // familia tenía al sorteo, sin descuento las de lo que agregó después.
         foto: LugaresAlSorteo.vigente(registros),

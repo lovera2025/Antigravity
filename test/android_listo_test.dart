@@ -44,7 +44,10 @@ class _VentanasQueNoEstan implements VentanasTotem {
 void main() {
   final gradle = File('android/app/build.gradle.kts').readAsStringSync();
   final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
-  final instalador = File('installer/build_installer.ps1').readAsStringSync();
+  // Sin los fines de renglón de Windows: un checkout nuevo los trae.
+  final instalador = File('installer/build_installer.ps1')
+      .readAsStringSync()
+      .replaceAll('\r\n', '\n');
 
   group('la firma', () {
     test('release firma con la clave de android/key.properties', () {

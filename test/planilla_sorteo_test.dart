@@ -932,14 +932,21 @@ void main() {
       ];
       for (final version in VersionPlanillaSorteo.values) {
         for (final bn in [false, true]) {
-          final bytes = await PdfService.construirPlanillaSorteoPdf(
-            evento,
-            alumnos,
-            version: version,
-            blancoYNegro: bn,
-            generada: DateTime(2026, 11, 12, 21, 30),
-          );
-          expect(bytes.length, greaterThan(1000), reason: '$version bn=$bn');
+          for (final orden in OrdenPlanillaSorteo.values) {
+            for (final vertical in [true, false]) {
+              final que = '$version bn=$bn $orden vertical=$vertical';
+              final bytes = await PdfService.construirPlanillaSorteoPdf(
+                evento,
+                alumnos,
+                version: version,
+                blancoYNegro: bn,
+                orden: orden,
+                vertical: vertical,
+                generada: DateTime(2026, 11, 12, 21, 30),
+              );
+              expect(bytes.length, greaterThan(1000), reason: que);
+            }
+          }
         }
       }
     });
@@ -1051,6 +1058,189 @@ void main() {
         );
         expect(paginasDelPdf(bytes), 1);
       });
+    });
+  });
+
+  group('por número de mesa (6.9.4)', () {
+    // El caso de la Técnica, con nombres inventados: lo que el jefe quiere es
+    // recorrer las mesas de la 1 a la última e ir anotando quién va en cada
+    // una, sin saltear ninguna.
+    List<ContratoAlumno> salon() => [
+          _alumno('q', nombre: 'RIVAS, T', curso: '2DA', mesas: const [])
+              .copyWith(numeroMesa: '107, 106', mesaExtraCantidad: 1,
+                  mesaExtraPrecio: 70000),
+          _alumno('a', nombre: 'ACOSTA, L', curso: '1RA', mesas: [1]),
+          _alumno('r', nombre: 'ROLON, J', curso: '2DA', mesas: [43, 44], extras: 1),
+          _alumno('v', nombre: 'PONCE, T', curso: '2DA', mesas: [45, 51], extras: 1),
+          _alumno('f', nombre: 'FINAL, F', curso: '1', mesas: [12, 67, 68], extras: 2),
+          _alumno('s', nombre: 'SIN MESA, S', curso: '2DA'),
+          _alumno('b', nombre: '[BAJA] BAJA, B', curso: '2DA', mesas: [2]),
+        ];
+
+    test('de la mesa 1 a la última, cada adicional en su número', () {
+      final r = PlanillaSorteo.porMesa(salon());
+      expect(
+        [for (final x in r) x.mesa],
+        [1, 12, 43, 44, 45, 51, 67, 68, 106, 107, null],
+      );
+      // Las adicionales llevan el renglón corto, de su familia.
+      final adicionales = {
+        for (final x in r)
+          if (x.esAdicional) x.mesa: x.fila.egresado,
+      };
+      expect(adicionales, {
+        44: 'ROLON, J',
+        51: 'PONCE, T',
+        67: 'FINAL, F',
+        68: 'FINAL, F',
+        106: 'RIVAS, T',
+      });
+      // La principal de RIVAS es la 107, aunque la 106 tenga número más chico.
+      final rivas = r.firstWhere((x) => x.mesa == 107);
+      expect(rivas.esAdicional, isFalse);
+      expect(rivas.fila.mesaPrincipal, '107');
+      expect(rivas.fila.adicional, '106');
+      expect(rivas.division, '2DA');
+    });
+
+    test('los que no tienen mesa van al final, y los de baja no van', () {
+      final r = PlanillaSorteo.porMesa(salon());
+      expect(r.last.mesa, isNull);
+      expect(r.last.fila.egresado, 'SIN MESA, S');
+      expect(r.any((x) => x.fila.egresado.contains('BAJA')), isFalse);
+    });
+
+    test('los mismos egresados que la planilla por división', () {
+      final porDivision = PlanillaSorteo.porDivision(salon());
+      final porMesa = PlanillaSorteo.porMesa(salon());
+      expect(
+        {for (final x in porMesa) if (!x.esAdicional) x.fila.alumnoId},
+        {for (final filas in porDivision.values) for (final f in filas) f.alumnoId},
+      );
+      expect(porMesa.where((x) => !x.esAdicional).length,
+          porDivision.values.fold<int>(0, (n, l) => n + l.length));
+    });
+
+    test('los sin mesa van al final aunque vengan primero en la lista', () {
+      final r = PlanillaSorteo.porMesa([
+        _alumno('s1', nombre: 'SOSA, A'),
+        _alumno('x5', nombre: 'XX, B', mesas: [5]),
+        _alumno('s2', nombre: 'RIOS, C'),
+        _alumno('x1', nombre: 'ZZ, D', mesas: [1]),
+        _alumno('s3', nombre: 'ACOSTA, E'),
+      ]);
+      expect([for (final x in r) x.mesa], [1, 5, null, null, null]);
+      expect(
+        [for (final x in r) if (x.mesa == null) x.fila.egresado],
+        ['ACOSTA, E', 'RIOS, C', 'SOSA, A'],
+      );
+    });
+
+    test('dos familias anotadas en la misma mesa van una debajo de la otra', () {
+      final r = PlanillaSorteo.porMesa([
+        _alumno('x', nombre: 'ZETA, Z', mesas: [5]),
+        _alumno('y', nombre: 'ALFA, A', mesas: [5]),
+      ]);
+      expect([for (final x in r) x.fila.egresado], ['ALFA, A', 'ZETA, Z']);
+    });
+
+    final evento = Evento(
+      id: 'e',
+      clienteId: 'c',
+      tipo: 'Recepción',
+      fechaEvento: DateTime(2026, 12, 4),
+      estado: EstadoEvento.planificacion,
+      modalidad: 'masivo',
+      cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+    );
+
+    test('el papel: los números salen en orden, en las cuatro hojas, y nada '
+        'se sale de la hoja', () async {
+      for (final version in VersionPlanillaSorteo.values) {
+        for (final vertical in [true, false]) {
+          final que = '$version ${vertical ? 'parada' : 'acostada'}';
+          // Solo los últimos: sin la hoja del resumen, para leer solo la lista.
+          final bytes = await PlanillaSorteoPdf.construir(
+            evento: evento,
+            alumnos: salon(),
+            version: version,
+            vertical: vertical,
+            soloUltimos: true,
+            orden: OrdenPlanillaSorteo.porMesa,
+            generada: DateTime(2026, 11, 25, 21, 30),
+          );
+          final palabras = palabrasDelPdf(bytes);
+          // Los números de la columna Mesa van en letra de 12.
+          final mesas = [
+            for (final w in palabras)
+              if (w.cuerpo == 12 && int.tryParse(w.texto) != null)
+                int.parse(w.texto),
+          ];
+          expect(mesas, [1, 12, 43, 44, 45, 51, 67, 68, 106, 107], reason: que);
+          final ancho = vertical
+              ? PdfPageFormat.a4.width
+              : PdfPageFormat.a4.landscape.width;
+          for (final w in palabras) {
+            expect(w.x + w.ancho, lessThanOrEqualTo(ancho - PlanillaTema.margen + 0.5),
+                reason: '$que: "${w.texto}" se sale de la hoja');
+          }
+          final texto = [for (final w in palabras) w.texto];
+          expect(texto, containsAll(['adicional', 'principal', 'Mesa']),
+              reason: que);
+          final junto = texto.join(' ');
+          expect(junto, contains('Mesa adicional de RIVAS, T'), reason: que);
+          expect(junto, contains('su principal es la 107'), reason: que);
+          // La columna de la mesa va primero: el número, a la izquierda del
+          // nombre.
+          final numero107 =
+              palabras.firstWhere((w) => w.cuerpo == 12 && w.texto == '107');
+          final nombre = palabras.firstWhere((w) => w.texto == 'RIVAS,');
+          expect(numero107.x, lessThan(nombre.x), reason: que);
+          if (version == VersionPlanillaSorteo.paraRepartir) {
+            expect(texto.contains('4000000'), isFalse, reason: que);
+          }
+        }
+      }
+    });
+
+    test('con toda la escuela va primero el resumen, y después la lista',
+        () async {
+      final bytes = await PlanillaSorteoPdf.construir(
+        evento: evento,
+        alumnos: salon(),
+        vertical: true,
+        orden: OrdenPlanillaSorteo.porMesa,
+        generada: DateTime(2026, 11, 25, 21, 30),
+      );
+      final texto = [for (final w in palabrasDelPdf(bytes)) w.texto];
+      final resumen = texto.indexOf('Resumen');
+      final lista = texto.indexOf('número');
+      expect(resumen, greaterThanOrEqualTo(0));
+      expect(lista, greaterThan(resumen));
+      expect(paginasDelPdf(bytes), greaterThanOrEqualTo(2));
+    });
+
+    test('sin elegir, sale como siempre: una hoja por división', () async {
+      final porDefecto = await PlanillaSorteoPdf.construir(
+        evento: evento,
+        alumnos: salon(),
+        vertical: true,
+        generada: DateTime(2026, 11, 25, 21, 30),
+      );
+      final alfabetico = await PlanillaSorteoPdf.construir(
+        evento: evento,
+        alumnos: salon(),
+        vertical: true,
+        orden: OrdenPlanillaSorteo.alfabetico,
+        generada: DateTime(2026, 11, 25, 21, 30),
+      );
+      expect(contenidoDelPdf(porDefecto), contenidoDelPdf(alfabetico));
+      final texto = [for (final w in palabrasDelPdf(porDefecto)) w.texto];
+      // Ni el título de la lista por mesa ni los renglones cortos.
+      final junto = texto.join(' ');
+      expect(junto.contains('Por número de mesa'), isFalse);
+      expect(junto.contains('su principal es'), isFalse);
+      expect(junto.contains('Mesa adicional de'), isFalse);
     });
   });
 }

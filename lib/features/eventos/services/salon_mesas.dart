@@ -173,22 +173,50 @@ class SalonMesas {
   /// para A PAGAR de VENDER (`APagarDeLaFamilia`), que reparten lo pagado de la
   /// primera adicional a la última.
   ///
-  /// **La mesa del contrato es la de número más bajo.** El sorteo no anota cuál
-  /// es (guarda los números de menor a mayor), pero siempre la pone adelante:
-  /// - con la familia junta, es la primera de su tramo;
-  /// - con las adicionales "Al final" (6.6.1), las adicionales van después de
-  ///   todas las principales, con números más altos, aunque formen un tramo más
-  ///   largo que el de la principal;
-  /// - la mesa nueva de quien llega después del sorteo (6.5.1) lleva el número
-  ///   que sigue al más alto.
+  /// **La mesa del contrato es la primera anotada** (6.9.4; [principal]) y
+  /// las adicionales, las que siguen, en el orden en que se anotaron.
+  ///
+  /// Hasta la 6.9.3 era la de número más bajo. El sorteo guarda los números
+  /// de menor a mayor y siempre pone la del contrato adelante (con la familia
+  /// junta, con las adicionales "Al final", con la mesa nueva al fondo), así
+  /// que para todo lo sorteado da lo mismo: el 25-nov-2026, en las 574 familias
+  /// con mesa de la nube, la primera anotada era la más baja. Cambia cuando el
+  /// jefe le da a una familia una mesa con un número más chico que la suya
+  /// (una familia con la 107 y la 106 que estaba vacía al lado): la 107 sigue siendo la
+  /// principal y la 106 la adicional. Lo que escribe los números conserva la
+  /// principal primera (`MesasExtraUtils.conLaPrincipalDeAntes`).
   ///
   /// No sale del tramo más largo ([tramos]): con la principal sola y dos
   /// adicionales juntas al fondo (la 12, y la 67 y la 68), la del contrato era
   /// la 67 y la 12 quedaba "a confirmar" (revisión del 20-nov-2026). Lo que el
-  /// número solo no puede decir: una adicional "lejos" (6.5.0) que cayó antes
+  /// orden solo no puede decir: una adicional "lejos" (6.5.0) que cayó antes
   /// que el bloque de su familia se toma por la del contrato.
   static List<int> enOrdenDelContrato(ContratoAlumno a) =>
-      MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).toList()..sort();
+      MesasExtraUtils.numerosEnOrdenDelTexto(a.numeroMesa);
+
+  /// La mesa principal, la del contrato: la primera anotada. Null sin números.
+  static int? principal(ContratoAlumno a) {
+    final ns = enOrdenDelContrato(a);
+    return ns.isEmpty ? null : ns.first;
+  }
+
+  /// Sus mesas con **la principal primero** y después las demás como en
+  /// [tramos] (el resto de su bloque, después las separadas). Es el orden en
+  /// que se reparten las sillas extra. Casi siempre es lo mismo que recorrer
+  /// [tramos]: la principal ya es la primera de su tramo más largo. No lo es
+  /// con la principal sola y las adicionales juntas en otro lado ("74, 88,
+  /// 89": antes las sillas iban primero a la 88); el 25-nov-2026 eran cuatro
+  /// familias, ninguna con sillas extra.
+  static List<int> mesasEnOrden(ContratoAlumno a) {
+    final resto = [for (final t in tramos(a)) ...t];
+    final p = principal(a);
+    if (p == null || !resto.contains(p)) return resto;
+    return [
+      p,
+      for (final n in resto)
+        if (n != p) n,
+    ];
+  }
 
   static String _textoTramo(List<int> t) =>
       t.length == 1 ? '${t.first}' : '${t.first}-${t.last}';
@@ -264,7 +292,7 @@ class SalonMesas {
   }) {
     var resto = sillasExtra(a);
     final out = <(int, int)>[];
-    final numeros = [for (final t in tramos(a)) ...t];
+    final numeros = mesasEnOrden(a);
     for (var i = 0; i < numeros.length; i++) {
       if (resto <= 0) break;
       final tope = i == 0 && sillasPrincipal != null

@@ -133,6 +133,10 @@ class PlanillaSorteoPdf {
 
     /// La hoja parada en vez de acostada ([_formatoDe]).
     bool vertical = false,
+
+    /// Por apellido, una hoja por división (como siempre), o todo el salón de
+    /// la mesa 1 a la última (6.9.4).
+    OrdenPlanillaSorteo orden = OrdenPlanillaSorteo.alfabetico,
     pw.Font? regular,
     pw.Font? negrita,
     DateTime? generada,
@@ -198,7 +202,67 @@ class PlanillaSorteoPdf {
       foto: foto,
     );
 
-    final secciones = soloUltimos
+    final porMesa = orden == OrdenPlanillaSorteo.porMesa;
+    final renglones = porMesa
+        ? PlanillaSorteo.porMesa(
+            alumnos,
+            pagos: pagos,
+            notas: notas,
+            repartos: repartos,
+            pasto: pasto,
+            lejos: interna ? lejos : const {},
+            foto: foto,
+          )
+        : const <RenglonPorMesa>[];
+    final controlTotal = '${resumen.egresados} egresados · '
+        '${resumen.mesas} mesas · ${resumen.sillasExtra} '
+        'sillas extra · ${resumen.conCena} con cena'
+        '${_entradasDelControl(generales: resumen.generales, conDescuento: resumen.conDescuento, sinDescuento: resumen.sinDescuento, al: al)}';
+
+    final secciones = porMesa
+        ? <_Seccion>[
+            if (!soloUltimos)
+              (
+                nombre: 'Resumen',
+                encabezado: () => tema.encabezado(
+                      titulo: 'Planilla del sorteo · Resumen del salón',
+                      institucion: institucion,
+                      version: textoVersion,
+                      generada: textoGenerada,
+                      extra: lineaSorteo,
+                    ),
+                contenido: () => _resumen(
+                      tema,
+                      resumen,
+                      interna,
+                      vertical: vertical,
+                      al: al,
+                    ),
+              ),
+            (
+              nombre: soloUltimos ? 'Últimos sorteados' : 'Por número de mesa',
+              encabezado: () => tema.encabezado(
+                    titulo: soloUltimos
+                        ? 'Planilla del sorteo · Últimos sorteados, por mesa'
+                        : 'Planilla del sorteo · Por número de mesa',
+                    institucion: institucion,
+                    version: textoVersion,
+                    generada: textoGenerada,
+                    extra: lineaSorteo,
+                    control: controlTotal,
+                  ),
+              contenido: () => [
+                    _tablaPorMesa(
+                      tema,
+                      renglones,
+                      version,
+                      vertical: vertical,
+                      al: al,
+                    ),
+                  ],
+            ),
+          ]
+        : soloUltimos
         ? <_Seccion>[
             (
               nombre: 'Últimos sorteados',
@@ -743,6 +807,121 @@ class PlanillaSorteoPdf {
     );
   }
 
+  /// Todo el salón de la mesa 1 a la última (6.9.4): las mismas columnas que
+  /// una división, con **la mesa primero**, la división debajo del nombre y
+  /// un renglón corto por cada mesa adicional ([_filaAdicional]).
+  static pw.Widget _tablaPorMesa(
+    PlanillaTema t,
+    List<RenglonPorMesa> renglones,
+    VersionPlanillaSorteo version, {
+    bool vertical = false,
+    String al = 'al 50 %',
+  }) {
+    final dondeVaLaMesa = vertical ? 1 : 2;
+    final anchos = [
+      ...(vertical ? _anchosVertical(version) : _anchos(version)),
+    ];
+    anchos.insert(0, anchos.removeAt(dondeVaLaMesa));
+    final titulos = [
+      ...(vertical ? columnasVertical(version) : columnas(version)),
+    ]..removeAt(dondeVaLaMesa);
+    titulos.insert(0, 'Mesa');
+    final interna = version == VersionPlanillaSorteo.interna;
+    return pw.Table(
+      border: t.bordeTabla,
+      columnWidths: {
+        for (var i = 0; i < anchos.length; i++) i: pw.FlexColumnWidth(anchos[i]),
+      },
+      children: [
+        pw.TableRow(
+          repeat: true,
+          decoration: pw.BoxDecoration(color: t.fondoEncabezadoTabla),
+          children: [
+            for (final c in titulos)
+              t.celdaTitulo(
+                c,
+                align: c == 'Mesa' || (c == 'Sillas' && !vertical)
+                    ? pw.TextAlign.center
+                    : pw.TextAlign.left,
+              ),
+          ],
+        ),
+        for (var i = 0; i < renglones.length; i++)
+          if (renglones[i].esAdicional)
+            _filaAdicional(t, renglones[i], i, columnas: titulos.length)
+          else if (vertical)
+            _filaVertical(
+              t,
+              renglones[i].fila,
+              i,
+              interna,
+              al,
+              division: renglones[i].division,
+              mesaPrimero: true,
+            )
+          else
+            _fila(
+              t,
+              renglones[i].fila,
+              i,
+              interna,
+              al,
+              division: renglones[i].division,
+              mesaPrimero: true,
+            ),
+      ],
+    );
+  }
+
+  /// El renglón corto de una mesa adicional en la planilla por número de
+  /// mesa: el número y de quién es. Lo demás de la familia está en el renglón
+  /// de su mesa principal.
+  static pw.TableRow _filaAdicional(
+    PlanillaTema t,
+    RenglonPorMesa r,
+    int indice, {
+    required int columnas,
+  }) {
+    final f = r.fila;
+    final fondo = indice.isOdd ? t.filaAlterna : null;
+    pw.Widget celda(pw.Widget child, {pw.Alignment? alineacion}) =>
+        pw.Container(
+          alignment: alineacion ?? pw.Alignment.topLeft,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+          child: AltoLibre(child: child),
+        );
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.full,
+      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
+      children: [
+        celda(
+          pw.Text(
+            '${r.mesa}',
+            style: t.estilo(size: 12, negrita: true, color: t.textoSuave),
+          ),
+          alineacion: pw.Alignment.center,
+        ),
+        celda(
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Mesa adicional de ${f.egresado}', style: t.estilo()),
+              pw.Text(
+                '${r.division} · su principal es la '
+                '${f.numeroPrincipal ?? f.mesaPrincipal}',
+                style: t.estilo(
+                  size: PlanillaTema.secundario,
+                  color: t.textoSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (var i = 2; i < columnas; i++) pw.SizedBox(),
+      ],
+    );
+  }
+
   /// La celda de la mesa principal: el número grande y, al lado, en dos
   /// renglones chicos, cuántos tienen cena y cuántas generales.
   static pw.Widget _celdaMesa(PlanillaTema t, FilaPlanillaSorteo f) {
@@ -807,8 +986,10 @@ class PlanillaSorteoPdf {
     FilaPlanillaSorteo f,
     int indice,
     bool interna,
-    String al,
-  ) {
+    String al, {
+    String? division,
+    bool mesaPrimero = false,
+  }) {
     final fondo = f.sinMesa
         ? t.rojoSinMesa
         : indice.isOdd
@@ -835,11 +1016,24 @@ class PlanillaSorteoPdf {
       RepartoSillas.confirmado => _marca(t, 'Confirmado', t.verde),
     };
 
-    return pw.TableRow(
-      verticalAlignment: pw.TableCellVerticalAlignment.full,
-      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
-      children: [
-        celda(pw.Text(f.egresado, style: t.estilo(negrita: true))),
+    final celdas = <pw.Widget>[
+        celda(
+          division == null
+              ? pw.Text(f.egresado, style: t.estilo(negrita: true))
+              : pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(f.egresado, style: t.estilo(negrita: true)),
+                    pw.Text(
+                      division,
+                      style: t.estilo(
+                        size: PlanillaTema.secundario,
+                        color: t.textoSuave,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
         celda(
           f.acompanantes.isEmpty
               ? pw.Text(
@@ -900,7 +1094,13 @@ class PlanillaSorteoPdf {
                 ? pw.Text(f.observaciones, style: t.estilo())
                 : pw.Text('-', style: t.estilo(color: t.textoSuave)),
           ),
-      ],
+    ];
+    // En la planilla por número de mesa, la mesa va primero.
+    if (mesaPrimero) celdas.insert(0, celdas.removeAt(2));
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.full,
+      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
+      children: celdas,
     );
   }
 
@@ -912,8 +1112,10 @@ class PlanillaSorteoPdf {
     FilaPlanillaSorteo f,
     int indice,
     bool interna,
-    String al,
-  ) {
+    String al, {
+    String? division,
+    bool mesaPrimero = false,
+  }) {
     final fondo = f.sinMesa
         ? t.rojoSinMesa
         : indice.isOdd
@@ -935,15 +1137,13 @@ class PlanillaSorteoPdf {
 
     final chico = t.estilo(size: PlanillaTema.secundario, color: t.textoSuave);
 
-    return pw.TableRow(
-      verticalAlignment: pw.TableCellVerticalAlignment.full,
-      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
-      children: [
+    final celdas = <pw.Widget>[
         celda(
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(f.egresado, style: t.estilo(negrita: true)),
+              if (division != null) pw.Text(division, style: chico),
               if (f.acompanantes.isEmpty)
                 pw.Text('sin acompañantes cargados', style: chico)
               else
@@ -1012,7 +1212,13 @@ class PlanillaSorteoPdf {
                 ? pw.Text(f.observaciones, style: t.estilo())
                 : pw.Text('-', style: t.estilo(color: t.textoSuave)),
           ),
-      ],
+    ];
+    // En la planilla por número de mesa, la mesa va primero.
+    if (mesaPrimero) celdas.insert(0, celdas.removeAt(1));
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.full,
+      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
+      children: celdas,
     );
   }
 

@@ -133,6 +133,7 @@ class SalonEntero {
               ).rotuloEnPantalla,
         numeros: numeros,
         division: g.division,
+        principalAnotada: g.principal,
       ));
       for (final n in numeros) {
         familiaDeMesa.putIfAbsent(n, () => g);

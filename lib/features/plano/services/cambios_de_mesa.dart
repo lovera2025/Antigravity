@@ -199,8 +199,26 @@ class CambiosDeMesa {
     return (i < 0 ? nombre : nombre.substring(0, i)).trim();
   }
 
+  /// Sus números como están anotados: **la principal primero** (6.9.4,
+  /// `SalonMesas.principal`). Para lo sorteado es lo mismo que de menor a
+  /// mayor.
   static List<int> numerosDe(ContratoAlumno a) =>
-      MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).toList()..sort();
+      MesasExtraUtils.numerosEnOrdenDelTexto(a.numeroMesa);
+
+  /// Los números de una familia con [sale] cambiada por [entra].
+  ///
+  /// Si estaban de menor a mayor (todo lo sorteado), quedan de menor a mayor,
+  /// como siempre: una PC con la 6.9.3 los lee igual. Si no —el jefe le dio una
+  /// adicional con un número más chico que su principal, "107, 106" (6.9.4)—
+  /// la que entra toma el lugar de la que sale: si se mueve la principal, la
+  /// nueva sigue siendo la principal.
+  static List<int> reemplazar(List<int> viejas, int sale, int entra) {
+    final enSuLugar = [for (final n in viejas) n == sale ? entra : n];
+    for (var i = 1; i < viejas.length; i++) {
+      if (viejas[i] < viejas[i - 1]) return enSuLugar;
+    }
+    return enSuLugar..sort();
+  }
 
   static List<int> _numerosDeTexto(String? texto) =>
       MesasExtraUtils.numerosMesaDesdeTexto(texto).toList()..sort();
@@ -891,11 +909,7 @@ class CambiosDeMesa {
         '${para == null ? 'otra familia' : apellido(para)}.',
       );
     }
-    final nuevas = [
-      for (final n in viejas)
-        if (n != mesa) n,
-      aMesa,
-    ]..sort();
+    final nuevas = reemplazar(viejas, mesa, aMesa);
     return CambioDeMesas._(
       tipo: tipo,
       antes: {a.id: MesasExtraUtils.formatearAsignacionMesas(viejas)},
@@ -1039,16 +1053,8 @@ class CambiosDeMesa {
       );
     }
     final deB = numerosDe(b);
-    final nuevasA = [
-      for (final n in deA)
-        if (n != mesa) n,
-      otraMesa,
-    ]..sort();
-    final nuevasB = [
-      for (final n in deB)
-        if (n != otraMesa) n,
-      mesa,
-    ]..sort();
+    final nuevasA = reemplazar(deA, mesa, otraMesa);
+    final nuevasB = reemplazar(deB, otraMesa, mesa);
     final avisos = <String>[
       if (Divisiones.clave(a.cursoDivision) != Divisiones.clave(b.cursoDivision))
         'Son de divisiones distintas: ${_division(a)} y ${_division(b)}.',

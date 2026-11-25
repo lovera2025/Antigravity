@@ -62,6 +62,8 @@ void main() {
       '_ejecutarSorteoConPlano',
       '_deshacerSorteoMesas',
       '_restaurarSorteoAnterior',
+      // DAR MESA (6.9.4): el jefe le da la mesa a quien no pagó.
+      '_darMesa',
     });
   });
 

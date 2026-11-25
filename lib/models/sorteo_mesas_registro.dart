@@ -67,6 +67,12 @@ class SorteoMesasRegistro {
   /// "el último sorteo" para saber quién llegó después.
   final bool automatico;
 
+  /// La mesa se la dio el jefe con DAR MESA, en la grilla (6.9.4): a quien no
+  /// pagó, porque él lo decidió. Va con [automatico] en true, así no cuenta
+  /// como "el último sorteo" (quien pague después sigue recibiendo su mesa
+  /// sola), pero no fue el programa: lo dice el registro.
+  final bool delJefe;
+
   /// En un sorteo por cumplimiento con familias ya sentadas (6.7.1): a las
   /// que tenían mesa **las cambió de lugar**, no les sumó. [antes] dice dónde
   /// estaba cada una, y deshacer solo este renglón las devuelve ahí. Sin esta
@@ -107,6 +113,7 @@ class SorteoMesasRegistro {
     this.nuevas,
     this.alFinal,
     this.automatico = false,
+    this.delJefe = false,
     this.reacomodo = false,
     this.unaMesaPrimero = false,
     this.lugares,
@@ -125,6 +132,7 @@ class SorteoMesasRegistro {
   static const claveNuevas = '_nuevas';
   static const claveAlFinal = '_al_final';
   static const claveAutomatico = '_auto';
+  static const claveDelJefe = '_del_jefe';
   static const claveReacomodo = '_reacomodo';
   static const claveUnaMesaPrimero = '_una_primero';
   static const claveLugares = '_lugares';
@@ -175,6 +183,7 @@ class SorteoMesasRegistro {
     Map<String, String>? lugares;
     DateTime? lugaresEl;
     var automatico = false;
+    var delJefe = false;
     var reacomodo = false;
     var unaMesaPrimero = false;
     try {
@@ -196,6 +205,8 @@ class SorteoMesasRegistro {
             alFinal = _mapa(e.value);
           } else if (clave == claveAutomatico) {
             automatico = e.value == true || e.value == 1 || e.value == '1';
+          } else if (clave == claveDelJefe) {
+            delJefe = e.value == true || e.value == 1 || e.value == '1';
           } else if (clave == claveReacomodo) {
             reacomodo = e.value == true || e.value == 1 || e.value == '1';
           } else if (clave == claveUnaMesaPrimero) {
@@ -226,6 +237,7 @@ class SorteoMesasRegistro {
       nuevas: nuevas,
       alFinal: alFinal,
       automatico: automatico,
+      delJefe: delJefe,
       reacomodo: reacomodo,
       unaMesaPrimero: unaMesaPrimero,
       lugares: lugares,
@@ -253,6 +265,7 @@ class SorteoMesasRegistro {
         claveNuevas: ?nuevas,
         claveAlFinal: ?alFinal,
         if (automatico) claveAutomatico: 1,
+        if (delJefe) claveDelJefe: 1,
         if (reacomodo) claveReacomodo: 1,
         if (unaMesaPrimero) claveUnaMesaPrimero: 1,
         claveLugares: ?lugares,

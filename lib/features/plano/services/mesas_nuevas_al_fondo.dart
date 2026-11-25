@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
+import '../../../models/sorteo_mesas_registro.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/sorteo_mesas_motor.dart';
 import '../modelo/armado_salon.dart';
@@ -111,8 +112,48 @@ class MesasNuevasAlFondo {
     return r;
   }
 
+  /// Las mesas del fondo que quedaron vacías (6.9.4): las que se agregaron
+  /// como mesa nueva al fondo (la clave `_nuevas` de algún renglón de
+  /// [registros]) y hoy no son de nadie: ninguna familia la tiene anotada, no
+  /// está fijada ni es libre o reservada.
+  ///
+  /// Pasa cuando el jefe mueve a esa familia a otra mesa: la 106 de la Técnica
+  /// se la dio el programa a una familia el 11-nov-2026, el jefe la pasó a la
+  /// 51 el 16-nov y la 106 quedó vacía; a la siguiente el programa le dio la
+  /// 107. Un hueco del medio del salón no entra: ese lo acomoda el jefe.
+  static Set<int> vaciasDelFondo({
+    required ArmadoSalon armado,
+    required ConfigPlano config,
+    required Iterable<ContratoAlumno> alumnos,
+    required Iterable<SorteoMesasRegistro> registros,
+  }) {
+    final usados = <int>{
+      ...SorteoMesasMotor.ocupadas(alumnos),
+      ...config.fijadas.keys,
+      ...config.libres.keys,
+    };
+    return {
+      for (final r in registros)
+        for (final texto in (r.nuevas ?? const <String, String>{}).values)
+          for (final n in MesasExtraUtils.numerosMesaDesdeTexto(texto))
+            if (armado.existe(n) && !usados.contains(n)) n,
+    };
+  }
+
   /// Agrega al salón una mesa por cada una que falta, con el número que sigue
   /// al más alto, y la deja fijada para su familia.
+  ///
+  /// - **Antes, las [vacias] del fondo** (6.9.4, [vaciasDelFondo]): si hay
+  ///   una, la familia recibe esa en vez de una nueva, también fijada. Primero
+  ///   las familias que ya tienen mesa, cada una la vacía más cerca de las
+  ///   suyas (la 106, al lado de la 107); después las que no tienen ninguna,
+  ///   la de número más bajo. Así no queda una mesa vacía en el plano.
+  /// - Con [soloSiQuedaEnOrden] (la mesa que el programa da solo), una familia
+  ///   con mesa solo recibe una vacía con número más alto que todas las suyas:
+  ///   así sus números siguen de menor a mayor y una PC con la 6.9.3 los lee
+  ///   igual. DAR MESA, que es del jefe, no lo pide.
+  /// - Con [azar], el orden de las familias es al azar en vez del de llegada:
+  ///   lo usa DAR MESA A TODOS, que reparte las vacías entre varias a la vez.
   ///
   /// - **El orden es el de llegada** ([llegada], la hora del pago): quien llegó
   ///   primero recibe el número más bajo. Sin hora, al final y por nombre.
@@ -120,8 +161,8 @@ class MesasNuevasAlFondo {
   ///   derecho de la hoja del fondo (donde termina el salón); las siguientes,
   ///   al lado de la anterior. Nunca en el pasillo del medio. Las dos mesas de
   ///   una familia quedan juntas.
-  /// - **El número** nunca llena un hueco ni repite uno que ya se dio
-  ///   ([EditarArmado.proximoNumero]).
+  /// - **El número** de una mesa nueva nunca llena un hueco ni repite uno que
+  ///   ya se dio ([EditarArmado.proximoNumero]).
   /// - Ninguna otra mesa se mueve ni cambia de número.
   static PlanMesasNuevas planear({
     required ArmadoSalon armado,
@@ -129,6 +170,9 @@ class MesasNuevasAlFondo {
     required Iterable<ContratoAlumno> alumnos,
     required Iterable<PedidoSorteo> pedidos,
     Map<String, DateTime> llegada = const {},
+    Set<int> vacias = const {},
+    bool soloSiQuedaEnOrden = false,
+    math.Random? azar,
     String? por,
     DateTime? ahora,
   }) {
@@ -145,6 +189,8 @@ class MesasNuevasAlFondo {
         final porNombre = (nombres[a] ?? '').compareTo(nombres[b] ?? '');
         return porNombre != 0 ? porNombre : a.compareTo(b);
       });
+    if (azar != null) enOrden.shuffle(azar);
+    final actuales = {for (final p in pedidos) p.alumnoId: p.actuales};
 
     // Los números que ya son de alguien, estén o no en el plano.
     final usados = <int>{
@@ -158,9 +204,55 @@ class MesasNuevasAlFondo {
     var salon = armado;
     final fijadas = {...config.fijadas};
     final nuevas = <MesaNueva>[];
+    final libres = {
+      for (final n in vacias)
+        if (armado.existe(n) && !usados.contains(n)) n,
+    };
+    // Las vacías del fondo, antes que nada: primero a las familias que ya
+    // tienen mesa (la más cerca de las suyas), después a las que no tienen.
+    final deVacias = <String, List<int>>{};
+    void repartirVacias({required bool conMesa}) {
+      for (final id in enOrden) {
+        final suyas = actuales[id] ?? const <int>[];
+        if (suyas.isNotEmpty != conMesa) continue;
+        for (var i = 0; i < faltan[id]!; i++) {
+          final tope = suyas.isEmpty ? null : suyas.reduce(math.max);
+          final candidatas = {
+            for (final n in libres)
+              if (!soloSiQuedaEnOrden || tope == null || n > tope) n,
+          };
+          final vacia = _vaciaMasCerca(
+            armado,
+            candidatas,
+            [...suyas, ...?deVacias[id]],
+          );
+          if (vacia == null) break;
+          libres.remove(vacia);
+          deVacias.putIfAbsent(id, () => []).add(vacia);
+        }
+      }
+    }
+
+    repartirVacias(conMesa: true);
+    repartirVacias(conMesa: false);
+
     int? anterior;
     for (final id in enOrden) {
+      final vaciasSuyas = [...?deVacias[id]];
       for (var i = 0; i < faltan[id]!; i++) {
+        final vacia = vaciasSuyas.isEmpty ? null : vaciasSuyas.removeAt(0);
+        if (vacia != null) {
+          usados.add(vacia);
+          fijadas[vacia] = MesaFijada(
+            alumnoId: id,
+            motivo: motivo,
+            por: por,
+            cuando: ahora,
+          );
+          nuevas.add(MesaNueva(vacia, id));
+          anterior = vacia;
+          continue;
+        }
         final numero = EditarArmado.proximoNumero(salon, usados);
         final cerca = anterior ?? _referencia(salon, hoja, lugarM)?.numero;
         final lugar = EditarArmado.lugarLibre(
@@ -193,6 +285,34 @@ class MesasNuevasAlFondo {
       config: config.copyWith(fijadas: fijadas),
       mesas: nuevas,
     );
+  }
+
+  /// De [libres], la que le toca a una familia con estas mesas ([suyas]): la
+  /// más cerca de alguna de ellas, en la misma hoja; sin mesas (o ninguna en
+  /// esa hoja), la de número más bajo. Null si no queda ninguna.
+  static int? _vaciaMasCerca(
+    ArmadoSalon armado,
+    Set<int> libres,
+    List<int> suyas,
+  ) {
+    if (libres.isEmpty) return null;
+    final ordenadas = libres.toList()..sort();
+    int? mejor;
+    var mejorDistancia = double.infinity;
+    for (final n in ordenadas) {
+      final m = armado.mesa(n);
+      if (m == null) continue;
+      for (final s in suyas) {
+        final o = armado.mesa(s);
+        if (o == null || o.hoja != m.hoja) continue;
+        final d = math.sqrt(math.pow(m.x - o.x, 2) + math.pow(m.y - o.y, 2));
+        if (d < mejorDistancia) {
+          mejorDistancia = d;
+          mejor = n;
+        }
+      }
+    }
+    return mejor ?? ordenadas.first;
   }
 
   /// La hoja donde termina el salón: la última que tiene mesas comunes (en un

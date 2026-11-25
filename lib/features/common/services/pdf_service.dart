@@ -4427,6 +4427,7 @@ class PdfService {
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     bool vertical = false,
+    OrdenPlanillaSorteo orden = OrdenPlanillaSorteo.alfabetico,
     DateTime? generada,
     FotoDeLosLugares? foto,
     double descuentoPct = 50,
@@ -4436,6 +4437,7 @@ class PdfService {
       foto: foto,
       descuentoPct: descuentoPct,
       vertical: vertical,
+      orden: orden,
       evento: evento,
       alumnos: alumnos,
       pagos: pagos,
@@ -4565,6 +4567,9 @@ class PdfService {
     /// La hoja parada en vez de acostada (`PlanillaSorteoPdf`).
     bool vertical = false,
 
+    /// Por apellido y división (como siempre) o de la mesa 1 a la última.
+    OrdenPlanillaSorteo orden = OrdenPlanillaSorteo.alfabetico,
+
     /// Lo que cada familia tenía al sorteo, y el descuento de PRECIOS: las
     /// entradas que se compran aparte, con y sin descuento.
     FotoDeLosLugares? foto,
@@ -4586,6 +4591,7 @@ class PdfService {
       version: version,
       blancoYNegro: blancoYNegro,
       vertical: vertical,
+      orden: orden,
     );
 
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
@@ -4595,6 +4601,7 @@ class PdfService {
     final sufijo =
         version == VersionPlanillaSorteo.interna ? 'interna' : 'para_repartir';
     final nombre = 'Planilla_Sorteo_${safeName}_$sufijo'
+        '${orden == OrdenPlanillaSorteo.porMesa ? '_por_mesa' : ''}'
         '${soloUltimos ? '_ultimos' : ''}${blancoYNegro ? '_BN' : ''}.pdf';
 
     if (!kIsWeb && Platform.isWindows) {

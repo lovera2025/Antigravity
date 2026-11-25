@@ -173,6 +173,7 @@ class PlanoDeLaFiesta {
       numeros: MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).toList()
         ..sort(),
       division: a.cursoDivision,
+      principalAnotada: SalonMesas.principal(a),
       sillasExtraPorMesa: {
         for (final (mesa, sillas)
             in SalonMesas.repartoSillas(a, sillasPrincipal: vigente?.principal))

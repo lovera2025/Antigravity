@@ -222,7 +222,14 @@ class _Contratos extends ContratosRepository {
     alumnos = [
       for (final a in alumnos)
         numeroPorContrato.containsKey(a.id)
-            ? a.copyWith(numeroMesa: numeroPorContrato[a.id] ?? '')
+            // Como la base de verdad: la principal queda primera.
+            ? a.copyWith(
+                numeroMesa: MesasExtraUtils.conLaPrincipalDeAntes(
+                      a.numeroMesa,
+                      numeroPorContrato[a.id],
+                    ) ??
+                    '',
+              )
             : a,
     ];
     if (movimiento != null) movimientos.add(movimiento);

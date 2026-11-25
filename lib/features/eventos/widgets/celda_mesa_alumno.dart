@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/silla_puerta.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../common/utils/solo_jefe.dart';
 import '../../recepcion/services/sillas_de_la_puerta.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../services/pago_para_sorteo.dart';
@@ -54,6 +55,16 @@ class CeldaMesaAlumno extends StatelessWidget {
   /// vigentes y quitadas. No cambian la cuenta: las cobra la barra.
   final List<SillaPuerta> sillasDeLaPuerta;
 
+  /// La fiesta ya se sorteó: quien sigue sin mesa dice "Sin mesa" en vez de
+  /// lo que le corresponde (6.9.4).
+  final bool sorteoHecho;
+
+  /// Le falta alguna mesa y se le puede dar con DAR MESA (6.9.4): va el
+  /// botón. [onDarMesa] null es sin modo jefe: el botón se ve apagado, con el
+  /// motivo.
+  final bool darMesa;
+  final VoidCallback? onDarMesa;
+
   const CeldaMesaAlumno({
     super.key,
     required this.alumno,
@@ -66,6 +77,9 @@ class CeldaMesaAlumno extends StatelessWidget {
     this.ocultarMontos = false,
     this.avisos = const [],
     this.sillasDeLaPuerta = const [],
+    this.sorteoHecho = false,
+    this.darMesa = false,
+    this.onDarMesa,
   });
 
   static String _plural(int n, String uno, String varios) =>
@@ -127,8 +141,10 @@ class CeldaMesaAlumno extends StatelessWidget {
     final chico = compacto ? 10.0 : 11.0;
     final baja = alumno.esBajaTemporal;
     // Antes del sorteo, la celda dice lo que le corresponde. A los de baja no
-    // se les reserva nada: quedan con el guion de siempre.
-    final antesDelSorteo = !tieneMesa && !baja;
+    // se les reserva nada: quedan con el guion de siempre. Con el sorteo hecho,
+    // quien no tiene mesa dice "Sin mesa" (6.9.4).
+    final sinMesaYaSorteado = !tieneMesa && !baja && sorteoHecho;
+    final antesDelSorteo = !tieneMesa && !baja && !sorteoHecho;
 
     final estado = RepartoDeSillas.estado(alumno, reparto);
     final vigente = RepartoDeSillas.vigente(alumno, reparto);
@@ -241,6 +257,18 @@ class CeldaMesaAlumno extends StatelessWidget {
         children: [
           if (antesDelSorteo)
             ..._renglonesAntesDelSorteo(chico)
+          else if (sinMesaYaSorteado)
+            Text(
+              e != null && !e.pagoBase ? 'Sin mesa · no pagó' : 'Sin mesa',
+              key: const Key('sin_mesa_ya_sorteado'),
+              style: TextStyle(
+                fontSize: compacto ? 11 : 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.orange.shade800,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            )
           else if (verEnPlano != null)
             InkWell(
               key: const Key('ver_en_plano'),
@@ -282,6 +310,7 @@ class CeldaMesaAlumno extends StatelessWidget {
               maxLines: 1,
             ),
           ?renglonSillas,
+          if (darMesa) _botonDarMesa(chico),
           if (enLaPuerta > 0)
             Text(
               '+$enLaPuerta en la puerta',
@@ -296,6 +325,32 @@ class CeldaMesaAlumno extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  /// DAR MESA (6.9.4): un toque y el número aparece. Sin modo jefe se ve
+  /// apagado y dice por qué.
+  Widget _botonDarMesa(double chico) {
+    final boton = TextButton.icon(
+      key: const Key('dar_mesa'),
+      onPressed: onDarMesa,
+      icon: Icon(Icons.lock_open_rounded, size: chico + 3),
+      label: Text(
+        'DAR MESA',
+        style: TextStyle(fontSize: chico, fontWeight: FontWeight.w900),
+      ),
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.indigo,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        minimumSize: const Size(0, 22),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+    if (onDarMesa != null) return boton;
+    return Tooltip(
+      message: '$kSoloEnModoJefe: la mesa la da el jefe.',
+      child: boton,
     );
   }
 
