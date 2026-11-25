@@ -220,7 +220,7 @@ const notas = {
     `<b>El jefe le da el permiso en OPERADORES</b>, como a la encargada: en Barra, una opción más, <b>Repositor</b>. El repositor no vende ni cierra cajas: solo anota el stock. Sin SQL para el permiso.`,
     `<b>¿Dónde trabaja el repositor?</b> Dos formas, lado a lado. Con <b>una tablet</b> (la app, como las cajeras) o con <b>su celular</b> por el wifi, como la encargada (escanea el QR de la notebook). Elegí la que prefieras en "Para decidir".`,
     `<b>El stock de cada barra</b>: lo que le diste, lo que vendió, lo que faltó y lo que le queda. En ámbar, lo que está por terminarse (el aviso que pone el jefe en PRECIOS). En DEPÓSITO, lo que cargó el jefe menos lo que ya se llevó a las barras. <b>Con las barras unidas se ven las dos; si cada barra está sola, cada una sabe lo suyo</b> y el depósito se completa cuando se juntan (o con internet).`,
-    `<b>REPONER</b>: qué producto, cuánto, a qué barra y una nota si quiere. Al guardar, esa barra lo tiene enseguida y le sale del depósito. <b>Solo se agregan renglones</b>: nada se borra ni se pisa. Si se equivocó, anota otro movimiento con la corrección.`,
+    `<b>REPONER</b>: qué producto, cuánto, a qué barra y una nota si quiere. Arriba ve <b>lo que cargó el jefe al principio</b> y lo que queda en el depósito. Abajo <b>deja dicho cuántas quedan en la barra</b> después de reponer: viene la cuenta del programa y, si contó otra cosa, la corrige (la diferencia queda anotada). Al guardar, a las cajeras de esa barra y a la encargada les sale el cartel <b>"Se repusieron…"</b>. <b>Solo se agregan renglones</b>: nada se borra ni se pisa.`,
     `<b>FALTANTE</b>: lo que falta y no es una venta. Qué producto, cuántas, el motivo (rota, congelada, vencida, se perdió u otro) y una nota. Ejemplo que me diste: "hubo tantas cervezas y faltan dos porque se congelaron". Queda escrito con su hora y quién lo anotó.`,
     `<b>Lo que ven los demás.</b> La cajera ve en VENDER lo que le queda <b>a su barra</b> (avisa, no frena). La encargada ve el stock de las barras pero <b>ya no toca nada</b>. El jefe, al final de la noche, ve y puede imprimir el resumen por producto: lo del depósito, lo repuesto a cada barra, lo vendido, los faltantes y lo que quedó.`,
     null,
@@ -404,9 +404,11 @@ function contenidoStock(conMarco){
   let cuerpo;
   if (tabBarra==='dep'){
     const dep = p => deposito[p] - stock.b1[p].dio - stock.b2[p].dio;
-    cuerpo = unidas ? productos.map(p => `<div class="prod"><span class="nom">${p}</span><span class="quedan">Quedan ${dep(p)}</span>
-      <span class="det">El jefe cargó ${deposito[p]} · a la Barra 1 ${stock.b1[p].dio} · a la Barra 2 ${stock.b2[p].dio}</span></div>`).join('')
-      : `<div class="franja ambar">La Barra 2 está en otro wifi: el depósito se completa cuando las barras se juntan o con internet. Acá: lo que salió para la Barra 1.</div>`;
+    cuerpo = (unidas ? productos.map(p => `<div class="prod"><span class="nom">${p}</span><span class="quedan">Quedan ${dep(p)}</span>
+      <span class="det">El jefe cargó <b style="color:var(--texto)">${deposito[p]}</b> al principio · a la Barra 1 ${stock.b1[p].dio} · a la Barra 2 ${stock.b2[p].dio}</span></div>`).join('')
+      : `<div class="franja ambar">La Barra 2 está en otro wifi: el depósito se completa cuando las barras se juntan o con internet. Acá: lo que salió para la Barra 1.</div>`)
+      + `<div class="nuevo" style="margin-top:8px;padding:4px;display:grid;gap:4px"><button class="b linea chico" style="justify-self:start">ANOTAR LO QUE HAY EN EL DEPÓSITO</button>
+         <span class="gris chica">Si lo contaste o te acordás cuánto había: se anota al lado de la cuenta, con la diferencia y tu nota. La cuenta no se pisa.</span></div>`;
   } else {
     cuerpo = productos.map(p => filaStock(tabBarra, p)).join('');
   }
@@ -445,17 +447,27 @@ function pantallaReponer(){
   const chipsProd = productos.map(p => `<button class="chip ${rep.prod===p?'on':''}" data-rprod="${p}">${p}</button>`).join('');
   const barra = b => `<button class="chip ${rep.barra===b?'on':''}" data-rbarra="${b}">${nombreBarra[b]}</button>`;
   const s = stock[rep.barra][rep.prod]; const q = s.dio - s.vendio - s.falto;
+  const enDep = deposito[rep.prod] - stock.b1[rep.prod].dio - stock.b2[rep.prod].dio;
+  const quedaria = q + rep.cant;
+  const contadas = rep.contadas ?? quedaria;
+  const dif = contadas - quedaria;
   return `<div class="lado"><div class="app tablet">
     <div class="barraApp"><span class="tit">REPONER</span></div>
     <div class="dialogo nuevo">
       <div class="campo"><label>QUÉ</label><div class="chips">${chipsProd}</div></div>
+      <div class="franja celeste">${rep.prod}: el jefe cargó <b>${deposito[rep.prod]}</b> al principio · en el depósito quedan <b>${enDep - rep.cant}</b> después de esto</div>
       <div class="campo"><label>CUÁNTO</label><div class="cant">
         <button class="b" id="menos">−</button><span class="num">${rep.cant}</span><button class="b" id="mas">＋</button>
         <div class="chips">${[6,12,24].map(n=>`<button class="chip" data-rsuma="${n}">+${n}</button>`).join('')}</div></div></div>
       <div class="campo"><label>A QUÉ BARRA</label><div class="chips">${barra('b1')}${barra('b2')}</div></div>
       <div class="campo"><label>NOTA (SI QUERÉS)</label><input class="caja-txt" placeholder="Ej.: de la heladera del fondo" value="${rep.nota}" id="rnota"></div>
-      <div class="franja celeste">${nombreBarra[rep.barra]} pasa de ${q} a <b>${q + rep.cant}</b> ${rep.prod}.</div>
+      <div class="campo"><label>¿CUÁNTAS QUEDAN AHORA EN LA ${nombreBarra[rep.barra].toUpperCase()}?</label>
+        <div class="cant"><button class="b" id="cmenos">−</button><span class="num">${contadas}</span><button class="b" id="cmas">＋</button>
+        <span class="gris chica">La cuenta da ${quedaria} (tenía ${q} + ${rep.cant})</span></div>
+        ${dif!==0 ? `<span class="franja ambar">Contaste ${dif>0?dif+' más':(-dif)+' menos'} de lo que da la cuenta: la diferencia queda anotada con esta reposición.</span>` : ''}
+      </div>
       <button class="b dorado ancho">GUARDAR</button>
+      <span class="gris chica">Al guardar, a las cajeras de la ${nombreBarra[rep.barra]} y a la encargada les sale: "Se repusieron ${rep.cant} ${rep.prod} · quedan ${contadas}".</span>
     </div></div></div>`;
 }
 
@@ -487,9 +499,18 @@ function pantallaLoQueVen(){
     <div><div class="etiqueta">LA CAJERA EN VENDER (BARRA 1)</div>
       <div class="app tablet">
         <div class="barraApp"><span class="tit">VENDER · Caja 1</span><span class="gris chica">Romi · Barra 1</span></div>
+        <div class="franja celeste nuevo" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>🔄 <b>Se repusieron 12 Cerveza lata</b> en tu barra · quedan 21 · Nico, 01:42</span><button class="b chico">OK</button></div>
         <div class="vender">${productos.map(p => { const s=stock.b1[p]; const q=s.dio-s.vendio-s.falto; return `<div class="vprod"><b>${p}</b><small class="${q<=aviso?'':'gris'}" style="${q<=aviso?'color:var(--ambar)':''}">Quedan ${q} en tu barra</small></div>`; }).join('')}</div>
-        <span class="gris chica nuevo" style="padding:4px">"Quedan" es lo de <b>su</b> barra. Avisa, no frena: si se terminó y el repositor todavía no lo anotó, puede VENDER IGUAL.</span>
+        <span class="gris chica nuevo" style="padding:4px">"Quedan" es lo de <b>su</b> barra. Avisa, no frena: si se terminó y el repositor todavía no lo anotó, puede VENDER IGUAL. El cartel de la reposición es solo para que sepa: no frena la venta, se va con OK o a los 20 segundos.</span>
       </div></div>
+    <div><div class="etiqueta">LA ENCARGADA EN EL IPHONE</div>
+      ${tel(`${encabezadoEnc()}
+        <div class="franja celeste nuevo">🔄 <b>Se repusieron 12 Cerveza lata</b> en la Barra 1 · quedan 21 · Nico, 01:42</div>
+        <div class="card"><b>STOCK DE LAS BARRAS</b><span class="gris chica">Solo para mirar: lo anota el repositor.</span>
+          ${productos.slice(0,3).map(p => { const s=stock.b1[p]; const q=s.dio-s.vendio-s.falto + (p==='Cerveza lata'?12:0); return `<div class="r chica"><span>${p} · Barra 1</span><b>${q}</b></div>`; }).join('')}
+          ${productos.slice(0,3).map(p => { const s=stock.b2[p]; const q=s.dio-s.vendio-s.falto; return `<div class="r chica"><span>${p} · Barra 2</span><b>${q}</b></div>`; }).join('')}
+        </div>`)}</div>
     <div style="flex:1;min-width:300px"><div class="etiqueta">EL JEFE AL FINAL DE LA NOCHE (CAJAS → STOCK DE LA NOCHE)</div>
       <div class="app pc" style="min-height:0">
         <div class="barraApp"><span class="tit">STOCK DE LA NOCHE</span><button class="b chico linea">IMPRIMIR</button></div>
@@ -515,7 +536,8 @@ function pantallaDecidirRep(){
     <b>Lo que te pregunto del repositor</b>
     <ol>
       <li><b>¿Con tablet (A) o con su celular por el wifi (B)?</b> Con tablet puede imprimir; con el celular no necesita una tablet.</li>
-      <li><b>¿El stock arranca en cero en cada barra</b> y el repositor anota lo que le lleva al principio (como en el ejemplo: "lo de arranque")? Lo que cargás en PRECIOS pasa a ser el depósito.</li>
+      <li><b>¿El stock arranca en cero en cada barra</b> y el repositor anota lo que le lleva al principio (como en el ejemplo: "lo de arranque")? Lo que carga el jefe en PRECIOS es el depósito, y el repositor lo ve.</li>
+      <li><b>Al reponer, ¿está bien que confirme cuántas quedan en la barra</b> (viene la cuenta y la corrige si contó otra cosa, con la diferencia anotada)?</li>
       <li><b>Los motivos del faltante:</b> Rota · Congelada · Vencida · Se perdió · Otro. ¿Falta alguno?</li>
       <li><b>Si una barra se queda sin algo</b>, ¿la cajera sigue pudiendo VENDER IGUAL (como hoy) o la frenamos?</li>
       <li><b>¿El repositor puede pasar stock de una barra a otra</b> (por ejemplo, 6 cervezas de la Barra 2 a la Barra 1), o siempre va del depósito a una barra?</li>
@@ -565,11 +587,14 @@ function dibujar(){
     else if (paso === 1){ p.innerHTML = pantallaDonde(); enlazarStock(); }
     else if (paso === 2){ p.innerHTML = dialogo==='movs' ? pantallaMovs() : pantallaStock(); enlazarRed(); enlazarStock(); }
     else if (paso === 3){ p.innerHTML = pantallaReponer();
-      document.querySelectorAll('[data-rprod]').forEach(b => b.onclick = () => { rep.prod = b.dataset.rprod; dibujar(); });
-      document.querySelectorAll('[data-rbarra]').forEach(b => b.onclick = () => { rep.barra = b.dataset.rbarra; dibujar(); });
-      document.querySelectorAll('[data-rsuma]').forEach(b => b.onclick = () => { rep.cant += +b.dataset.rsuma; dibujar(); });
-      $('#mas').onclick = () => { rep.cant++; dibujar(); };
-      $('#menos').onclick = () => { rep.cant = Math.max(1, rep.cant-1); dibujar(); };
+      document.querySelectorAll('[data-rprod]').forEach(b => b.onclick = () => { rep.prod = b.dataset.rprod; rep.contadas = undefined; dibujar(); });
+      document.querySelectorAll('[data-rbarra]').forEach(b => b.onclick = () => { rep.barra = b.dataset.rbarra; rep.contadas = undefined; dibujar(); });
+      document.querySelectorAll('[data-rsuma]').forEach(b => b.onclick = () => { rep.cant += +b.dataset.rsuma; rep.contadas = undefined; dibujar(); });
+      $('#mas').onclick = () => { rep.cant++; rep.contadas = undefined; dibujar(); };
+      $('#menos').onclick = () => { rep.cant = Math.max(1, rep.cant-1); rep.contadas = undefined; dibujar(); };
+      const base = () => { const s = stock[rep.barra][rep.prod]; return s.dio - s.vendio - s.falto + rep.cant; };
+      $('#cmas').onclick = () => { rep.contadas = (rep.contadas ?? base()) + 1; dibujar(); };
+      $('#cmenos').onclick = () => { rep.contadas = Math.max(0, (rep.contadas ?? base()) - 1); dibujar(); };
       $('#rnota').oninput = e => { rep.nota = e.target.value; }; }
     else if (paso === 4){ p.innerHTML = pantallaFaltante();
       document.querySelectorAll('[data-fprod]').forEach(b => b.onclick = () => { fal.prod = b.dataset.fprod; dibujar(); });
