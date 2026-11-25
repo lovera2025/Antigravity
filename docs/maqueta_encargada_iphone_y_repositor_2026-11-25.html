@@ -1,0 +1,586 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Encargada y repositor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+  --app:#0f0e12; --card:#17161a; --borde:#2a2830; --gris:#a7a29a; --texto:#f2efe8; --dorado:#d4af37;
+  --verde:#59d38a; --rojo:#ff8f82; --ambar:#f2b84b; --efectivo:#00b894; --transf:#9d97ff; --celeste:#7cc7ff;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;padding:18px 16px 48px}
+h1{font-weight:700;font-size:26px;margin:0;text-wrap:balance}
+h2{font-weight:700;font-size:19px;margin:6px 0 0}
+p{margin:0}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:16px}
+.sub{color:var(--tinta2);font-size:14.5px;max-width:900px}
+.aviso{border:1.5px dashed var(--primario);border-radius:12px;padding:8px 12px;font-size:14px;color:var(--tinta2);justify-self:start}
+.aviso b{color:var(--tinta)}
+.recorridos{display:flex;gap:8px;flex-wrap:wrap}
+.rec{background:var(--panel);border:1.5px solid var(--linea);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;color:var(--tinta);cursor:pointer}
+.rec.activo{border-color:var(--primario);background:var(--primario-suave)}
+.pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.paso{background:var(--panel);border:1.5px solid var(--linea);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;color:var(--tinta);font:inherit;display:grid;gap:2px}
+.paso .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primario);color:#fff;font-size:12px;font-weight:700}
+.paso b{font-size:14.5px}
+.paso small{color:var(--tinta2);font-size:12.5px}
+.paso.activo{border-color:var(--primario);background:var(--primario-suave)}
+.paso:focus-visible,.b:focus-visible,.rec:focus-visible,.seg button:focus-visible{outline:3px solid var(--primario);outline-offset:2px}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;font-size:14.5px;display:block}
+.nota .donde{display:block;margin-top:6px}
+.nota b{color:var(--tinta)}
+.nota ul{margin:0;padding-left:20px;display:grid;gap:3px}
+.donde{font-size:13px;color:var(--tinta2)}
+.decidir{border:2px solid var(--primario);border-radius:14px;padding:12px 14px;background:var(--panel);display:grid;gap:6px}
+.decidir ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.lado{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+.etiqueta{font-size:12.5px;font-weight:800;letter-spacing:.08em;color:var(--tinta2);margin-bottom:6px}
+
+/* la app */
+.app{background:var(--app);color:var(--texto);border-radius:20px;border:1px solid var(--borde);padding:16px;display:grid;gap:14px;align-content:start;overflow:hidden}
+.app.pc{flex:1;min-width:300px;max-width:900px;min-height:380px}
+.app.tablet{width:560px;max-width:100%;min-height:420px}
+.tel{width:375px;max-width:100%;background:#000;border-radius:38px;padding:12px;border:1px solid #333;flex:none}
+.tel .app{border-radius:28px;min-height:680px;padding:14px 14px 20px;gap:12px}
+.isla{font-size:11px;color:#8b867d;text-align:center;letter-spacing:.04em}
+.barraApp{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.barraApp .tit{font-weight:800;letter-spacing:.06em;font-size:16px;flex:1;min-width:0}
+.b{border:1.5px solid var(--borde);background:transparent;color:var(--texto);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:.04em}
+.b.dorado{background:var(--dorado);border-color:var(--dorado);color:#16130a}
+.b.linea{border-color:var(--dorado);color:var(--dorado)}
+.b.rojo{border-color:var(--rojo);color:var(--rojo)}
+.b.chico{padding:5px 12px;font-size:12.5px}
+.b.ancho{width:100%;padding:12px 16px}
+.b[disabled]{opacity:.4;cursor:not-allowed}
+.gris{color:var(--gris)}
+.chica{font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--borde);border-radius:18px;padding:12px 14px;display:grid;gap:6px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--card);border:1px solid var(--borde);border-radius:14px;padding:8px 12px}
+.kpi .t{font-size:10.5px;letter-spacing:.08em;font-weight:700;color:var(--gris)}
+.kpi .v{font-size:19px;font-weight:800}
+.kpi .s{font-size:11.5px;color:var(--gris)}
+.caja{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:10px 12px;display:grid;gap:2px}
+.caja h4{margin:0;font-size:16px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.pill.ab{background:rgba(89,211,138,.15);color:var(--verde)}
+.pill.ce{background:#2a2830;color:#c9c4ba}
+.pill.pide{background:rgba(212,175,55,.22);color:var(--dorado)}
+.r{display:flex;justify-content:space-between;gap:8px}
+.r span:first-child{color:var(--gris)}
+.r b{font-weight:700}
+.nuevo{outline:2px dashed var(--dorado);outline-offset:3px;border-radius:8px}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#16130a;background:var(--dorado);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.franja{border-radius:12px;padding:8px 12px;font-size:13px;font-weight:600}
+.franja.ok{background:rgba(89,211,138,.12);color:var(--verde)}
+.franja.ambar{background:rgba(242,184,75,.14);color:var(--ambar)}
+.franja.celeste{background:rgba(124,199,255,.12);color:var(--celeste)}
+.pedido{border:2px solid var(--dorado);border-radius:16px;padding:12px;display:grid;gap:8px;background:#1b1912}
+.grupo{font-size:11px;letter-spacing:.12em;font-weight:800;color:var(--dorado);margin-top:4px}
+.seg{display:inline-flex;border:1.5px solid rgba(212,175,55,.45);border-radius:999px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--gris);font:inherit;font-weight:800;font-size:12px;letter-spacing:.06em;padding:8px 14px;cursor:pointer}
+.seg button+button{border-left:1.5px solid rgba(212,175,55,.45)}
+.seg button.on{background:rgba(212,175,55,.2);color:var(--dorado)}
+.qr{width:170px;height:170px;background:
+  repeating-linear-gradient(90deg,#fff 0 9px,#000 9px 18px),repeating-linear-gradient(0deg,#fff 0 9px,#000 9px 18px);
+  background-blend-mode:difference;border:10px solid #fff;border-radius:8px}
+.pin{display:grid;justify-items:center;gap:12px;padding:14px 0}
+.puntos{display:flex;gap:12px}
+.puntos i{width:15px;height:15px;border-radius:50%;background:var(--dorado);display:block}
+.puntos i.v{background:transparent;border:2px solid var(--dorado)}
+.teclas{display:grid;grid-template-columns:repeat(3,64px);gap:10px}
+.teclas span{display:grid;place-items:center;height:52px;border-radius:50%;background:#1d1c21;font-size:20px;font-weight:700}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{font-size:10.5px;letter-spacing:.06em;color:var(--gris);font-weight:800;text-align:right;padding:6px 6px;border-bottom:1px solid var(--borde);white-space:nowrap}
+.tabla th:first-child,.tabla td:first-child{text-align:left}
+.tabla td{padding:8px 6px;border-bottom:1px solid var(--borde);text-align:right;white-space:nowrap}
+.tabla tr.total td{font-weight:800;border-bottom:0;border-top:2px solid rgba(212,175,55,.45)}
+.scrollx{overflow-x:auto}
+.prod{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--borde);align-items:center}
+.prod:last-child{border-bottom:0}
+.prod .nom{font-weight:800}
+.prod .det{font-size:12.5px;color:var(--gris);grid-column:1/-1}
+.quedan{font-weight:800;font-size:15px}
+.quedan.poco{color:var(--ambar)}
+.dialogo{background:#1d1c21;border:2px solid var(--dorado);border-radius:16px;padding:14px;display:grid;gap:10px}
+.campo{display:grid;gap:4px}
+.campo label{font-size:11px;letter-spacing:.08em;font-weight:800;color:var(--gris)}
+.caja-txt{font:inherit;font-size:15px;padding:9px 11px;border:1.5px solid var(--borde);border-radius:10px;background:#0f0e12;color:var(--texto);width:100%}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1.5px solid var(--borde);border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer;background:transparent;color:var(--texto);font-family:inherit}
+.chip.on{border-color:var(--dorado);color:var(--dorado);background:rgba(212,175,55,.12)}
+.cant{display:flex;align-items:center;gap:10px}
+.cant .num{font-size:30px;font-weight:800;min-width:60px;text-align:center}
+.mov{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:9px 0;border-bottom:1px solid var(--borde);font-size:13.5px}
+.mov:last-child{border-bottom:0}
+.mov .h{color:var(--gris);font-weight:700}
+.mov .x{font-weight:800}
+.mov .x.mas{color:var(--verde)}
+.mov .x.menos{color:var(--rojo)}
+.mov .n{grid-column:2/-1;color:var(--gris);font-size:12.5px}
+.vender{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vprod{background:var(--card);border:1px solid var(--borde);border-radius:14px;padding:10px;display:grid;gap:2px}
+.vprod b{font-size:14px}
+.vprod small{font-size:12px}
+</style></head><body>
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>La encargada en el iPhone y el repositor de la barra</h1>
+    <p class="sub">Maqueta con datos inventados, para ver antes de programar. La noche de la Técnica (4-dic) <b>no hay internet</b>: todo va por el wifi de cada barra. Lo marcado con línea punteada dorada y la etiqueta NUEVO es lo que se agrega.</p>
+    <p class="aviso"><b>Son dos recorridos, en el orden de la noche.</b> Elegí uno, tocá cada paso y adentro tocá los botones. Al final de cada recorrido hay preguntas para que me contestes.</p>
+  </header>
+
+  <div class="recorridos" id="recorridos"></div>
+  <nav class="pasos" id="pasos"></nav>
+  <div class="nota" id="nota"></div>
+  <section id="pantalla"></section>
+</div>
+
+<script>
+const $ = (s, el=document) => el.querySelector(s);
+const pesos = n => '$' + Math.round(n).toLocaleString('es-AR');
+
+// ── Estado de la maqueta ────────────────────────────────────────────────────
+let recorrido = 'enc';   // 'enc' | 'rep'
+let paso = 0;
+let unidas = true;       // las dos barras en una sola red
+let pedidoResuelto = null; // null | 'ok' | 'recontar'
+let volvio = false;      // el iPhone se bloqueó y volvió
+let sonido = false;
+let dispositivo = 'tablet'; // repositor: 'tablet' | 'celular'
+let tabBarra = 'b1';     // 'b1' | 'b2' | 'dep'
+let dialogo = null;      // null | 'reponer' | 'faltante'
+let rep = { prod:'Cerveza lata', cant:12, barra:'b1', nota:'' };
+let fal = { prod:'Cerveza lata', cant:2, motivo:'Congelada', nota:'' };
+let permisoBarra = 'repositor';
+
+// ── Datos inventados ────────────────────────────────────────────────────────
+const cajas = {
+  b1: [
+    { n:1, quien:'Romi',  estado:'ab', desde:'18:10', ventas:63, ef:402000, tr:188500 },
+    { n:2, quien:'Juli',  estado:'pide', desde:'18:25', ventas:47, ef:312000, tr:148500, cambio:20000, contado:331500, trVentas:19, anuladas:1 },
+  ],
+  b2: [
+    { n:4, quien:'Marta', estado:'ab', desde:'18:40', ventas:52, ef:356000, tr:161000 },
+    { n:5, quien:'Lu',    estado:'ab', desde:'19:05', ventas:38, ef:241500, tr:120000 },
+  ],
+};
+const productos = ['Cerveza lata','Fernet con Coca','Vodka trago','Speed','Agua'];
+const deposito = { 'Cerveza lata':240, 'Fernet con Coca':150, 'Vodka trago':120, 'Speed':96, 'Agua':96 };
+const stock = {
+  b1: { 'Cerveza lata':{dio:72,vendio:61,falto:2}, 'Fernet con Coca':{dio:48,vendio:40,falto:0}, 'Vodka trago':{dio:36,vendio:30,falto:1}, 'Speed':{dio:24,vendio:12,falto:0}, 'Agua':{dio:24,vendio:9,falto:0} },
+  b2: { 'Cerveza lata':{dio:60,vendio:38,falto:0}, 'Fernet con Coca':{dio:40,vendio:31,falto:0}, 'Vodka trago':{dio:30,vendio:18,falto:0}, 'Speed':{dio:24,vendio:20,falto:0}, 'Agua':{dio:24,vendio:6,falto:0} },
+};
+const aviso = 10;
+const nombreBarra = { b1:'Barra 1', b2:'Barra 2' };
+const movimientos = [
+  { h:'01:42', quien:'Nico', x:'+12', clase:'mas', que:'Cerveza lata → Barra 1', n:'Se las llevé de la heladera del fondo.' },
+  { h:'01:15', quien:'Nico', x:'−2', clase:'menos', que:'Cerveza lata · Barra 1 · Congelada', n:'Quedaron en el freezer, explotaron.' },
+  { h:'00:30', quien:'Nico', x:'+24', clase:'mas', que:'Speed → Barra 2', n:'' },
+  { h:'23:50', quien:'Nico', x:'−1', clase:'menos', que:'Vodka trago · Barra 1 · Rota', n:'Se cayó la botella al servir.' },
+  { h:'18:00', quien:'Nico', x:'+60', clase:'mas', que:'Cerveza lata → Barra 2', n:'Lo de arranque.' },
+  { h:'17:55', quien:'Nico', x:'+60', clase:'mas', que:'Cerveza lata → Barra 1', n:'Lo de arranque.' },
+];
+
+// ── Los pasos ───────────────────────────────────────────────────────────────
+const recorridos = {
+  enc: { nombre:'La encargada en el iPhone', pasos:[
+    { t:'En la notebook', s:'El QR para su iPhone' },
+    { t:'Entra con su PIN', s:'Desde el iPhone, sin internet' },
+    { t:'Las cajas de la noche', s:'Las dos barras o la suya' },
+    { t:'Un pedido de cierre', s:'Ve el conteo y acepta' },
+    { t:'Se bloqueó el iPhone', s:'Vuelve y sigue igual' },
+    { t:'Para decidir', s:'Lo que te pregunto' },
+  ]},
+  rep: { nombre:'El repositor de la barra', pasos:[
+    { t:'Darle el permiso', s:'En OPERADORES' },
+    { t:'Dónde trabaja', s:'Tablet o celular' },
+    { t:'El stock de cada barra', s:'Lo que le diste y lo que queda' },
+    { t:'REPONER', s:'Llevarle a una barra' },
+    { t:'FALTANTE', s:'Rotas, congeladas…' },
+    { t:'Lo que ven los demás', s:'La cajera, la encargada, el jefe' },
+    { t:'Para decidir', s:'Lo que te pregunto' },
+  ]},
+};
+
+const notas = {
+  enc: [
+    `<b>En la notebook de la barra</b>, con la central prendida, LAS CAJAS tiene un botón nuevo: <b>CELULAR DE LA ENCARGADA</b>. Muestra el QR y el nombre del wifi. Ella conecta el iPhone a ese wifi (Juniorbarra1) y escanea con la cámara: se abre una página que le sirve la notebook. <b>No hace falta internet ni instalar nada.</b><span class="donde">Dónde: Centro de Comando → BARRA → la fiesta → CAJAS (o la encargada con su PIN en la notebook → LAS CAJAS).</span>`,
+    `<b>Entra con su PIN de encargada</b> (el mismo de siempre). Lo revisa la notebook. Solo entra una encargada o el jefe: una cajera no puede abrir esta página. El PIN queda recordado en ese iPhone <b>hasta el mediodía siguiente</b>: si se bloquea o se cierra Safari, no lo vuelve a pedir.`,
+    `<b>Ve las cajas de esta noche</b>, igual que en LAS CAJAS de la notebook, pero en el tamaño del celular. Arriba, lo que la espera (un pedido de cierre). Si las dos barras están unidas por wifi, ve las dos; si cada barra está sola, ve la del wifi al que está conectada. Probá el botón de abajo para ver las dos formas. <b>No imprime</b>: los papeles los imprimen las cajeras desde sus tablets.`,
+    `<b>Al tocar VER</b>, el pedido de la Caja 2: lo que contó la cajera (solo el efectivo), lo que tenía que haber, la diferencia, y la transferencia aparte (para comparar con Mercado Pago; no entra en la diferencia). Elige <b>ACEPTAR Y CERRAR</b> o <b>QUE CUENTE DE NUEVO</b>. La caja la cierra la tablet de la cajera, como hoy.`,
+    `<b>El iPhone se bloqueó</b> (o se apagó, o ella se alejó del wifi). Al volver, la página se reconecta sola, pide todo de nuevo y muestra lo que pasó mientras no estaba. Si en ese rato una cajera pidió cerrar, el pedido la está esperando arriba. Las tablets que se duermen hacen lo mismo.`,
+    null,
+  ],
+  rep: [
+    `<b>El jefe le da el permiso en OPERADORES</b>, como a la encargada: en Barra, una opción más, <b>Repositor</b>. El repositor no vende ni cierra cajas: solo anota el stock. Sin SQL para el permiso.`,
+    `<b>¿Dónde trabaja el repositor?</b> Dos formas, lado a lado. Con <b>una tablet</b> (la app, como las cajeras) o con <b>su celular</b> por el wifi, como la encargada (escanea el QR de la notebook). Elegí la que prefieras en "Para decidir".`,
+    `<b>El stock de cada barra</b>: lo que le diste, lo que vendió, lo que faltó y lo que le queda. En ámbar, lo que está por terminarse (el aviso que pone el jefe en PRECIOS). En DEPÓSITO, lo que cargó el jefe menos lo que ya se llevó a las barras. <b>Con las barras unidas se ven las dos; si cada barra está sola, cada una sabe lo suyo</b> y el depósito se completa cuando se juntan (o con internet).`,
+    `<b>REPONER</b>: qué producto, cuánto, a qué barra y una nota si quiere. Al guardar, esa barra lo tiene enseguida y le sale del depósito. <b>Solo se agregan renglones</b>: nada se borra ni se pisa. Si se equivocó, anota otro movimiento con la corrección.`,
+    `<b>FALTANTE</b>: lo que falta y no es una venta. Qué producto, cuántas, el motivo (rota, congelada, vencida, se perdió u otro) y una nota. Ejemplo que me diste: "hubo tantas cervezas y faltan dos porque se congelaron". Queda escrito con su hora y quién lo anotó.`,
+    `<b>Lo que ven los demás.</b> La cajera ve en VENDER lo que le queda <b>a su barra</b> (avisa, no frena). La encargada ve el stock de las barras pero <b>ya no toca nada</b>. El jefe, al final de la noche, ve y puede imprimir el resumen por producto: lo del depósito, lo repuesto a cada barra, lo vendido, los faltantes y lo que quedó.`,
+    null,
+  ],
+};
+
+// ── Pantallas: la encargada ─────────────────────────────────────────────────
+function tel(contenido, extra=''){
+  return `<div class="tel ${extra}"><div class="app">${contenido}</div></div>`;
+}
+
+function pantallaQrNotebook(){
+  return `<div class="lado">
+    <div class="app pc">
+      <div class="barraApp"><span class="tit">BARRA · <span class="gris">Modo jefe</span></span></div>
+      <div class="card"><span class="gris chica">FIESTA</span><b style="font-size:18px">TÉCNICA PINAROLI</b><span class="gris chica">jueves 4 de diciembre · Barra 1</span></div>
+      <div class="card">
+        <div class="r"><b>● CENTRAL PRENDIDA</b><span class="gris chica">APAGAR</span></div>
+        <span class="gris chica">Las tablets de la Barra 1 la encuentran solas.</span>
+        <span class="chica" style="color:var(--verde)">La Barra 2 está unida: se ven las dos.</span>
+      </div>
+      <div class="nuevo" style="padding:6px;display:grid;gap:10px">
+        <div><button class="b dorado">📱 CELULAR DE LA ENCARGADA</button> <span class="tag">NUEVO</span></div>
+        <div class="card" style="grid-template-columns:auto 1fr;align-items:center;gap:16px">
+          <div class="qr" aria-label="QR de ejemplo"></div>
+          <div style="display:grid;gap:8px">
+            <b style="font-size:17px">Escaneá con la cámara del iPhone</b>
+            <span class="gris">1. Conectá el iPhone al wifi <b style="color:var(--texto)">Juniorbarra1</b>.<br>2. Abrí la cámara y apuntá al código.<br>3. Poné tu PIN de encargada.</span>
+            <span class="gris chica">Si no abre, escribí en Safari: <b style="color:var(--texto)">192.168.1.100:8797</b></span>
+            <span class="gris chica">No hace falta internet.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pantallaPin(){
+  return `<div class="lado">${tel(`
+    <div class="isla">192.168.1.100 — Junior Eventos</div>
+    <div class="pin nuevo">
+      <b style="font-size:22px;letter-spacing:.06em">BARRA</b>
+      <span class="gris">TÉCNICA PINAROLI · jue 4/12</span>
+      <span>Poné tu PIN de encargada</span>
+      <div class="puntos"><i></i><i></i><i class="v"></i><i class="v"></i></div>
+      <div class="teclas">${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(t=>`<span>${t}</span>`).join('')}</div>
+      <button class="b dorado" id="entrar">ENTRAR</button>
+      <span class="gris chica" style="text-align:center">Queda recordado en este iPhone hasta el mediodía.</span>
+    </div>`)}</div>`;
+}
+
+function tarjetaCaja(c){
+  const pill = c.estado==='pide' ? '<span class="pill pide">PIDE CERRAR</span>' : c.estado==='ce' ? '<span class="pill ce">CERRADA</span>' : '<span class="pill ab">ABIERTA</span>';
+  return `<div class="caja"><h4>Caja ${c.n} <span class="gris" style="font-size:13px;font-weight:600;flex:1">· ${c.quien}</span>${pill}</h4>
+    <span class="gris chica">desde las ${c.desde}</span>
+    <div class="r chica"><span>Ventas</span><b>${c.ventas}</b></div>
+    <div class="r chica"><span>Efectivo</span><b>${pesos(c.ef)}</b></div>
+    <div class="r chica"><span>Transferencia</span><b>${pesos(c.tr)}</b></div></div>`;
+}
+
+function encabezadoEnc(){
+  return `<div class="barraApp"><span class="tit">BARRA</span><span class="gris chica">Sole · encargada</span></div>
+    <div class="isla">TÉCNICA PINAROLI · jue 4/12 · ${unidas ? 'Barra 1 + Barra 2' : 'Barra 1'}</div>`;
+}
+
+function pantallaCajasEnc(){
+  const pide = cajas.b1.find(c => c.estado==='pide') && pedidoResuelto===null;
+  const barras = unidas ? ['b1','b2'] : ['b1'];
+  const todas = barras.flatMap(b => cajas[b]);
+  const ef = todas.reduce((a,c)=>a+c.ef,0), tr = todas.reduce((a,c)=>a+c.tr,0), v = todas.reduce((a,c)=>a+c.ventas,0);
+  const estadoRed = unidas
+    ? `<div class="franja ok nuevo">● Conectada a la Barra 1 · ves las dos barras</div>`
+    : `<div class="franja ambar nuevo">● Conectada a la Barra 1 · la Barra 2 está en otro wifi: para verla, conectate a Juniorbarra2.</div>`;
+  const sonidoBanner = sonido ? '' : `<button class="b linea ancho chica nuevo" id="sonido">🔔 TOCÁ PARA ACTIVAR EL AVISO CON SONIDO</button>`;
+  return `<div class="lado">${tel(`
+    ${encabezadoEnc()}
+    ${estadoRed}
+    ${sonidoBanner}
+    ${pide ? `<div class="pedido nuevo"><b>🔔 La Caja 2 (Juli) pide cerrar</b><span class="gris chica">Barra 1 · hace 1 minuto</span><button class="b dorado" id="ver_pedido">VER</button></div>` : ''}
+    ${pedidoResuelto==='ok' ? `<div class="franja ok">✓ Aceptaste el cierre de la Caja 2. La tablet de Juli la cerró.</div>` : ''}
+    ${pedidoResuelto==='recontar' ? `<div class="franja ambar">Le pediste a Juli que cuente de nuevo. Te va a llegar otro pedido.</div>` : ''}
+    <div class="kpis">
+      <div class="kpi"><div class="t">VENDIDO ESTA NOCHE</div><div class="v" style="color:var(--dorado)">${pesos(ef+tr)}</div><div class="s">${v} ventas</div></div>
+      <div class="kpi"><div class="t">CAJAS</div><div class="v">${todas.length}</div><div class="s">${pide?1:0} pide cerrar</div></div>
+      <div class="kpi"><div class="t">EFECTIVO</div><div class="v">${pesos(ef)}</div></div>
+      <div class="kpi"><div class="t">TRANSFERENCIA</div><div class="v">${pesos(tr)}</div></div>
+    </div>
+    ${barras.map(b => `<div class="grupo">${nombreBarra[b].toUpperCase()}</div>${cajas[b].map(c => tarjetaCaja(pedidoResuelto==='ok' && c.estado==='pide' ? {...c, estado:'ce'} : c)).join('')}`).join('')}
+    <span class="gris chica" style="text-align:center">Solo esta noche. Las de otros días, en la notebook.</span>
+  `)}
+  <div style="display:grid;gap:8px;max-width:300px">
+    <span class="etiqueta">PARA PROBAR EN LA MAQUETA</span>
+    <div class="seg"><button data-red="1" class="${unidas?'on':''}">BARRAS UNIDAS</button><button data-red="0" class="${!unidas?'on':''}">CADA UNA SOLA</button></div>
+    <span class="sub" style="font-size:13.5px">Unidas: los dos routers Mercusys enganchados por wifi. Cada una sola: si no llegan de punta a punta.</span>
+  </div></div>`;
+}
+
+function pantallaPedido(){
+  const c = cajas.b1[1];
+  const tenia = c.cambio + c.ef, dif = c.contado - tenia;
+  return `<div class="lado">${tel(`
+    ${encabezadoEnc()}
+    <div class="dialogo nuevo">
+      <b style="font-size:17px">Caja 2 · Juli pide cerrar</b>
+      <span class="gris chica">Barra 1 · abrió a las ${c.desde} · ${c.ventas} ventas</span>
+      <div class="grupo">EFECTIVO (LO QUE SE CUENTA)</div>
+      <div class="r"><span>Cambio con que arrancó</span><b>${pesos(c.cambio)}</b></div>
+      <div class="r"><span>Cobrado en efectivo</span><b>${pesos(c.ef)}</b></div>
+      <div class="r"><span>Tenía que haber</span><b>${pesos(tenia)}</b></div>
+      <div class="r"><span>Contó</span><b>${pesos(c.contado)}</b></div>
+      <div class="franja ${dif===0?'ok':'ambar'}" style="font-size:15px">${dif===0?'Justo, sin diferencia':dif<0?`Faltan ${pesos(-dif)}`:`Sobran ${pesos(dif)}`}</div>
+      <div class="grupo">TRANSFERENCIA (APARTE)</div>
+      <div class="r"><span>${c.trVentas} ventas</span><b style="color:var(--transf)">${pesos(c.tr)}</b></div>
+      <span class="gris chica">Para comparar con Mercado Pago. No entra en la diferencia.</span>
+      <div class="r chica"><span>Anuladas</span><b>${c.anuladas}</b></div>
+      <button class="b dorado ancho" id="aceptar">ACEPTAR Y CERRAR</button>
+      <button class="b linea ancho" id="recontar">QUE CUENTE DE NUEVO</button>
+      <button class="b ancho" id="despues">DESPUÉS</button>
+    </div>
+  `)}</div>`;
+}
+
+function pantallaVolvio(){
+  return `<div class="lado">${tel(`
+    ${encabezadoEnc()}
+    ${volvio
+      ? `<div class="franja ok nuevo">● Volviste: al día, a las 03:12</div>
+         <div class="card nuevo"><b>Mientras no estabas</b>
+           <span class="gris chica">· La Caja 5 (Lu) pidió cerrar a las 03:05.</span>
+           <span class="gris chica">· La Caja 1 vendió 14 veces.</span></div>
+         <div class="pedido"><b>🔔 La Caja 5 (Lu) pide cerrar</b><span class="gris chica">Barra 2 · hace 7 minutos</span><button class="b dorado">VER</button></div>`
+      : `<div class="franja celeste nuevo">● Reconectando con la notebook…</div>
+         <span class="gris chica">Lo que ves es de las 02:48. No tenés que hacer nada: vuelve sola.</span>`}
+    ${['b1','b2'].map(b => `<div class="grupo">${nombreBarra[b].toUpperCase()}</div>${cajas[b].map(c => tarjetaCaja(c.estado==='pide' ? {...c, estado:'ce'} : (volvio && c.n===5 ? {...c, estado:'pide'} : c))).join('')}`).join('')}
+  `)}
+  <div style="display:grid;gap:8px;max-width:300px">
+    <span class="etiqueta">PARA PROBAR EN LA MAQUETA</span>
+    <button class="b" style="background:var(--panel);color:var(--tinta);border-color:var(--linea)" id="desbloquear">${volvio?'Bloquear de nuevo':'Desbloquear el iPhone'}</button>
+  </div></div>`;
+}
+
+function pantallaDecidirEnc(){
+  return `<div class="decidir">
+    <b>Lo que te pregunto de la encargada</b>
+    <ol>
+      <li><b>¿Está bien que vea solo las cajas de esta noche?</b> Las de otros días se ven en la notebook (por día, como un cierre de caja en su fecha).</li>
+      <li><b>¿Puede entrar también el jefe con su PIN</b> a esta página, para mirar desde su celular cuando está en el salón? (Propongo que sí.)</li>
+      <li><b>El sonido del aviso:</b> el iPhone no deja sonar una página sin un toque antes. La primera vez ella toca "Activar el aviso con sonido" y después suena con cada pedido mientras la página esté abierta. Con el iPhone bloqueado no suena: al desbloquearlo, el pedido la está esperando arriba. ¿Te sirve así?</li>
+      <li><b>¿Le dejamos ANULAR una venta desde el iPhone</b> (con motivo), como en la notebook, o solo mirar y aceptar cierres? (Propongo solo mirar y aceptar: anular queda en la notebook y en la tablet.)</li>
+    </ol>
+  </div>`;
+}
+
+// ── Pantallas: el repositor ─────────────────────────────────────────────────
+function pantallaOperadores(){
+  const op = (v, t, s) => `<button data-perm="${v}" class="${permisoBarra===v?'on':''}" title="${s}">${t}</button>`;
+  return `<div class="lado"><div class="app pc">
+    <div class="barraApp"><span class="tit">OPERADORES · <span class="gris">Mi Empresa</span></span></div>
+    <div class="card">
+      <b style="font-size:17px">Nico</b><span class="gris chica">PIN ****</span>
+      <div class="r"><span>Cobros</span><b class="gris">—</b></div>
+      <div class="r"><span>Entradas</span><b class="gris">—</b></div>
+      <div class="r" style="align-items:center"><span>Barra</span>
+        <span class="nuevo" style="padding:2px"><div class="seg">${op('no','NO','Sin barra')}${op('cajera','CAJERA','Vende y cierra su caja')}${op('encargada','ENCARGADA','Ve todas las cajas y acepta los cierres')}${op('repositor','REPOSITOR','Anota reposiciones y faltantes')}</div></span>
+      </div>
+      <span class="gris chica">${{no:'No entra por BARRA.',cajera:'Abre su caja, vende y la cierra con el OK de la encargada.',encargada:'Ve todas las cajas, acepta los cierres. No toca el stock.',repositor:'Entra por BARRA con su PIN. No vende ni cierra cajas: anota lo que lleva a cada barra y lo que falta.'}[permisoBarra]}</span>
+      ${permisoBarra==='repositor'?'<span class="franja ambar chica">Repositor funciona con la versión nueva en todas las PCs y tablets.</span>':''}
+      <div><button class="b dorado">GUARDAR</button> <span class="gris chica">Pide el modo jefe.</span></div>
+    </div>
+  </div></div>`;
+}
+
+function filaStock(b, p){
+  const s = stock[b][p]; const q = s.dio - s.vendio - s.falto;
+  return `<div class="prod"><span class="nom">${p}</span><span class="quedan ${q<=aviso?'poco':''}">Quedan ${q}</span>
+    <span class="det">Le diste ${s.dio} · vendió ${s.vendio}${s.falto?` · faltó ${s.falto}`:''}</span></div>`;
+}
+
+function contenidoStock(conMarco){
+  const tab = (v,t) => `<button data-tab="${v}" class="${tabBarra===v?'on':''}">${t}</button>`;
+  let cuerpo;
+  if (tabBarra==='dep'){
+    const dep = p => deposito[p] - stock.b1[p].dio - stock.b2[p].dio;
+    cuerpo = unidas ? productos.map(p => `<div class="prod"><span class="nom">${p}</span><span class="quedan">Quedan ${dep(p)}</span>
+      <span class="det">El jefe cargó ${deposito[p]} · a la Barra 1 ${stock.b1[p].dio} · a la Barra 2 ${stock.b2[p].dio}</span></div>`).join('')
+      : `<div class="franja ambar">La Barra 2 está en otro wifi: el depósito se completa cuando las barras se juntan o con internet. Acá: lo que salió para la Barra 1.</div>`;
+  } else {
+    cuerpo = productos.map(p => filaStock(tabBarra, p)).join('');
+  }
+  return `
+    <div class="barraApp"><span class="tit">STOCK</span><span class="gris chica">Nico · repositor</span></div>
+    <div class="isla">TÉCNICA PINAROLI · jue 4/12</div>
+    <div class="seg nuevo">${tab('b1','BARRA 1')}${tab('b2','BARRA 2')}${tab('dep','DEPÓSITO')}</div>
+    <div class="card nuevo">${cuerpo}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" class="nuevo">
+      <button class="b dorado" id="reponer">＋ REPONER</button>
+      <button class="b rojo" id="faltante">− FALTANTE</button>
+    </div>
+    <button class="b chico" id="ver_movs" style="justify-self:start">VER LOS MOVIMIENTOS</button>`;
+}
+
+function pantallaDonde(){
+  return `<div class="lado">
+    <div><div class="etiqueta">A · CON UNA TABLET (LA APP)</div>
+      <div class="app tablet">${contenidoStock()}</div>
+      <p class="sub" style="max-width:520px;margin-top:8px">Como las cajeras: entra con su PIN en BARRA. Puede imprimir el resumen. Necesita una de las tablets.</p></div>
+    <div><div class="etiqueta">B · CON SU CELULAR, POR EL WIFI</div>
+      ${tel(contenidoStock())}
+      <p class="sub" style="max-width:360px;margin-top:8px">Como la encargada: escanea el QR de la notebook y pone su PIN. Sin tablet, pero no imprime. Al ir a la otra barra, se conecta a su wifi si las barras no están unidas.</p></div>
+  </div>`;
+}
+
+function pantallaStock(){
+  return `<div class="lado"><div class="app tablet">${contenidoStock()}</div>
+  <div style="display:grid;gap:8px;max-width:300px">
+    <span class="etiqueta">PARA PROBAR EN LA MAQUETA</span>
+    <div class="seg"><button data-red="1" class="${unidas?'on':''}">BARRAS UNIDAS</button><button data-red="0" class="${!unidas?'on':''}">CADA UNA SOLA</button></div>
+  </div></div>`;
+}
+
+function pantallaReponer(){
+  const chipsProd = productos.map(p => `<button class="chip ${rep.prod===p?'on':''}" data-rprod="${p}">${p}</button>`).join('');
+  const barra = b => `<button class="chip ${rep.barra===b?'on':''}" data-rbarra="${b}">${nombreBarra[b]}</button>`;
+  const s = stock[rep.barra][rep.prod]; const q = s.dio - s.vendio - s.falto;
+  return `<div class="lado"><div class="app tablet">
+    <div class="barraApp"><span class="tit">REPONER</span></div>
+    <div class="dialogo nuevo">
+      <div class="campo"><label>QUÉ</label><div class="chips">${chipsProd}</div></div>
+      <div class="campo"><label>CUÁNTO</label><div class="cant">
+        <button class="b" id="menos">−</button><span class="num">${rep.cant}</span><button class="b" id="mas">＋</button>
+        <div class="chips">${[6,12,24].map(n=>`<button class="chip" data-rsuma="${n}">+${n}</button>`).join('')}</div></div></div>
+      <div class="campo"><label>A QUÉ BARRA</label><div class="chips">${barra('b1')}${barra('b2')}</div></div>
+      <div class="campo"><label>NOTA (SI QUERÉS)</label><input class="caja-txt" placeholder="Ej.: de la heladera del fondo" value="${rep.nota}" id="rnota"></div>
+      <div class="franja celeste">${nombreBarra[rep.barra]} pasa de ${q} a <b>${q + rep.cant}</b> ${rep.prod}.</div>
+      <button class="b dorado ancho">GUARDAR</button>
+    </div></div></div>`;
+}
+
+function pantallaFaltante(){
+  const chipsProd = productos.map(p => `<button class="chip ${fal.prod===p?'on':''}" data-fprod="${p}">${p}</button>`).join('');
+  const motivos = ['Rota','Congelada','Vencida','Se perdió','Otro'].map(m => `<button class="chip ${fal.motivo===m?'on':''}" data-fmot="${m}">${m}</button>`).join('');
+  return `<div class="lado"><div class="app tablet">
+    <div class="barraApp"><span class="tit">FALTANTE</span></div>
+    <div class="dialogo nuevo" style="border-color:var(--rojo)">
+      <div class="campo"><label>QUÉ</label><div class="chips">${chipsProd}</div></div>
+      <div class="campo"><label>CUÁNTAS</label><div class="cant"><button class="b" id="fmenos">−</button><span class="num">${fal.cant}</span><button class="b" id="fmas">＋</button></div></div>
+      <div class="campo"><label>DE QUÉ BARRA</label><div class="chips"><button class="chip on">Barra 1</button><button class="chip">Barra 2</button><button class="chip">Depósito</button></div></div>
+      <div class="campo"><label>POR QUÉ</label><div class="chips">${motivos}</div></div>
+      <div class="campo"><label>NOTA ${fal.motivo==='Otro'?'(HACE FALTA)':'(SI QUERÉS)'}</label><input class="caja-txt" placeholder="Ej.: quedaron en el freezer y explotaron" value="${fal.nota}" id="fnota"></div>
+      <span class="gris chica">No es una venta: no cambia la plata de ninguna caja. Resta del stock y queda escrito con la hora y quién lo anotó.</span>
+      <button class="b rojo ancho">GUARDAR EL FALTANTE</button>
+    </div></div></div>`;
+}
+
+function pantallaLoQueVen(){
+  const filas = productos.map(p => {
+    const a = stock.b1[p], b = stock.b2[p];
+    const vend = a.vendio + b.vendio, falt = a.falto + b.falto;
+    const enBarras = (a.dio - a.vendio - a.falto) + (b.dio - b.vendio - b.falto);
+    const dep = deposito[p] - a.dio - b.dio;
+    return `<tr><td>${p}</td><td>${deposito[p]}</td><td>${a.dio}</td><td>${b.dio}</td><td>${vend}</td><td>${falt||'—'}</td><td>${enBarras}</td><td>${dep}</td></tr>`;
+  }).join('');
+  return `<div class="lado">
+    <div><div class="etiqueta">LA CAJERA EN VENDER (BARRA 1)</div>
+      <div class="app tablet">
+        <div class="barraApp"><span class="tit">VENDER · Caja 1</span><span class="gris chica">Romi · Barra 1</span></div>
+        <div class="vender">${productos.map(p => { const s=stock.b1[p]; const q=s.dio-s.vendio-s.falto; return `<div class="vprod"><b>${p}</b><small class="${q<=aviso?'':'gris'}" style="${q<=aviso?'color:var(--ambar)':''}">Quedan ${q} en tu barra</small></div>`; }).join('')}</div>
+        <span class="gris chica nuevo" style="padding:4px">"Quedan" es lo de <b>su</b> barra. Avisa, no frena: si se terminó y el repositor todavía no lo anotó, puede VENDER IGUAL.</span>
+      </div></div>
+    <div style="flex:1;min-width:300px"><div class="etiqueta">EL JEFE AL FINAL DE LA NOCHE (CAJAS → STOCK DE LA NOCHE)</div>
+      <div class="app pc" style="min-height:0">
+        <div class="barraApp"><span class="tit">STOCK DE LA NOCHE</span><button class="b chico linea">IMPRIMIR</button></div>
+        <div class="scrollx nuevo"><table class="tabla">
+          <tr><th>PRODUCTO</th><th>CARGADO</th><th>A BARRA 1</th><th>A BARRA 2</th><th>VENDIDO</th><th>FALTÓ</th><th>EN LAS BARRAS</th><th>EN EL DEPÓSITO</th></tr>
+          ${filas}
+        </table></div>
+        <span class="gris chica">Tocando un producto, los movimientos con hora, quién y la nota. La encargada ve lo mismo, sin tocar nada.</span>
+      </div></div>
+  </div>`;
+}
+
+function pantallaMovs(){
+  return `<div class="lado"><div class="app tablet">
+    <div class="barraApp"><span class="tit">MOVIMIENTOS</span><span class="gris chica">esta noche</span></div>
+    <div class="card nuevo">${movimientos.map(m => `<div class="mov"><span class="h">${m.h}</span><span>${m.que}</span><span class="x ${m.clase}">${m.x}</span>${m.n?`<span class="n">"${m.n}" · ${m.quien}</span>`:`<span class="n">${m.quien}</span>`}</div>`).join('')}</div>
+    <span class="gris chica">Solo se agregan renglones. Para corregir, se anota otro movimiento.</span>
+  </div></div>`;
+}
+
+function pantallaDecidirRep(){
+  return `<div class="decidir">
+    <b>Lo que te pregunto del repositor</b>
+    <ol>
+      <li><b>¿Con tablet (A) o con su celular por el wifi (B)?</b> Con tablet puede imprimir; con el celular no necesita una tablet.</li>
+      <li><b>¿El stock arranca en cero en cada barra</b> y el repositor anota lo que le lleva al principio (como en el ejemplo: "lo de arranque")? Lo que cargás en PRECIOS pasa a ser el depósito.</li>
+      <li><b>Los motivos del faltante:</b> Rota · Congelada · Vencida · Se perdió · Otro. ¿Falta alguno?</li>
+      <li><b>Si una barra se queda sin algo</b>, ¿la cajera sigue pudiendo VENDER IGUAL (como hoy) o la frenamos?</li>
+      <li><b>¿El repositor puede pasar stock de una barra a otra</b> (por ejemplo, 6 cervezas de la Barra 2 a la Barra 1), o siempre va del depósito a una barra?</li>
+    </ol>
+  </div>`;
+}
+
+// ── Dibujar ────────────────────────────────────────────────────────────────
+function dibujarArriba(){
+  $('#recorridos').innerHTML = Object.entries(recorridos).map(([k,r]) => `<button class="rec ${recorrido===k?'activo':''}" data-rec="${k}">${r.nombre}</button>`).join('');
+  document.querySelectorAll('[data-rec]').forEach(b => b.onclick = () => { recorrido = b.dataset.rec; paso = 0; dialogo = null; dibujar(); });
+  const ps = recorridos[recorrido].pasos;
+  $('#pasos').innerHTML = ps.map((p,i) => `<button class="paso ${i===paso?'activo':''}" data-paso="${i}"><span class="n">${i+1}</span><b>${p.t}</b><small>${p.s}</small></button>`).join('');
+  document.querySelectorAll('[data-paso]').forEach(b => b.onclick = () => { paso = +b.dataset.paso; dialogo = null; dibujar(); });
+  const n = notas[recorrido][paso];
+  $('#nota').style.display = n ? '' : 'none';
+  $('#nota').innerHTML = n || '';
+}
+
+function enlazarRed(){
+  document.querySelectorAll('[data-red]').forEach(b => b.onclick = () => { unidas = b.dataset.red==='1'; if (!unidas && tabBarra==='b2') tabBarra='b1'; dibujar(); });
+}
+function enlazarStock(){
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { if (!unidas && b.dataset.tab==='b2'){ return; } tabBarra = b.dataset.tab; dibujar(); });
+  const r = $('#reponer'); if (r) r.onclick = () => { paso = 3; dibujar(); };
+  const f = $('#faltante'); if (f) f.onclick = () => { paso = 4; dibujar(); };
+  const m = $('#ver_movs'); if (m) m.onclick = () => { dialogo = 'movs'; dibujar(); };
+}
+
+function dibujar(){
+  dibujarArriba();
+  const p = $('#pantalla');
+  if (recorrido === 'enc'){
+    if (paso === 0) p.innerHTML = pantallaQrNotebook();
+    else if (paso === 1){ p.innerHTML = pantallaPin(); $('#entrar').onclick = () => { paso = 2; dibujar(); }; }
+    else if (paso === 2){ p.innerHTML = pantallaCajasEnc(); enlazarRed();
+      const v = $('#ver_pedido'); if (v) v.onclick = () => { paso = 3; dibujar(); };
+      const s = $('#sonido'); if (s) s.onclick = () => { sonido = true; dibujar(); }; }
+    else if (paso === 3){ p.innerHTML = pantallaPedido();
+      $('#aceptar').onclick = () => { pedidoResuelto = 'ok'; paso = 2; dibujar(); };
+      $('#recontar').onclick = () => { pedidoResuelto = 'recontar'; paso = 2; dibujar(); };
+      $('#despues').onclick = () => { paso = 2; dibujar(); }; }
+    else if (paso === 4){ p.innerHTML = pantallaVolvio(); $('#desbloquear').onclick = () => { volvio = !volvio; dibujar(); }; }
+    else p.innerHTML = pantallaDecidirEnc();
+  } else {
+    if (paso === 0){ p.innerHTML = pantallaOperadores(); document.querySelectorAll('[data-perm]').forEach(b => b.onclick = () => { permisoBarra = b.dataset.perm; dibujar(); }); }
+    else if (paso === 1){ p.innerHTML = pantallaDonde(); enlazarStock(); }
+    else if (paso === 2){ p.innerHTML = dialogo==='movs' ? pantallaMovs() : pantallaStock(); enlazarRed(); enlazarStock(); }
+    else if (paso === 3){ p.innerHTML = pantallaReponer();
+      document.querySelectorAll('[data-rprod]').forEach(b => b.onclick = () => { rep.prod = b.dataset.rprod; dibujar(); });
+      document.querySelectorAll('[data-rbarra]').forEach(b => b.onclick = () => { rep.barra = b.dataset.rbarra; dibujar(); });
+      document.querySelectorAll('[data-rsuma]').forEach(b => b.onclick = () => { rep.cant += +b.dataset.rsuma; dibujar(); });
+      $('#mas').onclick = () => { rep.cant++; dibujar(); };
+      $('#menos').onclick = () => { rep.cant = Math.max(1, rep.cant-1); dibujar(); };
+      $('#rnota').oninput = e => { rep.nota = e.target.value; }; }
+    else if (paso === 4){ p.innerHTML = pantallaFaltante();
+      document.querySelectorAll('[data-fprod]').forEach(b => b.onclick = () => { fal.prod = b.dataset.fprod; dibujar(); });
+      document.querySelectorAll('[data-fmot]').forEach(b => b.onclick = () => { fal.motivo = b.dataset.fmot; dibujar(); });
+      $('#fmas').onclick = () => { fal.cant++; dibujar(); };
+      $('#fmenos').onclick = () => { fal.cant = Math.max(1, fal.cant-1); dibujar(); };
+      $('#fnota').oninput = e => { fal.nota = e.target.value; }; }
+    else if (paso === 5) p.innerHTML = pantallaLoQueVen();
+    else p.innerHTML = pantallaDecidirRep();
+  }
+}
+dibujar();
+</script>
+</body></html>
