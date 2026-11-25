@@ -246,6 +246,11 @@ class IngresosTotem {
   /// alumno y sus acompañantes se saludan juntos.
   String Function(Invitado) familiaDe = cadaUnoSuFamilia;
 
+  /// Si se saluda a un ingreso nuevo (la tele es el tótem, 24-nov-2026): cada
+  /// tele saluda lo de su recepcionista, y nada que llegue tarde. Null: se
+  /// saluda a todos, como siempre. El que no se saluda va igual a la lista.
+  bool Function(Invitado)? seSaluda;
+
   /// La bienvenida que está en pantalla. Null mientras no se saluda a nadie,
   /// y también mientras la tarjeta se va: lo que llega en ese momento espera
   /// la suya.
@@ -347,8 +352,20 @@ class IngresosTotem {
     _cortadoDesde = null;
 
     _delPuente.removeAll(r.confirmados);
-    _aplicar(r);
-    for (final i in r.saludar) {
+    final filtro = seSaluda;
+    final resuelta = filtro == null
+        ? r
+        : LecturaResuelta(
+            saludar: [for (final i in r.saludar) if (filtro(i)) i],
+            sinSaludo: [
+              ...r.sinSaludo,
+              for (final i in r.saludar) if (!filtro(i)) i,
+            ],
+            sacar: r.sacar,
+            confirmados: r.confirmados,
+          );
+    _aplicar(resuelta);
+    for (final i in resuelta.saludar) {
       _llega(i, ahora);
     }
   }
@@ -411,9 +428,13 @@ class IngresosTotem {
     // Aunque ya esté saludado: lo que marcó esta PC puede no haber subido.
     if (porElPuente) _delPuente.add(invitado.id);
     if (!_vistos.add(invitado.id)) return false;
-    _llega(invitado, ahora ?? DateTime.now());
     ingresados.insert(0, invitado);
-    return true;
+    if (seSaluda?.call(invitado) ?? true) {
+      _llega(invitado, ahora ?? DateTime.now());
+      return true;
+    }
+    // A la lista, sin bienvenida (es de la otra tele, o llegó tarde).
+    return false;
   }
 
   /// Si su ingreso lo avisó esta PC por el puente (y sigue adentro). Sus bajas

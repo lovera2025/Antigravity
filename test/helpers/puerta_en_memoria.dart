@@ -326,6 +326,49 @@ class InvitadosEnMemoria extends InvitadosRepository {
     return n;
   }
 
+  /// Lo que la Tele 1 le mandó a esta tele (la tele es el tótem, 24-nov-2026):
+  /// se copia sin encolar, como en la base.
+  final copiadasDeOtraTele = <String>[];
+
+  /// Lo que se encoló al pasar a principal.
+  final subidasDeOtraTele = <String>[];
+
+  @override
+  Future<Set<String>> guardarDeOtraTele(
+    String eventoId,
+    List<Map<String, dynamic>> llegadas,
+  ) async {
+    final escritas = <String>{};
+    for (final f in llegadas) {
+      final id = f['id'];
+      if (id is! String || f['evento_id'] != eventoId) continue;
+      final nueva = Invitado.fromJson({
+        'dni': '',
+        'intentos_fallidos': 0,
+        ...f,
+      });
+      final i = filas.indexWhere((x) => x.id == id);
+      if (i < 0) {
+        filas.add(nueva);
+      } else {
+        filas[i] = filas[i].copyWith(
+          nombreCompleto: nueva.nombreCompleto,
+          numeroMesa: nueva.numeroMesa,
+          estadoIngreso: nueva.estadoIngreso,
+          updatedAt: nueva.updatedAt,
+        );
+      }
+      escritas.add(id);
+      copiadasDeOtraTele.add(id);
+    }
+    if (escritas.isNotEmpty) _cambios.add(null);
+    return escritas;
+  }
+
+  @override
+  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async =>
+      subidasDeOtraTele.addAll(ids);
+
   /// Armar la lista desde los alumnos es de la oficina (las pantallas del
   /// salón), no de Recepción.
   @override
@@ -577,14 +620,17 @@ class PuertaEnMemoria {
     Map<String, TotemConfig> config = const {},
     bool puedeTotem = true,
     List<Override> extra = const [],
+    List<Evento>? eventos,
   }) =>
       ProviderScope(
         overrides: [
           eventosActivosProvider.overrideWith(
-            (ref) async => [
-              eventoDePrueba(eventoMasivo, 'masivo'),
-              eventoDePrueba(eventoParticular, 'particular'),
-            ],
+            (ref) async =>
+                eventos ??
+                [
+                  eventoDePrueba(eventoMasivo, 'masivo'),
+                  eventoDePrueba(eventoParticular, 'particular'),
+                ],
           ),
           invitadosRepositoryProvider.overrideWithValue(invitados),
           contratosRepositoryProvider.overrideWithValue(contratos),

@@ -32,12 +32,34 @@ class CelularDePrueba {
     required String codigo,
     String id = 'cel-juli',
     String nombre = 'Juli',
+    int? tele,
   }) async {
-    final q = Uri(queryParameters: {'c': codigo, 'id': id, 'p': nombre}).query;
+    final q = Uri(queryParameters: {
+      'c': codigo,
+      'id': id,
+      'p': nombre,
+      if (tele != null) 't': '$tele',
+    }).query;
     return CelularDePrueba._(
       await WebSocket.connect('ws://127.0.0.1:$puerto/vivo?$q'),
     );
   }
+
+  /// La Tele 2 (la tele es el tótem, 24-nov-2026), conectada a la central de
+  /// la Tele 1 como una de verdad.
+  static Future<CelularDePrueba> conectarTele(
+    int puerto, {
+    required String evento,
+    int numero = 2,
+  }) async {
+    final q = Uri(queryParameters: {'evento': evento, 'n': '$numero'}).query;
+    return CelularDePrueba._(
+      await WebSocket.connect('ws://127.0.0.1:$puerto/tele?$q'),
+    );
+  }
+
+  /// "Tu tele": cambia la tele de este celular.
+  void elegirTele(int n) => ws.add(jsonEncode({'t': 'tele', 'n': n}));
 
   /// El próximo mensaje de tipo [tipo] que todavía no se miró. Con [cumple],
   /// el próximo de ese tipo que cumpla (los anteriores quedan mirados).
@@ -65,6 +87,7 @@ class CelularDePrueba {
     Duration hace = Duration.zero,
     DatosSilla? silla,
     TiemposAMano? tiempos,
+    int? tele,
   }) => ws.add(
     jsonEncode(
       PedidoPuerta(
@@ -74,6 +97,7 @@ class CelularDePrueba {
         hace: hace,
         silla: silla,
         tiempos: tiempos,
+        tele: tele,
       ).toJson(),
     ),
   );
@@ -85,8 +109,9 @@ class CelularDePrueba {
     Duration hace = Duration.zero,
     DatosSilla? silla,
     TiemposAMano? tiempos,
+    int? tele,
   }) {
-    pedir(id, que, persona, hace: hace, silla: silla, tiempos: tiempos);
+    pedir(id, que, persona, hace: hace, silla: silla, tiempos: tiempos, tele: tele);
     return espera('respuesta', cumple: (m) => m['id'] == id);
   }
 

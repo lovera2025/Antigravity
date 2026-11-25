@@ -40,6 +40,8 @@ import 'features/recepcion/providers/recepcion_provider.dart'
 import 'features/recepcion/services/reservados_de_la_puerta.dart'
     show reservadosDeLaPuerta;
 import 'features/asesor/asesor_home_screen.dart';
+import 'features/tele/modo_tele.dart';
+import 'features/tele/pantalla_tele.dart';
 import 'features/common/providers/user_role_provider.dart';
 import 'features/common/widgets/operational_sync_coordinator.dart';
 import 'services/supabase_service.dart';
@@ -193,6 +195,9 @@ void main(List<String> args) async {
           '⚠️ Error al inicializar SQLite: $e (continuando sin cache local)',
         );
       }
+      // La tele es el tótem (24-nov-2026): una tele en modo tele abre derecho
+      // en el tótem, sin PIN.
+      if (Platform.isAndroid) await ModoTeleGuardado.cargar();
     }
     debugPrint('V4 >>> LANZANDO SECTOR PRIVADO: Junior Eventos App');
     runApp(const ProviderScope(child: JuniorEventsApp()));
@@ -700,6 +705,10 @@ class _RoleRouter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Una tele en modo tele va derecho a su tótem, sin PIN y sin el panel
+    // (24-nov-2026): desde ahí no hay camino a cobrar.
+    if (ref.watch(modoTeleProvider) != null) return const PantallaTele();
+
     final roleAsync = ref.watch(userRoleProvider);
     final appRole = ref.watch(appRoleProvider);
 

@@ -42,6 +42,23 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["etiquetaDeLaApp"] = "Junior Eventos"
+        // Una ventana de prueba armada como APK (`JUNIOR_APK_DE_PRUEBA=1`, la tele es el
+        // tótem, 24-nov-2026) es otra app: se instala al lado de la de verdad, nunca encima.
+        if (System.getenv("JUNIOR_APK_DE_PRUEBA") == "1") {
+            applicationIdSuffix = ".prueba"
+            manifestPlaceholders["etiquetaDeLaApp"] = "Junior Eventos · prueba"
+        }
+    }
+
+    // La página del celular de la puerta adentro del APK (la tele es la central,
+    // 24-nov-2026): `build/puesto`, la que arma el instalador, en los archivos propios de
+    // Android y no en los de Flutter (así Windows no la lleva dos veces). La tele la copia
+    // a su carpeta al abrir el modo tele (`PaginaDelCelularEnAndroid`).
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(layout.buildDirectory.dir("generated/puesto"))
+        }
     }
 
     signingConfigs {
@@ -72,3 +89,32 @@ android {
 flutter {
     source = "../.."
 }
+
+// Copia `build/puesto` (sin los `.symbols`, que solo sirven para depurar) a
+// `generated/puesto/puesto`: en el APK queda como `assets/puesto/...`. Sin la carpeta,
+// el APK sale sin la página y la tele lo dice en su menú.
+// Una página a medio armar (sin las letras ni los íconos) no se copia: el APK no sale. Así
+// salió la 6.6.0 en la PC (íconos como cuadraditos y, sin internet, nada), y el 24-nov un
+// `flutter build web` hecho encima de otro dejó la carpeta sin `assets/FontManifest.json`.
+val copiarPaginaDelCelular = tasks.register<Copy>("copiarPaginaDelCelular") {
+    val pagina = rootProject.file("../build/puesto")
+    doFirst {
+        if (!pagina.exists()) {
+            logger.warn("Sin build/puesto: el APK sale sin la página del celular de la puerta.")
+        } else {
+            val faltan = listOf("index.html", "main.dart.js", "assets/FontManifest.json")
+                .filter { !File(pagina, it).exists() }
+            if (faltan.isNotEmpty()) {
+                throw GradleException(
+                    "La página del celular (build/puesto) está a medio armar: falta $faltan. " +
+                        "Borrá build/puesto y .dart_tool/flutter_build y armala de nuevo.",
+                )
+            }
+        }
+    }
+    from(pagina) {
+        exclude("**/*.symbols")
+    }
+    into(layout.buildDirectory.dir("generated/puesto/puesto"))
+}
+tasks.named("preBuild") { dependsOn(copiarPaginaDelCelular) }

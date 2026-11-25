@@ -75,6 +75,17 @@ class TiemposDeLaNoche extends Notifier<TiemposAMano?> {
     unawaited(_subir(t));
   }
 
+  /// Los segundos que mandó la Tele 1 para esta tele (la Tele 2, 24-nov-2026):
+  /// los cambió su recepcionista desde el celular. Se guardan en esta tele y
+  /// **no se suben**: son de esta tele esta noche, y en la nube hay un solo
+  /// valor por fiesta.
+  Future<void> ponerDeOtraTele(TiemposAMano t) async {
+    _tocado = true;
+    if (t == state) return;
+    state = t;
+    await _guardarEnElDisco(t, subido: true);
+  }
+
   /// Vuelve a lo de Personalizar: se guardó la config entera.
   Future<void> olvidar() async {
     _tocado = true;

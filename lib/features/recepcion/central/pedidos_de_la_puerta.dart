@@ -121,6 +121,11 @@ class PedidoPuerta {
   /// En [QuePide.tiemposTotem].
   final TiemposAMano? tiempos;
 
+  /// La tele de quien lo pide (la tele es el tótem, 24-nov-2026): en qué tele
+  /// se saluda un ingreso, y a qué tele van los segundos. [kLasDosTeles] es las
+  /// dos; null, un celular o una PC sin "Tu tele": como hasta ahora.
+  final int? tele;
+
   const PedidoPuerta({
     required this.id,
     required this.que,
@@ -128,6 +133,7 @@ class PedidoPuerta {
     this.hace = Duration.zero,
     this.silla,
     this.tiempos,
+    this.tele,
   });
 
   /// El mismo, diciendo cuánto hace que se tocó.
@@ -138,6 +144,18 @@ class PedidoPuerta {
         hace: hace,
         silla: silla,
         tiempos: tiempos,
+        tele: tele,
+      );
+
+  /// El mismo, para la tele que eligió el celular al mandarlo.
+  PedidoPuerta conTele(int? tele) => PedidoPuerta(
+        id: id,
+        que: que,
+        personaId: personaId,
+        hace: hace,
+        silla: silla,
+        tiempos: tiempos,
+        tele: tele,
       );
 
   Map<String, Object?> toJson() => {
@@ -148,6 +166,7 @@ class PedidoPuerta {
         'hace': hace.inMilliseconds,
         if (silla != null) 'silla': silla!.toJson(),
         if (tiempos != null) 'tiempos': tiempos!.toJson(),
+        if (tele != null) 'tele': tele,
       };
 
   /// Null si no es un pedido que se entienda: de la red puede llegar
@@ -173,6 +192,7 @@ class PedidoPuerta {
       return null;
     }
     if (sinPersona && tiempos == null) return null;
+    final tele = json['tele'];
     return PedidoPuerta(
       id: id,
       que: quePide,
@@ -180,8 +200,85 @@ class PedidoPuerta {
       hace: Duration(milliseconds: hace is int && hace > 0 ? hace : 0),
       silla: silla,
       tiempos: tiempos,
+      tele: tele is int && esTeleValida(tele) ? tele : null,
     );
   }
+}
+
+/// "Las dos teles": lo que se marca se saluda en todas.
+const kLasDosTeles = 0;
+
+/// Cuántas teles puede tener una noche: la Tele 1 (la principal, que lleva la
+/// lista) y la Tele 2.
+const kTelesDeLaNoche = 2;
+
+/// Si [n] es una tele que se puede elegir: 1, 2 o [kLasDosTeles].
+bool esTeleValida(int n) => n >= kLasDosTeles && n <= kTelesDeLaNoche;
+
+/// "Tele 1", "Tele 2" o "Las dos".
+String nombreDeLaTele(int n) => n == kLasDosTeles ? 'Las dos' : 'Tele $n';
+
+/// Cómo se saluda a alguien que se ingresó por la central esta noche: en qué
+/// tele y si todavía se saluda (no, si el pedido llegó tarde: [kSaludarHasta]).
+class BienvenidaDeLaNoche {
+  /// La tele de quien lo marcó. Null o [kLasDosTeles]: en todas.
+  final int? tele;
+  final bool saludar;
+
+  /// Cuándo se marcó, con el reloj de la central.
+  final DateTime cuando;
+
+  const BienvenidaDeLaNoche({
+    required this.tele,
+    required this.saludar,
+    required this.cuando,
+  });
+
+  /// Para la Tele 2: lo que viaja de la Tele 1, con cuánto hace en vez de la
+  /// hora, así no importa si los relojes de las teles no coinciden.
+  Map<String, Object?> toJson(DateTime ahora) => {
+        if (tele != null) 'tele': tele,
+        'saludar': saludar,
+        'hace': ahora.difference(cuando).inMilliseconds,
+      };
+
+  /// Null si no se entiende. [ahora] es el reloj de quien lo recibe.
+  static BienvenidaDeLaNoche? fromJson(Object? json, DateTime ahora) {
+    if (json is! Map) return null;
+    final tele = json['tele'];
+    final saludar = json['saludar'];
+    final hace = json['hace'];
+    if (saludar is! bool) return null;
+    return BienvenidaDeLaNoche(
+      tele: tele is int && esTeleValida(tele) ? tele : null,
+      saludar: saludar,
+      cuando: ahora.subtract(
+        Duration(milliseconds: hace is int && hace > 0 ? hace : 0),
+      ),
+    );
+  }
+}
+
+/// **Si la tele [miTele] saluda un ingreso** (24-nov-2026: cada recepcionista
+/// controla su tele). Solo se saluda lo que entró por la central esta noche
+/// ([bienvenida] no es null): lo que baja de la nube o llega de golpe al
+/// conectarse la Tele 2 es quién ya estaba adentro, y no se saluda. Tampoco lo
+/// que llegó tarde ([BienvenidaDeLaNoche.saludar]) ni lo de la otra tele.
+///
+/// [ahora]: con esto, lo marcado hace más de [kSaludarHasta] tampoco se saluda.
+/// La Tele 2 lo pasa siempre: al conectarse le llega la lista entera, con las
+/// bienvenidas de toda la noche.
+bool seSaludaEnLaTele(
+  BienvenidaDeLaNoche? bienvenida, {
+  required int miTele,
+  DateTime? ahora,
+}) {
+  if (bienvenida == null || !bienvenida.saludar) return false;
+  if (ahora != null && ahora.difference(bienvenida.cuando) > kSaludarHasta) {
+    return false;
+  }
+  final tele = bienvenida.tele;
+  return tele == null || tele == kLasDosTeles || tele == miTele;
 }
 
 enum QueHaceLaCentral { ingresar, deshacer, sumarSilla, quitarSilla, tiempos, nada }
@@ -421,15 +518,57 @@ String horaCorta(DateTime hora) {
 /// noche. Si la notebook se reinicia, los ingresos siguen; solo se pierde el
 /// nombre de quién los hizo.
 class MarcasDeLaNoche {
+  MarcasDeLaNoche({DateTime Function()? ahora}) : _ahora = ahora ?? DateTime.now;
+
+  final DateTime Function() _ahora;
   final _porPersona = <String, String>{};
+
+  /// Cómo se saluda a cada uno (la tele es el tótem, 24-nov-2026): se anota
+  /// antes de marcar, así la tele lo sabe cuando la base avisa el cambio.
+  final _bienvenidas = <String, BienvenidaDeLaNoche>{};
 
   /// El puesto que marcó a [personaId], si fue esta noche por la central.
   String? quien(String personaId) => _porPersona[personaId];
 
-  void ingreso(String personaId, String puesto) =>
-      _porPersona[personaId] = puesto;
+  /// [tele]: la de quien lo marcó; [saludar]: si el pedido llegó a tiempo.
+  void ingreso(
+    String personaId,
+    String puesto, {
+    int? tele,
+    bool saludar = true,
+  }) {
+    _porPersona[personaId] = puesto;
+    _bienvenidas[personaId] = BienvenidaDeLaNoche(
+      tele: tele,
+      saludar: saludar,
+      cuando: _ahora(),
+    );
+  }
 
-  void deshizo(String personaId) => _porPersona.remove(personaId);
+  /// Vuelve a dejar a [personaId] como estaba antes de un pedido que falló.
+  void volver(String personaId, String? puesto, BienvenidaDeLaNoche? antes) {
+    if (puesto == null) {
+      _porPersona.remove(personaId);
+    } else {
+      _porPersona[personaId] = puesto;
+    }
+    if (antes == null) {
+      _bienvenidas.remove(personaId);
+    } else {
+      _bienvenidas[personaId] = antes;
+    }
+  }
+
+  void deshizo(String personaId) {
+    _porPersona.remove(personaId);
+    _bienvenidas.remove(personaId);
+  }
+
+  /// Cómo se saluda a [personaId], si entró por la central esta noche.
+  BienvenidaDeLaNoche? bienvenida(String personaId) => _bienvenidas[personaId];
+
+  Map<String, BienvenidaDeLaNoche> get bienvenidas =>
+      Map.unmodifiable(_bienvenidas);
 
   /// Cuántos marcó [puesto] y siguen adentro.
   int cuantos(String puesto) =>

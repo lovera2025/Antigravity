@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../models/invitado.dart';
 import '../../totem/services/tiempos_a_mano.dart';
 import '../chat/mensaje_de_puesto.dart';
 import '../services/puerta_del_evento.dart';
@@ -36,13 +37,25 @@ class PuestoConectado {
   /// Cuántos ingresó esta noche que siguen adentro.
   final int marcados;
 
+  /// La tele que eligió ("Tu tele", 24-nov-2026). Null: un celular de antes,
+  /// o una noche con una sola tele.
+  final int? tele;
+
   const PuestoConectado({
     required this.celular,
     required this.nombre,
     required this.conectado,
     required this.ultimaVez,
     required this.marcados,
+    this.tele,
   });
+}
+
+/// La Tele 2, conectada a la central de la Tele 1 (24-nov-2026).
+class TeleConectada {
+  final int numero;
+  final bool conectada;
+  const TeleConectada(this.numero, {required this.conectada});
 }
 
 /// La central de la puerta: una notebook del salón a la que los celulares de
@@ -71,12 +84,20 @@ class CentralPuerta {
     ResolvedorDePedidos? resolvedor,
     this.paginaDelCelular,
     DateTime Function()? ahora,
+    this.esTele = false,
   }) : _codigo = codigo,
-       _resolvedor =
-           resolvedor ?? ResolvedorDePedidos(eventoId: eventoId, pc: pc),
+       // El mismo reloj para la central y sus marcas: cuánto hace que se
+       // marcó a alguien se cuenta con uno solo.
+       _resolvedor = resolvedor ??
+           ResolvedorDePedidos(eventoId: eventoId, pc: pc, ahora: ahora),
        _ahora = ahora ?? DateTime.now;
 
   final String eventoId;
+
+  /// La central es la Tele 1 (la tele es el tótem, 24-nov-2026): los celulares
+  /// eligen "Tu tele" y se le puede conectar la Tele 2. En la notebook, false:
+  /// como siempre.
+  final bool esTele;
 
   /// La fila de los pedidos: la misma que usa la PC.
   final ResolvedorDePedidos _resolvedor;
@@ -96,6 +117,31 @@ class CentralPuerta {
   final _puestos = <String, PuestoConectado>{};
   final _errores = <String, List<DateTime>>{};
   final _cambiosDePuestos = StreamController<List<PuestoConectado>>.broadcast();
+
+  // ── Las teles (24-nov-2026) ───────────────────────────────────────────────
+
+  /// La Tele 2 conectada, si está.
+  final _teles = <int, _ConexionTele>{};
+
+  /// Los segundos de la llegada de cada otra tele (la 2): cada recepcionista
+  /// controla los de su tele. Los de la Tele 1 son [_tiempos].
+  final _tiemposDeTele = <int, TiemposAMano>{};
+
+  /// La lista de la puerta, fila por fila, para copiarla en la Tele 2.
+  final _filas = <String, Invitado>{};
+
+  final _cambiosDeTeles = StreamController<List<TeleConectada>>.broadcast();
+
+  /// Se avisa cada vez que la Tele 2 se conecta o se va.
+  Stream<List<TeleConectada>> get cambiosDeTeles => _cambiosDeTeles.stream;
+
+  List<TeleConectada> get teles => [
+    for (var n = 2; n <= kTelesDeLaNoche; n++)
+      TeleConectada(n, conectada: _teles.containsKey(n)),
+  ];
+
+  /// Lo que cambia la Tele 2 en sus segundos lo avisa acá.
+  void Function(int tele, TiemposAMano t)? alCambiarTiemposDeTele;
 
   String get codigo => _codigo;
   int? get puerto => _servidor?.port;
@@ -164,6 +210,93 @@ class CentralPuerta {
     if (titulo == _titulo) return;
     _titulo = titulo;
     if (_puerta != null) _mandarLista();
+  }
+
+  /// Los segundos de la llegada de la Tele [tele] (la 2), cambiados desde un
+  /// celular: se los manda a esa tele, que los pone en su pantalla.
+  void ponerTiemposDeTele(int tele, TiemposAMano tiempos) {
+    _tiemposDeTele[tele] = tiempos;
+    _teles[tele]?.mandar(jsonEncode({'t': 'tiempos', 'tiempos': tiempos.toJson()}));
+    if (_puerta != null) _mandarLista();
+  }
+
+  /// La lista de la puerta fila por fila (la de la base de esta tele): lo que
+  /// cambió se le manda a la Tele 2, que lo copia en la suya. Con cada ingreso
+  /// va cómo se saluda ([MarcasDeLaNoche.bienvenida]).
+  void ponerFilas(List<Invitado> filas) {
+    _filas
+      ..clear()
+      ..addEntries(filas.map((f) => MapEntry(f.id, f)));
+    for (final t in _teles.values) {
+      _mandarFilas(t);
+    }
+  }
+
+  /// Lo que la Tele 2 todavía no tiene: todo al conectarse; después, lo que
+  /// cambió.
+  void _mandarFilas(_ConexionTele t) {
+    final cambiadas = <Invitado>[];
+    for (final f in _filas.values) {
+      final firma = _firma(f);
+      if (t.enviadas[f.id] == firma) continue;
+      t.enviadas[f.id] = firma;
+      cambiadas.add(f);
+    }
+    if (cambiadas.isEmpty) return;
+    final ahora = _ahora();
+    final bienvenidas = <String, Object?>{};
+    for (final f in cambiadas) {
+      final b = f.estadoIngreso == EstadoIngreso.ingresado
+          ? _resolvedor.marcas.bienvenida(f.id)
+          : null;
+      if (b != null) bienvenidas[f.id] = b.toJson(ahora);
+    }
+    t.mandar(jsonEncode({
+      't': 'filas',
+      'filas': [for (final f in cambiadas) Invitado.sinDatosPrivados(f.toJson())],
+      'bienvenidas': bienvenidas,
+      'por': _resolvedor.marcas.todas,
+    }));
+  }
+
+  static String _firma(Invitado f) =>
+      '${f.estadoIngreso.name}|${f.updatedAt?.toIso8601String()}|'
+      '${f.numeroMesa}|${f.nombreCompleto}';
+
+  /// Lo que la Tele 2 tiene que saber de los celulares: quién la maneja.
+  void _mandarManejan() {
+    for (final t in _teles.values) {
+      t.mandar(jsonEncode({
+        't': 'maneja',
+        'nombres': _quienesManejan(t.numero),
+      }));
+    }
+    _avisarTeles();
+  }
+
+  /// Los nombres de los celulares conectados que eligieron la tele [n].
+  List<String> _quienesManejan(int n) => [
+    for (final c in _conexiones)
+      if (c.tele == n || c.tele == kLasDosTeles) c.nombre,
+  ];
+
+  /// Las teles para el celular: cuáles hay y quién maneja cada una.
+  String _textoDeTeles() => jsonEncode({
+    't': 'teles',
+    'lista': [
+      {'n': 1, 'conectada': true, 'maneja': _quienesManejan(1)},
+      for (final t in teles)
+        {'n': t.numero, 'conectada': t.conectada, 'maneja': _quienesManejan(t.numero)},
+    ],
+  });
+
+  void _avisarTeles() {
+    if (!esTele) return;
+    final texto = _textoDeTeles();
+    for (final c in _conexiones) {
+      c.mandar(texto);
+    }
+    if (!_cambiosDeTeles.isClosed) _cambiosDeTeles.add(teles);
   }
 
   // ── El chat de la puerta (6.5.0) ─────────────────────────────────────────
@@ -257,6 +390,13 @@ class CentralPuerta {
       'puerta': _puerta!.toJson(),
       'por': _resolvedor.marcas.todas,
       if (_tiempos != null) 'tiempos': _tiempos!.toJson(),
+      // La tele es el tótem (24-nov-2026): el celular dice "Conectado a la
+      // Tele 1" y, con dos teles, muestra los segundos de la suya.
+      if (esTele) 'central': 'Tele 1',
+      if (_tiemposDeTele.isNotEmpty)
+        'tiemposTeles': {
+          for (final e in _tiemposDeTele.entries) '${e.key}': e.value.toJson(),
+        },
     });
     for (final c in _conexiones) {
       c.mandar(_lista!);
@@ -283,9 +423,15 @@ class CentralPuerta {
     for (final c in todas) {
       await c.cerrar(WebSocketStatus.goingAway, 'cerrada');
     }
+    final teles = _teles.values.toList();
+    _teles.clear();
+    for (final t in teles) {
+      await t.cerrar(WebSocketStatus.goingAway, 'cerrada');
+    }
     await _servidor?.close(force: true);
     _servidor = null;
     await _cambiosDePuestos.close();
+    await _cambiosDeTeles.close();
   }
 
   // ── Lo que llega por la red ───────────────────────────────────────────────
@@ -294,6 +440,10 @@ class CentralPuerta {
     try {
       if (pedido.uri.path == '/vivo') {
         await _conectar(pedido);
+        return;
+      }
+      if (pedido.uri.path == '/tele') {
+        await _conectarTele(pedido);
         return;
       }
       if (pedido.method != 'GET' && pedido.method != 'HEAD') {
@@ -365,7 +515,13 @@ class CentralPuerta {
     // El ping lo contesta solo el navegador: una conexión que no contesta en
     // ese tiempo se da por caída.
     ws.pingInterval = const Duration(seconds: 5);
-    final conexion = _Conexion(ws, celular, nombre);
+    final tele = int.tryParse(datos['t'] ?? '');
+    final conexion = _Conexion(
+      ws,
+      celular,
+      nombre,
+      tele: esTele && tele != null && esTeleValida(tele) ? tele : null,
+    );
     _conexiones.add(conexion);
     _anotarPuesto(conexion, conectado: true, salvo: conexion);
     conexion.mandar(_lista ?? jsonEncode({'t': 'esperando'}));
@@ -380,6 +536,8 @@ class CentralPuerta {
     // Al que llega, siempre (aunque la lista no haya cambiado: vuelve el
     // mismo celular).
     conexion.mandar(_textoDePuestos());
+    // Con la central en una tele: qué teles hay y quién maneja cada una.
+    if (esTele) _mandarManejan();
 
     ws.listen(
       (mensaje) => _mensaje(conexion, mensaje),
@@ -392,6 +550,7 @@ class CentralPuerta {
   void _seFue(_Conexion conexion) {
     if (!_conexiones.remove(conexion)) return;
     _anotarPuesto(conexion, conectado: false);
+    if (esTele) _mandarManejan();
   }
 
   void _anotarPuesto(_Conexion c, {required bool conectado, _Conexion? salvo}) {
@@ -401,6 +560,7 @@ class CentralPuerta {
       conectado: conectado,
       ultimaVez: _ahora(),
       marcados: _resolvedor.marcas.cuantos(c.nombre),
+      tele: c.tele,
     );
     _avisarPuestos(salvo: salvo);
   }
@@ -414,6 +574,7 @@ class CentralPuerta {
         conectado: p.conectado,
         ultimaVez: p.ultimaVez,
         marcados: _resolvedor.marcas.cuantos(p.nombre),
+        tele: p.tele,
       );
     }
     if (!_cambiosDePuestos.isClosed) _cambiosDePuestos.add(puestos);
@@ -451,9 +612,21 @@ class CentralPuerta {
             hora: _ahora(),
           ),
         );
+      case 'tele':
+        // "Tu tele" (24-nov-2026): el celular cambió de tele.
+        final n = json['n'];
+        if (!esTele || n is! int || !esTeleValida(n)) return;
+        conexion.tele = n;
+        _anotarPuesto(conexion, conectado: true);
+        _mandarManejan();
       case 'pedido':
-        final pedido = PedidoPuerta.fromJson(json);
-        if (pedido == null) return;
+        final leido = PedidoPuerta.fromJson(json);
+        if (leido == null) return;
+        // Sin tele en el pedido, la que eligió el celular. Con la central en
+        // la notebook no hay teles: como siempre.
+        final pedido = esTele
+            ? leido.conTele(leido.tele ?? conexion.tele)
+            : leido.conTele(null);
         // De a uno, con la PC: cada pedido mira la base después del anterior.
         unawaited(
           _resolvedor.resolver(pedido, conexion.nombre).then((respuesta) {
@@ -463,6 +636,77 @@ class CentralPuerta {
             }
           }),
         );
+    }
+  }
+
+  // ── La Tele 2 (24-nov-2026) ───────────────────────────────────────────────
+
+  /// La Tele 2 se conecta con el número del evento, como las cajas de la barra:
+  /// es la misma app, con la misma fiesta bajada en la oficina.
+  Future<void> _conectarTele(HttpRequest pedido) async {
+    if (!WebSocketTransformer.isUpgradeRequest(pedido)) {
+      pedido.response.statusCode = HttpStatus.badRequest;
+      await pedido.response.close();
+      return;
+    }
+    final datos = pedido.uri.queryParameters;
+    final ws = await WebSocketTransformer.upgrade(pedido);
+    final numero = int.tryParse(datos['n'] ?? '');
+    if (!esTele ||
+        datos['evento'] != eventoId ||
+        numero == null ||
+        numero < 2 ||
+        numero > kTelesDeLaNoche) {
+      ws.add(jsonEncode({'t': 'evento'}));
+      await ws.close(4001, 'evento');
+      return;
+    }
+    final vieja = _teles.remove(numero);
+    if (vieja != null) unawaited(vieja.cerrar(4003, 'reemplazada'));
+    ws.pingInterval = const Duration(seconds: 5);
+    final t = _ConexionTele(ws, numero);
+    _teles[numero] = t;
+    t.mandar(jsonEncode({'t': 'central', 'codigo': _codigo, 'evento': eventoId}));
+    final tiempos = _tiemposDeTele[numero];
+    if (tiempos != null) {
+      t.mandar(jsonEncode({'t': 'tiempos', 'tiempos': tiempos.toJson()}));
+    }
+    _mandarFilas(t);
+    _mandarManejan();
+    ws.listen(
+      (mensaje) => _mensajeDeTele(t, mensaje),
+      onDone: () => _seFueTele(t),
+      onError: (Object _) => _seFueTele(t),
+      cancelOnError: true,
+    );
+  }
+
+  void _seFueTele(_ConexionTele t) {
+    if (!identical(_teles[t.numero], t)) return;
+    _teles.remove(t.numero);
+    _avisarTeles();
+  }
+
+  void _mensajeDeTele(_ConexionTele t, dynamic mensaje) {
+    if (mensaje is! String || mensaje.length > 4096) return;
+    final Object? json;
+    try {
+      json = jsonDecode(mensaje);
+    } catch (_) {
+      return;
+    }
+    if (json is! Map<String, dynamic>) return;
+    switch (json['t']) {
+      case 'hola':
+        t.mandar(jsonEncode({'t': 'hola'}));
+      case 'tiempos':
+        // Los segundos con que la Tele 2 arrancó: los celulares de esa tele
+        // los ven y los cambian desde ahí.
+        final tiempos = TiemposAMano.fromJson(json['tiempos']);
+        if (tiempos == null || _tiemposDeTele[t.numero] == tiempos) return;
+        _tiemposDeTele[t.numero] = tiempos;
+        alCambiarTiemposDeTele?.call(t.numero, tiempos);
+        if (_puerta != null) _mandarLista();
     }
   }
 
@@ -536,11 +780,14 @@ class CentralPuerta {
 }
 
 class _Conexion {
-  _Conexion(this.ws, this.celular, this.nombre);
+  _Conexion(this.ws, this.celular, this.nombre, {this.tele});
 
   final WebSocket ws;
   final String celular;
   final String nombre;
+
+  /// "Tu tele": la que eligió el celular.
+  int? tele;
 
   void mandar(String mensaje) {
     try {
@@ -555,4 +802,14 @@ class _Conexion {
       await ws.close(codigo, motivo).timeout(const Duration(seconds: 2));
     } catch (_) {}
   }
+}
+
+/// La Tele 2, del lado de la Tele 1: qué filas ya tiene.
+class _ConexionTele extends _Conexion {
+  _ConexionTele(WebSocket ws, this.numero) : super(ws, 'tele-$numero', 'Tele $numero');
+
+  final int numero;
+
+  /// La firma de cada fila que ya se le mandó.
+  final enviadas = <String, String>{};
 }

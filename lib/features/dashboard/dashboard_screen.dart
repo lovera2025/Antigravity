@@ -35,6 +35,8 @@ import '../common/utils/cortes_pantalla.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../recepcion/widgets/otra_fiesta_en_la_tele.dart';
 import '../common/widgets/admin_gate.dart';
+import '../common/utils/solo_jefe.dart' show kSoloEnModoJefe;
+import '../tele/elegir_modo_tele.dart';
 import '../common/providers/admin_provider.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
 import '../caja_sesiones/widgets/cerrar_caja_dialog.dart';
@@ -885,14 +887,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           }
         },
       ),
-      // En una tablet o un celular (la barra, 6.4.0) no hay segunda ventana: se ve
-      // apagada, con el motivo, para que se sepa dónde está.
+      // En una tele, una tablet o un celular no hay segunda ventana: TÓTEM deja
+      // usar el equipo como tótem (la tele es el tótem, 24-nov-2026), solo en
+      // modo jefe. En la web se ve apagada, con el motivo.
       _CommandAction(
         label: 'TÓTEM',
         icon: Icons.monitor_rounded,
-        onTap: _abrirTotem,
-        apagadaPorque:
-            KioskLauncher.disponible ? null : KioskLauncher.motivoNoDisponible,
+        onTap: KioskLauncher.disponible
+            ? _abrirTotem
+            : () => elegirModoTele(context, ref),
+        apagadaPorque: KioskLauncher.disponible
+            ? null
+            : kIsWeb
+                ? KioskLauncher.motivoNoDisponible
+                : (ref.watch(esRolJefeProvider) ? null : kSoloEnModoJefe),
       ),
     ];
 

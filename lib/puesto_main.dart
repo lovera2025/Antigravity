@@ -21,7 +21,12 @@ void main() {
     servidor: Uri.base,
     guardado: GuardadoEnElNavegador(),
   );
-  cliente.iniciar(codigoDelEnlace: Uri.base.queryParameters['c']);
+  // `&t=2`: el QR de la Tele 2 (la tele es el tótem, 24-nov-2026) deja este
+  // celular con "Tu tele: Tele 2".
+  cliente.iniciar(
+    codigoDelEnlace: Uri.base.queryParameters['c'],
+    teleDelEnlace: Uri.base.queryParameters['t'],
+  );
   runApp(PuestoApp(cliente: cliente));
 }
 

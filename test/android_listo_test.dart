@@ -139,13 +139,18 @@ void main() {
       expect(KioskLauncher.isTotemActive, isFalse);
     });
 
-    test('la tarjeta TÓTEM del panel se apaga con el motivo donde no se puede', () {
+    test('la tarjeta TÓTEM del panel: en la web, apagada con el motivo; en una tele '
+        'o una tablet, "usar este equipo como tótem", solo en modo jefe', () {
       final panel = File('lib/features/dashboard/dashboard_screen.dart').readAsStringSync();
-      final tarjeta = panel.substring(panel.indexOf("label: 'TÓTEM'"));
-      expect(
-        tarjeta.substring(0, tarjeta.indexOf('),')),
-        contains('KioskLauncher.disponible ? null : KioskLauncher.motivoNoDisponible'),
-      );
+      final desde = panel.indexOf("label: 'TÓTEM'");
+      final tarjeta = panel.substring(desde, panel.indexOf('],', desde));
+      expect(tarjeta, contains('KioskLauncher.disponible'));
+      expect(tarjeta, contains('kIsWeb'));
+      expect(tarjeta, contains('KioskLauncher.motivoNoDisponible'));
+      // La tele es el tótem (24-nov-2026): solo el jefe elige el modo tele.
+      expect(tarjeta, contains('elegirModoTele(context, ref)'));
+      expect(tarjeta, contains('esRolJefeProvider'));
+      expect(tarjeta, contains('kSoloEnModoJefe'));
       expect(panel, contains('onTap: apagada ? null : a.onTap'));
     });
   });

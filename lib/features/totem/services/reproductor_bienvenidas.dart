@@ -59,6 +59,10 @@ class ReproductorBienvenidas extends ChangeNotifier {
 
   set familiaDe(String Function(Invitado) f) => sala.familiaDe = f;
 
+  /// A quién se saluda ([IngresosTotem.seSaluda]): en la tele, lo de su
+  /// recepcionista.
+  set seSaluda(bool Function(Invitado)? f) => sala.seSaluda = f;
+
   /// Cuánto dura cada bienvenida. Cambiarlos con una tarjeta en pantalla
   /// mueve su fin (salvo mientras se va).
   ///

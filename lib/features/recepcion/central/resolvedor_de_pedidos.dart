@@ -45,7 +45,13 @@ abstract class PuertaDeEstaPc {
   });
 
   /// Los segundos de la llegada de esa noche: la tele cambia al instante.
-  Future<void> ponerTiempos(String eventoId, TiemposAMano tiempos);
+  /// [tele]: la de quien los cambió (24-nov-2026: cada recepcionista controla
+  /// su tele). Null: la de esta PC o la Tele 1.
+  Future<void> ponerTiempos(
+    String eventoId,
+    TiemposAMano tiempos, {
+    int? tele,
+  });
 }
 
 /// **Un solo candado para la PC y los celulares** (6.4.0): todo lo que se pide
@@ -57,14 +63,19 @@ abstract class PuertaDeEstaPc {
 /// Lo usa la central (`CentralPuerta`) con lo que llega por el wifi y la PC
 /// (`CentralDeLaPuerta.resolverDeEstaPc`) aunque la central esté apagada.
 class ResolvedorDePedidos {
-  ResolvedorDePedidos({required this.eventoId, required PuertaDeEstaPc pc})
-      : _pc = pc;
+  ResolvedorDePedidos({
+    required this.eventoId,
+    required PuertaDeEstaPc pc,
+    DateTime Function()? ahora,
+  })  : _pc = pc,
+        marcas = MarcasDeLaNoche(ahora: ahora);
 
   final String eventoId;
   final PuertaDeEstaPc _pc;
 
-  /// Quién marcó a cada uno esta noche, desde qué puesto.
-  final marcas = MarcasDeLaNoche();
+  /// Quién marcó a cada uno esta noche, desde qué puesto, y en qué tele se
+  /// saluda.
+  final MarcasDeLaNoche marcas;
 
   /// La lista que ve Recepción, la última que se le pasó.
   PuertaDelEvento? puerta;
@@ -116,7 +127,7 @@ class ResolvedorDePedidos {
       final t = pedido.tiempos;
       if (t == null) return _noSePudo(pedido);
       try {
-        await _pc.ponerTiempos(eventoId, t);
+        await _pc.ponerTiempos(eventoId, t, tele: pedido.tele);
       } catch (e) {
         debugPrint('Puerta, segundos del tótem: $e');
         return _noSePudo(pedido);
@@ -158,6 +169,7 @@ class ResolvedorDePedidos {
     final DecisionPedido decision;
     // Quién lo había marcado antes, para dejarlo como estaba si la base falla.
     final antes = marcas.quien(pedido.personaId);
+    final bienvenidaAntes = marcas.bienvenida(pedido.personaId);
     try {
       final fila = persona == null ? null : await _pc.fila(persona.id);
       decision = decidirPedido(
@@ -167,10 +179,16 @@ class ResolvedorDePedidos {
         quien: antes,
       );
       // Quién lo marcó se anota antes de marcar: la base avisa el cambio y la
-      // lista nueva sale enseguida, y tiene que salir con el nombre.
+      // lista nueva sale enseguida, y tiene que salir con el nombre. Y la tele
+      // tiene que saber, cuando la base avisa, en cuál se saluda.
       switch (decision.hace) {
         case QueHaceLaCentral.ingresar:
-          marcas.ingreso(persona!.id, puesto);
+          marcas.ingreso(
+            persona!.id,
+            puesto,
+            tele: pedido.tele,
+            saludar: decision.saludar,
+          );
           await _pc.ingresar(eventoId, persona, saludar: decision.saludar);
         case QueHaceLaCentral.deshacer:
           marcas.deshizo(persona!.id);
@@ -182,11 +200,7 @@ class ResolvedorDePedidos {
           break;
       }
     } catch (e) {
-      if (antes == null) {
-        marcas.deshizo(pedido.personaId);
-      } else {
-        marcas.ingreso(pedido.personaId, antes);
-      }
+      marcas.volver(pedido.personaId, antes, bienvenidaAntes);
       // No se guarda: el celular lo vuelve a mandar.
       debugPrint('Puerta, pedido ${pedido.id}: $e');
       return null;

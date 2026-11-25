@@ -97,6 +97,25 @@ class ClienteDePrueba extends ClienteCentral {
     return true;
   }
 
+  /// "Tu tele" (24-nov-2026): las teles que manda la Tele 1 y la elegida.
+  List<TeleDelCelular> tel = const [];
+  int? miTele;
+  String? centralTele;
+  final telesElegidas = <int>[];
+
+  @override
+  List<TeleDelCelular> get teles => tel;
+  @override
+  int? get tele => miTele;
+  @override
+  String get central => centralTele == null ? 'la PC' : 'la $centralTele';
+  @override
+  Future<void> elegirTele(int n) async {
+    telesElegidas.add(n);
+    miTele = n;
+    notifyListeners();
+  }
+
   @override
   Future<void> sumarSilla(GrupoPuerta grupo, DatosSilla datos) async =>
       sillasPedidas.add((QuePide.sumarSilla, grupo.titular.id, datos));

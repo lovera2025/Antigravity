@@ -12,6 +12,7 @@ import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import '../widgets/panel_puerta.dart';
 import 'cliente_central.dart';
+import 'pedidos_de_la_puerta.dart' show kLasDosTeles, nombreDeLaTele;
 
 /// El celular de la puerta: la misma lista de Recepción, que marca en la
 /// notebook central por el wifi del router (`ClienteCentral`).
@@ -117,8 +118,61 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
             const SizedBox(height: 8),
             _pastilla(),
           ],
+          // La central es una tele (24-nov-2026): cada recepcionista elige su
+          // tele, y lo que marca se saluda en esa.
+          if (conLista && _c.teles.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _tuTele(),
+          ],
         ],
       ),
+    );
+  }
+
+  /// "Tu tele: Tele 1 · Tele 2 · Las dos".
+  Widget _tuTele() {
+    final elegida = _c.tele;
+    Widget opcion(int n) {
+      final tele = _c.teles.where((t) => t.numero == n).firstOrNull;
+      final apagada = n != kLasDosTeles && n != 1 && !(tele?.conectada ?? false);
+      final on = elegida == n;
+      return Padding(
+        padding: const EdgeInsets.only(right: 6, bottom: 4),
+        child: ChoiceChip(
+          key: ValueKey('tu_tele_$n'),
+          label: Text(
+            apagada ? '${nombreDeLaTele(n)} (apagada)' : nombreDeLaTele(n),
+            style: _letra(
+              size: 13,
+              negrita: on,
+              color: on ? Colors.black : (apagada ? Colors.white38 : _perla),
+            ),
+          ),
+          selected: on,
+          showCheckmark: false,
+          selectedColor: _ambar,
+          backgroundColor: Colors.white.withValues(alpha: 0.06),
+          side: BorderSide(color: on ? _ambar : Colors.white24),
+          onSelected: (_) => _c.elegirTele(n),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          elegida == null
+              ? 'ELEGÍ TU TELE: AHÍ SE SALUDA LO QUE MARCÁS'
+              : 'TU TELE · AHÍ SE SALUDA LO QUE MARCÁS',
+          style: _titulo(size: 11, color: elegida == null ? _ambar : Colors.white54),
+        ),
+        const SizedBox(height: 4),
+        Wrap(children: [
+          for (final t in _c.teles) opcion(t.numero),
+          opcion(kLasDosTeles),
+        ]),
+      ],
     );
   }
 
@@ -185,6 +239,8 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
   /// Si está conectado a la PC y, si no, cuántos le faltan mandar.
   Widget _pastilla() {
     final pendientes = _c.pendientes.length;
+    // "la PC" o "la Tele 1" (la tele es el tótem, 24-nov-2026).
+    final central = _c.central;
     final (texto, color) = switch (_c.estado) {
       EstadoDelPuesto.conectado when _c.seMandaron > 0 => (
           _c.seMandaron == 1
@@ -192,11 +248,11 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
               : 'Conectado · se mandaron ${_c.seMandaron}',
           _verde,
         ),
-      EstadoDelPuesto.conectado => ('Conectado a la PC', _verde),
+      EstadoDelPuesto.conectado => ('Conectado a $central', _verde),
       _ => (
           pendientes == 0
-              ? 'Sin conexión con la PC'
-              : 'Sin conexión con la PC · $pendientes por mandar',
+              ? 'Sin conexión con $central'
+              : 'Sin conexión con $central · $pendientes por mandar',
           _ambar,
         ),
     };
@@ -248,10 +304,11 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
       case EstadoDelPuesto.conectado:
       case EstadoDelPuesto.sinConexion:
         if (puerta == null || eventoId == null) {
+          // La central puede ser la notebook o la Tele 1 (24-nov-2026).
           return _mensaje(
-            'Buscando la PC central…',
+            'Buscando la central…',
             'El celular tiene que estar en el wifi del router, el mismo de la '
-                'PC.',
+                'PC o la tele.',
             cargando: true,
           );
         }
@@ -417,7 +474,7 @@ class _DatosState extends State<_Datos> {
                     style: _letra(size: 18, negrita: true)),
                 const SizedBox(height: 6),
                 Text(
-                  'Así la PC sabe quién ingresó a cada uno.',
+                  'Así se sabe quién ingresó a cada uno.',
                   textAlign: TextAlign.center,
                   style: _letra(size: 13, color: Colors.white60),
                 ),

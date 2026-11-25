@@ -71,6 +71,9 @@ class PcEnMemoria implements PuertaDeEstaPc {
   /// Los segundos del tótem que se pusieron.
   final tiempos = <TiemposAMano>[];
 
+  /// La tele de cada cambio de segundos, en el mismo orden que [tiempos].
+  final telesDeLosTiempos = <int?>[];
+
   @override
   Future<List<SillaPuerta>> sillasDelEvento(String eventoId) async =>
       [for (final s in sillas) if (s.eventoId == eventoId) s];
@@ -114,8 +117,9 @@ class PcEnMemoria implements PuertaDeEstaPc {
   }
 
   @override
-  Future<void> ponerTiempos(String eventoId, TiemposAMano t) async {
+  Future<void> ponerTiempos(String eventoId, TiemposAMano t, {int? tele}) async {
     tiempos.add(t);
+    telesDeLosTiempos.add(tele);
   }
 
   /// La lista como la armaría Recepción con estas filas.

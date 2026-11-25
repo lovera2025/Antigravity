@@ -119,7 +119,21 @@ class TotemLocal extends ConsumerStatefulWidget {
   /// (la vista de Recepción). Si no, ocupa todo (la pantalla del asesor).
   final bool encuadrar;
 
-  const TotemLocal({super.key, required this.eventoId, this.encuadrar = false});
+  /// A quién saluda (la tele es el tótem, 24-nov-2026): la tele saluda solo lo
+  /// de su recepcionista y nada que llegue tarde. Null: a todos los que
+  /// entran, como en Recepción.
+  final bool Function(String personaId)? seSaluda;
+
+  /// El fondo sin moverse ([EscenaTotem.fondoQuieto]): lo elige la tele.
+  final bool fondoQuieto;
+
+  const TotemLocal({
+    super.key,
+    required this.eventoId,
+    this.encuadrar = false,
+    this.seSaluda,
+    this.fondoQuieto = false,
+  });
 
   @override
   ConsumerState<TotemLocal> createState() => _TotemLocalState();
@@ -138,6 +152,8 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
     super.initState();
     unawaited(FondoTotem.precargar());
     unawaited(FondoPropio.precargar());
+    final seSaluda = widget.seSaluda;
+    _reproductor.seSaluda = seSaluda == null ? null : (i) => seSaluda(i.id);
 
     // La ficha antes que la lista: la familia de cada uno tiene que estar
     // cuando llega su ingreso.
@@ -238,6 +254,7 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
                 enCamino: _reproductor.enCamino,
                 empezo: actual?.empezo,
                 fin: _reproductor.fin,
+                fondoQuieto: widget.fondoQuieto,
               );
             },
           );

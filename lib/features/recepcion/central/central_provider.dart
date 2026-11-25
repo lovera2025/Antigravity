@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pc_despierta.dart';
+import '../../barra/central/buscar_central.dart' show RespondeBusqueda;
+import '../../tele/red_de_la_tele.dart';
 import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
 import '../../../models/silla_puerta.dart';
@@ -30,11 +32,13 @@ class PuertaDeEstaPcConBase implements PuertaDeEstaPc {
   PuertaDeEstaPcConBase(
     this._invitados,
     this._sillas, {
-    required Future<void> Function(String eventoId, TiemposAMano t) ponerTiempos,
+    required Future<void> Function(String eventoId, TiemposAMano t, int? tele)
+        ponerTiempos,
   }) : _ponerTiempos = ponerTiempos;
   final InvitadosRepository _invitados;
   final SillasPuertaRepository _sillas;
-  final Future<void> Function(String eventoId, TiemposAMano t) _ponerTiempos;
+  final Future<void> Function(String eventoId, TiemposAMano t, int? tele)
+      _ponerTiempos;
 
   @override
   Future<Invitado?> fila(String id) => _invitados.getLocal(id);
@@ -89,8 +93,12 @@ class PuertaDeEstaPcConBase implements PuertaDeEstaPc {
       _sillas.quitar(sillaId, por: por, motivo: motivo);
 
   @override
-  Future<void> ponerTiempos(String eventoId, TiemposAMano tiempos) =>
-      _ponerTiempos(eventoId, tiempos);
+  Future<void> ponerTiempos(
+    String eventoId,
+    TiemposAMano tiempos, {
+    int? tele,
+  }) =>
+      _ponerTiempos(eventoId, tiempos, tele);
 }
 
 /// Por dónde escucha la central: todas las conexiones de la PC. Las pruebas
@@ -124,9 +132,11 @@ final cambiarCodigoCentralProvider =
 );
 
 /// La carpeta con la página del celular: `puesto` al lado del programa. La
-/// deja el instalador.
+/// deja el instalador. En una tele o una tablet (24-nov-2026) viene adentro del
+/// APK y la tele la copia a su carpeta al abrir (`PaginaDelCelularEnAndroid`).
 final paginaDelCelularProvider = Provider<Directory?>((ref) {
   try {
+    if (Platform.isAndroid) return PaginaDelCelularEnAndroid.carpeta;
     final carpeta = Directory(
       '${File(Platform.resolvedExecutable).parent.path}'
       '${Platform.pathSeparator}puesto',
@@ -150,6 +160,12 @@ class EstadoCentral {
   /// Lo que salió mal al prenderla, en palabras.
   final String? error;
 
+  /// La central es la Tele 1 (24-nov-2026).
+  final bool esTele;
+
+  /// La Tele 2: si está conectada.
+  final List<TeleConectada> teles;
+
   const EstadoCentral({
     this.eventoId,
     this.codigo,
@@ -157,7 +173,15 @@ class EstadoCentral {
     this.direcciones = const [],
     this.puestos = const [],
     this.error,
+    this.esTele = false,
+    this.teles = const [],
   });
+
+  /// Los celulares conectados que eligieron la tele [n] (o las dos).
+  List<String> manejan(int n) => [
+        for (final p in puestos)
+          if (p.conectado && (p.tele == n || p.tele == kLasDosTeles)) p.nombre,
+      ];
 
   bool get prendida => puerto != null;
 
@@ -179,6 +203,7 @@ class EstadoCentral {
     String? codigo,
     List<String>? direcciones,
     List<PuestoConectado>? puestos,
+    List<TeleConectada>? teles,
   }) =>
       EstadoCentral(
         eventoId: eventoId,
@@ -187,6 +212,8 @@ class EstadoCentral {
         direcciones: direcciones ?? this.direcciones,
         puestos: puestos ?? this.puestos,
         error: error,
+        esTele: esTele,
+        teles: teles ?? this.teles,
       );
 }
 
@@ -221,9 +248,32 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   PuertaDeEstaPc _pc() => PuertaDeEstaPcConBase(
         ref.read(invitadosRepositoryProvider),
         ref.read(sillasPuertaRepositoryProvider),
-        ponerTiempos: (id, t) =>
-            ref.read(tiemposAManoProvider(id).notifier).poner(t),
+        // Cada recepcionista controla su tele (24-nov-2026): los segundos de
+        // la Tele 2 van a la Tele 2; los de la Tele 1 (o de la notebook), acá.
+        // "Las dos": a las dos.
+        ponerTiempos: (id, t, tele) async {
+          final central = _central;
+          if (central != null && central.esTele && tele != null && tele != 1) {
+            if (tele == kLasDosTeles) {
+              for (final otra in central.teles) {
+                central.ponerTiemposDeTele(otra.numero, t);
+              }
+            } else {
+              central.ponerTiemposDeTele(tele, t);
+              return;
+            }
+          }
+          await ref.read(tiemposAManoProvider(id).notifier).poner(t);
+        },
       );
+
+  /// Cómo se saluda a [personaId] en las teles, si entró por la central esta
+  /// noche (la tele es el tótem, 24-nov-2026).
+  BienvenidaDeLaNoche? bienvenidaDe(String eventoId, String personaId) {
+    final r = _resolvedor;
+    if (r == null || r.eventoId != eventoId) return null;
+    return r.marcas.bienvenida(personaId);
+  }
 
   /// Lo que se pide desde esta PC (sumar o quitar una silla): por la misma
   /// fila que los celulares, con la central prendida o no. [puerta] es la
@@ -250,11 +300,23 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     return const EstadoCentral();
   }
 
+  /// La lista de la puerta fila por fila, para la Tele 2.
+  ProviderSubscription<AsyncValue<List<Invitado>>>? _filas;
+  StreamSubscription<List<TeleConectada>>? _teles;
+
+  /// Para que la Tele 2 la encuentre por el wifi ([RespondeBusqueda]).
+  RespondeBusqueda? _responde;
+
   /// La central de [eventoId]. Si ya estaba prendida para ese evento, solo
   /// vuelve a mirar las direcciones (la PC pudo haberse conectado al router
   /// recién).
-  Future<void> prender(String eventoId) async {
-    if (_central != null && state.eventoId == eventoId) {
+  ///
+  /// [comoTele]: la prende la Tele 1 (24-nov-2026). Los celulares eligen "Tu
+  /// tele", la Tele 2 la encuentra por el wifi y se copia la lista.
+  Future<void> prender(String eventoId, {bool comoTele = false}) async {
+    if (_central != null &&
+        state.eventoId == eventoId &&
+        _central!.esTele == comoTele) {
       final direcciones = await ref.read(direccionesDeEstaPcProvider)();
       state = state._con(direcciones: direcciones);
       return;
@@ -269,6 +331,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       pc: _pc(),
       resolvedor: resolvedor,
       paginaDelCelular: ref.read(paginaDelCelularProvider),
+      esTele: comoTele,
     );
     try {
       await central.arrancar(
@@ -337,6 +400,32 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       _chat?.ponerPuestos(central.puestosDelChat);
       if (identical(_central, central)) state = state._con(puestos: puestos);
     });
+    if (comoTele) {
+      // La Tele 2 copia la lista de esta: fila por fila, con cómo se saluda.
+      _filas = ref.container.listen<AsyncValue<List<Invitado>>>(
+        invitadosStreamProvider(eventoId),
+        (_, filas) {
+          final f = filas.value;
+          if (f != null) central.ponerFilas(f);
+        },
+        fireImmediately: true,
+      );
+      _teles = central.cambiosDeTeles.listen((teles) {
+        if (identical(_central, central)) state = state._con(teles: teles);
+      });
+      final responde = RespondeBusqueda(
+        eventoId: eventoId,
+        puertoCentral: central.puerto!,
+      );
+      _responde = responde;
+      // Android oye la pregunta de la Tele 2 solo con el permiso del
+      // multicast prendido (`RedDeLaTele`).
+      await RedDeLaTele.oirLaRed(true);
+      await responde.escuchar(
+        puerto: kPuertoBusquedaTele,
+        en: ref.read(escuchaCentralProvider),
+      );
+    }
     final direcciones = await ref.read(direccionesDeEstaPcProvider)();
     if (!identical(_central, central)) return;
     state = EstadoCentral(
@@ -345,6 +434,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       puerto: central.puerto,
       direcciones: direcciones,
       puestos: central.puestos,
+      esTele: comoTele,
+      teles: central.teles,
     );
   }
 
@@ -390,6 +481,16 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _tiempos = null;
     _salon?.close();
     _salon = null;
+    _filas?.close();
+    _filas = null;
+    await _teles?.cancel();
+    _teles = null;
+    final responde = _responde;
+    _responde = null;
+    if (responde != null) {
+      responde.cerrar();
+      await RedDeLaTele.oirLaRed(false);
+    }
     final chat = _chat;
     _chat = null;
     chat?.dispose();

@@ -106,6 +106,11 @@ class EscenaTotem extends StatefulWidget {
   final double tiempoFijo;
   final double progresoFijo;
 
+  /// El fondo sin moverse y lo demás como siempre (la tele es el tótem,
+  /// 24-nov-2026): en una tele de procesador chico el fondo animado puede ir a
+  /// los saltos. Se elige en el menú de la tele.
+  final bool fondoQuieto;
+
   const EscenaTotem({
     super.key,
     required this.estilo,
@@ -129,6 +134,7 @@ class EscenaTotem extends StatefulWidget {
     this.quieta = false,
     this.tiempoFijo = 4,
     this.progresoFijo = 0.35,
+    this.fondoQuieto = false,
   });
 
   /// Lo que tarda en entrar una llegada.
@@ -423,11 +429,17 @@ class _EscenaTotemState extends State<EscenaTotem>
                 alrededorDelTexto: widget.alrededorDelTexto,
               );
               final llegada = widget.llegada;
+              // Con el fondo quieto (la tele de procesador chico), el fondo
+              // queda en un instante fijo y se arma de nuevo al cambiarlo.
+              final tiempoDelFondo = widget.quieta
+                  ? widget.tiempoFijo
+                  : (widget.fondoQuieto ? widget.tiempoFijo : null);
               return Stack(
                 fit: StackFit.expand,
                 children: [
                   if (receta != null)
                     FondoPropio(
+                      key: ValueKey('fondo-propio-${widget.fondoQuieto}'),
                       imagen: _fondo.imagen,
                       chica: _fondo.chica,
                       receta: receta,
@@ -435,15 +447,19 @@ class _EscenaTotemState extends State<EscenaTotem>
                       // ensucia: va como Cristal, sin atenuar.
                       atenuado: receta.textoOscuro ? 1 : 1 - 0.45 * e,
                       fogonazo: _fogonazo(e),
-                      tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
+                      tiempoFijo: tiempoDelFondo,
                     )
                   else
-                    FondoTotem(
-                      estilo: estilo,
-                      color: color,
-                      atenuado: estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
-                      fogonazo: _fogonazo(e),
-                      tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
+                    RepaintBoundary(
+                      child: FondoTotem(
+                        key: ValueKey('fondo-${widget.fondoQuieto}'),
+                        estilo: estilo,
+                        color: color,
+                        atenuado:
+                            estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
+                        fogonazo: _fogonazo(e),
+                        tiempoFijo: tiempoDelFondo,
+                      ),
                     ),
                   ...escena.capasDeFondo(datos),
                   if (cuadro == null || tema == null) ...[

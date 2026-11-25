@@ -116,9 +116,13 @@ class _PcDePrueba implements PuertaDeEstaPc {
   }
 
   @override
-  Future<void> ponerTiempos(String eventoId, TiemposAMano tiempos) async {
+  Future<void> ponerTiempos(
+    String eventoId,
+    TiemposAMano tiempos, {
+    int? tele,
+  }) async {
     // ignore: avoid_print
-    print('TIEMPOS del tótem: $tiempos');
+    print('TIEMPOS del tótem${tele == null ? '' : ' (Tele $tele)'}: $tiempos');
   }
 
   @override

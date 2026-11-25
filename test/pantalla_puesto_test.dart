@@ -131,6 +131,39 @@ void main() {
       expect(find.text('Mesa 14'), findsOneWidget);
       // Lo de la PC no va en el celular.
       expect(find.textContaining('sin internet'), findsNothing);
+      // Con la central en la notebook no hay "Tu tele".
+      expect(find.byKey(const ValueKey('tu_tele_1')), findsNothing);
+    });
+
+    testWidgets('con la central en la Tele 1 (24-nov-2026): "Tu tele", y lo que se '
+        'elige va a la central', (tester) async {
+      cliente
+        ..centralTele = 'Tele 1'
+        ..miTele = 1
+        ..tel = const [
+          TeleDelCelular(numero: 1, conectada: true, manejan: ['Juli']),
+          TeleDelCelular(numero: 2, conectada: true),
+        ];
+      await abrir(tester);
+      expect(find.text('Conectado a la Tele 1'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tu_tele_1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tu_tele_2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tu_tele_$kLasDosTeles')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tu_tele_2')));
+      await tester.pump();
+      expect(cliente.telesElegidas, [2]);
+    });
+
+    testWidgets('la Tele 2 apagada se ve "(apagada)"', (tester) async {
+      cliente
+        ..centralTele = 'Tele 1'
+        ..tel = const [
+          TeleDelCelular(numero: 1, conectada: true),
+          TeleDelCelular(numero: 2, conectada: false),
+        ];
+      await abrir(tester);
+      expect(find.text('Tele 2 (apagada)'), findsOneWidget);
+      expect(find.textContaining('ELEGÍ TU TELE'), findsOneWidget);
     });
 
     testWidgets('INGRESAR se lo pide a la central', (tester) async {
@@ -226,10 +259,10 @@ void main() {
   });
 
   group('lo demás', () {
-    testWidgets('sin la lista todavía, busca la PC y dice dónde', (tester) async {
+    testWidgets('sin la lista todavía, busca la central y dice dónde', (tester) async {
       cliente.e = EstadoDelPuesto.conectando;
       await abrir(tester);
-      expect(find.text('Buscando la PC central…'), findsOneWidget);
+      expect(find.text('Buscando la central…'), findsOneWidget);
       expect(find.textContaining('wifi del router'), findsOneWidget);
     });
 

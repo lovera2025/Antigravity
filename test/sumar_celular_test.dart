@@ -30,7 +30,7 @@ class _CentralDePrueba extends CentralDeLaPuerta {
   EstadoCentral build() => alAbrir;
 
   @override
-  Future<void> prender(String eventoId) async {
+  Future<void> prender(String eventoId, {bool comoTele = false}) async {
     prendidas.add(eventoId);
     state = alPrender;
   }

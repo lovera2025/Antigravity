@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El cartel de la app en la fila de apps de una Google TV (la tele es el tótem,
+     24-nov-2026): el logo sobre el violeta oscuro del tótem. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#14122B" />
+        </shape>
+    </item>
+    <item
+        android:width="128dp"
+        android:height="128dp"
+        android:drawable="@mipmap/ic_launcher"
+        android:gravity="center" />
+</layer-list>

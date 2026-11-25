@@ -79,9 +79,66 @@ class ClienteCentral extends ChangeNotifier {
   Map<String, String> _por = const {};
 
   /// Los segundos de la llegada de esa noche, como los tiene la PC. Null si la
-  /// central no los mandó (una PC con la versión de antes).
+  /// central no los mandó (una PC con la versión de antes). Con dos teles, los
+  /// de la tele de este celular.
   TiemposAMano? _tiempos;
-  TiemposAMano? get tiempos => _tiempos;
+  TiemposAMano? get tiempos {
+    final t = _tele;
+    if (t != null && t != 1 && t != kLasDosTeles) {
+      return _tiemposTeles[t] ?? _tiempos;
+    }
+    return _tiempos;
+  }
+
+  /// Los de las otras teles (la 2), como los manda la Tele 1.
+  Map<int, TiemposAMano> _tiemposTeles = const {};
+
+  // ── "Tu tele" (la tele es el tótem, 24-nov-2026) ──────────────────────────
+
+  /// La tele de este celular: lo que se marca acá se saluda en esa. Null: la
+  /// central es una notebook, o este celular todavía no eligió.
+  int? _tele;
+  int? get tele => _tele;
+
+  /// Las teles de la noche, si la central es una tele: la 1 y la 2, con quién
+  /// maneja cada una. Vacía con la central en una notebook.
+  List<TeleDelCelular> _teles = const [];
+  List<TeleDelCelular> get teles => _teles;
+
+  /// "Tele 1" si la central es la Tele 1; null si es la PC.
+  String? _central;
+
+  /// "la PC" o "la Tele 1": "Conectado a la Tele 1".
+  String get central => _central == null ? 'la PC' : 'la $_central';
+
+  /// Elige la tele de este celular: desde ahora, lo que se marca acá se saluda
+  /// en esa ([kLasDosTeles]: en las dos).
+  Future<void> elegirTele(int n) async {
+    if (!esTeleValida(n)) return;
+    _tele = n;
+    await _guardado.guardar(_kTele, '$n');
+    _mandar({'t': 'tele', 'n': n});
+    if (!_cerrado) notifyListeners();
+  }
+
+  void _recibirTeles(Map<String, dynamic> m) {
+    final lista = m['lista'];
+    if (lista is! List) return;
+    _teles = [
+      for (final j in lista)
+        if (j is Map && j['n'] is int)
+          TeleDelCelular(
+            numero: j['n'] as int,
+            conectada: j['conectada'] == true,
+            manejan: [
+              if (j['maneja'] is List)
+                for (final x in j['maneja'] as List)
+                  if (x is String) x,
+            ],
+          ),
+    ];
+    if (!_cerrado) notifyListeners();
+  }
 
   final _pendientes = <PedidoPendiente>[];
   List<PedidoPendiente> get pendientes => List.unmodifiable(_pendientes);
@@ -123,14 +180,23 @@ class ClienteCentral extends ChangeNotifier {
   // ── Desde afuera ──────────────────────────────────────────────────────────
 
   /// Lee lo guardado y, si ya se sabe el nombre, se conecta. [codigoDelEnlace]
-  /// es el que trae el QR (`?c=4821`).
-  Future<void> iniciar({String? codigoDelEnlace}) async {
+  /// es el que trae el QR (`?c=4821`); [teleDelEnlace], la tele del QR que se
+  /// escaneó (`&t=2`).
+  Future<void> iniciar({String? codigoDelEnlace, String? teleDelEnlace}) async {
     _celular = await _guardado.leer(_kCelular) ?? '';
     if (_celular.isEmpty) {
       _celular = const Uuid().v4();
       await _guardado.guardar(_kCelular, _celular);
     }
     _nombre = await _guardado.leer(_kNombre);
+    final teleDelQr = int.tryParse(teleDelEnlace ?? '');
+    if (teleDelQr != null && esTeleValida(teleDelQr)) {
+      _tele = teleDelQr;
+      await _guardado.guardar(_kTele, '$teleDelQr');
+    } else {
+      final guardada = int.tryParse(await _guardado.leer(_kTele) ?? '');
+      _tele = guardada != null && esTeleValida(guardada) ? guardada : null;
+    }
     if (codigoDelEnlace != null && _esCodigo(codigoDelEnlace)) {
       _codigo = codigoDelEnlace;
       await _guardado.guardar(_kCodigo, _codigo);
@@ -280,12 +346,18 @@ class ClienteCentral extends ChangeNotifier {
   /// cambio de segundos que llega tarde ya no sirve. Devuelve si se mandó.
   bool ponerTiempos(TiemposAMano t) {
     if (_estado != EstadoDelPuesto.conectado || _canal == null) return false;
-    _tiempos = t;
+    final tele = _tele;
+    if (tele != null && tele != 1 && tele != kLasDosTeles) {
+      _tiemposTeles = {..._tiemposTeles, tele: t};
+    } else {
+      _tiempos = t;
+    }
     _mandar(PedidoPuerta(
       id: const Uuid().v4(),
       que: QuePide.tiemposTotem,
       personaId: '',
       tiempos: t,
+      tele: tele,
     ).toJson());
     if (!_cerrado) notifyListeners();
     return true;
@@ -332,6 +404,9 @@ class ClienteCentral extends ChangeNotifier {
         que: que,
         personaId: personaId,
         silla: silla,
+        // La tele de cuando se tocó: si se manda al volver el wifi, se saluda
+        // (o no) en esa.
+        tele: _tele,
       ),
       marcado: _ahora(),
     );
@@ -363,7 +438,12 @@ class ClienteCentral extends ChangeNotifier {
     final uri = servidor.replace(
       scheme: esSeguro ? 'wss' : 'ws',
       path: '/vivo',
-      queryParameters: {'c': _codigo!, 'id': _celular, 'p': _nombre!},
+      queryParameters: {
+        'c': _codigo!,
+        'id': _celular,
+        'p': _nombre!,
+        if (_tele != null) 't': '$_tele',
+      },
     );
     final WebSocketChannel canal;
     try {
@@ -452,6 +532,8 @@ class ClienteCentral extends ChangeNotifier {
         _recibirChat(json);
       case 'puestos':
         _recibirPuestos(json);
+      case 'teles':
+        _recibirTeles(json);
       case 'codigo':
       case 'espera':
       case 'nombre':
@@ -480,6 +562,16 @@ class ClienteCentral extends ChangeNotifier {
         ? {for (final e in por.entries) '${e.key}': '${e.value}'}
         : const {};
     _tiempos = TiemposAMano.fromJson(m['tiempos']);
+    final central = m['central'];
+    _central = central is String && central.isNotEmpty ? central : null;
+    final deTeles = m['tiemposTeles'];
+    _tiemposTeles = {
+      if (deTeles is Map)
+        for (final e in deTeles.entries)
+          if (int.tryParse('${e.key}') != null &&
+              TiemposAMano.fromJson(e.value) != null)
+            int.parse('${e.key}'): TiemposAMano.fromJson(e.value)!,
+    };
     _confirmados.removeWhere((c) => c.$2 < v || volvio);
     _intentos = 0;
     _poner(EstadoDelPuesto.conectado);
@@ -683,6 +775,19 @@ class GuardadoEnElNavegador implements GuardadoDelCelular {
   }
 }
 
+/// Una tele de la noche, como la ve el celular.
+class TeleDelCelular {
+  final int numero;
+  final bool conectada;
+  final List<String> manejan;
+  const TeleDelCelular({
+    required this.numero,
+    required this.conectada,
+    this.manejan = const [],
+  });
+}
+
+const _kTele = 'puesto_tele';
 const _kCelular = 'puesto_celular';
 const _kNombre = 'puesto_nombre';
 const _kCodigo = 'puesto_codigo';

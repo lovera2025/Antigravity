@@ -470,6 +470,99 @@ class InvitadosRepository {
     unawaited(_subirYa(id));
   }
 
+  /// **Lo que manda la Tele 1, copiado en la base de la Tele 2, sin encolarlo**
+  /// (la tele es el tótem, 24-nov-2026). Es el único camino para escribir acá
+  /// una fila de la puerta que no marcó este equipo, como
+  /// `BarraLocal.guardarDeOtroEquipo` en la barra: la Tele 1 es la que la sube.
+  ///
+  /// - Una fila que ya está: cambia solo el ingreso, el nombre, la mesa y la
+  ///   hora (el DNI de un particular queda).
+  /// - Una que no está (un masivo antes del sorteo): se crea.
+  /// - Una que tiene algo en la cola de este equipo no se toca, como al bajar
+  ///   de la nube.
+  ///
+  /// Devuelve los ids que escribió.
+  Future<Set<String>> guardarDeOtraTele(
+    String eventoId,
+    List<Map<String, dynamic>> filas,
+  ) async {
+    if (filas.isEmpty) return const {};
+    final db = await LocalDatabase.instance;
+    final escritas = <String>{};
+    await db.transaction((txn) async {
+      final enCola = await txn.query(
+        '_sync_queue',
+        columns: ['registro_id'],
+        where: "tabla = 'invitados'",
+      );
+      final trabadas = {for (final r in enCola) r['registro_id'] as String};
+      for (final f in filas) {
+        final id = f['id'];
+        if (id is! String || id.isEmpty || trabadas.contains(id)) continue;
+        if (f['evento_id'] != eventoId) continue;
+        final datos = {
+          'nombre_completo': f['nombre_completo'] ?? '',
+          'numero_mesa': f['numero_mesa'],
+          'estado_ingreso': f['estado_ingreso'] ?? 'pendiente',
+          'updated_at': f['updated_at'],
+        };
+        final cambiadas = await txn.update(
+          'invitados',
+          datos,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (cambiadas == 0) {
+          await txn.insert('invitados', {
+            'id': id,
+            'evento_id': eventoId,
+            ...datos,
+            'dni': '',
+            'intentos_fallidos': 0,
+            'created_at': f['created_at'] ?? f['updated_at'],
+          });
+        }
+        escritas.add(id);
+      }
+    });
+    if (escritas.isNotEmpty) _notifyChanges(eventoId);
+    return escritas;
+  }
+
+  /// La Tele 2 pasa a principal (la Tele 1 se apagó): lo que copió de la Tele 1
+  /// esta noche ([ids]) se encola para subir, por si la Tele 1 no llegó a
+  /// subirlo. Si ya estaba en la nube, sube lo mismo y no cambia nada.
+  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final db = await LocalDatabase.instance;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        final filas = await txn.query(
+          'invitados',
+          where: 'id = ? AND evento_id = ?',
+          whereArgs: [id, eventoId],
+          limit: 1,
+        );
+        if (filas.isEmpty) continue;
+        final f = filas.first;
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'invitados',
+          operacion: SyncOperation.insert,
+          registroId: id,
+          // Sin la mesa, como lo que sube la puerta: la mesa la pone el salón.
+          payload: {
+            'id': id,
+            'evento_id': eventoId,
+            'nombre_completo': f['nombre_completo'],
+            'estado_ingreso': f['estado_ingreso'],
+            'updated_at': f['updated_at'],
+          },
+        );
+      }
+    });
+  }
+
   /// Sube ya lo que la cola tiene de esta fila, sin esperar al motor.
   ///
   /// Sube **lo que dice la cola**, no solo el último cambio: si la fila todavía
