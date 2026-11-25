@@ -1,7 +1,8 @@
 # Al abrir "Caja 1" aparecen cajas viejas con el mismo número
 
-**Estado:** contado por el usuario el 25-nov-2026. Sin investigar. Va con el repositor de la barra
-([barra-repositor-y-stock.md](barra-repositor-y-stock.md)), después de la tele en la app de verdad.
+**Estado (25-nov, tarde): EN CURSO** en la sesión "La barra por día de operación y la madrugada": las cajas
+separadas por día de operación, como un cierre de caja en su fecha (lo pidió el usuario con fotos de LAS CAJAS).
+Ver `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`.
 
 ## Qué pasa
 

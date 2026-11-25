@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 82;
+  static const int _version = 83;
 
   /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
   /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
@@ -165,6 +165,11 @@ class LocalDatabase {
       await crearTablasV82(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v82 sin crear: $e');
+    }
+    try {
+      await crearTablasV83(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v83 sin crear: $e');
     }
     return db;
   }
@@ -756,6 +761,7 @@ class LocalDatabase {
     await crearTablasV80(db);
     await crearTablasV81(db);
     await crearTablasV82(db);
+    await crearTablasV83(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1401,6 +1407,63 @@ class LocalDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_entradas_para_rendir_updated ON entradas_para_rendir(updated_at)',
+    );
+  }
+
+  /// Las dos tablas de la v83 (25-nov-2026): **el repositor y el stock por barra**
+  /// (`docs/SPEC_repositor_y_stock_por_barra_2026-11-25.md`).
+  ///
+  /// `barra_stock_barras`: con cuánto arranca cada producto en cada barra y desde
+  /// cuánto se avisa (`StockEnLaBarra`); una fila por fiesta, producto y barra, con id
+  /// fijo. `barra_stock_movimientos`: lo que hace el repositor (`MovimientoDeStock`);
+  /// **solo se agregan filas**.
+  ///
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF NOT
+  /// EXISTS`, sin tocar ninguna tabla que ya exista. Una versión anterior no las
+  /// conoce y sigue con el stock de la fiesta de siempre.
+  static Future<void> crearTablasV83(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_stock_barras (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        producto_id TEXT NOT NULL,
+        barra TEXT NOT NULL,
+        arranque INTEGER NOT NULL DEFAULT 0,
+        aviso INTEGER,
+        activo INTEGER NOT NULL DEFAULT 1,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_stock_barras_evento ON barra_stock_barras(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_stock_movimientos (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        producto_id TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 0,
+        desde TEXT,
+        hacia TEXT,
+        contadas INTEGER,
+        ajuste INTEGER NOT NULL DEFAULT 0,
+        motivo TEXT,
+        nota TEXT,
+        conocido TEXT,
+        avisos_previos INTEGER,
+        responde_a TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_stock_movimientos_evento ON barra_stock_movimientos(evento_id)',
     );
   }
 
@@ -3721,6 +3784,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v82 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v82: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 82, las tablas de la v83 no aparecen.
+    if (oldVersion < 83 && newVersion >= 83) {
+      debugPrint('  🔧 v83: el repositor y el stock por barra');
+      try {
+        await crearTablasV83(db);
+        debugPrint('✅ Migración v83 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v83: $e');
       }
     }
   }

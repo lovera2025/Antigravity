@@ -448,6 +448,8 @@ class SyncEngine {
     'barra_vales': 'updated_at',
     'barra_recargos': 'updated_at',
     'barra_cierres': 'updated_at',
+    'barra_stock_barras': 'updated_at',
+    'barra_stock_movimientos': 'updated_at',
     'entradas_config': 'updated_at',
     'entradas_cajas': 'updated_at',
     'entradas_ventas': 'updated_at',
@@ -1629,6 +1631,10 @@ class SyncEngine {
     // El pedido de cierre de una caja de barra y el OK de la encargada (v79):
     // mientras no cruza, la cajera espera con la caja abierta.
     'barra_cierres',
+    // El stock por barra (v83, 25-nov-2026): sin stock no se vende, así que una
+    // reposición o el reparto del jefe tienen que llegar enseguida a las cajas.
+    'barra_stock_barras',
+    'barra_stock_movimientos',
     // La venta de entradas (v80): es plata, y dos PCs vendiendo la misma fiesta
     // tienen que verse en segundos (los números del talonario, las de los
     // lugares que ya compró una familia) y una anulación tiene que llegar a
@@ -2089,6 +2095,8 @@ class SyncEngine {
       if (table == 'barra_cierres') return 5;
       // Cuelga de la fiesta, como el precio.
       if (table == 'barra_recargos') return 2;
+      // El stock por barra (v83) cuelga de la fiesta y del producto, como el precio.
+      if (table == 'barra_stock_barras' || table == 'barra_stock_movimientos') return 2;
       // La venta de entradas (v80), de padres a hijas, como la barra.
       if (table == 'entradas_config' || table == 'entradas_cajas') return 2;
       if (table == 'entradas_ventas') return 4;
@@ -2462,6 +2470,8 @@ class SyncEngine {
       _pullTable(db, 'barra_vales', 'updated_at'),
       _pullTable(db, 'barra_recargos', 'updated_at'),
       _pullTable(db, 'barra_cierres', 'updated_at'),
+      _pullTable(db, 'barra_stock_barras', 'updated_at'),
+      _pullTable(db, 'barra_stock_movimientos', 'updated_at'),
       _pullTable(db, 'entradas_config', 'updated_at'),
       _pullTable(db, 'entradas_cajas', 'updated_at'),
       _pullTable(db, 'entradas_ventas', 'updated_at'),
@@ -3641,6 +3651,42 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v83, el stock por barra: exactamente las del `toMap()` de
+      // `StockEnLaBarra` y `MovimientoDeStock`, y las del SQL
+      // (`test/sync_tablas_v83_test.dart` las compara).
+      'barra_stock_barras': [
+        'id',
+        'evento_id',
+        'producto_id',
+        'barra',
+        'arranque',
+        'aviso',
+        'activo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_stock_movimientos': [
+        'id',
+        'evento_id',
+        'producto_id',
+        'tipo',
+        'cantidad',
+        'desde',
+        'hacia',
+        'contadas',
+        'ajuste',
+        'motivo',
+        'nota',
+        'conocido',
+        'avisos_previos',
+        'responde_a',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       // La v80, la venta de entradas: exactamente las del `toMap()` de cada modelo
       // y las del SQL (`test/sync_tablas_v80_test.dart` las compara).
       'entradas_config': [
@@ -3947,6 +3993,10 @@ class SyncEngine {
         'una fila por fiesta, con id fijo: cambiar el recargo la actualiza, no se borra',
     'barra_cierres':
         'solo se agregan filas: el pedido de cierre de la cajera y cada respuesta son otra',
+    'barra_stock_barras':
+        'una fila por fiesta, producto y barra con id fijo: sacarla le pone activo en 0, no se borra',
+    'barra_stock_movimientos':
+        'solo se agregan filas: corregir es otro movimiento',
     'entradas_config':
         'una fila por fiesta con id fijo: cambiar el precio la actualiza, no se borra',
     'entradas_cajas': 'una caja se cierra, no se borra',

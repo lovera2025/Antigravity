@@ -1,7 +1,8 @@
 # El repositor de la barra y el stock con reposiciones
 
-**Estado:** pedido por el usuario el 25-nov-2026. Sin plan ni maqueta. Va **después** de pasar la tele como tótem a
-la app de verdad (lo decide con el jefe).
+**Estado (25-nov, tarde): EN CURSO, para la Técnica del 4-dic.** Plan aprobado, maqueta contestada y la base
+programada (tablas, cuenta y tests). Todo lo decidido y lo que falta: `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`. Lo de
+abajo es el pedido original.
 
 ## Qué pidió
 

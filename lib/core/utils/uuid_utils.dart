@@ -115,6 +115,13 @@ class UuidUtils {
   static String barraRecargoId(String eventoId) =>
       _uuidDe('barra_recargos_v1|$eventoId');
 
+  /// PK estable para `barra_stock_barras` (v83): con cuánto arranca un producto en una
+  /// barra de una fiesta. Si el jefe lo cambia desde dos equipos, escriben la misma fila
+  /// (gana la última).
+  /// [claveBarra] es `claveDeBarra(nombre)`: "Barra 1" y "barra  1" son la misma fila.
+  static String barraStockBarraId(String eventoId, String productoId, String claveBarra) =>
+      _uuidDe('barra_stock_barras_v1|$eventoId|$productoId|$claveBarra');
+
   /// PK estable para `entradas_config` (v80): una por fiesta. Si el jefe cambia el
   /// precio desde dos PCs, escriben la misma fila (gana la última).
   static String entradasConfigId(String eventoId) =>

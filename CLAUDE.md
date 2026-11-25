@@ -539,8 +539,8 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v82 (6.9.3): no correr la app desde esta carpeta contra la base de verdad** hasta
-  que esta PC tenga la 6.9.3 instalada (hasta entonces tiene la 80). Los arneses que no abren la base sí.
+- **La base del equipo va por la v83 (25-nov, el stock por barra): no correr la app desde esta carpeta contra la base
+  de verdad** hasta que esta PC tenga instalada la versión con la v83. Los arneses que no abren la base sí.
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
     (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
@@ -794,8 +794,22 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
     papel de lo vendido dice "pulseras"**, salvo el historial A4, que espera una pregunta al usuario (cambiar su texto
     cambia `firmaDeLasHojas`). **Una ventana de prueba que llegue a PARA RENDIR reemplaza
     `abrirConstanciaParaRendirProvider`** (`test/arneses_sin_base_test.dart`).
-- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v83**: la v81 es de la entrega en dos partes y
-  la v82 de las entradas para rendir.
+- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v84**: la v81 es de la entrega en dos partes,
+  la v82 de las entradas para rendir y la v83 del stock por barra.
+
+**Para la Técnica del 4-dic (plan aprobado el 25-nov; entrada: `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`, que empieza
+con "Para retomar en otro chat")**: la fiesta es **sin internet** y el usuario quiere todo **sin bugs**; no se publica
+hasta que él lo diga. Cuatro partes: **la tele** (girar, cada tele con su escuela desde el celular sin PIN, todo
+guardado sin internet) y **la barra por día de operación** (las cajas de cada noche aparte, y nada se rompe pasada la
+medianoche), las dos en **sesiones aparte con su propio worktree**; **la encargada en su iPhone** por una página que
+sirve la notebook por el wifi (después de la barra por día); y **el repositor con el stock por barra**, cuya base
+(sin pantallas) está acá: **v83** (`barra_stock_barras`, `barra_stock_movimientos`; SQL
+`20261125120000_barra_stock.sql` **sin correr**) y **la única cuenta, `StockPorBarra`**
+(`lib/features/barra/cuentas/stock_por_barra.dart`). **Sin stock no se vende** (solo si el jefe repartió ese producto
+en esa barra), el depósito es el límite, y **un conteo guarda hasta dónde conocía el equipo** (`FotoDeStock`): lo de
+después se suma una sola vez aunque llegue tarde o del otro router. Las barras se comparan siempre con `claveDeBarra`.
+Cada barra tiene su router Mercusys MW305R y su notebook: el programa tiene que andar con las barras unidas por wifi o
+cada una sola (`docs/GUIA_ROUTERS_DE_LAS_BARRAS.md`).
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -842,7 +856,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 82 en la rama, con las tablas de la entrega en dos partes y de las entradas para rendir; las PCs tienen la 80) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 83 en la rama, con las tablas de la entrega en dos partes, de las entradas para rendir y del stock por barra; las PCs tienen la 80 o la 82) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).

@@ -395,8 +395,6 @@ void main() {
     }
     // Se crea al abrir, en una base nueva y al migrar.
     expect('await crearTablasV82(db);'.allMatches(fuente), hasLength(3));
-    // Y la app va por la 82.
-    expect(fuente, contains('static const int _version = 82;'));
   });
 
   test('si se reinstala la 6.9.2 la base abre, y al volver a la nueva también',
@@ -420,6 +418,8 @@ void main() {
     await db.close();
   });
 
+  // Con la versión fija: desde el stock por barra (25-nov-2026) la app va por la 83
+  // (lo de la versión de la app lo prueba `migracion_v83_test.dart`).
   group('la copia antes de migrar', () {
     test('una base en 80 se copia una sola vez, como antes_de_v82', () async {
       await crearBase(80);
@@ -427,8 +427,7 @@ void main() {
       final fotoOriginal = await foto(original);
       await original.close();
 
-      // Sin versión fija: la de la app.
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 82);
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v82.db'));
       final abierta = await factory.openDatabase(copia.path);
@@ -442,7 +441,7 @@ void main() {
 
     test('una base en 81 también se copia', () async {
       await crearBase(81);
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 82);
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v82.db'));
     });
@@ -451,7 +450,7 @@ void main() {
       await crearBase(80);
       final db = await abrirEnVersion(82);
       await db.close();
-      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory), isNull);
+      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 82), isNull);
     });
   });
 }

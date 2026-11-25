@@ -1,0 +1,132 @@
+1. sin stock se vende igual
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    return en(barra!, productoId)!.queda >= cantidad;
+    return true;
+---
+2. se repone más de lo que hay en el depósito
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (cantidad > hay) return 'En el depósito quedan $hay: no se puede reponer más.';
+
+---
+3. pasar de una barra a otra sin el porqué
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (porque == null || porque.trim().isEmpty) return 'Para pasar de una barra a otra, decí por qué.';
+
+---
+4. el reparto no descuenta del depósito
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      salio += arranques.values.fold<int>(0, (s, a) => s + a);
+      ;
+---
+5. las ventas anuladas descuentan stock
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+        vendida: (v) => !anuladas.contains(v.id),
+        vendida: (v) => true,
+---
+6. la barra de la caja se compara sin la clave (mayúsculas y espacios)
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+        if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: claveDeBarra(c.sede!),
+        if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: c.sede!,
+---
+7. el conteo no se usa: vale solo la cuenta
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      queda: queda ?? total,
+      queda: total,
+---
+8. lo que no conocía al contar se toma siempre como posterior (la venta se resta dos veces)
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || _cmp(v.createdAt, r.createdAt) < 0;
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero;
+---
+9. el número de venta no ordena: solo la hora
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || _cmp(v.createdAt, r.createdAt) < 0;
+          _cmp(v.createdAt, r.createdAt) < 0;
+---
+10. lo conocido de un equipo no ordena: solo la hora
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (conocido != null && _cmp(m.createdAt, conocido) <= 0) return true;
+
+---
+11. dos conteos a la vez se suman en vez de quedarse con uno
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      queda = queda == null ? desde : math.min(queda, desde);
+      queda = queda == null ? desde : queda + desde - total;
+---
+12. un conteo que conoce al anterior no lo reemplaza
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (_sabidoAntes(a, b)) return true;
+
+---
+13. "voy en camino" se resuelve con reposiciones de cualquier equipo
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      m.deviceId == equipo &&
+
+---
+14. "ya no voy" no saca el aviso
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      if (contestados.contains(a.id)) continue;
+
+---
+15. un producto sin reparto en esa barra queda trabado
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (!controla(barra, productoId)) return true;
+    if (!controla(barra, productoId)) return false;
+---
+16. se reparte más de lo que hay
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (total > sinReparto) return 'Hay $sinReparto: no se puede repartir $total.';
+
+---
+17. en plena noche se puede bajar el arranque de una barra que ya vendió
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      if (e.value < minimo) {
+      if (false) {
+---
+18. un reparto sin stock general frena igual
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      if (general[r.productoId] == null) {
+      if (false) {
+---
+19. un ajuste sin motivo se guarda
+lib/features/barra/datos/movimiento_de_stock.dart
+test/stock_por_barra_test.dart
+    if (ajuste != 0 && m == null) {
+    if (false) {
+---
+20. "Depósito" con acento se toma como una barra
+lib/features/barra/cuentas/nombre_de_barra.dart
+test/stock_por_barra_test.dart
+  const sin = 'aaaaeeeeiiiioooouuuun';
+  const sin = 'áàäâéèëêíìïîóòöôúùüûñ';
+---
+21. una anulación posterior al conteo no devuelve la botella
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+          vendida: (v) => ventaAntes(v) && !anuladaAntes(v),
+          vendida: (v) => ventaAntes(v) && !anuladas.contains(v.id),
+---
+22. el aviso por barra usa el de otra
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+            r.productoId: datos.stock(e.key, r.productoId, aviso: r.aviso, nombre: nombres[e.key]!),
+            r.productoId: datos.stock(e.key, r.productoId, aviso: 10, nombre: nombres[e.key]!),
+---
