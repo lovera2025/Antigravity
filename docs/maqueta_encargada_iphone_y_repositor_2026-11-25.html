@@ -172,10 +172,11 @@ const cajas = {
 const productos = ['Cerveza lata','Fernet con Coca','Vodka trago','Speed','Agua'];
 const deposito = { 'Cerveza lata':240, 'Fernet con Coca':150, 'Vodka trago':120, 'Speed':96, 'Agua':96 };
 const stock = {
-  b1: { 'Cerveza lata':{dio:72,vendio:61,falto:2}, 'Fernet con Coca':{dio:48,vendio:40,falto:0}, 'Vodka trago':{dio:36,vendio:30,falto:1}, 'Speed':{dio:24,vendio:12,falto:0}, 'Agua':{dio:30,vendio:9,falto:0} },
-  b2: { 'Cerveza lata':{dio:60,vendio:38,falto:0}, 'Fernet con Coca':{dio:40,vendio:31,falto:0}, 'Vodka trago':{dio:30,vendio:18,falto:0}, 'Speed':{dio:24,vendio:20,falto:0}, 'Agua':{dio:18,vendio:6,falto:0} },
+  b1: { 'Cerveza lata':{dio:72,vendio:61,falto:2}, 'Fernet con Coca':{dio:48,vendio:40,falto:0}, 'Vodka trago':{dio:36,vendio:30,falto:1}, 'Speed':{dio:24,vendio:23,falto:1}, 'Agua':{dio:30,vendio:9,falto:0} },
+  b2: { 'Cerveza lata':{dio:60,vendio:38,falto:0}, 'Fernet con Coca':{dio:40,vendio:31,falto:0}, 'Vodka trago':{dio:30,vendio:18,falto:0}, 'Speed':{dio:24,vendio:24,falto:0}, 'Agua':{dio:18,vendio:6,falto:0} },
 };
-const aviso = 10;
+const aviso = { b1:10, b2:6 };   // el jefe lo pone por barra
+let enCamino = {}, repuestoSpeed = false;   // enCamino['b2|Speed'] = true: avisado a esa barra
 const nombreBarra = { b1:'Barra 1', b2:'Barra 2' };
 const movimientos = [
   { h:'02:10', quien:'Nico', x:'6', clase:'mas', que:'Agua · Barra 2 → Barra 1', n:'En la Barra 2 casi no piden agua.' },
@@ -214,7 +215,7 @@ const notas = {
   enc: [
     `<b>En la notebook de la barra</b>, con la central prendida, LAS CAJAS tiene un botón nuevo: <b>CELULAR DE LA ENCARGADA</b>. Muestra el QR y el nombre del wifi. Ella conecta el iPhone a ese wifi (Juniorbarra1) y escanea con la cámara: se abre una página que le sirve la notebook. <b>No hace falta internet ni instalar nada.</b><span class="donde">Dónde: Centro de Comando → BARRA → la fiesta → CAJAS (o la encargada con su PIN en la notebook → LAS CAJAS).</span>`,
     `<b>Entra con su PIN de encargada</b> (el mismo de siempre). Lo revisa la notebook. Solo entra una encargada o el jefe: una cajera no puede abrir esta página. El PIN queda recordado en ese iPhone <b>hasta el mediodía siguiente</b>: si se bloquea o se cierra Safari, no lo vuelve a pedir.`,
-    `<b>Ve las cajas de esta noche</b>, igual que en LAS CAJAS de la notebook, pero en el tamaño del celular. Arriba, lo que la espera (un pedido de cierre). Si las dos barras están unidas por wifi, ve las dos; si cada barra está sola, ve la del wifi al que está conectada. Probá el botón de abajo para ver las dos formas. <b>No imprime</b>: los papeles los imprimen las cajeras desde sus tablets.`,
+    `<b>Ve las cajas de esta noche</b>, igual que en LAS CAJAS de la notebook, pero en el tamaño del celular, y <b>arriba los otros días</b> para mirar los que quiera (lo de antes del 4-dic fueron pruebas). En cada caja, VER SUS VENTAS y <b>ANULAR con motivo</b>. Arriba, lo que la espera (un pedido de cierre). <b>El jefe también entra con su PIN</b> para mirar el salón desde su celular. Si las dos barras están unidas por wifi, ve las dos; si cada barra está sola, ve la del wifi al que está conectada. Probá el botón de abajo para ver las dos formas. <b>No imprime</b>: los papeles los imprimen las cajeras desde sus tablets.`,
     `<b>Al tocar VER</b>, el pedido de la Caja 2: lo que contó la cajera (solo el efectivo), lo que tenía que haber, la diferencia, y la transferencia aparte (para comparar con Mercado Pago; no entra en la diferencia). Elige <b>ACEPTAR Y CERRAR</b> o <b>QUE CUENTE DE NUEVO</b>. La caja la cierra la tablet de la cajera, como hoy.`,
     `<b>El iPhone se bloqueó</b> (o se apagó, o ella se alejó del wifi). Al volver, la página se reconecta sola, pide todo de nuevo y muestra lo que pasó mientras no estaba. Si en ese rato una cajera pidió cerrar, el pedido la está esperando arriba. Las tablets que se duermen hacen lo mismo.`,
     null,
@@ -282,7 +283,8 @@ function tarjetaCaja(c){
     <span class="gris chica">desde las ${c.desde}</span>
     <div class="r chica"><span>Ventas</span><b>${c.ventas}</b></div>
     <div class="r chica"><span>Efectivo</span><b>${pesos(c.ef)}</b></div>
-    <div class="r chica"><span>Transferencia</span><b>${pesos(c.tr)}</b></div></div>`;
+    <div class="r chica"><span>Transferencia</span><b>${pesos(c.tr)}</b></div>
+    <span class="chica nuevo" style="color:var(--dorado);font-weight:800;margin-top:4px">VER SUS VENTAS → (ANULAR, con motivo)</span></div>`;
 }
 
 function encabezadoEnc(){
@@ -301,6 +303,7 @@ function pantallaCajasEnc(){
   const sonidoBanner = sonido ? '' : `<button class="b linea ancho chica nuevo" id="sonido">🔔 TOCÁ PARA ACTIVAR EL AVISO CON SONIDO</button>`;
   return `<div class="lado">${tel(`
     ${encabezadoEnc()}
+    <div class="chips nuevo"><button class="chip on">Esta noche · jue 4/12</button><button class="chip">mar 25/11 · 3 cajas</button><button class="chip">lun 24/11 · 1 caja</button></div>
     ${estadoRed}
     ${sonidoBanner}
     ${pide ? `<div class="pedido nuevo"><b>🔔 La Caja 2 (Juli) pide cerrar</b><span class="gris chica">Barra 1 · hace 1 minuto</span><button class="b dorado" id="ver_pedido">VER</button></div>` : ''}
@@ -313,7 +316,6 @@ function pantallaCajasEnc(){
       <div class="kpi"><div class="t">TRANSFERENCIA</div><div class="v">${pesos(tr)}</div></div>
     </div>
     ${barras.map(b => `<div class="grupo">${nombreBarra[b].toUpperCase()}</div>${cajas[b].map(c => tarjetaCaja(pedidoResuelto==='ok' && c.estado==='pide' ? {...c, estado:'ce'} : c)).join('')}`).join('')}
-    <span class="gris chica" style="text-align:center">Solo esta noche. Las de otros días, en la notebook.</span>
   `)}
   <div style="display:grid;gap:8px;max-width:300px">
     <span class="etiqueta">PARA PROBAR EN LA MAQUETA</span>
@@ -368,13 +370,20 @@ function pantallaVolvio(){
 
 function pantallaDecidirEnc(){
   return `<div class="decidir">
-    <b>Lo que te pregunto de la encargada</b>
+    <b>Lo que decidiste (25-nov)</b>
+    <ul>
+      <li>Ve las cajas de esta noche y, arriba, los otros días que quiera.</li>
+      <li>El jefe también entra con su PIN, para mirar el salón desde su celular.</li>
+      <li>El aviso con sonido, como está (un toque la primera vez).</li>
+      <li>Acepta los cierres y anula ventas, con motivo.</li>
+    </ul>
+    <details><summary class="gris chica">Las preguntas que te hice</summary>
     <ol>
       <li><b>¿Está bien que vea solo las cajas de esta noche?</b> Las de otros días se ven en la notebook (por día, como un cierre de caja en su fecha).</li>
       <li><b>¿Puede entrar también el jefe con su PIN</b> a esta página, para mirar desde su celular cuando está en el salón? (Propongo que sí.)</li>
       <li><b>El sonido del aviso:</b> el iPhone no deja sonar una página sin un toque antes. La primera vez ella toca "Activar el aviso con sonido" y después suena con cada pedido mientras la página esté abierta. Con el iPhone bloqueado no suena: al desbloquearlo, el pedido la está esperando arriba. ¿Te sirve así?</li>
       <li><b>¿Le dejamos ANULAR una venta desde el iPhone</b> (con motivo), como en la notebook, o solo mirar y aceptar cierres? (Propongo solo mirar y aceptar: anular queda en la notebook y en la tablet.)</li>
-    </ol>
+    </ol></details>
   </div>`;
 }
 
@@ -399,7 +408,7 @@ function pantallaOperadores(){
 
 function filaStock(b, p){
   const s = stock[b][p]; const q = s.dio - s.vendio - s.falto;
-  return `<div class="prod"><span class="nom">${p}</span><span class="quedan ${q<=aviso?'poco':''}">Quedan ${q}</span>
+  return `<div class="prod"><span class="nom">${p}</span><span class="quedan ${q<=aviso[b]?'poco':''}" style="${q===0?'color:var(--rojo)':''}">${q===0?'SIN STOCK':`Quedan ${q}`}</span>
     <span class="det">Le diste ${s.dio} · vendió ${s.vendio}${s.falto?` · faltó ${s.falto}`:''}</span></div>`;
 }
 
@@ -413,16 +422,20 @@ function contenidoStock(conMarco){
       : `<div class="franja ambar">La Barra 2 está en otro wifi: el depósito se completa cuando las barras se juntan o con internet. Acá: lo que salió para la Barra 1.</div>`)
       + `<div class="nuevo" style="margin-top:8px;padding:4px;display:grid;gap:6px">
          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="b linea chico">ANOTAR LO QUE HAY EN EL DEPÓSITO</button><button class="b linea chico">ENTRÓ MERCADERÍA</button></div>
-         <span class="gris chica"><b>Anotar lo que hay:</b> si lo contaste o te acordás cuánto había; queda al lado de la cuenta, con la diferencia y tu nota. <b>Entró mercadería:</b> si llegó más, cuánto y de dónde vino (hace falta decirlo); recién ahí se puede reponer más. El jefe lo ve.</span></div>`;
+         <span class="gris chica"><b>Anotar lo que hay:</b> si lo contaste o te acordás cuánto había; queda al lado de la cuenta. Si no da (se sabía que eran 70 y hay 68), <b>pide el motivo</b> de las que faltan: rota, congelada, vencida, se perdió u otro. <b>Entró mercadería:</b> si llegó más, cuánto y de dónde vino (hace falta decirlo); recién ahí se puede reponer más. El jefe lo ve.</span></div>`;
   } else {
     cuerpo = productos.map(p => filaStock(tabBarra, p)).join('');
   }
   const pocos = ['b1','b2'].flatMap(b => productos.map(p => { const s = stock[b][p]; return { b, p, q: s.dio - s.vendio - s.falto }; }))
-    .filter(x => x.q <= aviso && (unidas || x.b === 'b1'));
+    .filter(x => x.q <= aviso[x.b] && (unidas || x.b === 'b1'));
+  const sin = pocos.filter(x => x.q === 0), poco = pocos.filter(x => x.q > 0);
   const alertas = pocos.length ? `<div class="pedido nuevo" style="border-color:var(--ambar);background:#1d1810">
-      <b style="color:var(--ambar)">⚠ Está quedando poco</b>
-      ${pocos.map(x => `<div class="r" style="align-items:center"><span style="color:var(--texto)">${x.p} · <span class="gris">${nombreBarra[x.b]}</span> · quedan <b>${x.q}</b></span><button class="b chico linea" data-alerta="${x.b}|${x.p}">REPONER</button></div>`).join('')}
-      <span class="gris chica">Suena cuando aparece algo nuevo. El aviso lo pone el jefe: ${aviso} o menos.</span></div>` : '';
+      ${sin.length ? `<b style="color:var(--rojo)">⛔ Sin stock: no se puede vender</b>
+      ${sin.map(x => `<div class="r" style="align-items:center;flex-wrap:wrap"><span style="color:var(--texto)">${x.p} · <span class="gris">${nombreBarra[x.b]}</span></span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap">${enCamino[x.b+'|'+x.p] ? `<span class="pill pide">AVISADO A LA ${nombreBarra[x.b].toUpperCase()}: EN CAMINO</span>` : `<button class="b chico dorado" data-camino="${x.b}|${x.p}">AVISAR A LA ${nombreBarra[x.b].toUpperCase()}: VOY EN CAMINO</button>`}<button class="b chico linea" data-alerta="${x.b}|${x.p}">REPONER</button></span></div>`).join('')}` : ''}
+      ${poco.length ? `<b style="color:var(--ambar)">⚠ Está quedando poco</b>` : ''}
+      ${poco.map(x => `<div class="r" style="align-items:center"><span style="color:var(--texto)">${x.p} · <span class="gris">${nombreBarra[x.b]}</span> · quedan <b>${x.q}</b></span><button class="b chico linea" data-alerta="${x.b}|${x.p}">REPONER</button></div>`).join('')}
+      <span class="gris chica">Suena cuando aparece algo nuevo. El aviso lo pone el jefe para cada barra (Barra 1: ${aviso.b1} o menos · Barra 2: ${aviso.b2} o menos). VOY EN CAMINO les avisa a las cajeras de esa barra.</span></div>` : '';
   return `
     <div class="barraApp"><span class="tit">STOCK</span><span class="gris chica">Nico · repositor</span></div>
     <div class="isla">TÉCNICA PINAROLI · jue 4/12</div>
@@ -441,12 +454,12 @@ function pantallaReparto(){
   const filas = productos.map(p => {
     const dep = deposito[p] - arranque.b1[p] - arranque.b2[p];
     return `<tr><td>${p}</td><td>$ ${({'Cerveza lata':'4.000','Fernet con Coca':'8.000','Vodka trago':'7.000','Speed':'5.000','Agua':'2.500'})[p]}</td>
-      <td><b>${deposito[p]}</b></td><td class="nuevo">${arranque.b1[p]}</td><td class="nuevo">${arranque.b2[p]}</td><td>${dep}</td><td>${aviso}</td></tr>`;
+      <td><b>${deposito[p]}</b></td><td class="nuevo">${arranque.b1[p]}</td><td class="nuevo">${arranque.b2[p]}</td><td>${dep}</td><td class="nuevo">${aviso.b1}</td><td class="nuevo">${aviso.b2}</td></tr>`;
   }).join('');
   return `<div class="lado"><div class="app pc">
     <div class="barraApp"><span class="tit">PRECIOS · <span class="gris">TÉCNICA PINAROLI</span></span><span class="gris chica">Modo jefe</span></div>
     <div class="scrollx"><table class="tabla">
-      <tr><th>PRODUCTO</th><th>PRECIO</th><th>STOCK GENERAL</th><th>ARRANCA BARRA 1<span class="tag">NUEVO</span></th><th>ARRANCA BARRA 2<span class="tag">NUEVO</span></th><th>QUEDA EN EL DEPÓSITO</th><th>AVISO</th></tr>
+      <tr><th>PRODUCTO</th><th>PRECIO</th><th>STOCK GENERAL</th><th>ARRANCA BARRA 1<span class="tag">NUEVO</span></th><th>ARRANCA BARRA 2<span class="tag">NUEVO</span></th><th>QUEDA EN EL DEPÓSITO</th><th>AVISO BARRA 1</th><th>AVISO BARRA 2</th></tr>
       ${filas}
     </table></div>
     <span class="gris chica">Lo que el jefe no reparte queda en el depósito. Si reparte más de lo que hay, no lo deja guardar. Con una sola barra, la columna de la Barra 2 no aparece.</span>
@@ -505,9 +518,10 @@ function pantallaReponer(){
       <div class="campo"><label>¿CUÁNTAS QUEDAN AHORA EN LA ${nombreBarra[rep.barra].toUpperCase()}?</label>
         <div class="cant"><button class="b" id="cmenos">−</button><span class="num">${contadas}</span><button class="b" id="cmas">＋</button>
         <span class="gris chica">La cuenta da ${quedaria} (tenía ${q} + ${rep.cant})</span></div>
-        ${dif!==0 ? `<span class="franja ambar">Contaste ${dif>0?dif+' más':(-dif)+' menos'} de lo que da la cuenta: la diferencia queda anotada con esta reposición.</span>` : ''}
+        ${dif!==0 ? `<span class="franja ambar">${dif<0 ? `Faltan ${-dif}: la cuenta daba ${quedaria} y hay ${contadas}. ¿Qué pasó con ${-dif===1?'esa':'esas '+(-dif)}?` : `Sobran ${dif}: la cuenta daba ${quedaria} y hay ${contadas}. ¿De dónde salieron?`} (hace falta)</span>
+          <div class="chips">${(dif<0 ? ['Rota','Congelada','Vencida','Se perdió','Otro'] : ['Estaban sin anotar','Otro']).map(m => `<button class="chip ${rep.motivoDif===m?'on':''}" data-rdif="${m}">${m}</button>`).join('')}</div>` : ''}
       </div>
-      <button class="b dorado ancho" id="rguardar" data-pasa="${pasa?1:0}" ${pasa||faltaPorque?'disabled':''}>GUARDAR</button>
+      <button class="b dorado ancho" id="rguardar" data-pasa="${pasa||(dif!==0&&!rep.motivoDif)?1:0}" ${pasa||faltaPorque||(dif!==0&&!rep.motivoDif)?'disabled':''}>GUARDAR</button>
       ${desdeOtra && !pasa ? '<span class="gris chica">Para pasar de una barra a otra hace falta decir por qué.</span>' : ''}
       <span class="gris chica">Al guardar, a las cajeras de la ${nombreBarra[rep.barra]} y a la encargada les sale: "Se repusieron ${rep.cant} ${rep.prod} · quedan ${contadas}".${desdeOtra ? ` A las de la ${nombreBarra[otra]}: "Se llevaron ${rep.cant} ${rep.prod} a la ${nombreBarra[rep.barra]}".` : ''}</span>
     </div></div></div>`;
@@ -538,13 +552,24 @@ function pantallaLoQueVen(){
     return `<tr><td>${p}</td><td>${deposito[p]}</td><td>${a.dio}</td><td>${b.dio}</td><td>${vend}</td><td>${falt||'—'}</td><td>${enBarras}</td><td>${dep}</td></tr>`;
   }).join('');
   return `<div class="lado">
-    <div><div class="etiqueta">LA CAJERA EN VENDER (BARRA 1)</div>
+    <div><div class="etiqueta">LA CAJERA EN VENDER (BARRA 2)</div>
       <div class="app tablet">
-        <div class="barraApp"><span class="tit">VENDER · Caja 1</span><span class="gris chica">Romi · Barra 1</span></div>
-        <div class="franja celeste nuevo" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span>🔄 <b>Se repusieron 12 Cerveza lata</b> en tu barra · quedan 21 · Nico, 01:42</span><button class="b chico">OK</button></div>
-        <div class="vender">${productos.map(p => { const s=stock.b1[p]; const q=s.dio-s.vendio-s.falto; return `<div class="vprod"><b>${p}</b><small class="${q<=aviso?'':'gris'}" style="${q<=aviso?'color:var(--ambar)':''}">Quedan ${q} en tu barra</small></div>`; }).join('')}</div>
-        <span class="gris chica nuevo" style="padding:4px">"Quedan" es lo de <b>su</b> barra. Avisa, no frena: si se terminó y el repositor todavía no lo anotó, puede VENDER IGUAL. El cartel de la reposición es solo para que sepa: no frena la venta, se va con OK o a los 20 segundos.</span>
+        <div class="barraApp"><span class="tit">VENDER · Caja 4</span><span class="gris chica">Marta · Barra 2</span></div>
+        ${repuestoSpeed ? `<div class="franja ok nuevo" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>✓ <b>Se repusieron 12 Speed</b> en tu barra · quedan 12 · Nico, 02:31</span><button class="b chico">OK</button></div>`
+          : enCamino['b2|Speed'] ? `<div class="franja celeste nuevo">🚶 <b>Speed: Nico está en camino</b> con la reposición.</div>` : ''}
+        <div class="vender">${productos.map(p => {
+          const s = stock.b2[p]; let q = s.dio - s.vendio - s.falto;
+          if (p === 'Speed' && repuestoSpeed) q = 12;
+          if (q === 0) return `<div class="vprod nuevo" style="opacity:.75;border-color:var(--rojo)"><b>${p}</b><small style="color:var(--rojo)">SIN STOCK · no se puede vender</small>${enCamino['b2|'+p]?'<small style="color:var(--celeste)">Nico está en camino</small>':''}</div>`;
+          const verde = p === 'Speed' && repuestoSpeed;
+          return `<div class="vprod ${verde?'nuevo':''}" style="${verde?'border-color:var(--verde)':''}"><b>${p}</b><small style="${verde?'color:var(--verde)':q<=aviso.b2?'color:var(--ambar)':''}" class="${!verde&&q>aviso.b2?'gris':''}">Quedan ${q} en tu barra</small></div>`; }).join('')}</div>
+        <span class="gris chica nuevo" style="padding:4px">"Quedan" es lo de <b>su</b> barra. <b>Sin stock no se puede vender</b> (decidido el 25-nov). Cuando el repositor toca VOY EN CAMINO, la cajera lo ve; cuando repone, el producto vuelve en verde con la cantidad y se sigue vendiendo.</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <span class="etiqueta" style="width:100%">PARA PROBAR EN LA MAQUETA</span>
+        <button class="b" style="background:var(--panel);color:var(--tinta);border-color:var(--linea)" id="prueba_camino">${enCamino['b2|Speed']?'Sacar el "en camino"':'Nico avisa a la Barra 2: VOY EN CAMINO'}</button>
+        <button class="b" style="background:var(--panel);color:var(--tinta);border-color:var(--linea)" id="prueba_repone">${repuestoSpeed?'Volver a sin stock':'Nico repone 12 Speed'}</button>
       </div></div>
     <div><div class="etiqueta">LA ENCARGADA EN EL IPHONE</div>
       ${tel(`${encabezadoEnc()}
@@ -575,13 +600,17 @@ function pantallaMovs(){
 
 function pantallaDecidirRep(){
   return `<div class="decidir">
-    <b>Lo que te pregunto del repositor</b>
-    <ol>
-      <li><b>"Entró mercadería" en el depósito</b> (si llega más de lo que cargó el jefe, diciendo de dónde vino): ¿lo puede anotar el repositor, o solo el jefe?</li>
-      <li><b>El aviso de "Está quedando poco":</b> ¿un mismo número para las dos barras (el que pone el jefe por producto), o uno distinto por barra?</li>
-      <li><b>Los motivos del faltante:</b> Rota · Congelada · Vencida · Se perdió · Otro. ¿Falta alguno?</li>
-      <li><b>Si una barra se queda sin algo</b>, ¿la cajera sigue pudiendo VENDER IGUAL (como hoy) o la frenamos?</li>
-    </ol>
+    <b>Lo que decidiste (25-nov)</b>
+    <ul>
+      <li>Trabaja con su celular: la app si es Android (con el permiso del jefe), la página por el wifi si es iPhone.</li>
+      <li>El jefe carga el stock general y reparte con cuánto arranca cada barra; el depósito es el límite.</li>
+      <li>Se puede pasar de una barra a otra, explicando por qué.</li>
+      <li>"Entró mercadería" lo anota el repositor, diciendo de dónde vino.</li>
+      <li>El aviso de "Está quedando poco" lo pone el jefe <b>para cada barra</b>.</li>
+      <li>Si no da la cuenta (se sabía que eran 70 y hay 68), pide el motivo de las que faltan: rota, congelada, vencida, se perdió u otro.</li>
+      <li><b>Sin stock no se vende.</b> El repositor toca VOY EN CAMINO (las cajeras lo ven) y, al reponer, el producto vuelve en verde con la cantidad.</li>
+      <li>A las cajeras de esa barra y a la encargada les sale "Se repusieron…" al momento.</li>
+    </ul>
   </div>`;
 }
 
@@ -606,6 +635,7 @@ function enlazarStock(){
   const f = $('#faltante'); if (f) f.onclick = () => { paso = 5; dibujar(); };
   document.querySelectorAll('[data-alerta]').forEach(b => b.onclick = () => { const [bb, pp] = b.dataset.alerta.split('|'); rep.barra = bb; rep.prod = pp; rep.desde = 'dep'; rep.contadas = undefined; paso = 4; dibujar(); });
   const m = $('#ver_movs'); if (m) m.onclick = () => { dialogo = 'movs'; dibujar(); };
+  document.querySelectorAll('[data-camino]').forEach(b => b.onclick = () => { enCamino[b.dataset.camino] = true; dibujar(); });
 }
 
 function dibujar(){
@@ -630,6 +660,7 @@ function dibujar(){
     else if (paso === 3){ p.innerHTML = dialogo==='movs' ? pantallaMovs() : pantallaStock(); enlazarRed(); enlazarStock(); }
     else if (paso === 4){ p.innerHTML = pantallaReponer();
       document.querySelectorAll('[data-rdesde]').forEach(b => b.onclick = () => { rep.desde = b.dataset.rdesde; rep.contadas = undefined; dibujar(); });
+      document.querySelectorAll('[data-rdif]').forEach(b => b.onclick = () => { rep.motivoDif = b.dataset.rdif; dibujar(); });
       document.querySelectorAll('[data-rprod]').forEach(b => b.onclick = () => { rep.prod = b.dataset.rprod; rep.contadas = undefined; dibujar(); });
       document.querySelectorAll('[data-rbarra]').forEach(b => b.onclick = () => { rep.barra = b.dataset.rbarra; rep.contadas = undefined; dibujar(); });
       document.querySelectorAll('[data-rsuma]').forEach(b => b.onclick = () => { rep.cant += +b.dataset.rsuma; rep.contadas = undefined; dibujar(); });
@@ -647,7 +678,9 @@ function dibujar(){
       $('#fmas').onclick = () => { fal.cant++; dibujar(); };
       $('#fmenos').onclick = () => { fal.cant = Math.max(1, fal.cant-1); dibujar(); };
       $('#fnota').oninput = e => { fal.nota = e.target.value; }; }
-    else if (paso === 6) p.innerHTML = pantallaLoQueVen();
+    else if (paso === 6){ p.innerHTML = pantallaLoQueVen();
+      $('#prueba_camino').onclick = () => { enCamino['b2|Speed'] = !enCamino['b2|Speed']; if (!enCamino['b2|Speed']) repuestoSpeed = false; dibujar(); };
+      $('#prueba_repone').onclick = () => { repuestoSpeed = !repuestoSpeed; if (repuestoSpeed) enCamino['b2|Speed'] = false; dibujar(); }; }
     else p.innerHTML = pantallaDecidirRep();
   }
 }
