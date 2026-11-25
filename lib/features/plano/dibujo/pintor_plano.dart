@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../common/widgets/pintar_en_chico.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
@@ -1114,7 +1115,21 @@ class PintorResaltado extends CustomPainter {
     this.ruta,
     this.progresoRuta = 1,
     this.zoom = 1,
+    this.resplandorEnChico = 1,
+    this.pixeles = 1,
   }) : super(repaint: pulso);
+
+  /// La tele es el tótem (25-nov-2026): el resplandor del camino es borroso y
+  /// recalcularlo en cada imagen mientras se dibuja es lo que más le cuesta a
+  /// la tele. Con menos de 1 se calcula en una imagen así de chica y se
+  /// estira; la línea y la flecha van nítidas encima. Se ve igual.
+  final double resplandorEnChico;
+
+  /// Los píxeles de la pantalla por punto (para [resplandorEnChico]).
+  final double pixeles;
+
+  /// El camino medido, una vez por ruta: no en cada imagen.
+  static final _medidos = Expando<List<ui.PathMetric>>('camino medido');
 
   final ArmadoSalon armado;
   final String hoja;
@@ -1137,36 +1152,54 @@ class PintorResaltado extends CustomPainter {
     final h = armado.hoja(hoja);
     if (h == null) return;
     final encuadre = EncuadrePlano.de(h.caja, size);
-    canvas.save();
-    encuadre.aplicar(canvas);
 
     final puntos = ruta;
+    Path? visible;
+    ui.Tangent? punta;
+    var total = 0.0;
     if (puntos != null && puntos.length > 1 && progresoRuta > 0) {
       // El camino va en escuadra; la esquina, apenas suavizada, se lee como
       // un ángulo recto prolijo (6.2.1).
-      final camino = caminoRedondeado(puntos, armado.radio * 0.6);
-      final medida = camino.computeMetrics().toList();
-      final total = medida.fold<double>(0, (s, m) => s + m.length);
+      final medida = _medidos[puntos] ??=
+          caminoRedondeado(puntos, armado.radio * 0.6).computeMetrics().toList();
+      total = medida.fold<double>(0, (s, m) => s + m.length);
       var resta = total * progresoRuta.clamp(0, 1);
-      final visible = Path();
-      ui.Tangent? punta;
+      final v = Path();
       for (final m in medida) {
         if (resta <= 0) break;
         final hasta = math.min(resta, m.length);
-        visible.addPath(m.extractPath(0, hasta), Offset.zero);
+        v.addPath(m.extractPath(0, hasta), Offset.zero);
         punta = m.getTangentForOffset(hasta);
         resta -= m.length;
       }
-      canvas.drawPath(
-        visible,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 14
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = tema.ruta.withValues(alpha: 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      visible = v;
+    }
+    final resplandor = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = tema.ruta.withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    if (visible != null && resplandorEnChico < 1) {
+      final camino = visible;
+      pintarEnChico(
+        canvas,
+        Offset.zero & size,
+        escala: resplandorEnChico,
+        pixeles: pixeles,
+        dibujar: (lienzo, _, porPunto) {
+          lienzo.scale(porPunto);
+          encuadre.aplicar(lienzo);
+          lienzo.drawPath(camino, resplandor);
+        },
       );
+    }
+
+    canvas.save();
+    encuadre.aplicar(canvas);
+    if (visible != null) {
+      if (resplandorEnChico >= 1) canvas.drawPath(visible, resplandor);
       canvas.drawPath(
         visible,
         Paint()
@@ -1237,5 +1270,7 @@ class PintorResaltado extends CustomPainter {
       old.ruta != ruta ||
       old.progresoRuta != progresoRuta ||
       old.zoom != zoom ||
+      old.resplandorEnChico != resplandorEnChico ||
+      old.pixeles != pixeles ||
       !setEquals(old.resaltadas, resaltadas);
 }

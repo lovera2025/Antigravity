@@ -19,6 +19,10 @@ const _cifras = [FontFeature.liningFigures()];
 class EscenaGala extends EscenaEstilo {
   const EscenaGala();
 
+  /// El anillo de la foto gira y un brillo cruza el título todo el tiempo.
+  @override
+  bool get esperaSeMueve => true;
+
   @override
   Widget espera(DatosEscena d) {
     final u = d.u;
@@ -178,6 +182,7 @@ class EscenaGala extends EscenaEstilo {
                 color: Colors.white,
               ),
               nombre,
+              enLaTele: d.enLaTele,
             ),
           ],
           if (con != null) ...[

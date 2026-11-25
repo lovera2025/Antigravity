@@ -58,6 +58,9 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDir(layout.buildDirectory.dir("generated/puesto"))
+            // Solo en la app de prueba: los salones de verdad, sin nombres (ver
+            // `salonesDePrueba`, abajo).
+            assets.srcDir(layout.buildDirectory.dir("generated/salones_prueba"))
         }
     }
 
@@ -118,3 +121,25 @@ val copiarPaginaDelCelular = tasks.register<Copy>("copiarPaginaDelCelular") {
     into(layout.buildDirectory.dir("generated/puesto/puesto"))
 }
 tasks.named("preBuild") { dependsOn(copiarPaginaDelCelular) }
+
+// La app de prueba de la tele (`JUNIOR_APK_DE_PRUEBA=1`, 25-nov-2026) trae los salones de
+// los eventos masivos de verdad, sin nombres (`tool/salones_de_verdad.py` los deja en
+// `build/salones_prueba`), para medir el tótem con salones de verdad. **La app de verdad no
+// los lleva nunca**: sin la variable, la carpeta se vacía antes de armar.
+val salonesDePrueba = tasks.register("salonesDePrueba") {
+    outputs.upToDateWhen { false }
+    doLast {
+        val destino = layout.buildDirectory.dir("generated/salones_prueba/salones_prueba").get().asFile
+        destino.deleteRecursively()
+        val origen = rootProject.file("../build/salones_prueba/salones.json")
+        if (System.getenv("JUNIOR_APK_DE_PRUEBA") == "1") {
+            if (origen.exists()) {
+                destino.mkdirs()
+                origen.copyTo(File(destino, "salones.json"), overwrite = true)
+            } else {
+                logger.warn("Sin build/salones_prueba: la app de prueba va con el salón inventado.")
+            }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(salonesDePrueba) }

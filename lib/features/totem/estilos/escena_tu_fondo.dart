@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/contenido_bienvenida.dart';
 import 'escena_totem.dart';
+import 'fondo_totem.dart' show DibujoEnChico;
 import 'fuentes_totem.dart';
 import 'totem_estilo.dart';
 import 'tu_fondo.dart';
@@ -48,9 +49,10 @@ class EscenaTuFondo extends EscenaEstilo {
       ),
       if (r.efectos.any((e) => e != EfectoFondo.glitch))
         IgnorePointer(
-          child: CustomPaint(
-            painter: PintorEfectos(receta: r, reloj: d.reloj, u: d.u),
-            child: const SizedBox.expand(),
+          // En la tele, en chico como el fondo: son luces borrosas.
+          child: DibujoEnChico(
+            escala: d.enLaTele ? 0.5 : 1,
+            pintor: PintorEfectos(receta: r, reloj: d.reloj, u: d.u),
           ),
         ),
     ];
@@ -163,14 +165,16 @@ class EscenaTuFondo extends EscenaEstilo {
     final t = _Textos.de(r);
     final con = conQuienDe(c);
 
-    /// Entra subiendo apenas, en el tramo [desde]–[hasta] de la entrada.
+    /// Entra subiendo apenas, en el tramo [desde]–[hasta] de la entrada. En la
+    /// tele, lo que entra va en foto (con el lugar de su brillo): sube y
+    /// aparece la foto.
     Widget entra(double desde, double hasta, Widget hijo) {
       final p = d.tramo(desde, hasta);
       return Opacity(
         opacity: p,
         child: Transform.translate(
           offset: Offset(0, (1 - p) * u * 1.2),
-          child: hijo,
+          child: d.enFoto(hijo, margen: u * 3.2),
         ),
       );
     }
@@ -248,8 +252,9 @@ class EscenaTuFondo extends EscenaEstilo {
       fit: StackFit.expand,
       children: [
         IgnorePointer(
-          child: CustomPaint(
-            painter: _Chispas(
+          child: DibujoEnChico(
+            escala: d.enLaTele ? 0.5 : 1,
+            pintor: _Chispas(
               progreso: d.tramo(0.05, 0.45, curva: Curves.linear),
               color: r.colores.brillo,
               u: u,

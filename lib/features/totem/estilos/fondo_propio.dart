@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../services/foto_guardada.dart' show esperaDeReintentoDeLaFoto;
+import 'fondo_totem.dart' show pintarEnChico;
 import 'tu_fondo.dart';
 
 /// El shader de "Tu fondo" (`pubspec.yaml`, `shaders:`).
@@ -183,6 +184,12 @@ class FondoPropio extends StatefulWidget {
   /// Un instante fijo, en segundos: sin animación (tests y muestras).
   final double? tiempoFijo;
 
+  /// Como en `FondoTotem`: en la tele, el shader en una imagen chica.
+  final double escala;
+
+  /// Como en `FondoTotem`: el salón lo tapa casi entero; se queda quieto.
+  final bool tapado;
+
   const FondoPropio({
     super.key,
     required this.imagen,
@@ -191,6 +198,8 @@ class FondoPropio extends StatefulWidget {
     this.atenuado = 1,
     this.fogonazo = 0,
     this.tiempoFijo,
+    this.escala = 1,
+    this.tapado = false,
   });
 
   static Future<ui.FragmentProgram?>? _programa;
@@ -256,13 +265,18 @@ class _FondoPropioState extends State<FondoPropio>
   Ticker? _ticker;
   ui.FragmentShader? _shader;
 
+  /// Lo que llevaba andado antes de taparse.
+  double _andado = 0;
+
   @override
   void initState() {
     super.initState();
     _prepararShader();
     if (widget.tiempoFijo == null) {
-      _ticker = createTicker((d) => _tiempo.value = d.inMicroseconds / 1e6)
-        ..start();
+      _ticker = createTicker(
+        (d) => _tiempo.value = _andado + d.inMicroseconds / 1e6,
+      );
+      if (!widget.tapado) _ticker!.start();
     } else {
       _tiempo.value = widget.tiempoFijo!;
     }
@@ -272,6 +286,15 @@ class _FondoPropioState extends State<FondoPropio>
   void didUpdateWidget(covariant FondoPropio old) {
     super.didUpdateWidget(old);
     if (widget.tiempoFijo != null) _tiempo.value = widget.tiempoFijo!;
+    final t = _ticker;
+    if (t != null && old.tapado != widget.tapado) {
+      if (widget.tapado) {
+        _andado = _tiempo.value;
+        t.stop();
+      } else {
+        t.start();
+      }
+    }
   }
 
   void _prepararShader() {
@@ -312,6 +335,8 @@ class _FondoPropioState extends State<FondoPropio>
                 receta: widget.receta,
                 atenuado: widget.atenuado,
                 fogonazo: widget.fogonazo,
+                escala: widget.escala,
+                pixeles: View.maybeOf(context)?.devicePixelRatio ?? 1,
               )
             : PintorFondoQuieto(
                 imagen: imagen,
@@ -344,10 +369,31 @@ class _PintorConShader extends CustomPainter {
     required this.receta,
     required this.atenuado,
     required this.fogonazo,
+    this.escala = 1,
+    this.pixeles = 1,
   }) : super(repaint: tiempo);
+
+  final double escala;
+  final double pixeles;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (escala < 1) {
+      // En la tele: el shader en una imagen chica, que se estira. Todo lo del
+      // shader va en proporción de uRes: alcanza con darle lo que mide.
+      pintarEnChico(
+        canvas,
+        Offset.zero & size,
+        escala: escala,
+        pixeles: pixeles,
+        dibujar: (lienzo, mide, _) => _pintar(lienzo, mide),
+      );
+      return;
+    }
+    _pintar(canvas, size);
+  }
+
+  void _pintar(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final r = receta;
     try {
@@ -406,7 +452,9 @@ class _PintorConShader extends CustomPainter {
       old.receta.efectos.length != receta.efectos.length ||
       old.receta.intensidadEfectos != receta.intensidadEfectos ||
       old.atenuado != atenuado ||
-      old.fogonazo != fogonazo;
+      old.fogonazo != fogonazo ||
+      old.escala != escala ||
+      old.pixeles != pixeles;
 }
 
 /// "Tu fondo" sin shader: la imagen quieta (cubriendo, o entera al medio con

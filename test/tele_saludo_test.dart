@@ -136,24 +136,49 @@ void main() {
   });
 
   group('la fluidez', () {
-    test('imágenes por segundo, con el tope de la pantalla', () {
-      expect(Fluidez.porSegundoDe(const []), isNull);
-      expect(
-        Fluidez.porSegundoDe(List.filled(10, const Duration(microseconds: 16700))),
-        closeTo(59.9, 0.2),
-      );
-      expect(
-        Fluidez.porSegundoDe(List.filled(10, const Duration(milliseconds: 40))),
-        closeTo(25, 0.1),
-      );
-      expect(Fluidez.porSegundoDe(List.filled(10, const Duration(milliseconds: 5))), 60);
+    // Imágenes que empiezan cada [cada] microsegundos, con lo que tardan.
+    List<ImagenDibujada> imagenes(int n, int cada, {int armado = 3000, int dibujo = 8000}) => [
+          for (var i = 0; i < n; i++) (empezo: i * cada, armado: armado, dibujo: dibujo),
+        ];
+
+    test('imágenes por segundo de verdad, contadas por cuándo empieza cada una', () {
+      expect(MedidaDeFluidez.de(const []), isNull);
+      expect(MedidaDeFluidez.de(imagenes(1, 16667)), isNull);
+      expect(MedidaDeFluidez.de(imagenes(30, 16667))!.porSegundo, closeTo(60, 0.1));
+      // Una imagen cada 40 ms: 25 por segundo, aunque cada una tarde poco en
+      // armarse (es lo que se ve: la placa no llega).
+      expect(MedidaDeFluidez.de(imagenes(30, 40000))!.porSegundo, closeTo(25, 0.1));
+      // Con el tope de la pantalla.
+      expect(MedidaDeFluidez.de(imagenes(30, 10000))!.porSegundo, 60);
+      expect(MedidaDeFluidez.de(imagenes(30, 20000), tope: 50)!.porSegundo, 50);
+    });
+
+    test('lo que tarda cada parte, en promedio', () {
+      final m = MedidaDeFluidez.de(imagenes(10, 16667, armado: 2500, dibujo: 21000))!;
+      expect(m.msArmado, closeTo(2.5, 0.01));
+      expect(m.msDibujo, closeTo(21, 0.01));
+      expect(m.imagenes, 10);
+    });
+
+    test('se queda con lo de los últimos segundos', () {
+      final f = Fluidez(ventana: const Duration(seconds: 1));
+      for (final i in imagenes(120, 16667)) {
+        f.anotar(i);
+      }
+      // 120 imágenes en 2 s: quedan las del último segundo.
+      expect(f.medida!.imagenes, inInclusiveRange(59, 61));
+      f.dispose();
     });
 
     test('lo que dice', () {
       expect(Fluidez.texto(null), 'Midiendo…');
       expect(Fluidez.texto(58), contains('anda suave'));
       expect(Fluidez.texto(42), contains('se puede notar'));
-      expect(Fluidez.texto(20), contains('fondo quieto'));
+      expect(Fluidez.texto(20), contains('a los saltos'));
+      expect(
+        Fluidez.detalle(MedidaDeFluidez.de(imagenes(10, 16667, armado: 2500, dibujo: 9000))),
+        allOf(contains('anda suave'), contains('dibujo 9.0 ms'), contains('armado 2.5 ms')),
+      );
     });
   });
 }

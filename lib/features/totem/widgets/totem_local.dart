@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/sync_engine.dart';
 import '../../../main.dart' show kWebBaseUrl;
+import '../../../models/totem_config.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/repositories/planos_evento_repository.dart';
 import '../../recepcion/providers/recepcion_provider.dart';
@@ -127,13 +128,34 @@ class TotemLocal extends ConsumerStatefulWidget {
   /// El fondo sin moverse ([EscenaTotem.fondoQuieto]): lo elige la tele.
   final bool fondoQuieto;
 
+  /// La tele es el tótem ([EscenaTotem.enLaTele]): lo quieto, en foto.
+  final bool enLaTele;
+
+  /// De cuánto se calcula el fondo ([EscenaTotem.escalaDelFondo]).
+  final double escalaDelFondo;
+
+  /// La tele (25-nov-2026): al abrir, una bienvenida de ensayo se dibuja en
+  /// silencio, tapada de negro, el primer segundo y medio. Así la primera de
+  /// la noche no da el tirón de preparar sus fotos y sus letras.
+  final bool ensayar;
+
   const TotemLocal({
     super.key,
     required this.eventoId,
     this.encuadrar = false,
     this.seSaluda,
     this.fondoQuieto = false,
+    this.enLaTele = false,
+    this.escalaDelFondo = 1,
+    this.ensayar = false,
   });
+
+  /// Lo que dura el ensayo, tapado de negro.
+  static const duraElEnsayo = Duration(milliseconds: 1500);
+
+  /// Todas las letras de un nombre, para que el ensayo las prepare.
+  static const letrasDelEnsayo =
+      'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ ÁÉÍÓÚÜ, 0123456789';
 
   @override
   ConsumerState<TotemLocal> createState() => _TotemLocalState();
@@ -211,8 +233,60 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
     }
   }
 
+  /// El ensayo: mientras corre, tapado de negro (ver [TotemLocal.ensayar]).
+  late bool _ensayando = widget.ensayar;
+  Timer? _finDelEnsayo;
+
+  void _empezarEnsayo() {
+    _finDelEnsayo ??= Timer(TotemLocal.duraElEnsayo, () {
+      if (mounted) setState(() => _ensayando = false);
+    });
+  }
+
+  /// Una bienvenida de ensayo a una mesa de verdad del salón (con su camino),
+  /// con todas las letras.
+  List<Widget> _ensayos(EstiloTotem estilo, TotemConfig cfg, bool masivo) {
+    final plano = _ficha?.plano;
+    final mesa = plano == null || plano.mesas.isEmpty ? '1' : '${plano.mesas.first.numero}';
+    Widget ensayo(FaseLlegada fase, ContenidoBienvenida c) => IgnorePointer(
+          child: EscenaTotem(
+            key: ValueKey('ensayo-$fase'),
+            estilo: estilo,
+            respaldo: EstiloTotem.porDefecto(masivo: masivo),
+            cfg: cfg,
+            llegada: c,
+            plano: plano,
+            quieta: true,
+            faseFija: fase,
+            enLaTele: widget.enLaTele,
+            escalaDelFondo: widget.escalaDelFondo,
+          ),
+        );
+    return [
+      ensayo(
+        FaseLlegada.grande,
+        ContenidoBienvenida(
+          saludo: cfg.mensajeBienvenida,
+          nombres: const [TotemLocal.letrasDelEnsayo],
+          conQuien: 'con ${TotemLocal.letrasDelEnsayo.toLowerCase()}',
+          mesa: mesa,
+          musica: TotemLocal.letrasDelEnsayo,
+        ),
+      ),
+      ensayo(
+        FaseLlegada.acomodada,
+        ContenidoBienvenida(
+          saludo: '¡Bienvenidos!',
+          nombres: const [TotemLocal.letrasDelEnsayo, TotemLocal.letrasDelEnsayo],
+          mesa: mesa,
+        ),
+      ),
+    ];
+  }
+
   @override
   void dispose() {
+    _finDelEnsayo?.cancel();
     _reproductor.dispose();
     super.dispose();
   }
@@ -255,9 +329,24 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
                 empezo: actual?.empezo,
                 fin: _reproductor.fin,
                 fondoQuieto: widget.fondoQuieto,
+                enLaTele: widget.enLaTele,
+                escalaDelFondo: widget.escalaDelFondo,
               );
             },
           );
+
+    if (_ensayando && estilo != null) {
+      _empezarEnsayo();
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          escena,
+          ..._ensayos(estilo, cfg, masivo),
+          // Tapado: nadie ve el ensayo.
+          const ColoredBox(color: Colors.black),
+        ],
+      );
+    }
 
     if (!widget.encuadrar) return escena;
     return Center(

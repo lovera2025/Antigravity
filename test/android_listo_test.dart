@@ -67,6 +67,21 @@ void main() {
       expect(gradle, contains('applicationId = "ar.com.junioreventos.app"'));
     });
 
+    test('los salones de verdad van solo en la app de prueba de la tele (25-nov)', () {
+      final tarea = gradle.substring(gradle.indexOf('val salonesDePrueba'));
+      // Se vacía siempre antes de armar, y se copia solo con la variable.
+      expect(tarea, contains('destino.deleteRecursively()'));
+      expect(
+        tarea.indexOf('destino.deleteRecursively()'),
+        lessThan(tarea.indexOf('if (System.getenv("JUNIOR_APK_DE_PRUEBA") == "1")')),
+      );
+      expect(tarea, contains('outputs.upToDateWhen { false }'));
+      // El instalador de la app de verdad no prende la variable.
+      expect(instalador, isNot(contains('JUNIOR_APK_DE_PRUEBA')));
+      // Y la carpeta de donde salen no va a git.
+      expect(File('.gitignore').readAsLinesSync().map((l) => l.trim()), contains('/build/'));
+    });
+
     test('la clave y su contraseña no van a git', () {
       final raiz = File('.gitignore').readAsLinesSync().map((l) => l.trim()).toSet();
       expect(raiz, containsAll(['/android/key.properties', '*.jks', '*.keystore']));

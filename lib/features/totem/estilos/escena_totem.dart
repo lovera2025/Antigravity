@@ -24,6 +24,7 @@ import 'escena_tu_fondo.dart';
 import 'fondo_propio.dart';
 import 'forma_foto.dart';
 import 'fondo_totem.dart';
+import '../../common/widgets/foto_de_lo_quieto.dart';
 import 'fuentes_totem.dart';
 import 'plano_del_totem.dart';
 import 'totem_estilo.dart';
@@ -86,6 +87,14 @@ class EscenaTotem extends StatefulWidget {
   /// sobre [faseFija].
   final double? acomodoFijo;
 
+  /// Para las muestras, quieta: en qué momento de la entrada (de 0 a 1; las
+  /// letras a medio encender, el círculo a medio dibujar). Null: entera.
+  final double? entradaFija;
+
+  /// Para las muestras, quieta: cuánto se dibujó el camino, de 0 a 1. Null:
+  /// entero.
+  final double? caminoFijo;
+
   /// Qué llegada es: si cambia, la animación de entrada vuelve a empezar.
   final Object? claveLlegada;
 
@@ -111,6 +120,18 @@ class EscenaTotem extends StatefulWidget {
   /// los saltos. Se elige en el menú de la tele.
   final bool fondoQuieto;
 
+  /// La tele es el tótem (25-nov-2026): la placa de video de una tele es chica
+  /// y Flutter rehace la pantalla entera en cada imagen. Prendido, lo quieto
+  /// (las letras con su brillo, el salón) se dibuja una vez y se guarda como
+  /// foto (`FotoDeLoQuieto`), el fondo no se dibuja mientras el salón lo tapa
+  /// entero, y el vidrio de Cristal va sin desenfocar lo de atrás. **Se ve
+  /// igual.** Apagado (la PC, Recepción, la web), todo como siempre.
+  final bool enLaTele;
+
+  /// De cuánto se calcula el fondo animado: 1, del tamaño de la pantalla; en
+  /// la tele, 0,5 (o menos si la tele no llega, `CalidadDeLaTele`).
+  final double escalaDelFondo;
+
   const EscenaTotem({
     super.key,
     required this.estilo,
@@ -126,6 +147,8 @@ class EscenaTotem extends StatefulWidget {
     this.plano,
     this.faseFija,
     this.acomodoFijo,
+    this.entradaFija,
+    this.caminoFijo,
     this.claveLlegada,
     this.saliendo = false,
     this.enCamino = 0,
@@ -135,6 +158,8 @@ class EscenaTotem extends StatefulWidget {
     this.tiempoFijo = 4,
     this.progresoFijo = 0.35,
     this.fondoQuieto = false,
+    this.enLaTele = false,
+    this.escalaDelFondo = 1,
   });
 
   /// Lo que tarda en entrar una llegada.
@@ -187,6 +212,10 @@ class _EscenaTotemState extends State<EscenaTotem>
   /// Cuándo el nombre deja de estar en grande.
   Timer? _alAcomodar;
 
+  /// En la tele, el reloj de cuando el salón tapó el fondo: las capas de la
+  /// apariencia se quedan en ese instante mientras sigue tapado.
+  double? _relojTapado;
+
   /// Lo que dura el nombre en grande, según la config.
   Duration get _nombreEnGrande =>
       TiemposDeBienvenida.de(widget.cfg, conSalon: true).nombre;
@@ -228,7 +257,7 @@ class _EscenaTotemState extends State<EscenaTotem>
     _fondo.addListener(_cambioElFondo);
     _cargarFondo();
     if (widget.quieta) {
-      _entrada.value = widget.llegada == null ? 0 : 1;
+      _entrada.value = widget.llegada == null ? 0 : (widget.entradaFija ?? 1);
     } else {
       _reloj.repeat();
       if (widget.llegada != null) _entrada.forward(from: 0);
@@ -265,7 +294,7 @@ class _EscenaTotemState extends State<EscenaTotem>
       _programarAcomodo(deNuevo: false);
     }
     if (widget.quieta) {
-      _entrada.value = widget.llegada == null ? 0 : 1;
+      _entrada.value = widget.llegada == null ? 0 : (widget.entradaFija ?? 1);
       return;
     }
     if (widget.llegada == null) {
@@ -427,6 +456,7 @@ class _EscenaTotemState extends State<EscenaTotem>
                 alrededorDeLaFoto: widget.alrededorDeLaFoto,
                 alrededorDelBloque: widget.alrededorDelBloque,
                 alrededorDelTexto: widget.alrededorDelTexto,
+                enLaTele: widget.enLaTele,
               );
               final llegada = widget.llegada;
               // Con el fondo quieto (la tele de procesador chico), el fondo
@@ -434,6 +464,20 @@ class _EscenaTotemState extends State<EscenaTotem>
               final tiempoDelFondo = widget.quieta
                   ? widget.tiempoFijo
                   : (widget.fondoQuieto ? widget.tiempoFijo : null);
+              // En la tele, con el salón a pantalla completa y entero a la
+              // vista, del fondo se ve un 3 % (el salón claro deja pasar eso):
+              // se queda quieto, dibujado una vez, y vuelve a moverse cuando el
+              // salón se apaga detrás del nombre en grande. Las capas de la
+              // apariencia, igual: con el reloj de cuando se tapó, en foto.
+              final fondoTapado = widget.enLaTele &&
+                  cuadro != null &&
+                  tema != null &&
+                  datos.apaisado &&
+                  _opacidadDelSalon(e) >= 1;
+              if (!fondoTapado) _relojTapado = null;
+              final datosCapas = fondoTapado
+                  ? datos.conReloj(_relojTapado ??= reloj)
+                  : datos;
               return Stack(
                 fit: StackFit.expand,
                 children: [
@@ -448,6 +492,8 @@ class _EscenaTotemState extends State<EscenaTotem>
                       atenuado: receta.textoOscuro ? 1 : 1 - 0.45 * e,
                       fogonazo: _fogonazo(e),
                       tiempoFijo: tiempoDelFondo,
+                      escala: widget.escalaDelFondo,
+                      tapado: fondoTapado,
                     )
                   else
                     RepaintBoundary(
@@ -459,19 +505,50 @@ class _EscenaTotemState extends State<EscenaTotem>
                             estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
                         fogonazo: _fogonazo(e),
                         tiempoFijo: tiempoDelFondo,
+                        escala: widget.escalaDelFondo,
+                        tapado: fondoTapado,
                       ),
                     ),
-                  ...escena.capasDeFondo(datos),
+                  for (final capa in escena.capasDeFondo(datosCapas))
+                    fondoTapado ? datos.enFoto(capa) : capa,
                   if (cuadro == null || tema == null) ...[
                     if (e < 1)
                       Opacity(
                         opacity: (1 - e * 1.6).clamp(0.0, 1.0),
-                        child: escena.espera(datos),
+                        child: datos.enFoto(
+                          escena.espera(datos),
+                          huella: escena.huellaDeLaEspera(datos),
+                          clave: (
+                            'espera',
+                            widget.cfg,
+                            estilo,
+                            escena.huellaDeLaEspera(datos),
+                            escena.esperaSeMueve ? reloj : null,
+                            ancho,
+                            alto,
+                            color,
+                            widget.foto,
+                            widget.qrUrl,
+                          ),
+                        ),
                       ),
                     if (llegada != null && e > 0)
                       Opacity(
                         opacity: (e * 1.8).clamp(0.0, 1.0),
-                        child: escena.llegada(datos, llegada),
+                        child: datos.enFoto(
+                          escena.llegada(datos, llegada),
+                          clave: (
+                            'llegada',
+                            llegada,
+                            widget.claveLlegada,
+                            e < 1 ? e : 1.0,
+                            estilo,
+                            widget.cfg,
+                            ancho,
+                            alto,
+                            color,
+                          ),
+                        ),
                       ),
                   ] else
                     ..._conElSalon(escena, datos, cuadro, tema, guia, receta),
@@ -539,7 +616,7 @@ class _EscenaTotemState extends State<EscenaTotem>
   /// tarda [EscenaTotem.caminoDura]. Quieta, entero.
   double get _progresoCamino {
     final a = widget.empezo;
-    if (widget.quieta || a == null) return 1;
+    if (widget.quieta || a == null) return widget.caminoFijo ?? 1;
     final ms = DateTime.now().difference(a).inMilliseconds -
         _nombreEnGrande.inMilliseconds -
         EscenaTotem.acomodo.inMilliseconds ~/ 2;
@@ -635,77 +712,162 @@ class _EscenaTotemState extends State<EscenaTotem>
     Widget enLaFranja(Widget hijo) =>
         pantallaCompleta ? sobreCartel(hijo, 1) : hijo;
 
-    final panel = PanelPlano(
-      armado: plano,
-      hoja: encendido ? guia.hoja : cuadro.hoja,
-      estado: encendido ? guia.estado : _salonVacio(plano),
-      resaltadas: encendido ? guia.mesas : const {},
-      ruta: encendido ? guia.ruta : null,
-      tema: tema,
-      borde: d.color,
-      u: d.u,
-      relleno: cuadro.relleno,
-      animar: !widget.quieta,
-      progresoCamino: _progresoCamino,
-      // Mientras el camino marca la mesa, el borde late.
-      pulsar: encendido,
+    PanelPlano panelDe(ParteDelPanel parte) => PanelPlano(
+          armado: plano,
+          hoja: encendido ? guia.hoja : cuadro.hoja,
+          estado: encendido ? guia.estado : _salonVacio(plano),
+          resaltadas: encendido ? guia.mesas : const {},
+          ruta: encendido ? guia.ruta : null,
+          tema: tema,
+          borde: d.color,
+          u: d.u,
+          relleno: cuadro.relleno,
+          animar: !widget.quieta,
+          progresoCamino: _progresoCamino,
+          // Mientras el camino marca la mesa, el borde late.
+          pulsar: encendido,
+          enLaTele: widget.enLaTele,
+          parte: parte,
+        );
+    // En la tele, el salón quieto (también con la mesa encendida) va entero en
+    // una foto, y lo que se mueve (el camino, la flecha, el pulso y el borde
+    // que late) en su capa, encima.
+    final tele = widget.enLaTele;
+    final panel = panelDe(tele ? ParteDelPanel.quieto : ParteDelPanel.entero);
+    // Lo que cambia lo que se ve en cada foto (ver [DatosEscena.enFoto]). Los
+    // objetos van por identidad: el plano, la guía, el cuadro y el tema se
+    // arman una vez y se guardan.
+    final claveDelSalon = (plano, encendido, guia, cuadro, tema, d.color, d.u);
+    final claveDeLaEspera = (
+      widget.cfg,
+      d.estilo,
+      escena.huellaDeLaEspera(enCuadro),
+      escena.esperaSeMueve ? d.reloj : null,
+      cuadro,
+      d.u,
+      d.color,
+      widget.foto,
+      widget.qrUrl,
+      cartelClaro,
     );
+    final claveDeLaLlegada = (
+      llegada,
+      widget.claveLlegada,
+      e < 1 ? e : 1.0,
+      d.estilo,
+      widget.cfg,
+      cuadro,
+      d.u,
+      d.color,
+      cartelClaro,
+    );
+    final encima = tele && encendido ? panelDe(ParteDelPanel.loQueSeMueve) : null;
 
+    // En la tele, cada cosa que se apaga o se prende con Opacity va entera en
+    // una foto: apagar una foto no cuesta nada, y apagar un dibujo con varias
+    // partes encimadas obliga a mezclarlo entero en cada imagen. El salón va en
+    // foto mientras no tiene la mesa encendida (en la espera y detrás del
+    // nombre en grande); encendido, el camino y el pulso se mueven: en vivo.
+    // Con nombre: lo que aparece y desaparece no hace que se vuelva a armar lo
+    // de al lado (y en la tele, que se vuelva a sacar su foto).
+    // Lo que se mueve va adentro de lo mismo que se apaga: el salón y su borde
+    // que late se apagan juntos, como una sola cosa (si no, el borde se veía
+    // más pálido mientras vuelve el salón). Solo cuesta mientras vuelve.
     return [
       if (pantallaCompleta)
         // El fondo y el panel se apagan juntos, como una sola cosa: detrás del
         // nombre en grande no se nota dónde termina uno y empieza el otro.
         Positioned.fill(
+          key: const ValueKey('el-salon'),
           child: Opacity(
             opacity: opacidad,
             child: Stack(
               fit: StackFit.expand,
               children: [
-                ColoredBox(
-                  key: const Key('salon_a_pantalla_completa'),
-                  color: tema.fondo,
+                d.enFoto(
+                  Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ColoredBox(
+                        key: const Key('salon_a_pantalla_completa'),
+                        color: tema.fondo,
+                      ),
+                      Positioned.fromRect(rect: cuadro.panel, child: panel),
+                    ],
+                  ),
+                  // Fuera de la tele es el panel entero, con lo que se mueve
+                  // adentro: en vivo.
+                  activa: tele,
+                  clave: claveDelSalon,
                 ),
-                Positioned.fromRect(rect: cuadro.panel, child: panel),
+                if (encima != null)
+                  Positioned.fromRect(rect: cuadro.panel, child: encima),
               ],
             ),
           ),
         )
       else
         Positioned.fromRect(
+          key: const ValueKey('el-salon'),
           rect: cuadro.panel,
-          child: Opacity(opacity: opacidad, child: panel),
+          child: Opacity(
+            opacity: opacidad,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                d.enFoto(panel, activa: tele, clave: claveDelSalon),
+                ?encima,
+              ],
+            ),
+          ),
         ),
       if (e < 1)
         Positioned.fromRect(
+          key: const ValueKey('la-espera'),
           rect: cuadro.cuadro,
           child: Opacity(
             opacity: (1 - e * 1.6).clamp(0.0, 1.0),
             // Adentro del salón, resumido: se lee de lejos en un lugar chico.
             child: enElSalon
-                ? sobreCartel(
-                    ResumenEnElSalon.deLaEspera(d, oscuro: cartelClaro),
-                    1,
+                ? d.enFoto(
+                    sobreCartel(
+                      ResumenEnElSalon.deLaEspera(d, oscuro: cartelClaro),
+                      1,
+                    ),
+                    clave: ('resumen', claveDeLaEspera),
                   )
-                : enLaFranja(achicado(escena.espera(enCuadro))),
+                : d.enFoto(
+                    enLaFranja(achicado(escena.espera(enCuadro))),
+                    huella: escena.huellaDeLaEspera(enCuadro),
+                    clave: ('espera', claveDeLaEspera),
+                  ),
           ),
         ),
       // El nombre en grande, sobre el salón apagado, con cartel. Se va
       // achicando hacia el cuadro mientras aparece el acomodado.
       if (llegada != null && e > 0 && sale > 0)
         Positioned.fromRect(
+          key: const ValueKey('el-nombre-en-grande'),
           rect: hacia,
           child: Opacity(
             opacity: ((e * 1.8).clamp(0.0, 1.0) * sale).clamp(0.0, 1.0),
-            child: sobreCartel(
-              FittedBox(
-                fit: BoxFit.fill,
-                child: SizedBox.fromSize(
-                  size: grande.size,
-                  child: escena.llegada(enGrande, llegada),
+            child: d.enFoto(
+              sobreCartel(
+                FittedBox(
+                  fit: BoxFit.fill,
+                  child: SizedBox.fromSize(
+                    size: grande.size,
+                    // En la tele, la foto se saca en grande y se achica entera.
+                    child: d.enFoto(
+                      escena.llegada(enGrande, llegada),
+                      clave: ('grande', claveDeLaLlegada),
+                    ),
+                  ),
                 ),
+                // Apenas transparente: detrás se adivinan el salón y el fondo.
+                0.8,
               ),
-              // Apenas transparente: detrás se adivinan el salón y el fondo.
-              0.8,
+              clave: ('cartel', claveDeLaLlegada),
             ),
           ),
         ),
@@ -713,17 +875,24 @@ class _EscenaTotemState extends State<EscenaTotem>
       // cartel; en una franja, sobre el fondo de la apariencia, sin.
       if (llegada != null && e > 0 && entra > 0)
         Positioned.fromRect(
+          key: const ValueKey('el-nombre-acomodado'),
           rect: cuadro.cuadro,
           child: Opacity(
             opacity: ((e * 1.8).clamp(0.0, 1.0) * entra).clamp(0.0, 1.0),
             // En la pista, el nombre y la mesa, en grande: el detalle ya se vio
             // con el nombre en grande.
             child: enElSalon
-                ? sobreCartel(
-                    ResumenEnElSalon.deLaLlegada(d, llegada, oscuro: cartelClaro),
-                    1,
+                ? d.enFoto(
+                    sobreCartel(
+                      ResumenEnElSalon.deLaLlegada(d, llegada, oscuro: cartelClaro),
+                      1,
+                    ),
+                    clave: ('resumen', claveDeLaLlegada),
                   )
-                : enLaFranja(achicado(escena.llegada(enCuadro, llegada))),
+                : d.enFoto(
+                    enLaFranja(achicado(escena.llegada(enCuadro, llegada))),
+                    clave: ('acomodada', claveDeLaLlegada),
+                  ),
           ),
         ),
     ];
@@ -804,6 +973,9 @@ class DatosEscena {
   /// Ver [EscenaTotem.alrededorDelTexto].
   final Widget Function(Widget frases)? alrededorDelTexto;
 
+  /// Ver [EscenaTotem.enLaTele].
+  final bool enLaTele;
+
   const DatosEscena({
     required this.cfg,
     required this.estilo,
@@ -823,7 +995,35 @@ class DatosEscena {
     this.alrededorDeLaFoto,
     this.alrededorDelBloque,
     this.alrededorDelTexto,
+    this.enLaTele = false,
   });
+
+  /// En la tele, [hijo] dibujado una vez y guardado como foto
+  /// ([FotoDeLoQuieto]); si no, tal cual. [margen]: lo que su brillo se ve
+  /// afuera ([margenDelBrillo]); [huella]: lo que se sabe que va y viene.
+  ///
+  /// [clave]: todo lo que cambia lo que se ve. Con ella, lo de adentro no se
+  /// vuelve a armar en cada imagen mientras no cambie ([MismoHijo]); sin ella,
+  /// algo que se vuelve a acomodar solo (como el plano) tira la foto.
+  Widget enFoto(
+    Widget hijo, {
+    double margen = 0,
+    Object? huella,
+    bool activa = true,
+    Object? clave,
+  }) =>
+      enLaTele
+          ? FotoDeLoQuieto(
+              margen: margen,
+              huella: huella,
+              activa: activa,
+              child: clave == null ? hijo : MismoHijo(clave: clave, child: hijo),
+            )
+          : hijo;
+
+  /// Un texto con brillo como foto, en la tele: el brillo se calcula una vez.
+  Widget textoConBrillo(Text texto) =>
+      enFoto(texto, margen: margenDelBrillo(texto.style));
 
   /// Lo mismo, para la parte de la pantalla que deja el plano.
   ///
@@ -850,6 +1050,31 @@ class DatosEscena {
         alrededorDeLaFoto: alrededorDeLaFoto,
         alrededorDelBloque: alrededorDelBloque,
         alrededorDelTexto: alrededorDelTexto,
+        enLaTele: enLaTele,
+      );
+
+  /// Lo mismo, con el reloj en [r] (las capas del fondo, quietas en la tele
+  /// mientras el salón las tapa).
+  DatosEscena conReloj(double r) => DatosEscena(
+        cfg: cfg,
+        estilo: estilo,
+        foto: foto,
+        color: color,
+        segundo: segundo,
+        u: u,
+        ancho: ancho,
+        alto: alto,
+        apaisado: apaisado,
+        qrUrl: qrUrl,
+        enCamino: enCamino,
+        entrada: entrada,
+        reloj: r,
+        conPlano: conPlano,
+        planoAlCostado: planoAlCostado,
+        alrededorDeLaFoto: alrededorDeLaFoto,
+        alrededorDelBloque: alrededorDelBloque,
+        alrededorDelTexto: alrededorDelTexto,
+        enLaTele: enLaTele,
       );
 
   /// La parte de [entrada] que va de [desde] a [hasta], de 0 a 1.
@@ -994,6 +1219,15 @@ abstract class EscenaEstilo {
   /// Lo que va entre el fondo animado y el contenido (la foto a pantalla
   /// completa del Póster).
   List<Widget> capasDeFondo(DatosEscena d) => const [];
+
+  /// Lo que cambia solo, de a ratos, en la espera (la letra floja de Neón): en
+  /// la tele se guarda una foto por cada valor y se pasa de una a la otra sin
+  /// volver a dibujar. Null: nada.
+  Object? huellaDeLaEspera(DatosEscena d) => null;
+
+  /// La espera se mueve todo el tiempo con el reloj (el anillo que gira de
+  /// Gala): en la tele no se puede guardar en foto entera.
+  bool get esperaSeMueve => false;
 
   Widget espera(DatosEscena d);
 
@@ -1169,6 +1403,15 @@ class PanelPlano extends StatefulWidget {
   /// Cuánto tarda un latido del borde.
   static const latido = Duration(milliseconds: 1400);
 
+  /// Ver [EscenaTotem.enLaTele]: el salón, como foto; el camino y la flecha,
+  /// en vivo mientras se dibujan.
+  final bool enLaTele;
+
+  /// Qué parte del panel: entero, o (en la tele) solo lo quieto, para que
+  /// vaya en una sola foto, o solo lo que se mueve (el camino, la flecha, el
+  /// pulso de las mesas y el borde que late), que va encima.
+  final ParteDelPanel parte;
+
   const PanelPlano({
     super.key,
     required this.armado,
@@ -1183,6 +1426,8 @@ class PanelPlano extends StatefulWidget {
     this.animar = true,
     this.progresoCamino = 1,
     this.pulsar = false,
+    this.enLaTele = false,
+    this.parte = ParteDelPanel.entero,
   });
 
   /// El de la llegada de una familia: su mesa encendida y su camino.
@@ -1196,8 +1441,10 @@ class PanelPlano extends StatefulWidget {
     bool animar = true,
     double progresoCamino = 1,
     bool pulsar = true,
+    bool enLaTele = false,
   }) =>
       PanelPlano(
+        enLaTele: enLaTele,
         key: key,
         armado: guia.armado,
         hoja: guia.hoja,
@@ -1215,6 +1462,39 @@ class PanelPlano extends StatefulWidget {
 
   @override
   State<PanelPlano> createState() => _PanelPlanoState();
+}
+
+/// Qué parte de [PanelPlano] se dibuja.
+enum ParteDelPanel {
+  /// Todo junto (la PC, Recepción, la web).
+  entero,
+
+  /// Lo quieto: el salón con todo su detalle y la mesa encendida, y el borde
+  /// mientras no late. En la tele va en una sola foto.
+  quieto,
+
+  /// Lo que se mueve: el camino con la flecha, el pulso de las mesas y el
+  /// borde que late. Va encima de lo quieto.
+  loQueSeMueve,
+}
+
+/// Todo lo que está afuera del rectángulo redondeado del panel (lo de adentro
+/// lo tapa el salón).
+class _AfueraDe extends CustomClipper<Path> {
+  _AfueraDe(this.redondeo);
+  final BorderRadius redondeo;
+
+  @override
+  Path getClip(Size size) {
+    final r = Offset.zero & size;
+    return Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(r.inflate(size.longestSide))
+      ..addRRect(redondeo.toRRect(r));
+  }
+
+  @override
+  bool shouldReclip(_AfueraDe old) => old.redondeo != redondeo;
 }
 
 class _PanelPlanoState extends State<PanelPlano>
@@ -1239,7 +1519,10 @@ class _PanelPlanoState extends State<PanelPlano>
   /// Late solo si hay que pulsar y se anima: quieto, la escena se queda
   /// quieta (y un `pumpAndSettle` termina).
   void _ajustar() {
-    final mover = widget.pulsar && widget.animar;
+    // Lo quieto no late: el borde que late va con lo que se mueve.
+    final mover = widget.pulsar &&
+        widget.animar &&
+        widget.parte != ParteDelPanel.quieto;
     if (mover && !_latido.isAnimating) {
       _latido.repeat();
     } else if (!mover && _latido.isAnimating) {
@@ -1267,22 +1550,103 @@ class _PanelPlanoState extends State<PanelPlano>
     final w = widget;
     final u = w.u;
     final redondeo = BorderRadius.circular(u * 0.6);
+    VistaPlano vista(CapasDelPlano capas) => VistaPlano(
+          armado: w.armado,
+          hoja: w.hoja,
+          tema: w.tema,
+          estado: w.estado,
+          resaltadas: w.resaltadas,
+          ruta: w.ruta,
+          progresoRuta: w.progresoCamino,
+          animar: w.animar,
+          enFoto: w.enLaTele,
+          capas: capas,
+        );
+    // El borde quieto, como cuando no late.
+    Border borde(double p) => Border.all(
+          color: w.borde.withValues(alpha: 0.55 + 0.45 * p),
+          width: math.max(1, u * (0.06 + 0.12 * p)),
+        );
+
+    switch (w.parte) {
+      case ParteDelPanel.quieto:
+        // El salón con todo su detalle, sin capas propias: lo guarda en una
+        // sola foto quien lo usa. Mientras late, el borde va con lo que se
+        // mueve.
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            borderRadius: redondeo,
+            border: w.pulsar ? null : borde(0),
+          ),
+          child: ClipRRect(
+            borderRadius: redondeo,
+            child: ColoredBox(
+              color: w.tema.fondo,
+              child: Padding(
+                padding: EdgeInsets.all(w.relleno),
+                child: vista(CapasDelPlano.soloElDibujo),
+              ),
+            ),
+          ),
+        );
+      case ParteDelPanel.loQueSeMueve:
+        final encima = ClipRRect(
+          borderRadius: redondeo,
+          child: Padding(
+            padding: EdgeInsets.all(w.relleno),
+            child: vista(CapasDelPlano.soloLoQueSeMueve),
+          ),
+        );
+        return AnimatedBuilder(
+          animation: _latido,
+          child: encima,
+          builder: (context, encima) {
+            final p = _cuanto;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // El resplandor del borde, afuera del salón (adentro lo tapaba
+                // el salón, que va debajo).
+                if (p > 0)
+                  ClipPath(
+                    clipper: _AfueraDe(redondeo),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: redondeo,
+                        boxShadow: [
+                          BoxShadow(
+                            color: w.borde.withValues(alpha: 0.6 * p),
+                            blurRadius: u * (0.5 + 1.1 * p),
+                            spreadRadius: u * 0.15 * p,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                DecoratedBox(
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    borderRadius: redondeo,
+                    border: w.pulsar ? borde(p) : null,
+                  ),
+                  child: encima,
+                ),
+              ],
+            );
+          },
+        );
+      case ParteDelPanel.entero:
+        break;
+    }
+
     final dibujo = ClipRRect(
       borderRadius: redondeo,
       child: ColoredBox(
         color: w.tema.fondo,
         child: Padding(
           padding: EdgeInsets.all(w.relleno),
-          child: VistaPlano(
-            armado: w.armado,
-            hoja: w.hoja,
-            tema: w.tema,
-            estado: w.estado,
-            resaltadas: w.resaltadas,
-            ruta: w.ruta,
-            progresoRuta: w.progresoCamino,
-            animar: w.animar,
-          ),
+          child: vista(CapasDelPlano.todas),
         ),
       ),
     );
@@ -1606,8 +1970,44 @@ List<Shadow> brilloNeon(Color color, double u, {double fuerza = 1}) => [
 
 /// Un texto que aparece letra por letra: con [progreso] en 0 no se ve nada, en
 /// 1 está entero. El lugar lo ocupa desde el principio, así nada se mueve.
+///
+/// Las letras que todavía no se prendieron ya muestran su brillo (el de neón
+/// se ve dorado detrás) y después se prenden en blanco: así se ve en vivo.
+///
+/// [enLaTele]: lo mismo, con dos fotos que se sacan una vez: el brillo del
+/// nombre entero, siempre a la vista, y las letras sin brillo, que se toman de
+/// a una con su opacidad ([NombreQueSePrende]). Ninguna sombra se recalcula
+/// mientras se prende.
 Widget letraPorLetra(String texto, TextStyle estilo, double progreso,
-    {TextAlign align = TextAlign.center}) {
+    {TextAlign align = TextAlign.center, bool enLaTele = false}) {
+  if (enLaTele) {
+    final letras = NombreQueSePrende(
+      progreso: progreso,
+      child: _letraPorLetra(texto, estilo.copyWith(shadows: const []), 1, align),
+    );
+    final brillo = estilo.shadows ?? const <Shadow>[];
+    if (brillo.isEmpty) return letras;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // El brillo de todas las letras, con las letras transparentes.
+        FotoDeLoQuieto(
+          margen: margenDelBrillo(estilo),
+          child: _letraPorLetra(texto, estilo, 0, align),
+        ),
+        letras,
+      ],
+    );
+  }
+  return _letraPorLetra(texto, estilo, progreso, align);
+}
+
+Widget _letraPorLetra(
+  String texto,
+  TextStyle estilo,
+  double progreso,
+  TextAlign align,
+) {
   final letras = texto.characters.toList();
   final n = letras.length;
   return Text.rich(

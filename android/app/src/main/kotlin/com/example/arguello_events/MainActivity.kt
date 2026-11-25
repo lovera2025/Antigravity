@@ -2,6 +2,7 @@ package com.example.arguello_events
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -62,6 +63,51 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Lo que se sabe del aparato, para "Cómo anda" de la app de prueba de la
+        // tele (25-nov-2026, `lib/features/tele/aparato_de_la_tele.dart`).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "junior_eventos/aparato")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "datos" -> Thread {
+                        val datos = HashMap<String, Any?>()
+                        datos["bits"] = if (android.os.Process.is64Bit()) 64 else 32
+                        datos["modelo"] = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+                        datos["dibuja"] = conQueDibuja()
+                        runOnUiThread { result.success(datos) }
+                    }.start()
+                    // Solo la app de prueba los trae (Gradle los copia con
+                    // JUNIOR_APK_DE_PRUEBA=1): los salones de verdad, sin nombres.
+                    "salonesDePrueba" -> Thread {
+                        val texto = try {
+                            assets.open("salones_prueba/salones.json").bufferedReader().use { it.readText() }
+                        } catch (e: Exception) {
+                            null
+                        }
+                        runOnUiThread { result.success(texto) }
+                    }.start()
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    /// Con qué dibuja Flutter: lo dice el motor en el registro de la app al
+    /// arrancar ("Using the Impeller rendering backend (Vulkan)").
+    private fun conQueDibuja(): String? {
+        return try {
+            val proceso = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "raw", "-t", "3000"))
+            val linea = proceso.inputStream.bufferedReader().useLines { lineas ->
+                lineas.lastOrNull { it.contains("rendering backend") }
+            }
+            proceso.destroy()
+            when {
+                linea == null -> null
+                linea.contains("Vulkan", ignoreCase = true) -> "Vulkan"
+                linea.contains("OpenGL", ignoreCase = true) -> "OpenGL"
+                else -> linea.trim().take(40)
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun ponerMulticast(prender: Boolean) {

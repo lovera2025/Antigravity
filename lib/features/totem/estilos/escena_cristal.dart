@@ -14,24 +14,36 @@ import 'totem_estilo.dart';
 class EscenaCristal extends EscenaEstilo {
   const EscenaCristal();
 
-  static Widget _vidrio(double u, {required Widget child}) => ClipRRect(
-    borderRadius: BorderRadius.circular(u * 1.2),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: u * 0.6, sigmaY: u * 0.6),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: u * 1.4, vertical: u * 1.6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(u * 1.2),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.30),
-            width: u * 0.05,
-          ),
+  /// La tarjeta de vidrio. [enLaTele]: sin desenfocar lo de atrás (el fondo de
+  /// Cristal es un gradiente suave, y en la tele va calculado en chico: casi
+  /// no cambia), así la tarjeta entera puede ir en foto.
+  static Widget _vidrio(
+    double u, {
+    required Widget child,
+    bool enLaTele = false,
+  }) {
+    final tarjeta = Container(
+      padding: EdgeInsets.symmetric(horizontal: u * 1.4, vertical: u * 1.6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(u * 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.30),
+          width: u * 0.05,
         ),
-        child: child,
       ),
-    ),
-  );
+      child: child,
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(u * 1.2),
+      child: enLaTele
+          ? tarjeta
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: u * 0.6, sigmaY: u * 0.6),
+              child: tarjeta,
+            ),
+    );
+  }
 
   @override
   Widget espera(DatosEscena d) {
@@ -49,6 +61,7 @@ class EscenaCristal extends EscenaEstilo {
       child: d.bloque(
         _vidrio(
           u,
+          enLaTele: d.enLaTele,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -129,8 +142,10 @@ class EscenaCristal extends EscenaEstilo {
         transform: Matrix4.identity()
           ..setEntry(3, 2, 0.0012)
           ..rotateY((1 - giro.clamp(0.0, 1.0)) * math.pi / 2),
-        child: _vidrio(
+        // En la tele, la tarjeta entera en foto: se da vuelta la foto.
+        child: d.enFoto(_vidrio(
           u,
+          enLaTele: d.enLaTele,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -196,7 +211,7 @@ class EscenaCristal extends EscenaEstilo {
               musicaDeLaLlegada(c, d, familia: FuentesTotem.linea),
             ],
           ),
-        ),
+        )),
       ),
     );
   }

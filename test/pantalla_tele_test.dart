@@ -1,7 +1,9 @@
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/recepcion/central/central_provider.dart';
+import 'package:arguello_events/features/tele/calidad_de_la_tele.dart';
 import 'package:arguello_events/features/tele/modo_tele.dart';
 import 'package:arguello_events/features/tele/pantalla_tele.dart';
+import 'package:arguello_events/features/totem/widgets/totem_local.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,8 +44,13 @@ void main() {
 
   late _ModoFijo modo;
 
-  Future<void> abrir(WidgetTester tester, {PapelDeLaTele papel = PapelDeLaTele.principal}) async {
-    SharedPreferences.setMockInitialValues({});
+  Future<void> abrir(
+    WidgetTester tester, {
+    PapelDeLaTele papel = PapelDeLaTele.principal,
+    bool conDiagnostico = false,
+    Map<String, Object> preferencias = const {},
+  }) async {
+    SharedPreferences.setMockInitialValues(preferencias);
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -53,7 +60,7 @@ void main() {
       alumnos: [alumnoDePrueba('c1000000-0000-4000-8000-000000000001', 'PÉREZ, JUAN', mesas: [12])],
     );
     await tester.pumpWidget(mundo.recepcion(
-      PantallaTele(ahora: () => _hoy),
+      PantallaTele(ahora: () => _hoy, conDiagnostico: conDiagnostico),
       eventos: [eventoDePrueba(eventoMasivo, 'masivo')],
       extra: [
         modoTeleProvider.overrideWith(() => modo),
@@ -126,6 +133,45 @@ void main() {
     await tester.tap(find.text('LISTO'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(modo.puestos, [null]);
+  });
+
+  testWidgets('en la app de verdad el menú no muestra ningún número (25-nov)', (tester) async {
+    await abrir(tester);
+    await tecla(tester, LogicalKeyboardKey.select);
+    expect(find.text('TELE 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tele_como_anda')), findsNothing);
+    expect(find.textContaining('Cómo anda'), findsNothing);
+    expect(find.textContaining('por segundo'), findsNothing);
+  });
+
+  testWidgets('la app de prueba sí dice cómo anda, con los números', (tester) async {
+    await abrir(tester, conDiagnostico: true);
+    await tecla(tester, LogicalKeyboardKey.select);
+    expect(find.byKey(const ValueKey('tele_como_anda')), findsOneWidget);
+    expect(find.textContaining('Cómo anda'), findsOneWidget);
+    expect(find.textContaining('fondo a la mitad'), findsOneWidget);
+  });
+
+  testWidgets('el tótem de la tele va con lo quieto en foto y el fondo a la mitad', (tester) async {
+    await abrir(tester);
+    final totem = tester.widget<TotemLocal>(find.byType(TotemLocal));
+    expect(totem.enLaTele, isTrue);
+    expect(totem.escalaDelFondo, FondoDeLaTele.mitad.escala);
+    expect(totem.fondoQuieto, isFalse);
+  });
+
+  testWidgets('la tele recuerda que tuvo que bajar el fondo', (tester) async {
+    await abrir(tester, preferencias: {AjusteDeLaTele.clave: 'quieto'});
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump(const Duration(milliseconds: 100));
+    final totem = tester.widget<TotemLocal>(find.byType(TotemLocal));
+    expect(totem.fondoQuieto, isTrue);
+    // Desde el menú se vuelve a animar (en chico).
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tester.tap(find.byKey(const ValueKey('tele_fondo')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.widget<TotemLocal>(find.byType(TotemLocal)).escalaDelFondo,
+        FondoDeLaTele.tercio.escala);
   });
 
   testWidgets('el fondo quieto se elige desde el menú y queda en la tele', (tester) async {

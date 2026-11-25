@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../common/widgets/foto_de_lo_quieto.dart';
 import '../services/contenido_bienvenida.dart';
 import 'escena_totem.dart';
 import 'fuentes_totem.dart';
@@ -29,6 +30,10 @@ class EscenaNeon extends EscenaEstilo {
     final t = reloj % 4;
     return (t > 0.30 && t < 0.36) || (t > 0.44 && t < 0.48);
   }
+
+  /// En la tele, una foto con la letra prendida y otra con la letra apagada.
+  @override
+  Object? huellaDeLaEspera(DatosEscena d) => apagada(d.reloj);
 
   @override
   Widget espera(DatosEscena d) {
@@ -166,7 +171,7 @@ class EscenaNeon extends EscenaEstilo {
         children: [
           Opacity(
             opacity: titila ? 0.2 : prende,
-            child: Text(
+            child: d.textoConBrillo(Text(
               c.saludo,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -175,7 +180,7 @@ class EscenaNeon extends EscenaEstilo {
                 color: Colors.white,
                 shadows: brilloNeon(d.segundo, u),
               ),
-            ),
+            )),
           ),
           SizedBox(height: u * 0.5),
           for (final (i, n) in c.nombres.indexed) ...[
@@ -190,6 +195,7 @@ class EscenaNeon extends EscenaEstilo {
                 shadows: brilloNeon(d.color, u, fuerza: 0.9),
               ),
               nombre,
+              enLaTele: d.enLaTele,
             ),
           ],
           if (con != null) ...[
@@ -212,37 +218,60 @@ class EscenaNeon extends EscenaEstilo {
             SizedBox(
               width: u * 7.5,
               height: u * 7.5,
-              child: CustomPaint(
-                painter: _CirculoNeon(progreso: circulo, color: d.color, u: u),
-                child: Center(
-                  child: Opacity(
-                    opacity: circulo,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          c.rotuloMesa.toUpperCase(),
-                          style: TextStyle(
-                            fontFamily: FuentesTotem.linea,
-                            fontSize: u * 0.7,
-                            letterSpacing: u * 0.2,
-                            color: Colors.white.withValues(alpha: 0.85),
-                          ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // En la tele, el círculo entero en foto y descubierto como
+                  // un barrido: el brillo no se recalcula mientras se dibuja.
+                  if (d.enLaTele)
+                    BarridoDeCirculo(
+                      progreso: circulo,
+                      child: d.enFoto(
+                        CustomPaint(
+                          painter: _CirculoNeon(progreso: 1, color: d.color, u: u),
                         ),
-                        Text(
-                          c.mesa!,
-                          style: TextStyle(
-                            fontFamily: FuentesTotem.tubo,
-                            fontSize: u * (c.mesa!.length > 3 ? 1.9 : 2.8),
-                            height: 1.05,
-                            color: Colors.white,
-                            shadows: brilloNeon(d.color, u, fuerza: 0.8),
-                          ),
+                        margen: u * 0.8,
+                      ),
+                    )
+                  else
+                    CustomPaint(
+                      painter: _CirculoNeon(progreso: circulo, color: d.color, u: u),
+                    ),
+                  Center(
+                    child: Opacity(
+                      opacity: circulo,
+                      child: d.enFoto(
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              c.rotuloMesa.toUpperCase(),
+                              style: TextStyle(
+                                fontFamily: FuentesTotem.linea,
+                                fontSize: u * 0.7,
+                                letterSpacing: u * 0.2,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
+                            ),
+                            Text(
+                              c.mesa!,
+                              style: TextStyle(
+                                fontFamily: FuentesTotem.tubo,
+                                fontSize: u * (c.mesa!.length > 3 ? 1.9 : 2.8),
+                                height: 1.05,
+                                color: Colors.white,
+                                shadows: brilloNeon(d.color, u, fuerza: 0.8),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                        margen: margenDelBrillo(
+                          TextStyle(shadows: brilloNeon(d.color, u, fuerza: 0.8)),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],

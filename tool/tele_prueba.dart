@@ -26,6 +26,7 @@
 // Las preferencias van en memoria (no las del programa instalado), y la lista,
 // los alumnos y el plano también: al cerrar se pierde lo marcado.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,6 +40,7 @@ import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
+import 'package:arguello_events/features/tele/aparato_de_la_tele.dart';
 import 'package:arguello_events/features/tele/modo_tele.dart';
 import 'package:arguello_events/features/tele/pantalla_tele.dart';
 import 'package:arguello_events/features/tele/red_de_la_tele.dart';
@@ -54,6 +56,9 @@ import 'raiz_del_proyecto.dart';
 
 const _papel = String.fromEnvironment('papel');
 const _red = String.fromEnvironment('red') == 'si';
+const _comoAntes = String.fromEnvironment('fluida') == 'no';
+// `--dart-define=fondo=quieto`: arranca con el fondo quieto (para medir).
+const _fondoQuieto = String.fromEnvironment('fondo') == 'quieto';
 
 final _familias = [
   ('PÉREZ, JUAN MARTÍN', ['GÓMEZ, ANA', 'PÉREZ, LUIS'], 'Tusa · Karol G'),
@@ -85,14 +90,78 @@ ArmadoSalon _salon() => ArmarAMedida.acomodar(
 /// Ingreso.
 const _mesas = [8, 23, 37, 52, 66, 81, 95, 14, 45, 60, 74, 99];
 
-/// En el APK de prueba: qué es este aparato. Con el control de la tele se
-/// elige con las flechas y OK.
-class _ElegirTele extends StatelessWidget {
-  const _ElegirTele({required this.alElegir});
-  final void Function(PapelDeLaTele) alElegir;
+/// Un salón para la prueba: su armado y las mesas de cada una de las 12
+/// familias inventadas.
+class _SalonDePrueba {
+  const _SalonDePrueba(this.nombre, this.armado, this.mesas);
+  final String nombre;
+  final ArmadoSalon armado;
+  final List<List<int>> mesas;
+}
+
+/// El inventado (101 mesas), por si no están los de verdad.
+_SalonDePrueba _inventado() => _SalonDePrueba(
+      'Inventado · 101 mesas',
+      _salon(),
+      [for (final m in _mesas) [m]],
+    );
+
+/// **Los salones de los eventos masivos de verdad** (25-nov-2026), sin nombres:
+/// `tool/salones_de_verdad.py` los saca de una copia de la base y los deja en
+/// `build/salones_prueba/salones.json`; el APK de prueba los trae adentro
+/// (Gradle, con JUNIOR_APK_DE_PRUEBA=1). Las 12 familias inventadas se sientan
+/// en las mesas de 12 familias de verdad, repartidas de la primera a la última
+/// (la del fondo incluida): el camino más largo también se ve.
+Future<List<_SalonDePrueba>> _salonesDeVerdad() async {
+  String? texto;
+  if (Platform.isAndroid) {
+    texto = await AparatoDeLaTele.salonesDePrueba();
+  } else {
+    final f = File('${carpetaEnBuild('salones_prueba').path}${Platform.pathSeparator}salones.json');
+    if (f.existsSync()) texto = await f.readAsString();
+  }
+  if (texto == null || texto.isEmpty) return const [];
+  final lista = (jsonDecode(texto) as List).cast<Map<String, dynamic>>();
+  return [
+    for (final s in lista)
+      if ((s['familias'] as List).length >= _familias.length)
+        _SalonDePrueba(
+          s['nombre'] as String,
+          ArmadoSalon.fromJson(s['armado'] as Map<String, dynamic>),
+          _repartidas([
+            for (final f in s['familias'] as List) [for (final n in f as List) n as int],
+          ]),
+        ),
+  ];
+}
+
+/// 12 de [familias], repartidas de la primera a la última.
+List<List<int>> _repartidas(List<List<int>> familias) {
+  final n = _familias.length;
+  return [
+    for (var i = 0; i < n; i++) familias[(i * (familias.length - 1) / (n - 1)).round()],
+  ];
+}
+
+/// En el APK de prueba: qué es este aparato, y con qué salón. Con el control
+/// de la tele se elige con las flechas y OK.
+class _ElegirTele extends StatefulWidget {
+  const _ElegirTele({required this.salones, required this.alElegir});
+  final List<_SalonDePrueba> salones;
+  final void Function(PapelDeLaTele, _SalonDePrueba) alElegir;
+
+  @override
+  State<_ElegirTele> createState() => _ElegirTeleState();
+}
+
+class _ElegirTeleState extends State<_ElegirTele> {
+  var _salon = 0;
 
   @override
   Widget build(BuildContext context) {
+    final salones = widget.salones;
+    final elegido = salones[_salon];
+    void alElegir(PapelDeLaTele papel) => widget.alElegir(papel, elegido);
     Widget boton(PapelDeLaTele papel, String detalle, {bool primero = false}) =>
         Padding(
           padding: const EdgeInsets.all(10),
@@ -133,7 +202,32 @@ class _ElegirTele extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text('Una fiesta inventada: no toca la base ni la nube.',
                     style: GoogleFonts.outfit(fontSize: 16, color: Colors.white54)),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
+                // El salón: los de los eventos de verdad (sin nombres), el más
+                // grande primero.
+                Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: OutlinedButton(
+                    style: ButtonStyle(
+                      padding: const WidgetStatePropertyAll(EdgeInsets.all(16)),
+                      side: WidgetStateProperty.resolveWith((s) => BorderSide(
+                            color: s.contains(WidgetState.focused)
+                                ? const Color(0xFFD4AF37)
+                                : Colors.white38,
+                            width: s.contains(WidgetState.focused) ? 4 : 1,
+                          )),
+                    ),
+                    onPressed: salones.length < 2
+                        ? null
+                        : () => setState(() => _salon = (_salon + 1) % salones.length),
+                    child: Text(
+                      'Salón: ${elegido.nombre}'
+                      '${salones.length < 2 ? '' : '  ·  OK para cambiar (${_salon + 1} de ${salones.length})'}',
+                      style: GoogleFonts.outfit(fontSize: 18, color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Wrap(
                   alignment: WrapAlignment.center,
                   children: [
@@ -165,13 +259,14 @@ class _ModoFijo extends ModoTeleNotifier {
 }
 
 /// Una tele de la prueba: su lista, sus alumnos y su central, en memoria.
-Widget _tele(PapelDeLaTele papel, ArmadoSalon salon) {
+Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
+  final salon = elegido.armado;
   final alumnos = [
     for (var i = 0; i < _familias.length; i++)
       alumnoDePrueba(
         'c${i.toString().padLeft(7, '0')}-0000-4000-8000-000000000000',
         _familias[i].$1,
-        mesas: [_mesas[i]],
+        mesas: elegido.mesas[i],
         acomp: _familias[i].$2,
         musica: _familias[i].$3,
         division: i < 6 ? '5° A' : '5° B',
@@ -200,7 +295,9 @@ Widget _tele(PapelDeLaTele papel, ArmadoSalon salon) {
   // La fiesta inventada es hoy: la tele la elige sola.
   final hoy = DateTime.now();
   return mundo.recepcion(
-    const PantallaTele(),
+    // Con "Cómo anda": la prueba es para medir. La app de verdad no lo tiene.
+    // `--dart-define=fluida=no`: como antes del 25-nov, para comparar.
+    const PantallaTele(conDiagnostico: true, fluida: !_comoAntes),
     elegido: eventoMasivo,
     eventos: [
       Evento(
@@ -214,7 +311,7 @@ Widget _tele(PapelDeLaTele papel, ArmadoSalon salon) {
     ],
     config: {eventoMasivo: TotemConfig.defaults(eventoMasivo)},
     extra: [
-      modoTeleProvider.overrideWith(() => _ModoFijo(ModoTele(papel))),
+      modoTeleProvider.overrideWith(() => _ModoFijo(ModoTele(papel, fondoQuieto: _fondoQuieto))),
       totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria()),
       // En esta PC la Tele 2 pregunta solo acá; en el wifi, a toda la red.
       if (!enAndroid && !_red)
@@ -233,7 +330,11 @@ Future<void> main() async {
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
   GoogleFonts.config.allowRuntimeFetching = false;
-  final salon = _salon();
+  final deVerdad = await _salonesDeVerdad();
+  final salones = deVerdad.isEmpty ? [_inventado()] : deVerdad;
+  // En esta PC, `--dart-define=salon=N` elige otro (1, el más grande).
+  final n = int.tryParse(const String.fromEnvironment('salon')) ?? 1;
+  final salon = salones[(n - 1).clamp(0, salones.length - 1)];
 
   if (Platform.isAndroid) {
     await PaginaDelCelularEnAndroid.preparar();
@@ -245,7 +346,10 @@ Future<void> main() async {
       return;
     }
     // Un solo APK para la tele y el celular: al abrir, se elige qué es.
-    runApp(_ElegirTele(alElegir: (papel) => runApp(_tele(papel, salon))));
+    runApp(_ElegirTele(
+      salones: salones,
+      alElegir: (papel, elegido) => runApp(_tele(papel, elegido)),
+    ));
     return;
   }
 

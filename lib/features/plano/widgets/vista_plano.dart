@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 
+import '../../common/widgets/foto_de_lo_quieto.dart';
 import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
 import '../services/familias_en_el_plano.dart';
+
+/// Qué capas dibuja [VistaPlano].
+enum CapasDelPlano {
+  /// Todo: el salón, el camino y el pulso.
+  todas,
+
+  /// Solo el salón (mesas, sillas, números, apellidos, sectores y la mesa
+  /// encendida), sin capas propias.
+  soloElDibujo,
+
+  /// Solo lo que se mueve: el camino con su flecha y el pulso de las mesas.
+  soloLoQueSeMueve,
+}
 
 /// Una hoja del plano, dibujada en un estilo, con las mesas tocables.
 ///
@@ -36,7 +50,20 @@ class VistaPlano extends StatefulWidget {
     this.onApretar,
     this.onArrastrar,
     this.onSoltar,
+    this.enFoto = false,
+    this.capas = CapasDelPlano.todas,
   });
+
+  /// La tele es el tótem (25-nov-2026): el salón se dibuja una vez y se guarda
+  /// como foto (`FotoDeLoQuieto`), con todo su detalle; el camino, aparte, en
+  /// vivo mientras se dibuja y en foto cuando terminó, con su resplandor
+  /// calculado en chico. El pulso de las mesas sigue en vivo (son unos
+  /// círculos). Se ve igual.
+  final bool enFoto;
+
+  /// Qué se dibuja: todo, o (en la tele, para que el salón quieto vaya entero
+  /// en una foto y lo que se mueve encima) una de las dos partes.
+  final CapasDelPlano capas;
 
   final ArmadoSalon armado;
   final String hoja;
@@ -158,26 +185,57 @@ class _VistaPlanoState extends State<VistaPlano>
       builder: (context, constraints) {
         final size = constraints.biggest;
         final tocable = widget.onTapMesa != null || widget.onHoverMesa != null;
-        Widget plano = Stack(
-          fit: StackFit.expand,
-          children: [
-            RepaintBoundary(
-              child: CustomPaint(
-                painter: PintorPlano(
-                  armado: widget.armado,
-                  hoja: widget.hoja,
-                  tema: widget.tema,
-                  estado: widget.estado,
-                  familias: widget.familias,
-                  resaltadas: widget.resaltadas,
-                  seleccionada: widget.seleccionada,
-                  regla: widget.mostrarRegla,
-                  cotas: widget.mostrarMedidas,
-                  lugares: widget.lugares,
-                  zoom: widget.zoom,
+        final enFoto = widget.enFoto;
+        final capas = widget.capas;
+        final pixeles = View.maybeOf(context)?.devicePixelRatio ?? 1;
+        Widget dibujo = CustomPaint(
+          painter: PintorPlano(
+            armado: widget.armado,
+            hoja: widget.hoja,
+            tema: widget.tema,
+            estado: widget.estado,
+            familias: widget.familias,
+            resaltadas: widget.resaltadas,
+            seleccionada: widget.seleccionada,
+            regla: widget.mostrarRegla,
+            cotas: widget.mostrarMedidas,
+            lugares: widget.lugares,
+            zoom: widget.zoom,
+          ),
+        );
+        // Solo el dibujo, sin capas propias: lo guarda en foto quien lo usa
+        // (el salón de la tele, entero), y se entera de lo que cambia.
+        if (capas == CapasDelPlano.soloElDibujo) return dibujo;
+        if (enFoto) dibujo = FotoDeLoQuieto(child: dibujo);
+        Widget? camino;
+        if (enFoto && widget.ruta != null) {
+          camino = IgnorePointer(
+            child: RepaintBoundary(
+              child: FotoDeLoQuieto(
+                child: CustomPaint(
+                  painter: PintorResaltado(
+                    armado: widget.armado,
+                    hoja: widget.hoja,
+                    tema: widget.tema,
+                    estado: widget.estado,
+                    resaltadas: const {},
+                    pulso: _quieto,
+                    ruta: widget.ruta,
+                    progresoRuta: widget.progresoRuta,
+                    zoom: widget.zoom,
+                    resplandorEnChico: 0.5,
+                    pixeles: pixeles,
+                  ),
                 ),
               ),
             ),
+          );
+        }
+        Widget plano = Stack(
+          fit: StackFit.expand,
+          children: [
+            if (capas != CapasDelPlano.soloLoQueSeMueve) RepaintBoundary(child: dibujo),
+            ?camino,
             if (_hayQueResaltar)
               // Su propia capa: el pulso repinta solo los anillos, no lo que
               // haya alrededor del plano.
@@ -191,7 +249,8 @@ class _VistaPlanoState extends State<VistaPlano>
                       estado: widget.estado,
                       resaltadas: _resaltadas,
                       pulso: widget.animar ? _pulso : _quieto,
-                      ruta: widget.ruta,
+                      // En foto, el camino va en su capa.
+                      ruta: enFoto ? null : widget.ruta,
                       progresoRuta: widget.progresoRuta,
                       zoom: widget.zoom,
                     ),

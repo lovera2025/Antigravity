@@ -17,6 +17,8 @@ import '../recepcion/providers/sin_internet_provider.dart';
 import '../recepcion/services/puerta_del_evento.dart';
 import '../recepcion/widgets/linea_sin_internet.dart';
 import '../totem/widgets/totem_local.dart';
+import 'aparato_de_la_tele.dart';
+import 'calidad_de_la_tele.dart';
 import 'cliente_de_la_tele.dart';
 import 'fluidez.dart';
 import 'modo_tele.dart';
@@ -49,10 +51,26 @@ TextStyle _letra(double size, {Color color = _perla, bool negrita = false}) =>
 /// tele es "Salir del modo tele", con el PIN del jefe
 /// (`test/modo_tele_cerrado_test.dart`).
 class PantallaTele extends ConsumerStatefulWidget {
-  const PantallaTele({super.key, this.ahora = DateTime.now});
+  const PantallaTele({
+    super.key,
+    this.ahora = DateTime.now,
+    this.conDiagnostico = false,
+    this.fluida = true,
+  });
+
+  /// Lo quieto en foto y el fondo en chico ([TotemLocal.enLaTele]). Siempre
+  /// prendido; solo la app de prueba lo apaga (`--dart-define=fluida=no`) para
+  /// medir el antes y el después en el mismo aparato.
+  final bool fluida;
 
   /// El reloj: las pruebas lo fijan.
   final DateTime Function() ahora;
+
+  /// "Cómo anda" en el menú, con los números (imágenes por segundo, lo que
+  /// tarda cada una, el aparato). **Solo la app de prueba**
+  /// (`tool/tele_prueba.dart`): en la app de verdad no se ve ningún número
+  /// (pedido del usuario, 25-nov-2026; `test/pantalla_tele_test.dart`).
+  final bool conDiagnostico;
 
   @override
   ConsumerState<PantallaTele> createState() => _PantallaTeleState();
@@ -76,12 +94,78 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
   Timer? _borrarManejan;
   bool _mostrarManejan = false;
 
+  /// De cuánto va el fondo: arranca a la mitad y, si la tele no llega, baja
+  /// sola (`AjusteDeLaTele`), callada.
+  final _ajuste = AjusteDeLaTele();
+  Timer? _mirarFluidez;
+  bool _hayTotem = false;
+
+  /// Solo con [PantallaTele.conDiagnostico].
+  AparatoDeLaTele? _aparato;
+
+  /// Las medidas del último minuto, con su hora.
+  final _ultimas = <(DateTime, MedidaDeFluidez)>[];
+
+  /// La peor del último minuto (en la app de prueba: hacer entrar a alguien,
+  /// abrir el menú y mirar esto).
+  MedidaDeFluidez? get _peor => _ultimas.isEmpty
+      ? null
+      : _ultimas
+          .map((x) => x.$2)
+          .reduce((a, b) => a.porSegundo <= b.porSegundo ? a : b);
+
+  /// Las imágenes por segundo de la pantalla.
+  double get _hz {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    final hz = views.isEmpty ? 60.0 : views.first.display.refreshRate;
+    return hz.isFinite && hz >= 20 ? hz : 60;
+  }
+
+  /// Cuándo arrancó: los primeros segundos (preparar las fotos, girar la
+  /// pantalla) no cuentan para decidir.
+  final _arranco = DateTime.now();
+  static const _sinMirarAlArrancar = Duration(seconds: 15);
+
+  void _mirar() {
+    if (!mounted || !_hayTotem || _vista != null) return;
+    _fluidez.tope = _hz;
+    final m = _fluidez.medida;
+    // Lo de cada 5 s del último minuto: lo peor es lo de la última bienvenida.
+    if (m != null) {
+      final ahora = DateTime.now();
+      _ultimas
+        ..add((ahora, m))
+        ..removeWhere((x) => ahora.difference(x.$1) > const Duration(minutes: 1));
+    }
+    // En la app de prueba, cada medida al registro (`adb logcat -s flutter`).
+    if (widget.conDiagnostico) {
+      debugPrint('fluidez: ${Fluidez.detalle(m)} · '
+          '${widget.fluida ? _ajuste.fondo.nombre : 'como antes'}');
+    }
+    if (!widget.fluida) return;
+    if (DateTime.now().difference(_arranco) < _sinMirarAlArrancar) return;
+    if (_ajuste.mirar(m, hz: _hz)) {
+      setState(() {});
+      unawaited(AjusteDeLaTele.guardar(_ajuste.fondo));
+      _fluidez.olvidar();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     unawaited(PantallaDespierta.mantener(true));
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
     _fluidez.arrancar();
+    unawaited(AjusteDeLaTele.leer().then((f) {
+      if (mounted && f != _ajuste.fondo) setState(() => _ajuste.fondo = f);
+    }));
+    _mirarFluidez = Timer.periodic(const Duration(seconds: 5), (_) => _mirar());
+    if (widget.conDiagnostico) {
+      unawaited(AparatoDeLaTele.leer().then((a) {
+        if (mounted) setState(() => _aparato = a);
+      }));
+    }
     unawaited(ModoTeleGuardado.fiestaElegida().then((id) {
       if (mounted && id != null) setState(() => _elegida = id);
     }));
@@ -102,6 +186,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     unawaited(PantallaDespierta.mantener(false));
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     _fluidez.dispose();
+    _mirarFluidez?.cancel();
     unawaited(_bajadas?.cancel());
     _relectura?.cancel();
     _ayuda?.cancel();
@@ -217,6 +302,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
       elegida: _elegida,
     );
     final evento = fiesta.fiesta;
+    _hayTotem = evento != null;
     if (evento != null) _asegurar(evento.id, modo);
     if (fiesta.hayQueElegir && _vista == null && eventos.hasValue) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -254,7 +340,13 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
                     key: ValueKey('tele-${evento.id}-${modo.papel.name}'),
                     eventoId: evento.id,
                     seSaluda: (id) => _seSaluda(evento.id, modo, id),
-                    fondoQuieto: modo.fondoQuieto,
+                    fondoQuieto:
+                        modo.fondoQuieto || _ajuste.fondo == FondoDeLaTele.quieto,
+                    // Lo quieto en foto y el fondo en chico: se ve igual y la
+                    // placa de la tele llega (25-nov-2026).
+                    enLaTele: widget.fluida,
+                    escalaDelFondo: widget.fluida ? _ajuste.fondo.escala : 1,
+                    ensayar: widget.fluida,
                   ),
                 if (evento != null) _Vigia(eventoId: evento.id),
                 Positioned(
@@ -408,6 +500,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     List<String> manejan,
   ) {
     final principal = modo.papel == PapelDeLaTele.principal;
+    final quieto = modo.fondoQuieto || _ajuste.fondo == FondoDeLaTele.quieto;
     final otra = principal
         ? (central.teles.any((t) => t.conectada)
             ? 'La Tele 2 está conectada'
@@ -452,11 +545,16 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         ),
         _Opcion(
           key: const ValueKey('tele_fondo'),
-          icono: modo.fondoQuieto ? Icons.pause_circle_outline : Icons.play_circle_outline,
-          texto: modo.fondoQuieto ? 'Fondo quieto · tocá para animarlo' : 'Fondo animado · tocá para dejarlo quieto',
-          alElegir: () => ref
-              .read(modoTeleProvider.notifier)
-              .poner(modo.con(fondoQuieto: !modo.fondoQuieto)),
+          icono: quieto ? Icons.pause_circle_outline : Icons.play_circle_outline,
+          texto: quieto ? 'Fondo quieto · tocá para animarlo' : 'Fondo animado · tocá para dejarlo quieto',
+          alElegir: () {
+            if (quieto && _ajuste.fondo == FondoDeLaTele.quieto) {
+              // Lo había dejado quieto la tele sola: lo animado, en chico.
+              setState(() => _ajuste.fondo = FondoDeLaTele.tercio);
+              unawaited(AjusteDeLaTele.guardar(_ajuste.fondo));
+            }
+            ref.read(modoTeleProvider.notifier).poner(modo.con(fondoQuieto: !quieto));
+          },
         ),
         if (!principal) ...[
           _Opcion(
@@ -474,14 +572,27 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             alElegir: () => _pasarAPrincipal(modo),
           ),
         ],
-        const SizedBox(height: 8),
-        ListenableBuilder(
-          listenable: _fluidez,
-          builder: (context, _) => Text(
-            'Cómo anda: ${Fluidez.texto(_fluidez.porSegundo)}',
-            style: _letra(15, color: Colors.white54),
+        // Los números, solo en la app de prueba.
+        if (widget.conDiagnostico) ...[
+          const SizedBox(height: 8),
+          ListenableBuilder(
+            key: const ValueKey('tele_como_anda'),
+            listenable: _fluidez,
+            builder: (context, _) {
+              final pantalla = MediaQuery.sizeOf(context) *
+                  MediaQuery.devicePixelRatioOf(context);
+              final peor = _peor;
+              return Text(
+                'Cómo anda: ${Fluidez.detalle(_fluidez.medida)}\n'
+                '${peor == null ? '' : 'Lo peor del último minuto: ${Fluidez.detalle(peor)}\n'}'
+                '${pantalla.width.round()}×${pantalla.height.round()} · '
+                '${_hz.round()} Hz · ${_ajuste.fondo.nombre}'
+                '${_aparato == null || _aparato!.texto.isEmpty ? '' : ' · ${_aparato!.texto}'}',
+                style: _letra(15, color: Colors.white54),
+              );
+            },
           ),
-        ),
+        ],
         if (evento != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
