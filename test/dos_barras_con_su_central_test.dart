@@ -249,6 +249,24 @@ void main() {
     }
   });
 
+  test('muchas preguntas seguidas por la red: ninguna se pierde (el socket no espera)', () async {
+    final recibe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final manda = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    var llegaron = 0;
+    recibe.listen((e) {
+      if (e == RawSocketEvent.read && recibe.receive() != null) llegaron++;
+    });
+    // Todas a la vez, sin esperar entre una y otra: así salen las preguntas a cada
+    // dirección de la red y las respuestas a cada tablet.
+    await Future.wait([
+      for (var i = 0; i < 40; i++)
+        mandarDatagrama(manda, [i], InternetAddress.loopbackIPv4, recibe.port),
+    ]);
+    await hasta(() => llegaron == 40, que: 'llegaron las 40 (llegaron $llegaron)', segundos: 3);
+    recibe.close();
+    manda.close();
+  });
+
   test('el OK de la encargada cruza de una barra a la otra', () async {
     juntar();
     await hasta(() => barra1.enganchada(), que: 'enganchadas');

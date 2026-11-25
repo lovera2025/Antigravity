@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
-import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/jefe/cajas_de_la_fiesta.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
+import 'package:arguello_events/features/barra/services/pantalla_despierta.dart';
 import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
 import 'package:arguello_events/features/barra/widgets/vender_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
@@ -135,6 +135,25 @@ void main() {
       await montar(tester, CajasDeLaFiestaVista(fiesta: tecnica));
       expect(find.byKey(const Key('jefe_sin_cajas_esta_noche')), findsOneWidget);
       expect(find.text('Vie 20/11 · 1 caja'), findsOneWidget, reason: 'la prueba, arriba para tocar');
+    });
+
+    testWidgets('en la tablet no deja apagar la pantalla mientras está abierta, como VENDER', (tester) async {
+      final pedidos = <Object?>[];
+      PantallaDespierta.enAndroidEnLaPrueba = true;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(PantallaDespierta.canal, (call) async {
+        pedidos.add(call.arguments);
+        return null;
+      });
+      addTearDown(() {
+        PantallaDespierta.enAndroidEnLaPrueba = null;
+        PantallaDespierta.olvidar();
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(PantallaDespierta.canal, null);
+      });
+      await montar(tester, CajasDeLaFiestaVista(fiesta: tecnica));
+      expect(pedidos, [true]);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(pedidos, [true, false], reason: 'al salir de LAS CAJAS la suelta');
     });
 
     testWidgets('en el celular de la encargada no se desborda con las noches arriba', (tester) async {

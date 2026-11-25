@@ -237,7 +237,7 @@ class ClienteDeLaCentral extends ChangeNotifier {
         'equipo': equipo,
         'caja': nombreCaja,
         // La central lo muestra; y si es otra central, la pone aparte de las cajas.
-        if (barraDeLaCaja != null) 'barra': barraDeLaCaja!,
+        'barra': ?barraDeLaCaja,
         if (eleccion.esDeCentral) 'central': '1',
       },
     );

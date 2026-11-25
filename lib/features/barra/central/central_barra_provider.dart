@@ -9,7 +9,6 @@ import '../../../core/services/instalacion_id.dart';
 import '../../../core/services/pc_despierta.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../recepcion/central/direcciones_red.dart';
-import '../cuentas/dia_de_operacion.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../services/barras_del_salon.dart';
@@ -328,6 +327,11 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     if (!vuelve || _central != null) return;
     await prender(eventoId, barra: guardada.barra, desdeElBoton: false);
   }
+
+  /// Corta el enganche con la central de la otra barra y la vuelve a buscar (si se ven,
+  /// se vuelven a enganchar solas). Lo usa la ventana de prueba de las dos barras para
+  /// "separar" las redes.
+  void volverABuscarLaOtra() => _central?.volverABuscarLaOtra();
 
   Future<void> apagar() async {
     final guardado = ref.read(guardadoDeLaCentralProvider);

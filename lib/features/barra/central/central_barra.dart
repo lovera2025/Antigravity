@@ -217,7 +217,6 @@ class CentralBarra {
 
   /// El enganche con la otra central vuelve a buscarla desde cero: lo usan las ventanas
   /// de prueba para "separar" las dos redes.
-  @visibleForTesting
   void volverABuscarLaOtra() => _puente?.volverABuscar();
 
   /// Abre la central y devuelve en qué puerto quedó. [en] es por dónde se escucha: en la

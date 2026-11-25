@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
-import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/dia_de_operacion.dart';
 import 'package:arguello_events/features/barra/cuentas/stock_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';

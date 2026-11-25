@@ -2,7 +2,6 @@ import 'package:image/image.dart' as img;
 
 import '../../../core/utils/ar_time.dart';
 import '../cuentas/cierre_de_barra.dart';
-import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/numero_de_ticket.dart';
 import '../cuentas/pesos.dart';
 import '../cuentas/vales_de_barra.dart';

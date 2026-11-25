@@ -797,6 +797,22 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v83**: la v81 es de la entrega en dos partes y
   la v82 de las entradas para rendir.
 
+**25-nov, para la Técnica del 4-dic (Parte 2 del plan): la barra por noche, la madrugada y una central por barra —
+programado y probado en el sandbox, SIN PUBLICAR, en la rama `claude/sleepy-jepsen-bea21a`** (falta juntarla con la
+feature; `docs/CONTEXTO_BARRA_POR_NOCHE_2026-11-25.md`, que empieza con "Para retomar en otro chat"). Sin SQL.
+- **La noche de una caja es el día en que se abrió, en hora de Argentina, con el corte al mediodía**
+  (`barra/cuentas/dia_de_operacion.dart`, `DiaDeOperacion`, `CajasPorDia`: **la única cuenta del día de la barra**);
+  las ventas van con su caja aunque sean de madrugada. Una pantalla o cuenta nueva de la barra que sume cajas **pasa
+  por `CajasPorDia`**: LAS CAJAS, BARRA del cierre, el stock, el "Quedan" de VENDER y los vales anulados de la puerta
+  ya son de una noche (las cajas de prueba de otros días no se suman). Nada se borra.
+- La hora de la barra en un lugar: **`relojDeLaBarraProvider`** (`relojDelJefeProvider` la sigue).
+- **La barra de cada caja va en `sede`** ("Barra 1" · "Barra 2", `services/barras_del_salon.dart`); la central dice
+  la suya, la tablet se engancha a la de su barra, y **dos centrales de la fiesta que se ven se enganchan solas**
+  (`CentralBarra.engancharConOtras`, una sola punta). **Para mandar por UDP, `mandarDatagrama`**: el `send` seguido
+  de otro se perdía en Windows.
+- `PantallaDespierta` cuenta cuántas pantallas la piden (VENDER, LAS CAJAS, la tele).
+- Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (27, todas atrapadas).
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
