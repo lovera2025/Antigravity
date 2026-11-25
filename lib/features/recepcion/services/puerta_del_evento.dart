@@ -137,6 +137,7 @@ class PuertaDelEvento {
       grupos.add(
         GrupoPuerta._(
           contratoId: a.id,
+          principal: SalonMesas.principal(a),
           sillasPorMesa: SillasDeLaFamilia.de(
             a,
             repartos[a.id],
@@ -335,7 +336,7 @@ class PuertaDelEvento {
   /// planilla y el plano ([SalonMesas], [RepartoDeSillas]).
   static String? textoSillasPuerta(ContratoAlumno a, SillasReparto? guardado) {
     if (!SalonMesas.tieneNumeros(a)) return null;
-    final numeros = [for (final t in SalonMesas.tramos(a)) ...t];
+    final numeros = SalonMesas.mesasEnOrden(a);
     final principal = RepartoDeSillas.vigente(a, guardado)?.principal;
     final extraPorMesa = {
       for (final (mesa, sillas)
@@ -422,6 +423,11 @@ class GrupoPuerta {
   /// sorteo porque no estaban pagas).
   final int adicionalesSinMesa;
 
+  /// La mesa principal de la familia, la anotada primero (6.9.4,
+  /// `SalonMesas.principal`): con "107, 106", la 107. Va al plano de la
+  /// recepcionista. Null en una fila cargada a mano o de una central vieja.
+  final int? principal;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -439,6 +445,7 @@ class GrupoPuerta {
     this.reservadaPara,
     this.mesasAConfirmar = const {},
     this.adicionalesSinMesa = 0,
+    this.principal,
   });
 
   /// Las mesas de la familia que se muestran como suyas: sin las "a
@@ -482,6 +489,7 @@ class GrupoPuerta {
         if (mesasAConfirmar.isNotEmpty)
           'aConfirmar': [...mesasAConfirmar]..sort(),
         if (adicionalesSinMesa > 0) 'adicionalesSinMesa': adicionalesSinMesa,
+        if (principal != null) 'principal': principal,
       };
 
   factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
@@ -499,6 +507,7 @@ class GrupoPuerta {
             if (n is int) n,
       },
       adicionalesSinMesa: sinMesa is int ? sinMesa : 0,
+      principal: json['principal'] is int ? json['principal'] as int : null,
       titular: PersonaPuerta._fromJson(
         json['titular'] as Map<String, dynamic>,
         eventoId,

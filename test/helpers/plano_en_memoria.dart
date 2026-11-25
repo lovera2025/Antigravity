@@ -38,6 +38,7 @@ import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/predio.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
+import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 
 /// No se usa para nada: los reemplazos heredan de clases que lo piden.
 SupabaseClient supabaseDePrueba() => SupabaseClient(
@@ -170,7 +171,14 @@ class ContratosDelPlano extends ContratosRepository {
     alumnos = [
       for (final a in alumnos)
         numeroPorContrato.containsKey(a.id)
-            ? a.copyWith(numeroMesa: numeroPorContrato[a.id] ?? '')
+            // Como la base de verdad: la principal queda primera.
+            ? a.copyWith(
+                numeroMesa: MesasExtraUtils.conLaPrincipalDeAntes(
+                      a.numeroMesa,
+                      numeroPorContrato[a.id],
+                    ) ??
+                    '',
+              )
             : a,
     ];
     if (movimiento != null) movimientos.add(movimiento);

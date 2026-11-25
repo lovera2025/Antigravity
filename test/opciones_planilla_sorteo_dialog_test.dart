@@ -97,7 +97,35 @@ void main() {
       blancoYNegro: false,
       soloUltimos: false,
       vertical: true,
+      orden: OrdenPlanillaSorteo.alfabetico,
     ));
+  });
+
+  testWidgets('el orden viene alfabético, y se puede pedir por número de mesa',
+      (tester) async {
+    // 25-nov-2026: para ir anotando qué mesa le tocó a cada chico, la lista de
+    // la mesa 1 a la última. Vale para la interna y para la de repartir.
+    final elegido = await abrir(tester);
+    expect(find.text('Orden'), findsOneWidget);
+    expect(
+      tester
+          .widget<SegmentedButton<OrdenPlanillaSorteo>>(
+            find.byKey(const Key('planilla_orden')),
+          )
+          .selected,
+      {OrdenPlanillaSorteo.alfabetico},
+    );
+    expect(find.text('Una hoja por división, por apellido.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Por número de mesa'));
+    await tester.tap(find.text('Por número de mesa'));
+    await tester.ensureVisible(find.text('Para repartir'));
+    await tester.tap(find.text('Para repartir'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('de la mesa 1 a la última'), findsOneWidget);
+    await generar(tester);
+    expect(elegido.single!.orden, OrdenPlanillaSorteo.porMesa);
+    expect(elegido.single!.version, VersionPlanillaSorteo.paraRepartir);
   });
 
   testWidgets('la hoja viene parada, y se puede pedir acostada', (tester) async {
@@ -157,7 +185,9 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.ensureVisible(find.text('Para repartir'));
     await tester.tap(find.text('Para repartir'));
+    await tester.ensureVisible(find.text('Blanco y negro'));
     await tester.tap(find.text('Blanco y negro'));
     await tester.pumpAndSettle();
     await generar(tester);
@@ -166,6 +196,7 @@ void main() {
       blancoYNegro: true,
       soloUltimos: true,
       vertical: true,
+      orden: OrdenPlanillaSorteo.alfabetico,
     ));
   });
 

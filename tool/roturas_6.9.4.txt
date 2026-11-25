@@ -1,0 +1,144 @@
+1. la planilla por mesa no ordena por número
+lib/features/eventos/services/planilla_sorteo.dart
+test/planilla_sorteo_test.dart
+        return mx.compareTo(my);
+        return 0;
+---
+2. la planilla por mesa pierde el renglón de las adicionales
+lib/features/eventos/services/planilla_sorteo.dart
+test/planilla_sorteo_test.dart
+      for (final n in f.numerosAdicionales) {
+      for (final n in const <int>[]) {
+---
+3. los que no tienen mesa van primero
+lib/features/eventos/services/planilla_sorteo.dart
+test/planilla_sorteo_test.dart
+        if (mx == null) return 1;
+        if (mx == null) return -1;
+---
+4. la columna de la mesa no va primero
+lib/features/common/services/planilla_sorteo_pdf.dart
+test/planilla_sorteo_test.dart
+    if (mesaPrimero) celdas.insert(0, celdas.removeAt(2));
+
+---
+5. la principal vuelve a ser la de número más bajo
+lib/features/eventos/services/salon_mesas.dart
+test/principal_primera_anotada_test.dart test/mesa_que_da_el_jefe_test.dart
+      MesasExtraUtils.numerosEnOrdenDelTexto(a.numeroMesa);
+      MesasExtraUtils.numerosEnOrdenDelTexto(a.numeroMesa)..sort();
+---
+6. lo que se guarda ordena los números y pierde la principal (un Mover, un sorteo)
+lib/features/eventos/repositories/contratos_repository.dart
+test/principal_primera_anotada_test.dart
+          'numero_mesa': MesasExtraUtils.conLaPrincipalDeAntes(antes, e.value),
+          'numero_mesa': e.value,
+---
+7. la planilla toma la principal del tramo más largo
+lib/features/eventos/services/planilla_sorteo.dart
+test/principal_primera_anotada_test.dart test/planilla_sorteo_test.dart
+    final principal = tramos.isEmpty ? null : SalonMesas.principal(a);
+    final principal = tramos.isEmpty ? null : tramos.first.first;
+---
+8. la 106 queda vacía: nunca se usa una vacía del fondo
+lib/features/plano/services/mesas_nuevas_al_fondo.dart
+test/mesa_que_da_el_jefe_test.dart
+          deVacias.putIfAbsent(id, () => []).add(vacia);
+          deVacias.putIfAbsent(id, () => []);
+---
+9. la misma vacía se le da a dos familias
+lib/features/plano/services/mesas_nuevas_al_fondo.dart
+test/mesa_que_da_el_jefe_test.dart
+          libres.remove(vacia);
+
+---
+10. el azar no decide quién recibe la vacía
+lib/features/plano/services/mesas_nuevas_al_fondo.dart
+test/mesa_que_da_el_jefe_test.dart
+    if (azar != null) enOrden.shuffle(azar);
+
+---
+11. la mesa que el programa da solo no usa la vacía
+lib/features/plano/services/mesa_nueva_sola.dart
+test/mesa_que_da_el_jefe_test.dart
+      vacias: MesasNuevasAlFondo.vaciasDelFondo(
+      vacias: const <int>{}.isEmpty ? const <int>{} : MesasNuevasAlFondo.vaciasDelFondo(
+---
+12. DAR MESA no le da la adicional a quien no pagó la base
+lib/features/plano/services/mesa_que_da_el_jefe.dart
+test/mesa_que_da_el_jefe_test.dart
+    final soloBase = exclusion.soloBase.difference(elegidos);
+    final soloBase = exclusion.soloBase;
+---
+13. a los de baja también se les ofrece DAR MESA
+lib/features/plano/services/mesa_que_da_el_jefe.dart
+test/mesa_que_da_el_jefe_test.dart
+    if (a.esBajaTemporal) return 0;
+
+---
+14. el renglón de DAR MESA no guarda que lo dio el jefe
+lib/models/sorteo_mesas_registro.dart
+test/mesa_que_da_el_jefe_test.dart
+        if (delJefe) claveDelJefe: 1,
+
+---
+15. antes del sorteo la celda ya dice "Sin mesa"
+lib/features/eventos/widgets/celda_mesa_alumno.dart
+test/celda_mesa_alumno_test.dart
+    final antesDelSorteo = !tieneMesa && !baja && !sorteoHecho;
+    final antesDelSorteo = false;
+---
+16. DAR MESA sin modo jefe se puede tocar
+lib/features/eventos/widgets/celda_mesa_alumno.dart
+test/celda_mesa_alumno_test.dart
+      onPressed: onDarMesa,
+      onPressed: onDarMesa ?? () {},
+---
+17. DAR MESA no deja la puerta al día
+lib/features/eventos/detalle_evento_masivo_screen.dart
+test/puerta_sigue_al_salon_test.dart
+      final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
+      final puerta = await Future<dynamic>.value(null);
+---
+18. el cartel de "a todos" no viene con todas tildadas
+lib/features/eventos/widgets/dar_mesa_a_todos_dialog.dart
+test/dar_mesa_a_todos_dialog_test.dart
+    for (final f in widget.familias) f.alumno.id,
+    for (final f in widget.familias.take(1)) f.alumno.id,
+---
+19. el cartel de la planilla viene en "Por número de mesa"
+lib/features/eventos/widgets/opciones_planilla_sorteo_dialog.dart
+test/opciones_planilla_sorteo_dialog_test.dart
+  var orden = OrdenPlanillaSorteo.alfabetico;
+  var orden = OrdenPlanillaSorteo.porMesa;
+---
+20. el plano vuelve a poner la principal en la más baja
+lib/features/plano/services/plano_de_la_fiesta.dart
+test/principal_primera_anotada_test.dart
+      principalAnotada: SalonMesas.principal(a),
+
+---
+21. mover una sola mesa vuelve a ordenar los números
+lib/features/plano/services/cambios_de_mesa.dart
+test/principal_primera_anotada_test.dart
+      if (viejas[i] < viejas[i - 1]) return enSuLugar;
+      if (viejas[i] < viejas[i - 1]) return enSuLugar..sort();
+---
+22. la puerta no le pasa la principal al plano de la recepcionista
+lib/features/recepcion/services/puerta_del_evento.dart
+test/principal_primera_anotada_test.dart
+          principal: SalonMesas.principal(a),
+
+---
+23. las vacías no van primero a quien ya tiene mesa
+lib/features/plano/services/mesas_nuevas_al_fondo.dart
+test/mesa_que_da_el_jefe_test.dart
+    repartirVacias(conMesa: true);
+
+---
+24. la mesa sola deja la adicional con un número más chico que la principal
+lib/features/plano/services/mesa_nueva_sola.dart
+test/mesa_que_da_el_jefe_test.dart
+      soloSiQuedaEnOrden: true,
+
+---

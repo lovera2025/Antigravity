@@ -497,8 +497,13 @@ void main() {
       expect(SalonMesas.textoRepartoSillas(quiroz), '12 (+2) · 13 (+2)');
       final nicolini = alumno('n', extras: 1, mesa: '30, 31', sillas: 3);
       expect(SalonMesas.textoRepartoSillas(nicolini), '30 (+2) · 31 (+1)');
-      final separada = alumno('s', extras: 2, mesa: '40, 12, 13', sillas: 3);
+      final separada = alumno('s', extras: 2, mesa: '12, 13, 40', sillas: 3);
       expect(SalonMesas.textoRepartoSillas(separada), '12 (+2) · 13 (+1)');
+      // La principal es la primera anotada (6.9.4): con la 40 primero, las
+      // sillas van primero a la 40 aunque el bloque sea la 12 y la 13.
+      final primeroLa40 =
+          alumno('p', extras: 2, mesa: '40, 12, 13', sillas: 3);
+      expect(SalonMesas.textoRepartoSillas(primeroLa40), '40 (+2) · 12 (+1)');
       expect(SalonMesas.textoRepartoSillas(alumno('x', sillas: 2)),
           '2 sillas extra');
       expect(SalonMesas.textoRepartoSillas(alumno('x')), '-');

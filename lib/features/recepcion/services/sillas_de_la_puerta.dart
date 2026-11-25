@@ -156,7 +156,7 @@ class SillasDeLaFamilia {
     Set<int> aConfirmar = const {},
   }) {
     final numeros = SalonMesas.tieneNumeros(a)
-        ? [for (final t in SalonMesas.tramos(a)) ...t]
+        ? SalonMesas.mesasEnOrden(a)
         : const <int>[];
     final principal = RepartoDeSillas.vigente(a, guardado)?.principal;
     final delContrato = {

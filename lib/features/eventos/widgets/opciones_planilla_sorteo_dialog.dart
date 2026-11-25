@@ -16,6 +16,10 @@ typedef OpcionesPlanillaSorteo = ({
   /// como está puesta casi cualquier impresora, y acostada salía a media hoja
   /// o cortada (lo contó el usuario el 10-nov).
   bool vertical,
+
+  /// Por apellido, una hoja por división (viene así, como siempre), o todo el
+  /// salón de la mesa 1 a la última (6.9.4).
+  OrdenPlanillaSorteo orden,
 });
 
 /// Pregunta qué planilla se imprime: la interna (con teléfonos y
@@ -35,6 +39,7 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
   var version = VersionPlanillaSorteo.interna;
   var blancoYNegro = false;
   var vertical = true;
+  var orden = OrdenPlanillaSorteo.alfabetico;
   var soloUltimos = hayUltimos && sugerirUltimos && ultimos.enPie.length > 1;
   return showDialog<OpcionesPlanillaSorteo>(
     context: context,
@@ -109,6 +114,34 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
+              const Text('Orden'),
+              const SizedBox(height: 8),
+              SegmentedButton<OrdenPlanillaSorteo>(
+                key: const Key('planilla_orden'),
+                segments: const [
+                  ButtonSegment(
+                    value: OrdenPlanillaSorteo.alfabetico,
+                    icon: Icon(Icons.sort_by_alpha_rounded),
+                    label: Text('Alfabético'),
+                  ),
+                  ButtonSegment(
+                    value: OrdenPlanillaSorteo.porMesa,
+                    icon: Icon(Icons.format_list_numbered_rounded),
+                    label: Text('Por número de mesa'),
+                  ),
+                ],
+                selected: {orden},
+                onSelectionChanged: (s) => setDialog(() => orden = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                orden == OrdenPlanillaSorteo.alfabetico
+                    ? 'Una hoja por división, por apellido.'
+                    : 'Todo el salón en una lista, de la mesa 1 a la última. '
+                        'Cada mesa adicional va en su número.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
               const Text('Impresión'),
               const SizedBox(height: 8),
               SegmentedButton<bool>(
@@ -174,6 +207,7 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
                 blancoYNegro: blancoYNegro,
                 soloUltimos: soloUltimos,
                 vertical: vertical,
+                orden: orden,
               ),
             ),
             child: const Text('GENERAR'),

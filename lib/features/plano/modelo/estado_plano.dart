@@ -15,12 +15,18 @@ class OcupantePlano {
   /// Sillas extra que van en cada una de sus mesas (mesa → cantidad).
   final Map<int, int> sillasExtraPorMesa;
 
+  /// La mesa principal tal como está anotada: la primera de su número de mesa
+  /// (6.9.4, `SalonMesas.principal`). Con "107, 106" es la 107 aunque la 106
+  /// tenga número más bajo. Null: se toma la de siempre ([principalDe]).
+  final int? principalAnotada;
+
   const OcupantePlano({
     required this.id,
     required this.nombre,
     required this.numeros,
     this.division,
     this.sillasExtraPorMesa = const {},
+    this.principalAnotada,
   });
 
   /// Lo que va antes de la coma: "GÓMEZ" de "GÓMEZ, SOFÍA".
@@ -29,9 +35,18 @@ class OcupantePlano {
     return (i < 0 ? nombre : nombre.substring(0, i)).trim();
   }
 
-  /// La mesa principal: la primera del tramo más largo (a igual largo, el que
-  /// empieza antes). Es la misma regla que usa la planilla del sorteo.
-  int? get principal => principalDe(numeros);
+  /// La mesa principal: la anotada primero ([principalAnotada], 6.9.4), la
+  /// misma que dicen la planilla y la puerta. Sin ella, la primera del tramo
+  /// más largo (a igual largo, el que empieza antes).
+  int? get principal => principalEntre(numeros);
+
+  /// La principal entre [disponibles]: la anotada si está ahí; si no, la de
+  /// siempre ([principalDe]).
+  int? principalEntre(Iterable<int> disponibles) {
+    final anotada = principalAnotada;
+    if (anotada != null && disponibles.contains(anotada)) return anotada;
+    return principalDe(disponibles);
+  }
 
   static int? principalDe(Iterable<int> numeros) {
     final l = numeros.toSet().toList()..sort();
@@ -291,7 +306,7 @@ class EstadoPlano {
     // deja a la familia sin apellido en ninguna mesa.
     final principalOcupante = <String, int?>{
       for (final o in ocupantes)
-        o.id: OcupantePlano.principalDe([
+        o.id: o.principalEntre([
           for (final n in o.numeros.toSet())
             if (armado.existe(n) && !enConflicto(n)) n,
         ]),

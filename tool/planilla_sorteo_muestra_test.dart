@@ -348,5 +348,35 @@ void main() {
       stdout.writeln('── PDF en: ${archivo.path}');
       expect(archivo.lengthSync(), greaterThan(1000));
     }
+
+    // Por número de mesa (6.9.4): toda la escuela de la mesa 1 a la última,
+    // con cada mesa adicional en su número. Parada y acostada, interna y para
+    // repartir.
+    for (final (nombre, version, vertical) in [
+      ('por_mesa_para_repartir_parada', VersionPlanillaSorteo.paraRepartir, true),
+      ('por_mesa_interna_parada', VersionPlanillaSorteo.interna, true),
+      ('por_mesa_para_repartir_acostada', VersionPlanillaSorteo.paraRepartir, false),
+    ]) {
+      final bytes = await PdfService.construirPlanillaSorteoPdf(
+        evento,
+        sorteados,
+        pagos: pagos,
+        notas: notas,
+        repartos: repartos,
+        pasto: armado.pasto,
+        bloques: sorteo.bloques,
+        lineaSorteo: dosSorteos,
+        foto: foto,
+        version: version,
+        vertical: vertical,
+        orden: OrdenPlanillaSorteo.porMesa,
+        generada: DateTime(2026, 11, 25, 21, 30),
+      );
+      final archivo = File(
+        '$destino${Platform.pathSeparator}Planilla_Sorteo_MUESTRA_$nombre.pdf',
+      )..writeAsBytesSync(bytes);
+      stdout.writeln('── PDF en: ${archivo.path}');
+      expect(archivo.lengthSync(), greaterThan(1000));
+    }
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

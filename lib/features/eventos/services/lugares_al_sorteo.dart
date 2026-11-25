@@ -360,7 +360,9 @@ class LugaresAlSorteo {
               if (resto == 0) break;
               final r = e.value;
               final sinPagoHastaAhi = !deMesa.any((p) => hasta(p, r.createdAt));
-              if (r.automatico && sinPagoHastaAhi) {
+              // La que dio el jefe con DAR MESA (6.9.4) no es "el programa
+              // se la dio al cargarla": va a revisar.
+              if (r.automatico && !r.delJefe && sinPagoHastaAhi) {
                 seguras++;
                 deSeguras.add(
                   'Mesa ${e.key}: el programa se la dio el ${_fecha(r.createdAt)}, '
@@ -370,7 +372,7 @@ class LugaresAlSorteo {
                 dudosas++;
                 deDudosas.add(
                   'Mesa ${e.key}: recibió el número el ${_fecha(r.createdAt)}'
-                  '${r.automatico ? ', con un pago posterior al sorteo' : ''}.',
+                  '${r.delJefe ? ', se la dio el jefe' : r.automatico ? ', con un pago posterior al sorteo' : ''}.',
                 );
               }
               resto--;

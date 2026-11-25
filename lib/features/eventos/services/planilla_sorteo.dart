@@ -23,6 +23,16 @@ enum VersionPlanillaSorteo {
   paraRepartir,
 }
 
+/// En qué orden van los egresados (6.9.4).
+enum OrdenPlanillaSorteo {
+  /// Una hoja por división, por apellido: como siempre.
+  alfabetico,
+
+  /// Todo el salón en una lista, de la mesa 1 a la última: para recorrer las
+  /// mesas una por una (pedido del usuario, 25-nov-2026).
+  porMesa,
+}
+
 /// Cómo figura en la planilla el reparto de las sillas extra.
 enum RepartoSillas {
   /// No tiene sillas extra: no hay nada que repartir.
@@ -107,6 +117,13 @@ class FilaPlanillaSorteo {
   /// Egresado y acompañantes: todos tienen cena.
   final int conCena;
 
+  /// El número de la mesa principal, la del contrato. Null sin mesa (o con un
+  /// número que no se entiende).
+  final int? numeroPrincipal;
+
+  /// Los números de sus mesas adicionales, en el orden del contrato.
+  final List<int> numerosAdicionales;
+
   const FilaPlanillaSorteo({
     required this.alumnoId,
     required this.egresado,
@@ -129,11 +146,38 @@ class FilaPlanillaSorteo {
     required this.observaciones,
     required this.sinMesa,
     required this.conCena,
+    this.numeroPrincipal,
+    this.numerosAdicionales = const [],
   });
 
   /// Todas sus mesas en un renglón: "12 + 13-14".
   String get todasLasMesas =>
       adicional == '-' ? mesaPrincipal : '$mesaPrincipal + $adicional';
+}
+
+/// Un renglón de la planilla **por número de mesa** (6.9.4).
+///
+/// La familia va entera en su mesa principal ([esAdicional] en false), y cada
+/// mesa adicional tiene su renglón corto en su número, así la columna de la
+/// mesa va de la 1 a la última sin saltear ninguna.
+class RenglonPorMesa {
+  /// El número de la mesa. Null: la familia no tiene mesa (va al final).
+  final int? mesa;
+
+  final FilaPlanillaSorteo fila;
+
+  /// La división del egresado, como está escrita.
+  final String division;
+
+  /// Es una mesa adicional de [fila]: va el renglón corto.
+  final bool esAdicional;
+
+  const RenglonPorMesa({
+    required this.mesa,
+    required this.fila,
+    required this.division,
+    this.esAdicional = false,
+  });
 }
 
 /// Una división en la hoja de resumen.
@@ -315,7 +359,13 @@ class PlanillaSorteo {
   }) {
     final tramos = SalonMesas.tramos(a);
     final crudo = a.numeroMesa?.trim() ?? '';
-    final principal = tramos.isEmpty ? null : tramos.first.first;
+    // La principal es la del contrato, la primera anotada (6.9.4): la misma
+    // que dicen la puerta y el plano. Hasta la 6.9.3 era la primera del tramo
+    // más largo, y con "12, 67, 68" la planilla decía 67.
+    final principal = tramos.isEmpty ? null : SalonMesas.principal(a);
+    final tramoPrincipal = principal == null
+        ? const <int>[]
+        : tramos.firstWhere((t) => t.contains(principal));
 
     // ── Mesa principal ────────────────────────────────────────────────────
     final sinPagarBase = pago != null && !pago.pagoBase;
@@ -336,11 +386,18 @@ class PlanillaSorteo {
     }
 
     // ── Adicional: sus mesas extra ────────────────────────────────────────
-    final extrasDelBloque =
-        tramos.isEmpty ? const <int>[] : tramos.first.skip(1).toList();
+    // Las del bloque de la principal, sin ella. Casi siempre la principal es la
+    // primera de su bloque ("12-14": la 13 y la 14); con la 107 y la 106 que
+    // le dio el jefe después, la adicional es la 106.
+    final extrasDelBloque = [
+      for (final n in tramoPrincipal)
+        if (n != principal) n,
+    ];
     final partes = <String>[
-      if (extrasDelBloque.isNotEmpty) _tramoExtra(extrasDelBloque, pasto),
-      for (final t in tramos.skip(1)) _tramoExtra(t, pasto, separada: true),
+      for (final t in SorteoMesasMotor.tramosDe(extrasDelBloque))
+        _tramoExtra(t, pasto),
+      for (final t in tramos)
+        if (!identical(t, tramoPrincipal)) _tramoExtra(t, pasto, separada: true),
     ];
     final extras = SalonMesas.mesasExtra(a);
     final String adicional;
@@ -458,6 +515,11 @@ class PlanillaSorteo {
       observaciones: pendiente,
       sinMesa: sinMesa,
       conCena: conCena,
+      numeroPrincipal: principal,
+      numerosAdicionales: [
+        for (final n in SalonMesas.enOrdenDelContrato(a))
+          if (n != principal) n,
+      ],
     );
   }
 
@@ -498,6 +560,53 @@ class PlanillaSorteo {
             )
             .toList(),
     };
+  }
+
+  /// Todo el salón en un solo orden, **de la mesa 1 a la última** (6.9.4): un
+  /// renglón por familia en su mesa principal y uno corto por cada mesa
+  /// adicional, en su número. Los que no tienen mesa van al final, por
+  /// apellido. Mismos egresados que [porDivision] (sin los de baja), con la
+  /// misma cuenta de cada fila ([fila]).
+  static List<RenglonPorMesa> porMesa(
+    Iterable<ContratoAlumno> alumnos, {
+    Map<String, PagoAlumno>? pagos,
+    Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
+    Set<int> pasto = const {},
+    Map<String, DistanciaLejos> lejos = const {},
+    FotoDeLosLugares? foto,
+  }) {
+    final renglones = <RenglonPorMesa>[];
+    for (final a in activos(alumnos)) {
+      final f = fila(
+        a,
+        pago: pagos?[a.id],
+        nota: notas[a.id],
+        repartoElegido: repartos[a.id],
+        pasto: pasto,
+        lejos: lejos[a.id],
+        foto: foto,
+      );
+      final d = division(a);
+      renglones.add(RenglonPorMesa(mesa: f.numeroPrincipal, fila: f, division: d));
+      for (final n in f.numerosAdicionales) {
+        renglones.add(
+          RenglonPorMesa(mesa: n, fila: f, division: d, esAdicional: true),
+        );
+      }
+    }
+    renglones.sort((x, y) {
+      final mx = x.mesa, my = y.mesa;
+      if (mx != my) {
+        if (mx == null) return 1;
+        if (my == null) return -1;
+        return mx.compareTo(my);
+      }
+      if (x.esAdicional != y.esAdicional) return x.esAdicional ? 1 : -1;
+      final c = x.fila.egresado.compareTo(y.fila.egresado);
+      return c != 0 ? c : x.fila.alumnoId.compareTo(y.fila.alumnoId);
+    });
+    return renglones;
   }
 
   /// Los totales de la noche y el detalle por división.

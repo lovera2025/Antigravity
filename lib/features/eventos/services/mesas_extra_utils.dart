@@ -536,6 +536,63 @@ class MesasExtraUtils {
     return numeros;
   }
 
+  /// Los mismos números que [numerosMesaDesdeTexto], **en el orden en que están
+  /// escritos** (un rango, en su lugar y de menor a mayor). La primera es la
+  /// mesa del contrato, la principal (6.9.4): ver `SalonMesas.principal`.
+  static List<int> numerosEnOrdenDelTexto(String? numeroMesa) {
+    if (numeroMesa == null || numeroMesa.trim().isEmpty) return const [];
+    final texto =
+        numeroMesa.toLowerCase().replaceAll(RegExp(r'\([^)]*\)'), ' ');
+    final numeros = <int>{};
+    for (final m in RegExp(
+      r'(\d+)\s*(?:-|–|—|\bal\b|\ba\b)\s*(\d+)|(\d+)',
+    ).allMatches(texto)) {
+      if (m.group(3) != null) {
+        numeros.add(int.parse(m.group(3)!));
+        continue;
+      }
+      final a = int.parse(m.group(1)!);
+      final b = int.parse(m.group(2)!);
+      if (b >= a && b - a < _maxMesasPorRango) {
+        for (var n = a; n <= b; n++) {
+          numeros.add(n);
+        }
+      } else {
+        numeros
+          ..add(a)
+          ..add(b);
+      }
+    }
+    numeros.remove(0);
+    return numeros.toList();
+  }
+
+  /// El texto [nuevo] de una familia que tenía [antes], con **su principal
+  /// primera** si la conserva (6.9.4).
+  ///
+  /// La principal es la mesa que la familia recibió primero, la primera
+  /// anotada. Lo que escribe los números (el sorteo, mover, deshacer) los
+  /// ordena de menor a mayor: sin esto, a una familia con la 107 que recibe la
+  /// adicional 106 la principal se le pasaría a la 106 y la 107 quedaría "a
+  /// confirmar". Si la familia ya no tiene esa mesa, [nuevo] queda como vino.
+  static String? conLaPrincipalDeAntes(String? antes, String? nuevo) {
+    if (nuevo == null || nuevo.trim().isEmpty) return nuevo;
+    final viejos = numerosEnOrdenDelTexto(antes);
+    if (viejos.isEmpty) return nuevo;
+    final principal = viejos.first;
+    final nuevos = numerosEnOrdenDelTexto(nuevo);
+    if (nuevos.isEmpty ||
+        nuevos.first == principal ||
+        !nuevos.contains(principal)) {
+      return nuevo;
+    }
+    return formatearAsignacionMesas([
+      principal,
+      for (final n in nuevos)
+        if (n != principal) n,
+    ]);
+  }
+
   /// Resuelve ítem de mesa desde clave de cobro; nunca asume mesa 1 si hay una sola activa distinta.
   static MesaExtraItem resolveMesa({
     required String conceptoKey,

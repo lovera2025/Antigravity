@@ -39,6 +39,9 @@ Future<void> _mostrar(
   VoidCallback? onVerEnPlano,
   List<String> avisos = const [],
   double ancho = 110,
+  bool sorteoHecho = false,
+  bool darMesa = false,
+  VoidCallback? onDarMesa,
 }) =>
     tester.pumpWidget(
       MaterialApp(
@@ -55,6 +58,9 @@ Future<void> _mostrar(
                 marcarPago: marcarPago,
                 ocultarMontos: ocultarMontos,
                 avisos: avisos,
+                sorteoHecho: sorteoHecho,
+                darMesa: darMesa,
+                onDarMesa: onDarMesa,
               ),
             ),
           ),
@@ -361,5 +367,89 @@ void main() {
       ancho: 78,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  group('DAR MESA (6.9.4)', () {
+    testWidgets('con el sorteo hecho, quien no pagó y no tiene mesa lo dice',
+        (tester) async {
+      await _mostrar(
+        tester,
+        _alumno(),
+        pago: PagoAlumno.nada,
+        sorteoHecho: true,
+        ancho: 160,
+      );
+      expect(_renglones(tester), contains('Sin mesa · no pagó'));
+      expect(find.byKey(const Key('dar_mesa')), findsNothing);
+    });
+
+    testWidgets('con algo pagado dice solo "Sin mesa"', (tester) async {
+      await _mostrar(
+        tester,
+        _alumno(),
+        pago: const PagoAlumno(base: 30000),
+        sorteoHecho: true,
+        ancho: 160,
+      );
+      expect(_renglones(tester), contains('Sin mesa'));
+    });
+
+    testWidgets('antes del sorteo no cambia: dice lo que le corresponde',
+        (tester) async {
+      await _mostrar(tester, _alumno(), pago: PagoAlumno.nada, ancho: 160);
+      expect(find.byKey(const Key('sin_mesa_ya_sorteado')), findsNothing);
+      expect(_renglones(tester), contains('1 mesa'));
+    });
+
+    testWidgets('en modo jefe, un toque y se da la mesa', (tester) async {
+      var dio = 0;
+      await _mostrar(
+        tester,
+        _alumno(),
+        pago: PagoAlumno.nada,
+        sorteoHecho: true,
+        darMesa: true,
+        onDarMesa: () => dio++,
+        ancho: 160,
+      );
+      await tester.tap(find.byKey(const Key('dar_mesa')));
+      expect(dio, 1);
+    });
+
+    testWidgets('también a quien le falta la adicional', (tester) async {
+      var dio = 0;
+      await _mostrar(
+        tester,
+        _alumno(extras: 1, mesas: [107]),
+        pago: const PagoAlumno(base: 200000),
+        sorteoHecho: true,
+        darMesa: true,
+        onDarMesa: () => dio++,
+        ancho: 160,
+      );
+      expect(_renglones(tester).join(' '), contains('le falta 1 mesa'));
+      await tester.tap(find.byKey(const Key('dar_mesa')));
+      expect(dio, 1);
+    });
+
+    testWidgets('sin modo jefe se ve apagado y dice por qué', (tester) async {
+      await _mostrar(
+        tester,
+        _alumno(),
+        pago: PagoAlumno.nada,
+        sorteoHecho: true,
+        darMesa: true,
+        ancho: 160,
+      );
+      final boton =
+          tester.widget<TextButton>(find.byKey(const Key('dar_mesa')));
+      expect(boton.onPressed, isNull);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Tooltip && (w.message ?? '').contains('Solo en modo jefe'),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }

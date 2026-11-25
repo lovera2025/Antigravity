@@ -266,6 +266,12 @@ class ContratosRepository {
   /// [movimiento] es el renglón de `mesas_movimientos` de un cambio de familias
   /// (con su motivo), y [plano] es la fila del plano de la fiesta cuando el
   /// sorteo guarda sus bloques.
+  ///
+  /// **La principal de cada familia queda primera** (6.9.4): si conserva la
+  /// mesa que tenía anotada primero, se escribe adelante aunque el número que
+  /// llega venga ordenado de menor a mayor (`MesasExtraUtils.conLaPrincipalDeAntes`).
+  /// Es el único lugar por donde pasan el sorteo, mover, intercambiar,
+  /// deshacer, restaurar y la mesa que se da sola.
   Future<void> asignarNumerosMesa(
     Map<String, String?> numeroPorContrato, {
     SorteoMesasRegistro? registro,
@@ -276,7 +282,17 @@ class ContratosRepository {
     final db = await LocalDatabase.instance;
     await db.transaction((txn) async {
       for (final e in numeroPorContrato.entries) {
-        await _actualizarContratoEn(txn, e.key, {'numero_mesa': e.value});
+        final filas = await txn.query(
+          'contratos_alumnos',
+          columns: ['numero_mesa'],
+          where: 'id = ?',
+          whereArgs: [e.key],
+        );
+        final antes =
+            filas.isEmpty ? null : filas.first['numero_mesa'] as String?;
+        await _actualizarContratoEn(txn, e.key, {
+          'numero_mesa': MesasExtraUtils.conLaPrincipalDeAntes(antes, e.value),
+        });
       }
       if (registro != null) {
         await SorteosMesasRepository.registrarEn(txn, registro);

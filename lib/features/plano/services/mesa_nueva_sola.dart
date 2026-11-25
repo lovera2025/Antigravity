@@ -184,7 +184,8 @@ class CuentaMesaNueva {
 /// y le falta el número de una mesa que tiene algo pagado, el programa le da
 /// la mesa sin que el jefe apriete SORTEO: su mesa fijada, si tenía una
 /// esperándola, o una mesa nueva al fondo con el número que sigue
-/// ([MesasNuevasAlFondo]).
+/// ([MesasNuevasAlFondo]). Desde la 6.9.4, antes que una nueva, una del fondo
+/// que quedó vacía ([MesasNuevasAlFondo.vaciasDelFondo]).
 ///
 /// **Es lo único del salón que el programa hace sin modo jefe**, y por eso es
 /// angosto a propósito:
@@ -310,6 +311,18 @@ class MesaNuevaSola {
       alumnos: vistos,
       pedidos: pedidos,
       llegada: llegada,
+      // Primero una mesa del fondo que quedó vacía, como la 106 de la Técnica
+      // (6.9.4, pedido del usuario: "esa que quedó vacía se le puede dar al
+      // resto que aún le falta").
+      vacias: MesasNuevasAlFondo.vaciasDelFondo(
+        armado: armado,
+        config: plano.config,
+        alumnos: vistos,
+        registros: registros,
+      ),
+      // Lo que el programa hace solo deja los números de menor a mayor: una
+      // PC con la 6.9.3 los lee igual (la principal es la más baja).
+      soloSiQuedaEnOrden: true,
       por: por,
       ahora: ahora,
     );
