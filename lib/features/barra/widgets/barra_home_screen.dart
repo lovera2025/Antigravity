@@ -9,8 +9,10 @@ import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/dia_de_la_fiesta.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../central/central_barra_provider.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_providers.dart';
+import '../services/barras_del_salon.dart';
 import 'abrir_caja_barra_dialog.dart';
 import 'barra_home_web.dart';
 import 'elegir_impresora_screen.dart';
@@ -46,16 +48,39 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
     setState(() => _abriendo = true);
     try {
       final barra = ref.read(barraDeLaCajaProvider);
-      var caja = await barra.cajaAbierta(eventoId: fiesta.id, operadorId: op.id);
+      final ahora = ref.read(relojDeLaBarraProvider)();
+      // Una fiesta que ya pasó sigue solo para cerrar lo que quedó abierto: se retoma su
+      // caja, sea de la noche que sea, y no se abren cajas nuevas. Si no, solo su caja de
+      // esta noche (25-nov-2026): una de prueba de otro día que quedó abierta sigue
+      // aparte, en su día, y esta noche se abre una nueva.
+      final yaPaso = laFiestaYaPaso(fiesta, ahora);
+      var caja = await barra.cajaAbierta(
+        eventoId: fiesta.id,
+        operadorId: op.id,
+        desdeLaNoche: yaPaso ? null : DiaDeOperacion.de(ahora),
+      );
       if (caja == null) {
-        final abiertas = await barra.cajasAbiertas(fiesta.id);
+        if (yaPaso) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              key: Key('barra_fiesta_pasada_sin_caja'),
+              content: Text('Esta fiesta ya pasó: no se abren cajas nuevas. Siguen abiertas cajas de '
+                  'esa noche: las cierra cada cajera desde su VENDER.'),
+            ));
+          }
+          return;
+        }
+        final abiertas = abiertasDeEstaNoche(await barra.cajasAbiertas(fiesta.id), ahora);
+        final recordada = await ref.read(barraDelEquipoProvider).leer();
         if (!mounted) return;
         final elegida = await pedirAbrirCajaBarra(
           context,
           fiesta: EventoPresentacion.tituloPrincipal(fiesta),
           abiertas: abiertas,
+          barra: recordada,
         );
         if (elegida == null) return;
+        unawaited(ref.read(barraDelEquipoProvider).guardar(elegida.sede));
         caja = await barra.abrirCaja(
           eventoId: fiesta.id,
           operadorId: op.id,
@@ -73,8 +98,11 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
           builder: (_) => VenderScreen(fiesta: fiesta, caja: caja!),
         ));
         // Cerrada la caja de una fiesta que ya pasó, la fiesta se va de la lista
-        // (revisión del 15-nov).
-        if (mounted) ref.invalidate(fiestasDeLaBarraProvider);
+        // (revisión del 15-nov): se vuelve a mirar qué cajas siguen abiertas.
+        if (mounted) {
+          ref.invalidate(fiestasQueSiguenProvider);
+          ref.invalidate(fiestasDeLaBarraProvider);
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -109,6 +137,8 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
     const gold = Color(0xFFD4AF37);
     final app = ref.watch(appRoleProvider);
     final fiestas = ref.watch(fiestasDeLaBarraProvider);
+    final siguen = ref.watch(fiestasQueSiguenProvider).value ?? const FiestasQueSiguen();
+    final ahora = ref.watch(relojDeLaBarraProvider)();
     final puesta = ref.watch(puestaAlDiaBarraProvider);
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
@@ -178,12 +208,16 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                   style: const TextStyle(fontWeight: FontWeight.w800),
                                 ),
                                 // Una fiesta que ya pasó sigue solo por la caja
-                                // abierta de la cajera: va al final y marcada
-                                // (revisión del 15-nov), como en Entradas.
-                                subtitle: laFiestaYaPaso(e, DateTime.now())
+                                // abierta de la cajera, o por cajas de su noche
+                                // todavía abiertas (25-nov-2026): va al final y
+                                // marcada (revisión del 15-nov), como en Entradas.
+                                subtitle: laFiestaYaPaso(e, ahora)
                                     ? Text(
-                                        '${_fecha(e.fechaEvento)} · Tu caja de barra sigue '
-                                        'abierta: cerrala desde VENDER',
+                                        siguen.conSuCaja.contains(e.id)
+                                            ? '${_fecha(e.fechaEvento)} · Tu caja de barra sigue '
+                                                'abierta: cerrala desde VENDER'
+                                            : '${_fecha(e.fechaEvento)} · Siguen abiertas cajas de '
+                                                'esa noche',
                                         key: Key('barra_caja_abierta_${e.id}'),
                                         style: TextStyle(
                                           color: Theme.of(context).colorScheme.error,

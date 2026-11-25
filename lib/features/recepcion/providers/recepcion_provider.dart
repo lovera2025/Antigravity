@@ -317,6 +317,8 @@ final valesAnuladosDelEventoProvider = StreamProvider.autoDispose
           cajas: await barra.cajas(eventoId),
           ventas: await barra.ventas(eventoId),
           anulaciones: await barra.anulaciones(eventoId),
+          // Solo las cajas de esta noche: las de prueba de otro día no cuentan.
+          ahora: ref.read(relojDeLaBarraProvider)(),
         );
       } catch (e) {
         debugPrint('Recepción: no se pudo leer la barra de esta PC: $e');

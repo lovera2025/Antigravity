@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'buscar_central.dart';
+import 'cliente_de_la_central.dart';
 import 'filas_de_la_red.dart';
 
 /// El puerto de la central de la barra. Si está ocupado se prueban los siguientes nueve.
@@ -27,22 +30,56 @@ class CajaConectada {
   /// Lo que esa tablet tiene sin subir a la nube, según su último latido.
   final PendientesDeLaBarra porSubir;
 
+  /// "Barra 2", si la caja lo dijo (25-nov-2026).
+  final String? barra;
+
+  /// **Es la central de otra barra**, enganchada con esta: se pasan todo.
+  final bool esCentral;
+
   const CajaConectada({
     required this.equipo,
     required this.nombre,
     required this.conectada,
     required this.ultimaVez,
     this.porSubir = PendientesDeLaBarra.nada,
+    this.barra,
+    this.esCentral = false,
   });
 
-  CajaConectada con({String? nombre, bool? conectada, DateTime? ultimaVez, PendientesDeLaBarra? porSubir}) =>
+  CajaConectada con({
+    String? nombre,
+    bool? conectada,
+    DateTime? ultimaVez,
+    PendientesDeLaBarra? porSubir,
+    String? barra,
+    bool? esCentral,
+  }) =>
       CajaConectada(
         equipo: equipo,
         nombre: nombre ?? this.nombre,
         conectada: conectada ?? this.conectada,
         ultimaVez: ultimaVez ?? this.ultimaVez,
         porSubir: porSubir ?? this.porSubir,
+        barra: barra ?? this.barra,
+        esCentral: esCentral ?? this.esCentral,
       );
+}
+
+/// Cómo está el enganche de esta central con la de la otra barra (25-nov-2026).
+@immutable
+class EngancheConOtra {
+  /// La otra central: "Barra 2" (null si no lo dijo).
+  final String? barra;
+  final bool conectada;
+
+  const EngancheConOtra({this.barra, required this.conectada});
+
+  @override
+  bool operator ==(Object other) =>
+      other is EngancheConOtra && other.barra == barra && other.conectada == conectada;
+
+  @override
+  int get hashCode => Object.hash(barra, conectada);
 }
 
 /// La central de la barra: **la notebook de la barra**, a la que las tablets de las cajas
@@ -66,17 +103,33 @@ class CajaConectada {
 /// - de la central: `{t:'filas', …}` y `{t:'hola', cajas}` (cuántas cajas están conectadas).
 ///
 /// Solo atiende a su fiesta: una caja de otra fiesta se cierra con 4001.
+///
+/// **Una central por barra** (25-nov-2026): cada barra tiene su notebook y su router, y
+/// [barra] dice cuál es. **Si ve a la central de la otra barra en la red, se engancha
+/// sola** ([engancharConOtras]) y se pasan todo, en las dos direcciones: lo de sus cajas
+/// va a la otra y lo de la otra a sus cajas. Cada fila tiene su id, así que repetirla no
+/// cambia nada, y una fila solo se reparte si era nueva: no da vueltas. Si no se ven
+/// (cada router por su lado), cada una sigue sola; lo de las dos se junta cuando se
+/// vuelven a ver o cuando vuelve internet.
 class CentralBarra {
   CentralBarra({
     required this.eventoId,
     required BarraDeLaRed barra,
     this.alGuardar,
+    this.barraDelSalon,
     DateTime Function()? ahora,
   })  : _barra = barra,
         _ahora = ahora ?? DateTime.now;
 
   final String eventoId;
+
+  /// "Barra 1": la barra de esta notebook. Null: la de antes, de toda la fiesta.
+  final String? barraDelSalon;
   final BarraDeLaRed _barra;
+
+  /// El enganche con la central de la otra barra, si se buscó ([engancharConOtras]).
+  ClienteDeLaCentral? _puente;
+  final _cambiosDelPuente = StreamController<void>.broadcast();
 
   /// Llegó algo nuevo y se guardó: las pantallas de la notebook (CAJAS) se rehacen.
   final void Function()? alGuardar;
@@ -103,9 +156,69 @@ class CentralBarra {
     return lista;
   }
 
-  int get conectadas => _cajas.values.where((c) => c.conectada).length;
+  /// Cuántas cajas conectadas (sin contar otra central enganchada).
+  int get conectadas => _cajas.values.where((c) => c.conectada && !c.esCentral).length;
 
   Stream<List<CajaConectada>> get cambiosDeCajas => _cambiosDeCajas.stream;
+
+  /// Las otras centrales de la fiesta enganchadas con esta, de un lado o del otro: la
+  /// que esta buscó ([engancharConOtras]) y las que se engancharon acá.
+  List<EngancheConOtra> get otras {
+    final lista = <EngancheConOtra>[];
+    final puente = _puente;
+    if (puente != null && puente.estado != EstadoDeLaCentral.apagada && puente.estado != EstadoDeLaCentral.buscando) {
+      lista.add(EngancheConOtra(barra: puente.donde?.barra, conectada: puente.conectada));
+    }
+    for (final c in _cajas.values) {
+      if (c.esCentral) lista.add(EngancheConOtra(barra: c.barra, conectada: c.conectada));
+    }
+    return lista;
+  }
+
+  /// Avisa cuando cambia el enganche que buscó esta central.
+  Stream<void> get cambiosDelPuente => _cambiosDelPuente.stream;
+
+  /// **Busca a las otras centrales de su fiesta y se engancha** (25-nov-2026). [equipo]
+  /// es el id de esta notebook: con él la búsqueda no se encuentra a sí misma y, de cada
+  /// par, se engancha una sola ([EleccionDeCentral.otraCentral]). Mientras no la
+  /// encuentra, sigue sola, como siempre.
+  void engancharConOtras({
+    required String equipo,
+    required BuscaCentral buscador,
+    WebSocketChannel Function(Uri)? abrir,
+    Duration latido = const Duration(seconds: 5),
+    Duration silencioMaximo = const Duration(seconds: 12),
+    Duration pausa = const Duration(seconds: 1),
+  }) {
+    if (_puente != null) return;
+    final puente = ClienteDeLaCentral(
+      eventoId: eventoId,
+      equipo: equipo,
+      nombreCaja: 'Central${barraDelSalon == null ? '' : ' · $barraDelSalon'}',
+      barra: _barra,
+      barraDeLaCaja: barraDelSalon,
+      eleccion: EleccionDeCentral.otraCentral(equipo),
+      buscador: buscador,
+      abrir: abrir,
+      ahora: _ahora,
+      latido: latido,
+      silencioMaximo: silencioMaximo,
+      pausa: pausa,
+      alGuardar: alGuardar,
+      // Lo nuevo de la otra barra, a las cajas de esta.
+      alRecibir: (nuevas) => _mandarATodas(nuevas),
+    );
+    puente.addListener(() {
+      if (!_cambiosDelPuente.isClosed) _cambiosDelPuente.add(null);
+    });
+    _puente = puente;
+    puente.arrancar();
+  }
+
+  /// El enganche con la otra central vuelve a buscarla desde cero: lo usan las ventanas
+  /// de prueba para "separar" las dos redes.
+  @visibleForTesting
+  void volverABuscarLaOtra() => _puente?.volverABuscar();
 
   /// Abre la central y devuelve en qué puerto quedó. [en] es por dónde se escucha: en la
   /// app, todas las conexiones de la PC; en las pruebas, solo esta PC (así Windows no
@@ -130,16 +243,23 @@ class CentralBarra {
     return servidor.port;
   }
 
-  /// Lo que se hizo en esta notebook (el jefe anuló una venta): a todas las cajas.
+  /// Lo que se hizo en esta notebook (el jefe anuló una venta): a todas las cajas, y a la
+  /// central de la otra barra si están enganchadas.
   Future<void> difundirDeEstaPc(String tabla, String id) async {
     final fila = await _barra.filaDeLaRed(tabla, id);
     if (fila == null || !filaDeLaFiesta(tabla, fila, eventoId)) return;
-    _mandarATodas({
+    final filas = {
       tabla: [fila],
-    });
+    };
+    _mandarATodas(filas);
+    _puente?.enviarFilas(filas);
   }
 
   Future<void> cerrar() async {
+    final puente = _puente;
+    _puente = null;
+    puente?.dispose();
+    await _cambiosDelPuente.close();
     final todas = _conexiones.toList();
     _conexiones.clear();
     for (final c in todas) {
@@ -180,7 +300,14 @@ class CentralBarra {
         unawaited(vieja.cerrar(4003, 'reemplazada'));
       }
       ws.pingInterval = const Duration(seconds: 5);
-      final conexion = _Conexion(ws, equipo, nombre);
+      final barra = datos['barra']?.trim();
+      final conexion = _Conexion(
+        ws,
+        equipo,
+        nombre,
+        barra: barra == null || barra.isEmpty || barra.length > 40 ? null : barra,
+        esCentral: datos['central'] == '1',
+      );
       _conexiones.add(conexion);
       _anotar(conexion, conectada: true);
       ws.listen(
@@ -215,8 +342,17 @@ class CentralBarra {
             conectada: conectada,
             ultimaVez: _ahora(),
             porSubir: porSubir ?? PendientesDeLaBarra.nada,
+            barra: c.barra,
+            esCentral: c.esCentral,
           )
-        : antes.con(nombre: c.nombre, conectada: conectada, ultimaVez: _ahora(), porSubir: porSubir);
+        : antes.con(
+            nombre: c.nombre,
+            conectada: conectada,
+            ultimaVez: _ahora(),
+            porSubir: porSubir,
+            barra: c.barra,
+            esCentral: c.esCentral,
+          );
     if (!_cambiosDeCajas.isClosed) _cambiosDeCajas.add(cajas);
   }
 
@@ -277,6 +413,8 @@ class CentralBarra {
     if (nuevas.isEmpty) return;
     alGuardar?.call();
     _mandarATodas(nuevas, menos: de);
+    // Y a la central de la otra barra, si esta se enganchó con ella.
+    _puente?.enviarFilas(nuevas);
   }
 
   void _mandarATodas(Map<String, List<Map<String, Object?>>> filas, {_Conexion? menos}) {
@@ -288,11 +426,13 @@ class CentralBarra {
 }
 
 class _Conexion {
-  _Conexion(this.ws, this.equipo, this.nombre);
+  _Conexion(this.ws, this.equipo, this.nombre, {this.barra, this.esCentral = false});
 
   final WebSocket ws;
   final String equipo;
   final String nombre;
+  final String? barra;
+  final bool esCentral;
 
   void mandar(String mensaje) {
     try {

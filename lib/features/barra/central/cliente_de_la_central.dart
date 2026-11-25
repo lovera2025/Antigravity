@@ -33,6 +33,10 @@ enum EstadoDeLaCentral {
 ///   lo de la central**: así un corte (el wifi, la notebook que se reinició) se arregla
 ///   solo, sin cola que cuidar. Lo repetido no cambia nada ([BarraDeLaRed.guardarDeOtroEquipo]).
 /// - Lo que llega se guarda sin la cola de subida: lo sube el equipo que lo hizo.
+/// - **Se engancha a la central de su barra** ([barraDeLaCaja], [EleccionDeCentral],
+///   25-nov-2026). La misma clase hace de **enganche entre dos centrales** de la misma
+///   fiesta (`CentralBarra`): entonces [alRecibir] le pasa a su central lo nuevo que llegó
+///   de la otra, para que lo reparta entre sus cajas.
 class ClienteDeLaCentral extends ChangeNotifier {
   ClienteDeLaCentral({
     required this.eventoId,
@@ -40,6 +44,9 @@ class ClienteDeLaCentral extends ChangeNotifier {
     required this.nombreCaja,
     required BarraDeLaRed barra,
     this.alGuardar,
+    this.alRecibir,
+    this.barraDeLaCaja,
+    EleccionDeCentral? eleccion,
     BuscaCentral? buscador,
     DondeEstaLaCentral? aMano,
     WebSocketChannel Function(Uri)? abrir,
@@ -48,6 +55,7 @@ class ClienteDeLaCentral extends ChangeNotifier {
     this.silencioMaximo = const Duration(seconds: 12),
     this.pausa = const Duration(seconds: 1),
   })  : _barra = barra,
+        eleccion = eleccion ?? EleccionDeCentral.deLaCaja(barra: barraDeLaCaja),
         _buscador = buscador ?? BuscaCentral(eventoId: eventoId),
         _aMano = aMano,
         _abrir = abrir ?? WebSocketChannel.connect,
@@ -60,8 +68,18 @@ class ClienteDeLaCentral extends ChangeNotifier {
   final String nombreCaja;
   final BarraDeLaRed _barra;
 
+  /// "Barra 1": la de la caja. Null: cualquiera (la encargada).
+  final String? barraDeLaCaja;
+
+  /// Qué central sirve entre las que contestan.
+  final EleccionDeCentral eleccion;
+
   /// Llegó algo de otra caja y se guardó: VENDER y CAJAS se rehacen.
   final void Function()? alGuardar;
+
+  /// Lo nuevo que llegó y se guardó, fila por fila: la central que usa este cliente para
+  /// engancharse con otra lo reparte entre sus cajas.
+  final void Function(Map<String, List<Map<String, Object?>>> nuevas)? alRecibir;
   final BuscaCentral _buscador;
   final WebSocketChannel Function(Uri) _abrir;
   final DateTime Function() _ahora;
@@ -81,6 +99,10 @@ class ClienteDeLaCentral extends ChangeNotifier {
   Timer? _latidos;
   Timer? _reintento;
   DateTime _ultimaNoticia = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Desde cuándo se está buscando: la central de otra barra sirve recién después de
+  /// [EleccionDeCentral.esperaPorSuBarra].
+  DateTime _buscandoDesde = DateTime.fromMillisecondsSinceEpoch(0);
   var _intentos = 0;
   var _cerrado = false;
 
@@ -116,6 +138,12 @@ class ClienteDeLaCentral extends ChangeNotifier {
     _aMano = donde;
     if (_cerrado || _estado == EstadoDeLaCentral.apagada) return;
     _cortar();
+    // Cortada, no está conectada: así al volver se manda todo de nuevo (25-nov-2026: si
+    // quedaba "conectada", la próxima central no recibía lo de este equipo).
+    if (_estado == EstadoDeLaCentral.conectada) {
+      _desde ??= _ahora();
+      _poner(EstadoDeLaCentral.sinCentral);
+    }
     _intentos = 0;
     _buscarOIr();
   }
@@ -136,6 +164,18 @@ class ClienteDeLaCentral extends ChangeNotifier {
       },
     });
   }
+
+  /// Manda [filas] como están, si está conectada: lo nuevo que la central de este
+  /// enganche recibió de sus cajas. Sin conexión no se guarda nada aparte: al volver,
+  /// las dos puntas se mandan todo.
+  void enviarFilas(Map<String, List<Map<String, Object?>>> filas) {
+    if (_cerrado || !conectada || filas.isEmpty) return;
+    _enviar({'t': 'filas', 'filas': filas});
+  }
+
+  /// Corta y vuelve a buscar la central desde cero (sin la dirección escrita a mano). Lo
+  /// usan las ventanas de prueba para "separar" las redes de las dos barras.
+  void volverABuscar() => ponerAMano(null);
 
   @override
   void dispose() {
@@ -163,8 +203,12 @@ class ClienteDeLaCentral extends ChangeNotifier {
       _conectar(aMano);
       return;
     }
+    _buscandoDesde = _ahora();
     unawaited(_buscador.buscar((donde) {
       if (_cerrado || _canal != null) return;
+      // La de su barra; la de otra, solo si la suya no aparece (o, entre centrales, la
+      // otra de la fiesta).
+      if (!eleccion.sirve(donde, buscando: _ahora().difference(_buscandoDesde))) return;
       _buscador.parar();
       _conectar(donde);
     }));
@@ -188,7 +232,14 @@ class ClienteDeLaCentral extends ChangeNotifier {
       host: donde.direccion,
       port: donde.puerto,
       path: '/barra',
-      queryParameters: {'evento': eventoId, 'equipo': equipo, 'caja': nombreCaja},
+      queryParameters: {
+        'evento': eventoId,
+        'equipo': equipo,
+        'caja': nombreCaja,
+        // La central lo muestra; y si es otra central, la pone aparte de las cajas.
+        if (barraDeLaCaja != null) 'barra': barraDeLaCaja!,
+        if (eleccion.esDeCentral) 'central': '1',
+      },
     );
     final WebSocketChannel canal;
     try {
@@ -198,6 +249,10 @@ class ClienteDeLaCentral extends ChangeNotifier {
       return;
     }
     _canal = canal;
+    // Si la central no está (se apagó, la notebook se reinició), la conexión rechazada
+    // llega también por el stream (y de ahí se reintenta): acá solo se atiende, para que
+    // no quede como un error suelto.
+    unawaited(canal.ready.then<void>((_) {}, onError: (Object _) {}));
     _ultimaNoticia = _ahora();
     _escucha = canal.stream.listen(
       (m) {
@@ -299,19 +354,22 @@ class ClienteDeLaCentral extends ChangeNotifier {
   }
 
   Future<void> _guardar(Map<dynamic, dynamic> filas) async {
-    var algo = false;
+    final nuevas = <String, List<Map<String, Object?>>>{};
     for (final tabla in tablasDeLaRed) {
       final lista = filas[tabla];
       if (lista is! List) continue;
       for (final f in lista) {
         if (!filaDeLaFiesta(tabla, f, eventoId)) continue;
+        final fila = Map<String, Object?>.from(f as Map);
         try {
-          if (await _barra.guardarDeOtroEquipo(tabla, Map<String, Object?>.from(f as Map))) algo = true;
+          if (await _barra.guardarDeOtroEquipo(tabla, fila)) (nuevas[tabla] ??= []).add(fila);
         } catch (e) {
           debugPrint('Barra: no se guardó una fila de la central ($tabla): $e');
         }
       }
     }
-    if (algo) alGuardar?.call();
+    if (nuevas.isEmpty) return;
+    alGuardar?.call();
+    alRecibir?.call(nuevas);
   }
 }

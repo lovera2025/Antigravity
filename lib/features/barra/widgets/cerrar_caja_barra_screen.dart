@@ -186,10 +186,11 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     final barra = ref.read(barraDeLaCajaProvider);
     final CajaBarra cerrada;
     try {
-      // La caja como está guardada: el cambio pudo ponerse después de abrir.
-      final enLaBase = widget.caja.operadorId == null
-          ? null
-          : await barra.cajaAbierta(eventoId: widget.caja.eventoId, operadorId: widget.caja.operadorId!);
+      // La caja como está guardada: el cambio pudo ponerse después de abrir. Por su id: la
+      // cajera puede tener otra abierta de otra noche (25-nov-2026).
+      final enLaBase = (await barra.cajasAbiertas(widget.caja.eventoId))
+          .where((c) => c.id == widget.caja.id)
+          .firstOrNull;
       final caja = enLaBase ?? widget.caja;
       await _leerVentas(caja);
       final diferencia = CierreDeBarra.de(caja, _ventas, _anulaciones).diferenciaCon(contado);

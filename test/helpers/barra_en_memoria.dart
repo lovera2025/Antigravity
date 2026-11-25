@@ -77,9 +77,17 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   Future<int> ventasSinSubir() async => sinSubir.length;
 
   @override
-  Future<CajaBarra?> cajaAbierta({required String eventoId, required String operadorId}) async {
+  Future<CajaBarra?> cajaAbierta({
+    required String eventoId,
+    required String operadorId,
+    DiaDeOperacion? desdeLaNoche,
+  }) async {
     for (final c in cajasGuardadas.reversed) {
-      if (c.eventoId == eventoId && c.operadorId == operadorId && c.deviceId == equipo && c.abierta) {
+      if (c.eventoId == eventoId &&
+          c.operadorId == operadorId &&
+          c.deviceId == equipo &&
+          c.abierta &&
+          (desdeLaNoche == null || !DiaDeOperacion.deLaCaja(c).isBefore(desdeLaNoche))) {
         return c;
       }
     }
@@ -95,9 +103,14 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     String? sede,
     double cambioInicial = 0,
   }) async {
-    final ya = await cajaAbierta(eventoId: eventoId, operadorId: operadorId);
-    if (ya != null) return ya;
     final ahora = reloj();
+    // Como la base: solo cuenta una de esta noche.
+    final ya = await cajaAbierta(
+      eventoId: eventoId,
+      operadorId: operadorId,
+      desdeLaNoche: DiaDeOperacion.de(ahora),
+    );
+    if (ya != null) return ya;
     final caja = CajaBarra.abrir(
       eventoId: eventoId,
       operadorId: operadorId,

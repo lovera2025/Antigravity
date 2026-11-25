@@ -198,8 +198,12 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   Future<int> ventasSinSubir() => _caja.ventasSinSubir();
 
   @override
-  Future<CajaBarra?> cajaAbierta({required String eventoId, required String operadorId}) =>
-      _caja.cajaAbierta(eventoId: eventoId, operadorId: operadorId);
+  Future<CajaBarra?> cajaAbierta({
+    required String eventoId,
+    required String operadorId,
+    DiaDeOperacion? desdeLaNoche,
+  }) =>
+      _caja.cajaAbierta(eventoId: eventoId, operadorId: operadorId, desdeLaNoche: desdeLaNoche);
 
   @override
   Future<List<VentaBarra>> ventas(String eventoId) => _caja.ventas(eventoId);

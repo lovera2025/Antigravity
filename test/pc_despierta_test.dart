@@ -87,7 +87,8 @@ void main() {
     ]) {
       test('$nombre: prendida sí, apagada no', () {
         final f = leer(ruta);
-        final prender = f.substring(f.indexOf('Future<void> prender(String eventoId) async {'));
+        // Las dos centrales ya reciben algo más que la fiesta (la tele, la barra).
+        final prender = f.substring(f.indexOf('Future<void> prender(String eventoId'));
         expect(
           prender.substring(0, prender.indexOf('Future<void> reanudar(')),
           contains('_despierta?.mantener(true)'),

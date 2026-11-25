@@ -448,7 +448,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         const SizedBox(height: 14),
                       ],
                       if (sector == SectorDelCierre.barra)
-                        SectorBarraDelCierre(isDark: isDark)
+                        SectorBarraDelCierre(isDark: isDark, diaDelCierre: state.dia)
                       else if (sector == SectorDelCierre.entradas)
                         SectorEntradasDelCierre(isDark: isDark)
                       else ...[

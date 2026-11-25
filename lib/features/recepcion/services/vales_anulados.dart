@@ -1,3 +1,4 @@
+import '../../barra/cuentas/dia_de_operacion.dart';
 import '../../barra/datos/barra_repositorio.dart';
 import 'sillas_de_la_puerta.dart' show valeNormalizado;
 
@@ -22,12 +23,22 @@ class ValesAnulados {
   /// Desde la barra de la fiesta. **Si un mismo "caja-número" está en dos cajas (dos
   /// cajas con el mismo número) y una no está anulada, no se marca**: nunca acusar por
   /// error.
+  ///
+  /// **Con [ahora], solo las cajas de esa noche** (25-nov-2026, [CajasPorDia.inicial]: la
+  /// de esta noche o, al día siguiente, la última con cajas): la "Caja 1" de una prueba
+  /// de otro día no se confunde con la "Caja 1" de la fiesta.
   factory ValesAnulados.de({
     required List<CajaBarra> cajas,
     required List<VentaBarra> ventas,
     required List<AnulacionBarra> anulaciones,
+    DateTime? ahora,
   }) {
-    final numeroDeCaja = {for (final c in cajas) c.id: c.numeroCaja};
+    var deLaNoche = cajas;
+    if (ahora != null) {
+      final porDia = CajasPorDia.de(cajas);
+      deLaNoche = porDia.delDia(porDia.inicial(ahora: ahora));
+    }
+    final numeroDeCaja = {for (final c in deLaNoche) c.id: c.numeroCaja};
     final anuladas = {for (final a in anulaciones) a.ventaId};
     final porVale = <String, List<bool>>{};
     for (final v in ventas) {

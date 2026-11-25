@@ -9,6 +9,7 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../cuentas/cierre_de_barra.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pesos.dart';
 import '../cuentas/reimpresion_de_barra.dart';
 import '../cuentas/silla_de_la_puerta.dart';
@@ -19,6 +20,7 @@ import '../impresion/papel_en_pantalla.dart';
 import '../impresion/ticket_esc_pos.dart' show LineaTicket;
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../services/pantalla_despierta.dart';
 import '../services/papel_de_la_barra.dart';
 import '../widgets/elegir_papel.dart';
 import '../widgets/ok_del_cierre.dart';
@@ -40,6 +42,15 @@ import 'barra_jefe_providers.dart';
 ///
 /// Se pone al día solo: cuando una caja sube sus ventas, el aviso entre equipos hace que
 /// esto se vuelva a leer. Sin internet, cada tablet guarda lo suyo y lo sube al volver.
+///
+/// **Una noche por vez** (25-nov-2026, `cuentas/dia_de_operacion.dart`): viene en la de
+/// esta noche (o la última con cajas), y los otros días van arriba para tocar. Los
+/// totales, la diferencia, LO VENDIDO, el papel y el stock son de esa noche: las cajas de
+/// prueba de otro día no se suman, como un cierre de caja en su fecha. Una tarjeta de
+/// otra noche dice su fecha.
+///
+/// **No deja apagar la pantalla de la tablet** mientras está abierta, como VENDER: de
+/// madrugada, si no, el pedido de cierre de una cajera no se ve ni suena.
 class CajasDeLaFiestaVista extends ConsumerStatefulWidget {
   final Evento fiesta;
 
@@ -77,6 +88,10 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
   String? _cajaElegida;
   bool _ocupado = false;
 
+  /// La noche que se mira. Null: la de esta noche, o la última con cajas
+  /// ([CajasPorDia.inicial]).
+  DiaDeOperacion? _noche;
+
   /// En una caja: la lista de ventas, o LO VENDIDO (cada bebida, por categoría).
   bool _verLoVendido = false;
   _FiltroDeVentas _filtro = _FiltroDeVentas.todas;
@@ -92,6 +107,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
   @override
   void initState() {
     super.initState();
+    // En la tablet de la encargada la pantalla no se apaga mientras mira las cajas.
+    unawaited(PantallaDespierta.mantener(true));
     if (ref.read(enLaWebProvider)) {
       _relectura = Timer.periodic(kRelecturaDeCajasEnLaWeb, (_) => _releer());
     }
@@ -99,6 +116,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
 
   @override
   void dispose() {
+    unawaited(PantallaDespierta.mantener(false));
     _relectura?.cancel();
     super.dispose();
   }
@@ -294,19 +312,21 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     );
   }
 
-  /// LO VENDIDO DE LA FIESTA: todas las cajas juntas, cada bebida por categoría. En la
-  /// pantalla y en el PDF va entero; por la impresora, se elige corto o con cada bebida.
-  Future<void> _verLoVendidoDeLaFiesta(CajasDeLaFiesta datos) async {
-    final cuentas = datos.resumen.deLaFiesta;
+  /// LO VENDIDO DE LA FIESTA: todas las cajas **de la noche que se mira** juntas, cada
+  /// bebida por categoría. En la pantalla y en el PDF va entero; por la impresora, se
+  /// elige corto o con cada bebida.
+  Future<void> _verLoVendidoDeLaFiesta(NocheDeLaBarra noche) async {
+    final cuentas = noche.resumen.deLaFiesta;
     if (cuentas == null) return;
     final ahora = DateTime.now();
-    final cajas = datos.resumen.cajas.length;
+    final cajas = noche.resumen.cajas.length;
     List<LineaTicket> papel({required bool corto}) => ModeloTicket.deLoVendido(
           cuentas,
           fiesta: _titulo,
           cajas: cajas,
           ahora: ahora,
           corto: corto,
+          dia: noche.dia,
         );
     final entero = papel(corto: false);
     await showDialog<void>(
@@ -354,7 +374,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
             onPressed: () => ref.read(guardarPdfDeLaBarraProvider)(
               entero,
               titulo: 'Lo vendido de la fiesta',
-              nombre: 'Lo vendido barra - $_titulo',
+              nombre: 'Lo vendido barra - $_titulo - ${noche.dia.diaYMes.replaceAll('/', '-')}',
               context: dialogo,
             ),
             child: const Text('PDF 58 mm'),
@@ -439,8 +459,17 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     final cajas = ref.watch(cajasDelJefeProvider(widget.fiesta.id));
     final esJefe = ref.watch(mandaEnLaBarraProvider);
     final enLaWeb = ref.watch(enLaWebProvider);
+    final ahora = ref.watch(relojDelJefeProvider)();
+    final estaNoche = DiaDeOperacion.de(ahora);
     // La central se prende en la notebook, no en la web ni en una tablet.
     final conPanel = !enLaWeb && ref.watch(centralSePrendeAcaProvider);
+    final panel = [
+      if (conPanel) ...[
+        PanelCentralDeLaBarra(eventoId: widget.fiesta.id, fechaDeLaFiesta: widget.fiesta.fechaEvento),
+        const SizedBox(height: 12),
+      ],
+      _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
+    ];
     return cajas.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('No se pudieron leer las cajas.')),
@@ -449,8 +478,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         if (datos.sinCajas) {
           return _lista(enLaWeb: enLaWeb, [
             // La central de la barra, en la notebook (no en la web ni en una tablet).
-            if (conPanel) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
-            _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
+            ...panel,
             const SizedBox(height: 24),
             const Center(
               child: Text(
@@ -460,22 +488,58 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
             ),
           ]);
         }
-        final elegida = datos.resumen.cajas.where((r) => r.caja.id == _cajaElegida).firstOrNull;
+        // La noche elegida, si sigue teniendo cajas (o es esta noche); si no, la de esta
+        // noche o la última con cajas.
+        final elegidaAntes = _noche;
+        final dia = elegidaAntes != null && (datos.porDia.tiene(elegidaAntes) || elegidaAntes == estaNoche)
+            ? elegidaAntes
+            : datos.porDia.inicial(ahora: ahora, fechaDeLaFiesta: widget.fiesta.fechaEvento);
+        final noche = datos.delDia(dia);
+        final noches = _Noches(
+          porDia: datos.porDia,
+          elegida: dia,
+          estaNoche: estaNoche,
+          onElegir: (d) => setState(() {
+            _noche = d;
+            _cajaElegida = null;
+            _aviso = null;
+          }),
+        );
+        if (noche.sinCajas) {
+          // Esta noche todavía sin cajas, pero hubo en otros días: arriba, para tocar.
+          return _lista(enLaWeb: enLaWeb, [
+            ...panel,
+            AvisoDePedidosDeCierre(eventoId: widget.fiesta.id),
+            const SizedBox(height: 12),
+            noches,
+            const SizedBox(height: 24),
+            Center(
+              child: Text(
+                dia == estaNoche
+                    ? 'Todavía no se abrió ninguna caja esta noche.'
+                    : 'Esa noche no se abrió ninguna caja.',
+                key: const Key('jefe_sin_cajas_esta_noche'),
+              ),
+            ),
+          ]);
+        }
+        final elegida = noche.resumen.cajas.where((r) => r.caja.id == _cajaElegida).firstOrNull;
         return LayoutBuilder(builder: (context, caja) {
           final conCostado = caja.maxWidth >= 1000;
           final principal = <Widget>[
-            if (conPanel) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
-            _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
+            ...panel,
             // "La Caja 2 pide cerrar": a la encargada y al jefe en modo jefe.
             AvisoDePedidosDeCierre(eventoId: widget.fiesta.id),
             const SizedBox(height: 12),
-            _Totales(resumen: datos.resumen),
+            noches,
+            const SizedBox(height: 12),
+            _Totales(resumen: noche.resumen),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
                 key: const Key('jefe_vendido_fiesta'),
-                onPressed: () => _verLoVendidoDeLaFiesta(datos),
+                onPressed: () => _verLoVendidoDeLaFiesta(noche),
                 icon: const Icon(Icons.local_bar_outlined),
                 label: const Text('LO VENDIDO DE LA FIESTA'),
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -484,7 +548,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
             const SizedBox(height: 16),
             if (elegida == null)
               _Tarjetas(
-                resumen: datos.resumen,
+                resumen: noche.resumen,
+                estaNoche: estaNoche,
                 sinOk: datos.sinOk,
                 onElegir: (r) => setState(() {
                   _cajaElegida = r.caja.id;
@@ -494,9 +559,9 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                 }),
               )
             else
-              _ventasDeLaCaja(elegida, datos, esJefe, enLaWeb: enLaWeb),
+              _ventasDeLaCaja(elegida, datos, esJefe, enLaWeb: enLaWeb, estaNoche: estaNoche),
           ];
-          final stock = _Stock(stock: datos.stock);
+          final stock = _Stock(stock: noche.stock, dia: dia, estaNoche: estaNoche);
           if (!conCostado) {
             return _lista(
               enLaWeb: enLaWeb,
@@ -516,7 +581,13 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     );
   }
 
-  Widget _ventasDeLaCaja(ResumenDeCaja r, CajasDeLaFiesta datos, bool esJefe, {required bool enLaWeb}) {
+  Widget _ventasDeLaCaja(
+    ResumenDeCaja r,
+    CajasDeLaFiesta datos,
+    bool esJefe, {
+    required bool enLaWeb,
+    required DiaDeOperacion estaNoche,
+  }) {
     final caja = r.caja;
     final ventas = VentaDeLaCaja.armar(
       ventas: [for (final v in datos.ventas) if (v.cajaBarraId == caja.id) v],
@@ -554,7 +625,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                   key: const Key('jefe_caja_titulo'),
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
-                Text(_horario(caja), style: const TextStyle(color: Color(0xFFA7A29A))),
+                Text(_horario(caja, estaNoche), style: const TextStyle(color: Color(0xFFA7A29A))),
                 OutlinedButton.icon(
                   key: const Key('jefe_ver_cierre'),
                   onPressed: () => _verCierre(r, datos),
@@ -769,10 +840,16 @@ String _hora(String iso) {
   return '${ar.hour.toString().padLeft(2, '0')}:${ar.minute.toString().padLeft(2, '0')}';
 }
 
-/// "abierta desde las 22:05" o "de 22:15 a 02:40".
-String _horario(CajaBarra c) => c.abierta
-    ? 'abierta desde las ${_hora(c.abiertaAt)}'
-    : 'de ${_hora(c.abiertaAt)} a ${_hora(c.cerradaAt!)}';
+/// "abierta desde las 22:05" o "de 22:15 a 02:40". **Una caja de otra noche que
+/// [estaNoche] dice su fecha** ("Vie 20/11 · de 22:15 a 02:40"): una caja de prueba no
+/// se confunde con una de la fiesta.
+String _horario(CajaBarra c, DiaDeOperacion estaNoche) {
+  final horas = c.abierta
+      ? 'abierta desde las ${_hora(c.abiertaAt)}'
+      : 'de ${_hora(c.abiertaAt)} a ${_hora(c.cerradaAt!)}';
+  final dia = DiaDeOperacion.deLaCaja(c);
+  return dia == estaNoche ? horas : '${dia.corto} · $horas';
+}
 
 class _EnVivo extends ConsumerWidget {
   final bool enLaWeb;
@@ -893,14 +970,84 @@ class _Totales extends StatelessWidget {
   }
 }
 
+/// Las noches de la fiesta con cajas, arriba, para tocar: la que se mira marcada, **esta
+/// noche primero** y las demás de la más nueva a la más vieja. Con una sola noche (la de
+/// hoy) no aparece. Si la que se mira no es esta noche, lo dice en ámbar: una caja de
+/// prueba no se lee como de la fiesta.
+class _Noches extends StatelessWidget {
+  final CajasPorDia porDia;
+  final DiaDeOperacion elegida;
+  final DiaDeOperacion estaNoche;
+  final ValueChanged<DiaDeOperacion> onElegir;
+
+  const _Noches({
+    required this.porDia,
+    required this.elegida,
+    required this.estaNoche,
+    required this.onElegir,
+  });
+
+  static String clave(DiaDeOperacion d) => 'jefe_noche_${d.anio}-${d.mes}-${d.dia}';
+
+  @override
+  Widget build(BuildContext context) {
+    final dias = porDia.dias.reversed.where((d) => d != estaNoche).toList();
+    final todas = [estaNoche, ...dias];
+    // Solo esta noche y ninguna otra: no hay nada que elegir.
+    if (dias.isEmpty) return const SizedBox.shrink();
+    String rotulo(DiaDeOperacion d) {
+      final n = porDia.delDia(d).length;
+      final cajas = n == 0 ? 'sin cajas' : (n == 1 ? '1 caja' : '$n cajas');
+      return d == estaNoche ? 'Esta noche · ${d.corto} · $cajas' : '${d.corto} · $cajas';
+    }
+
+    return Column(
+      key: const Key('jefe_noches'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final d in todas)
+              ChoiceChip(
+                key: Key(clave(d)),
+                label: Text(rotulo(d)),
+                selected: d == elegida,
+                onSelected: (_) => onElegir(d),
+              ),
+          ],
+        ),
+        if (elegida != estaNoche)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Estás mirando las cajas del ${elegida.largo}: no son las de esta noche.',
+              key: const Key('jefe_noche_otra'),
+              style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFF2B84B)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _Tarjetas extends StatelessWidget {
   final ResumenDeCajas resumen;
   final ValueChanged<ResumenDeCaja> onElegir;
 
+  /// La noche de hoy: una caja de otra dice su fecha.
+  final DiaDeOperacion estaNoche;
+
   /// Las cajas que cerraron sin el OK de la encargada.
   final Set<String> sinOk;
 
-  const _Tarjetas({required this.resumen, required this.onElegir, this.sinOk = const {}});
+  const _Tarjetas({
+    required this.resumen,
+    required this.onElegir,
+    required this.estaNoche,
+    this.sinOk = const {},
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -916,6 +1063,7 @@ class _Tarjetas extends StatelessWidget {
               r: r,
               ancho: ancho,
               onTap: () => onElegir(r),
+              estaNoche: estaNoche,
               sinOk: sinOk.contains(r.caja.id),
             ),
         ],
@@ -928,6 +1076,7 @@ class _TarjetaDeCaja extends StatelessWidget {
   final ResumenDeCaja r;
   final double ancho;
   final VoidCallback onTap;
+  final DiaDeOperacion estaNoche;
 
   /// Cerró sin esperar el OK de la encargada.
   final bool sinOk;
@@ -936,6 +1085,7 @@ class _TarjetaDeCaja extends StatelessWidget {
     required this.r,
     required this.ancho,
     required this.onTap,
+    required this.estaNoche,
     this.sinOk = false,
   });
 
@@ -1000,7 +1150,12 @@ class _TarjetaDeCaja extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  [if (c.operadorNombre != null) c.operadorNombre!, _horario(c)].join(' · '),
+                  [
+                    if (c.operadorNombre != null) c.operadorNombre!,
+                    if (c.sede != null) c.sede!,
+                    _horario(c, estaNoche),
+                  ].join(' · '),
+                  key: Key('jefe_caja_horario_${c.id}'),
                   style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
                 ),
                 const SizedBox(height: 10),
@@ -1073,7 +1228,11 @@ class _TarjetaDeCaja extends StatelessWidget {
 class _Stock extends StatelessWidget {
   final List<StockConNombre> stock;
 
-  const _Stock({required this.stock});
+  /// La noche de este stock, y la de hoy.
+  final DiaDeOperacion dia;
+  final DiaDeOperacion estaNoche;
+
+  const _Stock({required this.stock, required this.dia, required this.estaNoche});
 
   @override
   Widget build(BuildContext context) {
@@ -1094,9 +1253,11 @@ class _Stock extends StatelessWidget {
               style: TextStyle(fontSize: 12, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: Color(0xFFA7A29A)),
             ),
             const SizedBox(height: 2),
-            const Text(
-              'Todas las cajas descuentan del mismo. Arriba, lo agotado y lo que está en aviso.',
-              style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
+            Text(
+              '${dia == estaNoche ? 'Esta noche' : 'La noche del ${dia.corto}'}: todas las cajas '
+              'descuentan del mismo; las de otros días, no. Arriba, lo agotado y lo que está en aviso.',
+              key: const Key('jefe_stock_noche'),
+              style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
             ),
             const SizedBox(height: 12),
             if (stock.isEmpty)

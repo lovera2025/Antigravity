@@ -52,16 +52,20 @@ BarraEnMemoria catalogoDePrueba() {
   return catalogo;
 }
 
-/// Lo guardado en el equipo, en memoria: cada lado tiene el suyo.
+/// Lo guardado en el equipo, en memoria: cada lado tiene el suyo (y sobrevive a
+/// "reiniciar la notebook" en la ventana de prueba).
 class GuardadoDePrueba extends GuardadoDeLaCentral {
-  String? fiesta;
+  CentralGuardada? central;
   DondeEstaLaCentral? donde;
 
-  @override
-  Future<String?> prendida({DateTime? ahora}) async => fiesta;
+  String? get fiesta => central?.eventoId;
 
   @override
-  Future<void> anotarPrendida(String? eventoId, {DateTime? ahora}) async => fiesta = eventoId;
+  Future<CentralGuardada?> prendida() async => central;
+
+  @override
+  Future<void> anotarPrendida(String? eventoId, {String? barra, DateTime? ahora}) async => central =
+      eventoId == null ? null : CentralGuardada(eventoId: eventoId, desde: ahora ?? DateTime.now(), barra: barra);
 
   @override
   Future<DondeEstaLaCentral?> aMano() async => donde;

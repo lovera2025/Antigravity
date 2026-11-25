@@ -19,12 +19,28 @@ class PantallaDespierta {
   static bool get _enAndroid =>
       enAndroidEnLaPrueba ?? (!kIsWeb && Platform.isAndroid);
 
-  /// Prende o apaga "no apagar la pantalla". Nunca falla: si el canal no
-  /// contesta, la tablet se apaga como siempre y nada más.
+  /// Cuántas pantallas abiertas la piden: VENDER, LAS CAJAS (25-nov-2026) y la tele.
+  /// Se apaga recién cuando la última la suelta: si la encargada abre LAS CAJAS encima
+  /// de otra que la pide y vuelve, la pantalla sigue prendida.
+  static var _piden = 0;
+
+  /// Para las pruebas: vuelve a cero.
+  @visibleForTesting
+  static void olvidar() => _piden = 0;
+
+  /// Pide ([despierta] true) o suelta (false) "no apagar la pantalla"; cada pantalla
+  /// la pide al abrir y la suelta al cerrar. Nunca falla: si el canal no contesta, la
+  /// tablet se apaga como siempre y nada más.
   static Future<void> mantener(bool despierta) async {
     if (!_enAndroid) return;
+    final antes = _piden > 0;
+    _piden = despierta ? _piden + 1 : (_piden > 0 ? _piden - 1 : 0);
+    final ahora = _piden > 0;
+    // Solo cuando cambia: la segunda pantalla que la pide no vuelve a llamar, y la
+    // primera que la suelta tampoco.
+    if (antes == ahora) return;
     try {
-      await canal.invokeMethod<void>('despierta', despierta);
+      await canal.invokeMethod<void>('despierta', ahora);
     } catch (e) {
       debugPrint('Pantalla despierta: $e');
     }

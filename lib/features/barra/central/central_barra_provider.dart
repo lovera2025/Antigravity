@@ -9,7 +9,10 @@ import '../../../core/services/instalacion_id.dart';
 import '../../../core/services/pc_despierta.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../recepcion/central/direcciones_red.dart';
+import '../cuentas/dia_de_operacion.dart';
+import '../datos/barra_repositorio.dart';
 import '../providers/barra_del_jefe_provider.dart';
+import '../services/barras_del_salon.dart';
 import 'barra_con_la_red.dart';
 import 'buscar_central.dart';
 import 'central_barra.dart';
@@ -37,8 +40,14 @@ final escuchaCentralBarraProvider = Provider<InternetAddress>((ref) => InternetA
 /// En qué puerto prueba primero la central. Las pruebas ponen 0: el que esté libre.
 final puertoCentralBarraProvider = Provider<int>((ref) => kPuertoCentralBarra);
 
-/// Por qué puerto se pregunta dónde está la central. Las pruebas ponen otro.
+/// Por qué puerto se pregunta dónde está la central (y en cuál contesta la de esta
+/// notebook). Las pruebas ponen otro.
 final puertoBusquedaBarraProvider = Provider<int>((ref) => kPuertoBusquedaBarra);
+
+/// A qué puertos pregunta este equipo por las centrales: en la app, el mismo de
+/// [puertoBusquedaBarraProvider]. Las ventanas de prueba, con las dos centrales de las dos
+/// barras en la misma PC (cada una contesta en su puerto), preguntan a los dos.
+final puertosQuePreguntaBarraProvider = Provider<List<int>>((ref) => [ref.watch(puertoBusquedaBarraProvider)]);
 
 /// A dónde pregunta la caja por la red. Las pruebas: solo a esta PC.
 final destinosBusquedaBarraProvider =
@@ -55,14 +64,24 @@ final equipoDeLaBarraProvider = Provider<Future<String> Function()>((ref) => Ins
 /// dirección escrita a mano. Los tests lo reemplazan.
 final guardadoDeLaCentralProvider = Provider<GuardadoDeLaCentral>((ref) => const GuardadoDeLaCentral());
 
+/// La central que estaba prendida en esta notebook: de qué fiesta, desde cuándo y de qué
+/// barra.
+@immutable
+class CentralGuardada {
+  final String eventoId;
+
+  /// Cuándo se prendió con el botón (volver a prenderla sola no lo cambia).
+  final DateTime desde;
+  final String? barra;
+
+  const CentralGuardada({required this.eventoId, required this.desde, this.barra});
+}
+
 class GuardadoDeLaCentral {
   const GuardadoDeLaCentral();
 
   static const _prendida = 'barra_central_prendida_v1';
   static const _aMano = 'barra_central_a_mano_v1';
-
-  /// Cuánto dura "la central estaba prendida": una noche.
-  static const dura = Duration(hours: 18);
 
   Future<String?> _leer(String clave) async {
     try {
@@ -83,19 +102,26 @@ class GuardadoDeLaCentral {
     } catch (_) {}
   }
 
-  /// La fiesta de la central prendida esta noche en esta PC, o null.
-  Future<String?> prendida({DateTime? ahora}) async {
+  /// La última central prendida en esta PC, o null. **No vence sola** (25-nov-2026): si
+  /// vuelve a prenderse lo decide [CentralDeLaBarra.reanudar], con la noche y las cajas
+  /// abiertas. Hasta la 6.9.3 vencía a las 18 horas, y una fiesta que siguió pasado el
+  /// mediodía se quedaba sin central después de un reinicio.
+  Future<CentralGuardada?> prendida() async {
     final crudo = await _leer(_prendida);
     final partes = crudo?.split('|');
-    if (partes == null || partes.length != 2) return null;
+    if (partes == null || partes.length < 2 || partes[0].isEmpty) return null;
     final cuando = DateTime.tryParse(partes[1]);
-    if (cuando == null || (ahora ?? DateTime.now()).difference(cuando) > dura) return null;
-    return partes[0];
+    if (cuando == null) return null;
+    final barra = partes.length > 2 && partes[2].isNotEmpty ? partes[2] : null;
+    return CentralGuardada(eventoId: partes[0], desde: cuando, barra: barra);
   }
 
-  Future<void> anotarPrendida(String? eventoId, {DateTime? ahora}) => _guardar(
+  /// [eventoId] null: se apagó a mano.
+  Future<void> anotarPrendida(String? eventoId, {String? barra, DateTime? ahora}) => _guardar(
         _prendida,
-        eventoId == null ? null : '$eventoId|${(ahora ?? DateTime.now()).toUtc().toIso8601String()}',
+        eventoId == null
+            ? null
+            : '$eventoId|${(ahora ?? DateTime.now()).toUtc().toIso8601String()}|${barra ?? ''}',
       );
 
   Future<DondeEstaLaCentral?> aMano() async {
@@ -112,9 +138,17 @@ class EstadoCentralBarra {
   final String? eventoId;
   final int? puerto;
 
+  /// "Barra 1": la barra de esta notebook (25-nov-2026). Null: de toda la fiesta.
+  final String? barra;
+
   /// De la más probable a la menos ([direccionesParaCelulares]).
   final List<String> direcciones;
+
+  /// Las cajas, y también las otras centrales enganchadas (`esCentral`).
   final List<CajaConectada> cajas;
+
+  /// El enganche con la central de la otra barra, si se encontraron.
+  final List<EngancheConOtra> otras;
 
   /// Si contesta a las tablets que la buscan solas. Sin eso, la dirección se escribe a mano.
   final bool contestaBusqueda;
@@ -125,8 +159,10 @@ class EstadoCentralBarra {
   const EstadoCentralBarra({
     this.eventoId,
     this.puerto,
+    this.barra,
     this.direcciones = const [],
     this.cajas = const [],
+    this.otras = const [],
     this.contestaBusqueda = false,
     this.error,
   });
@@ -137,13 +173,23 @@ class EstadoCentralBarra {
   /// está conectada a ningún router.
   String? get direccion => !prendida || direcciones.isEmpty ? null : '${direcciones.first}:$puerto';
 
-  int get conectadas => cajas.where((c) => c.conectada).length;
+  /// Cuántas cajas conectadas (sin las otras centrales).
+  int get conectadas => cajas.where((c) => c.conectada && !c.esCentral).length;
 
-  EstadoCentralBarra con({List<String>? direcciones, List<CajaConectada>? cajas}) => EstadoCentralBarra(
+  /// Solo las cajas, sin las otras centrales.
+  List<CajaConectada> get soloCajas => [for (final c in cajas) if (!c.esCentral) c];
+
+  /// Si está enganchada ahora con alguna otra central de la fiesta.
+  bool get enganchada => otras.any((o) => o.conectada);
+
+  EstadoCentralBarra con({List<String>? direcciones, List<CajaConectada>? cajas, List<EngancheConOtra>? otras}) =>
+      EstadoCentralBarra(
         eventoId: eventoId,
         puerto: puerto,
+        barra: barra,
         direcciones: direcciones ?? this.direcciones,
         cajas: cajas ?? this.cajas,
+        otras: otras ?? this.otras,
         contestaBusqueda: contestaBusqueda,
         error: error,
       );
@@ -152,10 +198,14 @@ class EstadoCentralBarra {
 /// La central de la barra de esta notebook ([CentralBarra]). Se prende desde BARRA →
 /// CAJAS (CENTRAL) y queda prendida mientras el programa esté abierto; al volver a abrir
 /// BARRA esa noche se vuelve a prender sola ([reanudar]). Atiende una fiesta por vez.
+///
+/// **Es la central de una barra** (25-nov-2026: una notebook por barra): contesta con su
+/// barra, y busca a la central de la otra barra para engancharse y pasarse todo.
 class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   CentralBarra? _central;
   RespondeBusqueda? _busqueda;
   StreamSubscription<List<CajaConectada>>? _cajas;
+  StreamSubscription<void>? _puente;
 
   /// Se lee al armar: al cerrarse, Riverpod no deja leer otros providers.
   late AvisoALaRed _aviso;
@@ -172,17 +222,24 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     return const EstadoCentralBarra();
   }
 
-  Future<void> prender(String eventoId) async {
+  /// Prende la central de [eventoId] en esta notebook, de la [barra] elegida (null: la
+  /// recordada de este equipo). Si ya estaba prendida para esa fiesta y esa barra, solo
+  /// relee las direcciones. [desdeElBoton] false: la volvió a prender [reanudar], y lo
+  /// guardado (desde cuándo) no cambia.
+  Future<void> prender(String eventoId, {String? barra, bool desdeElBoton = true}) async {
     if (!ref.read(redDeLaBarraHabilitadaProvider)) return;
-    if (_central != null && state.eventoId == eventoId) {
+    final deLaBarra = barraDe(barra) ?? await ref.read(barraDelEquipoProvider).leer();
+    if (_central != null && state.eventoId == eventoId && state.barra == deLaBarra) {
       final direcciones = await ref.read(direccionesCentralBarraProvider)();
       state = state.con(direcciones: direcciones);
       return;
     }
     await _soltar();
+    if (deLaBarra != null) unawaited(ref.read(barraDelEquipoProvider).guardar(deLaBarra));
     final central = CentralBarra(
       eventoId: eventoId,
       barra: ref.read(barraDeLaRedProvider),
+      barraDelSalon: deLaBarra,
       alGuardar: () => ref.read(operationalSyncRevisionProvider.notifier).bump(),
     );
     final int puerto;
@@ -200,7 +257,8 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     }
     _central = central;
     _despierta?.mantener(true);
-    final busqueda = RespondeBusqueda(eventoId: eventoId, puertoCentral: puerto);
+    final equipo = await ref.read(equipoDeLaBarraProvider)();
+    final busqueda = RespondeBusqueda(eventoId: eventoId, puertoCentral: puerto, barra: deLaBarra, equipo: equipo);
     final contesta = await busqueda.escuchar(
       puerto: ref.read(puertoBusquedaBarraProvider),
       en: ref.read(escuchaCentralBarraProvider),
@@ -209,27 +267,66 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     // Lo que se hace en esta notebook (el jefe anula desde CAJAS) va a todas las cajas.
     _aviso.salida = central.difundirDeEstaPc;
     _cajas = central.cambiosDeCajas.listen((cajas) {
-      if (identical(_central, central)) state = state.con(cajas: cajas);
+      if (identical(_central, central)) state = state.con(cajas: cajas, otras: central.otras);
     });
-    unawaited(ref.read(guardadoDeLaCentralProvider).anotarPrendida(eventoId));
+    // La central de la otra barra: si está en la misma red, se enganchan solas.
+    _puente = central.cambiosDelPuente.listen((_) {
+      if (identical(_central, central) && state.prendida) state = state.con(otras: central.otras);
+    });
+    central.engancharConOtras(
+      equipo: equipo,
+      buscador: BuscaCentral(
+        eventoId: eventoId,
+        puertos: ref.read(puertosQuePreguntaBarraProvider),
+        destinos: ref.read(destinosBusquedaBarraProvider),
+      ),
+    );
+    if (desdeElBoton) {
+      unawaited(ref.read(guardadoDeLaCentralProvider).anotarPrendida(
+            eventoId,
+            barra: deLaBarra,
+            ahora: ref.read(relojDeLaBarraProvider)(),
+          ));
+    }
     final direcciones = await ref.read(direccionesCentralBarraProvider)();
     if (!identical(_central, central)) return;
     state = EstadoCentralBarra(
       eventoId: eventoId,
       puerto: puerto,
+      barra: deLaBarra,
       direcciones: direcciones,
       cajas: central.cajas,
+      otras: central.otras,
       contestaBusqueda: contesta,
     );
   }
 
-  /// Si la central de [eventoId] estaba prendida esta noche (la notebook se reinició, se
-  /// cerró el programa), la vuelve a prender: las tablets se reconectan solas.
-  Future<void> reanudar(String eventoId) async {
+  /// Si la central de [eventoId] estaba prendida (la notebook se reinició, se cerró el
+  /// programa), **la vuelve a prender sola, con su barra**, y las tablets se reconectan
+  /// solas. Vuelve ([sigueLaNoche]):
+  /// - la misma noche en que se prendió (hasta el mediodía siguiente);
+  /// - la noche de la fiesta ([fechaDeLaFiesta]);
+  /// - **mientras haya cajas abiertas de esa noche**, aunque pase el mediodía: la caja se
+  ///   abre a la tarde y sigue hasta las 7 u 8 de la mañana (25-nov-2026; hasta la 6.9.3
+  ///   dejaba de volver a las 18 horas de prenderla).
+  Future<void> reanudar(String eventoId, {DateTime? fechaDeLaFiesta}) async {
     if (_central != null) return;
-    final prendida = await ref.read(guardadoDeLaCentralProvider).prendida();
-    if (prendida != eventoId || _central != null) return;
-    await prender(eventoId);
+    final guardada = await ref.read(guardadoDeLaCentralProvider).prendida();
+    if (guardada == null || guardada.eventoId != eventoId || _central != null) return;
+    List<CajaBarra> cajas;
+    try {
+      cajas = await ref.read(barraDeEsteEquipoProvider).cajas(eventoId);
+    } catch (_) {
+      cajas = const [];
+    }
+    final vuelve = sigueLaNoche(
+      guardada: guardada,
+      ahora: ref.read(relojDeLaBarraProvider)(),
+      fechaDeLaFiesta: fechaDeLaFiesta,
+      cajas: cajas,
+    );
+    if (!vuelve || _central != null) return;
+    await prender(eventoId, barra: guardada.barra, desdeElBoton: false);
   }
 
   Future<void> apagar() async {
@@ -248,8 +345,27 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     _busqueda = null;
     await _cajas?.cancel();
     _cajas = null;
+    await _puente?.cancel();
+    _puente = null;
     await central?.cerrar();
   }
+}
+
+/// Si la central guardada vuelve a prenderse sola ([CentralDeLaBarra.reanudar]): la
+/// misma noche en que se prendió, la noche de la fiesta, o mientras haya cajas abiertas
+/// de esa noche (o de una después) en este equipo. Una caja de prueba de una noche
+/// anterior que quedó abierta no la trae de vuelta.
+bool sigueLaNoche({
+  required CentralGuardada guardada,
+  required DateTime ahora,
+  DateTime? fechaDeLaFiesta,
+  Iterable<CajaBarra> cajas = const [],
+}) {
+  final hoy = DiaDeOperacion.de(ahora);
+  final noche = DiaDeOperacion.de(guardada.desde);
+  if (hoy == noche) return true;
+  if (fechaDeLaFiesta != null && DiaDeOperacion.delCalendario(fechaDeLaFiesta) == hoy) return true;
+  return cajas.any((c) => c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(noche));
 }
 
 final centralDeLaBarraProvider =
@@ -269,10 +385,11 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     return null;
   }
 
-  /// La caja [nombreCaja] ("Caja 2 · Sofía") de [eventoId] empieza a buscar la central. Si
-  /// ya estaba con esa fiesta, nada. En la notebook que tiene la central prendida para esa
+  /// La caja [nombreCaja] ("Caja 2 · Sofía") de [eventoId] empieza a buscar la central **de
+  /// su [barra]** ("Barra 1"; null: cualquiera de la fiesta, como la encargada). Si ya
+  /// estaba con esa fiesta, nada. En la notebook que tiene la central prendida para esa
   /// fiesta, tampoco: lo que se vende ahí ya va a la central.
-  Future<void> arrancar({required String eventoId, required String nombreCaja}) async {
+  Future<void> arrancar({required String eventoId, required String nombreCaja, String? barra}) async {
     if (!ref.read(redDeLaBarraHabilitadaProvider)) return;
     final central = ref.read(centralDeLaBarraProvider);
     if (central.prendida && central.eventoId == eventoId) return;
@@ -287,10 +404,11 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
       equipo: equipo,
       nombreCaja: nombreCaja,
       barra: ref.read(barraDeLaRedProvider),
+      barraDeLaCaja: barraDe(barra),
       alGuardar: () => ref.read(operationalSyncRevisionProvider.notifier).bump(),
       buscador: BuscaCentral(
         eventoId: eventoId,
-        puerto: ref.read(puertoBusquedaBarraProvider),
+        puertos: ref.read(puertosQuePreguntaBarraProvider),
         destinos: ref.read(destinosBusquedaBarraProvider),
       ),
       aMano: aMano,

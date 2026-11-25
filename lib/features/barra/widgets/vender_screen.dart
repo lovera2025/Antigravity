@@ -12,6 +12,7 @@ import '../central/central_barra_provider.dart';
 import '../central/linea_de_la_caja.dart';
 import '../cuentas/cobro_barra.dart';
 import '../cuentas/cuenta_barra.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pesos.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
@@ -108,6 +109,8 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     unawaited(ref.read(clienteDeLaBarraProvider.notifier).arrancar(
           eventoId: widget.fiesta.id,
           nombreCaja: 'Caja ${caja.numeroCaja}${caja.operadorNombre == null ? '' : ' · ${caja.operadorNombre}'}',
+          // La central de su barra (25-nov-2026): cada barra tiene su notebook.
+          barra: caja.sede,
         ));
   }
 
@@ -128,17 +131,23 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     final barra = ref.read(barraDeLaCajaProvider);
     final productos = await barra.productos();
     final precios = await barra.precios(widget.fiesta.id);
-    // El stock es general: lo descuentan todas las cajas de la fiesta, no solo esta.
+    // El stock es general: lo descuentan todas las cajas de la fiesta, no solo esta, pero
+    // **solo las de esta noche** (25-nov-2026): lo vendido en una caja de prueba de otro
+    // día no descuenta.
     final ventas = await barra.ventas(widget.fiesta.id);
     final anulaciones = await barra.anulaciones(widget.fiesta.id);
+    final cajas = await barra.cajas(widget.fiesta.id);
     if (!mounted) return;
     setState(() {
       _productos = productosParaVender(productos, precios, eventoId: widget.fiesta.id);
-      _stock = StockDeLaBarra.de(
+      _stock = StockDeLaBarra.deLaNoche(
         eventoId: widget.fiesta.id,
         precios: precios,
         ventas: ventas,
         anulaciones: anulaciones,
+        // La caja de esta pantalla también, por si todavía no está entre las leídas.
+        cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
+        dia: DiaDeOperacion.deLaCaja(widget.caja),
       );
       _cargando = false;
     });

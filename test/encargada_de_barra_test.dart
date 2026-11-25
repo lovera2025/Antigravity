@@ -46,6 +46,9 @@ void main() {
     fiesta = fiestaDePrueba(BarraEnPrueba.id(1), 'PUERTO VIEJO', hoy.add(const Duration(days: 2)));
     prueba.eventos.add(fiesta);
     final b = prueba.barra;
+    // La noche de hoy (25-nov-2026: LAS CAJAS muestra una noche por vez): las cajas de
+    // esta prueba se abren ahora.
+    b.reloj = () => DateTime.now().toUtc();
     final fernet = b.producto('Fernet con coca');
     final silla = b.producto('Silla extra');
     b.precio(fiesta.id, fernet, 6000);
@@ -111,6 +114,10 @@ void main() {
   }
 
   Future<void> tocar(WidgetTester tester, Finder f) async {
+    // En el celular lo de abajo de una lista larga no está armado: se desliza hasta verlo.
+    if (f.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first);
+    }
     await tester.ensureVisible(f);
     await tester.pump();
     await tester.tap(f);

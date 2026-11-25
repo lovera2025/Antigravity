@@ -1,3 +1,4 @@
+import '../cuentas/dia_de_operacion.dart';
 import 'anulacion_barra.dart';
 import 'caja_barra.dart';
 import 'paso_del_cierre.dart';
@@ -7,6 +8,7 @@ import 'recargo_barra.dart';
 import 'vale_barra.dart';
 import 'venta_barra.dart';
 
+export '../cuentas/dia_de_operacion.dart' show DiaDeOperacion;
 export 'anulacion_barra.dart';
 export 'caja_barra.dart';
 export 'paso_del_cierre.dart';
@@ -87,18 +89,28 @@ abstract interface class BarraDeLaCaja {
   /// para avisar si el número elegido ya lo tiene otra.
   Future<List<CajaBarra>> cajasAbiertas(String eventoId);
 
+  /// Todas las cajas de la fiesta que conoce este equipo, abiertas y cerradas: con ellas
+  /// se sabe la noche de cada venta (el "Quedan" de VENDER cuenta solo la de esta noche).
+  Future<List<CajaBarra>> cajas(String eventoId);
+
   /// Cuántas ventas de este equipo esperan subir.
   Future<int> ventasSinSubir();
 
-  /// La caja abierta de [operadorId] en esa fiesta, **en este equipo**. Null si no
-  /// tiene.
+  /// La caja abierta de [operadorId] en esa fiesta, **en este equipo**, la más nueva.
+  /// Con [desdeLaNoche], solo una abierta esa noche o después (`cuentas/dia_de_operacion.dart`):
+  /// una de una noche anterior (una de prueba que quedó abierta) no cuenta. "O después"
+  /// por si el reloj de la tablet está corrido: esa sí es la caja de hoy.
+  /// Null si no tiene.
   Future<CajaBarra?> cajaAbierta({
     required String eventoId,
     required String operadorId,
+    DiaDeOperacion? desdeLaNoche,
   });
 
   /// Abre una caja en este equipo. Si [operadorId] ya tiene una abierta en esa fiesta
-  /// en este equipo, devuelve esa: no se abren dos por tocar dos veces.
+  /// en este equipo **esta noche**, devuelve esa: no se abren dos por tocar dos veces.
+  /// Una suya de otra noche (una de prueba que quedó abierta) no cuenta: se abre la de
+  /// hoy y la otra sigue aparte, en su día (25-nov-2026).
   Future<CajaBarra> abrirCaja({
     required String eventoId,
     required String operadorId,

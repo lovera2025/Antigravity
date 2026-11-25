@@ -303,6 +303,7 @@ void main() {
 
     tearDown(() {
       PantallaDespierta.enAndroidEnLaPrueba = null;
+      PantallaDespierta.olvidar();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(PantallaDespierta.canal, null);
     });
@@ -317,6 +318,16 @@ void main() {
       PantallaDespierta.enAndroidEnLaPrueba = false;
       await PantallaDespierta.mantener(true);
       expect(pedidos, isEmpty);
+    });
+
+    test('LAS CAJAS encima de VENDER: se apaga recién cuando se cierra la última (25-nov)', () async {
+      PantallaDespierta.enAndroidEnLaPrueba = true;
+      await PantallaDespierta.mantener(true); // VENDER
+      await PantallaDespierta.mantener(true); // LAS CAJAS, encima
+      await PantallaDespierta.mantener(false); // se cierra LAS CAJAS
+      expect(pedidos.map((c) => '${c.arguments}'), ['true'], reason: 'VENDER sigue abierta');
+      await PantallaDespierta.mantener(false); // se cierra VENDER
+      expect(pedidos.map((c) => '${c.arguments}'), ['true', 'false']);
     });
 
     test('si el canal no contesta, no falla', () async {

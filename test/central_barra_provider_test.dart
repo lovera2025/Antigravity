@@ -13,6 +13,7 @@ import 'package:arguello_events/features/barra/central/linea_de_la_caja.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/services/barra_sin_internet.dart';
+import 'package:arguello_events/features/barra/services/barras_del_salon.dart';
 import 'package:arguello_events/features/common/widgets/operational_sync_coordinator.dart';
 
 import 'helpers/barra_en_memoria.dart';
@@ -23,14 +24,17 @@ import 'helpers/barra_en_memoria.dart';
 const _fiesta = 'e0000000-0000-4000-8000-000000000001';
 
 class _GuardadoEnMemoria extends GuardadoDeLaCentral {
-  String? fiesta;
+  CentralGuardada? central;
   DondeEstaLaCentral? donde;
 
-  @override
-  Future<String?> prendida({DateTime? ahora}) async => fiesta;
+  String? get fiesta => central?.eventoId;
 
   @override
-  Future<void> anotarPrendida(String? eventoId, {DateTime? ahora}) async => fiesta = eventoId;
+  Future<CentralGuardada?> prendida() async => central;
+
+  @override
+  Future<void> anotarPrendida(String? eventoId, {String? barra, DateTime? ahora}) async => central =
+      eventoId == null ? null : CentralGuardada(eventoId: eventoId, desde: ahora ?? DateTime.now(), barra: barra);
 
   @override
   Future<DondeEstaLaCentral?> aMano() async => donde;
@@ -57,13 +61,20 @@ void main() {
     s.close();
   });
 
-  ({ProviderContainer c, BarraEnMemoria barra, _GuardadoEnMemoria guardado}) equipo(String id) {
-    final barra = BarraEnMemoria()
-      ..equipo = id
-      ..reloj = (() => DateTime.now().toUtc());
+  ({ProviderContainer c, BarraEnMemoria barra, _GuardadoEnMemoria guardado}) equipo(
+    String id, {
+    BarraEnMemoria? deAntes,
+    _GuardadoEnMemoria? guardadoDeAntes,
+    DateTime Function()? reloj,
+  }) {
+    final barra = deAntes ??
+        (BarraEnMemoria()
+          ..equipo = id
+          ..reloj = (() => DateTime.now().toUtc()));
     final aviso = AvisoALaRed();
-    final guardado = _GuardadoEnMemoria();
+    final guardado = guardadoDeAntes ?? _GuardadoEnMemoria();
     final c = ProviderContainer(overrides: [
+      if (reloj != null) relojDeLaBarraProvider.overrideWithValue(reloj),
       avisoALaRedProvider.overrideWithValue(aviso),
       barraDeEsteEquipoProvider.overrideWithValue(BarraConLaRed(caja: barra, jefe: barra, red: barra, aviso: aviso)),
       barraDeLaRedProvider.overrideWithValue(barra),
@@ -118,6 +129,51 @@ void main() {
       () => notebook.c.read(centralDeLaBarraProvider).cajas.single.porSubir.ventas == 1,
       que: 'la notebook ve que esa caja tiene 1 venta sin subir',
     );
+  });
+
+  // 25-nov-2026: una central por barra, y la madrugada.
+  test('prende con la barra elegida, la tablet de esa barra la encuentra, y se recuerda', () async {
+    final notebook = equipo('notebook');
+    await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta, barra: 'Barra 2');
+    final estado = notebook.c.read(centralDeLaBarraProvider);
+    expect(estado.barra, 'Barra 2');
+    expect(notebook.guardado.central!.barra, 'Barra 2', reason: 'vuelve con su barra');
+    expect(await const BarraDelEquipo().leer(), 'Barra 2', reason: 'queda elegida la próxima vez');
+
+    final tablet = equipo('tablet-a');
+    await tablet.c
+        .read(clienteDeLaBarraProvider.notifier)
+        .arrancar(eventoId: _fiesta, nombreCaja: 'Caja 2 · Sofía', barra: 'Barra 2');
+    final cliente = tablet.c.read(clienteDeLaBarraProvider)!;
+    await hasta(() => cliente.conectada, que: 'conectada');
+    expect(cliente.donde!.barra, 'Barra 2');
+    await hasta(() => notebook.c.read(centralDeLaBarraProvider).soloCajas.single.barra == 'Barra 2',
+        que: 'la notebook ve de qué barra es la caja');
+  });
+
+  test('después de un reinicio pasado el mediodía, vuelve sola mientras quede una caja de esa noche', () async {
+    // Se prendió a las 17 del 4-dic; la caja de Marta sigue abierta a las 13 del 5.
+    var ahora = DateTime.utc(2026, 12, 4, 20);
+    final antes = equipo('notebook', reloj: () => ahora);
+    await antes.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta, barra: 'Barra 1');
+    antes.barra.reloj = () => DateTime.utc(2026, 12, 4, 21);
+    final caja = await antes.barra.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
+    antes.c.dispose(); // se reinicia la notebook
+
+    ahora = DateTime.utc(2026, 12, 5, 16); // las 13 del 5-dic
+    final despues = equipo('notebook', deAntes: antes.barra, guardadoDeAntes: antes.guardado, reloj: () => ahora);
+    await despues.c.read(centralDeLaBarraProvider.notifier).reanudar(_fiesta);
+    expect(despues.c.read(centralDeLaBarraProvider).prendida, isTrue, reason: 'la caja de esa noche sigue abierta');
+    expect(despues.c.read(centralDeLaBarraProvider).barra, 'Barra 1');
+    expect(antes.guardado.central!.desde, DateTime.utc(2026, 12, 4, 20), reason: 'volver sola no cambia desde cuándo');
+
+    // Cerrada esa caja, otro reinicio ya no la prende.
+    despues.barra.reloj = () => DateTime.utc(2026, 12, 5, 16, 5);
+    await despues.barra.cerrarCaja(caja, efectivoContado: 0, diferencia: 0, quien: 'Marta');
+    despues.c.dispose();
+    final otraVez = equipo('notebook', deAntes: antes.barra, guardadoDeAntes: antes.guardado, reloj: () => ahora);
+    await otraVez.c.read(centralDeLaBarraProvider.notifier).reanudar(_fiesta);
+    expect(otraVez.c.read(centralDeLaBarraProvider).prendida, isFalse);
   });
 
   test('en la notebook con la central prendida, VENDER no arranca otro cliente', () async {

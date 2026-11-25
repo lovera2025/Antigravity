@@ -130,7 +130,7 @@ void main() {
     expect(find.byKey(const Key('barra_sin_fiestas')), findsOneWidget);
   });
 
-  testWidgets('abrir la caja pide solo el número y la sede, sin cambio ni turno', (tester) async {
+  testWidgets('abrir la caja pide solo el número y la barra, sin cambio ni turno', (tester) async {
     CajaBarra? lista;
     await abrir(tester, alAbrir: (_, _, caja) => lista = caja);
     await tester.tap(find.byKey(Key('barra_fiesta_${puertoViejo.id}')));
@@ -145,13 +145,19 @@ void main() {
       reason: 'sin número no abre',
     );
     await tester.tap(find.byKey(const Key('caja_numero_2')));
-    await tester.enterText(find.byKey(const Key('caja_sede')), 'Barra del fondo');
+    await tester.pump();
+    expect(
+      tester.widget<ButtonStyleButton>(find.byKey(const Key('caja_abrir'))).onPressed,
+      isNull,
+      reason: 'sin barra no abre (25-nov: cada barra tiene su central)',
+    );
+    await tester.tap(find.byKey(const Key('caja_barra_2')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('caja_abrir')));
     await tester.pumpAndSettle();
     expect(lista, isNotNull);
     expect(lista!.numeroCaja, 2);
-    expect(lista!.sede, 'Barra del fondo');
+    expect(lista!.sede, 'Barra 2');
     expect(lista!.cambioInicial, 0);
     expect(lista!.operadorNombre, 'Marta');
     expect(barra.barra.cajasGuardadas, hasLength(1));
@@ -188,6 +194,8 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('caja_numero_ocupada')), findsOneWidget);
     expect(find.textContaining('Juan'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('caja_barra_1')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('caja_abrir')));
     await tester.pumpAndSettle();
     expect(lista!.numeroCaja, 2);

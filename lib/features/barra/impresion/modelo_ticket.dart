@@ -2,6 +2,7 @@ import 'package:image/image.dart' as img;
 
 import '../../../core/utils/ar_time.dart';
 import '../cuentas/cierre_de_barra.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/numero_de_ticket.dart';
 import '../cuentas/pesos.dart';
 import '../cuentas/vales_de_barra.dart';
@@ -27,6 +28,19 @@ abstract final class ModeloTicket {
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '';
     return '${_dias[ArTime.toAr(dt).weekday - 1]} ${fechaYHora(iso)}';
+  }
+
+  /// "Vie 04/12/2026 - 01:30": **el día es el de la noche de la caja, no el del reloj**
+  /// (25-nov-2026): pasada la medianoche el vale de la fiesta del viernes decía "Sáb
+  /// 05/12" y parecía de otra noche. La hora sí es la del reloj.
+  static String nocheYHora(String iso, CajaBarra caja) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    final noche = DiaDeOperacion.deLaCaja(caja);
+    if (noche.esSinFecha) return diaFechaYHora(iso);
+    final ar = ArTime.toAr(dt);
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return '${noche.conDiaDeLaSemana} - ${dos(ar.hour)}:${dos(ar.minute)}';
   }
 
   /// El papel de IMPRIMIR UNA PRUEBA (6.4.0): para ver que la impresora anda **sin
@@ -157,7 +171,7 @@ abstract final class ModeloTicket {
     return [
       if (copia != null) const GrandeTicket('*** COPIA ***'),
       ..._centrado(fiesta.toUpperCase(), negrita: true),
-      TextoTicket(diaFechaYHora(venta.createdAt)),
+      TextoTicket(nocheYHora(venta.createdAt, caja)),
       ..._centrado(numero),
       if (vale.porSeparado) ...[
         GrandeTicket('VALE POR ${vale.bebidas.single.cantidad}'),
@@ -253,21 +267,25 @@ abstract final class ModeloTicket {
     ];
   }
 
-  /// LO VENDIDO DE LA FIESTA (11-nov-2026): **todas las cajas juntas**, por categoría y,
-  /// sin [corto], con cada bebida debajo. [cuentas] sale de `CierreDeBarra.deLaFiesta`.
-  /// No es el cierre de ninguna caja: no lleva lo contado ni la diferencia.
+  /// LO VENDIDO DE LA FIESTA (11-nov-2026): **todas las cajas de una noche juntas**, por
+  /// categoría y, sin [corto], con cada bebida debajo. [cuentas] sale de
+  /// `CierreDeBarra.deLaFiesta`. No es el cierre de ninguna caja: no lleva lo contado ni
+  /// la diferencia. Con [dia] dice de qué noche son ("Las 3 cajas del 4/12", 25-nov-2026).
   static List<LineaTicket> deLoVendido(
     CierreDeBarra cuentas, {
     required String fiesta,
     required int cajas,
     required DateTime ahora,
     bool corto = false,
+    DiaDeOperacion? dia,
   }) =>
       [
         const TituloTicket('JUNIOR EVENTOS'),
         const TextoTicket('LO VENDIDO - BARRA', negrita: true),
         ..._centrado(fiesta),
-        TextoTicket(cajas == 1 ? 'La caja de la fiesta' : 'Las $cajas cajas juntas'),
+        TextoTicket(dia == null
+            ? (cajas == 1 ? 'La caja de la fiesta' : 'Las $cajas cajas juntas')
+            : (cajas == 1 ? 'La caja del ${dia.diaYMes}' : 'Las $cajas cajas del ${dia.diaYMes}')),
         TextoTicket(fechaYHora(ahora.toUtc().toIso8601String())),
         const SeparadorTicket(),
         if (cuentas.porProducto.isEmpty) const TextoTicket('Sin ventas'),

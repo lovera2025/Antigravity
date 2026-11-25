@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/ar_time.dart';
 import '../../barra/cuentas/cierre_de_barra.dart';
+import '../../barra/cuentas/dia_de_operacion.dart';
 import '../../barra/cuentas/pesos.dart';
 import '../../barra/jefe/barra_jefe_providers.dart';
 import 'estilo_del_sector.dart';
@@ -12,21 +14,51 @@ const _transferencia = transferenciaDelSector;
 const _colorDiferencia = colorDeLaDiferencia;
 const _diferencia = diferenciaCorta;
 
-/// BARRA en el cierre de caja (6.4.0): la fiesta (la próxima, o la de anoche hasta el día
-/// siguiente; CAMBIAR DE FIESTA para otra) y **una línea por caja** con el cambio, el
+/// BARRA en el cierre de caja (6.4.0): la fiesta (la de esta noche, o la de anoche hasta el
+/// día siguiente; CAMBIAR DE FIESTA para otra) y **una línea por caja** con el cambio, el
 /// efectivo, la transferencia, los mixtos, las anuladas, lo contado y la diferencia; los
 /// totales y las sillas extra vendidas. **Solo para mirar:** anular y reimprimir siguen en
 /// BARRA → CAJAS. Lee lo mismo que CAJAS del jefe (`cajasDelJefeProvider`), así que en la
 /// web lee la nube.
-class SectorBarraDelCierre extends ConsumerWidget {
+///
+/// **Las cajas de una noche** (25-nov-2026, `cuentas/dia_de_operacion.dart`): la del día
+/// del cierre ([diaDelCierre]) si hubo cajas; si no, la de esta noche o la última con
+/// cajas. Las otras noches de la fiesta van arriba para tocar: una caja de prueba de otro
+/// día no se suma.
+class SectorBarraDelCierre extends ConsumerStatefulWidget {
   final bool isDark;
 
-  const SectorBarraDelCierre({super.key, required this.isDark});
+  /// El día que muestra el cierre de caja. Null: el de hoy.
+  final DateTime? diaDelCierre;
+
+  const SectorBarraDelCierre({super.key, required this.isDark, this.diaDelCierre});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SectorBarraDelCierre> createState() => _SectorBarraDelCierreState();
+}
+
+class _SectorBarraDelCierreState extends ConsumerState<SectorBarraDelCierre> {
+  /// La noche que se eligió tocando arriba; null: la del cierre.
+  DiaDeOperacion? _noche;
+
+  /// La fiesta de la noche elegida: si cambia la fiesta, se vuelve a la del cierre.
+  String? _deLaFiesta;
+
+  @override
+  void didUpdateWidget(SectorBarraDelCierre anterior) {
+    super.didUpdateWidget(anterior);
+    // Otro día en el cierre: manda ese.
+    if (anterior.diaDelCierre != widget.diaDelCierre) _noche = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
     final muted = isDark ? Colors.white60 : Colors.black54;
     final fiestas = ref.watch(fiestasDelJefeProvider);
+    final ahora = ref.watch(relojDelJefeProvider)();
+    final diaDelCierre = widget.diaDelCierre;
+    final preferido = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(ArTime.toAr(diaDelCierre));
     return fiestas.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(24),
@@ -54,8 +86,9 @@ class SectorBarraDelCierre extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'La barra va por fiesta, no por día: la de anoche sigue acá hasta mañana. Solo para '
-              'mirar: anular y reimprimir siguen en BARRA, en la pestaña CAJAS.',
+              'La barra va por fiesta y por noche: la de anoche sigue acá hasta el mediodía, y '
+              'las cajas de otros días van aparte. Solo para mirar: anular y reimprimir siguen en '
+              'BARRA, en la pestaña CAJAS.',
               style: TextStyle(fontSize: 12, color: muted),
             ),
             const SizedBox(height: 14),
@@ -66,21 +99,116 @@ class SectorBarraDelCierre extends ConsumerWidget {
                 child: Center(child: CircularProgressIndicator(color: _gold)),
               ),
               error: (_, _) => const Text('No se pudieron leer las cajas.'),
-              data: (d) => d.sinCajas
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Text(
-                        'Todavía no se abrió ninguna caja en esta fiesta.',
-                        key: const Key('cierre_barra_sin_cajas'),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: muted),
-                      ),
-                    )
-                  : _Resumen(resumen: d.resumen, isDark: isDark),
+              data: (d) {
+                if (d.sinCajas) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'Todavía no se abrió ninguna caja en esta fiesta.',
+                      key: const Key('cierre_barra_sin_cajas'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: muted),
+                    ),
+                  );
+                }
+                final elegida = _deLaFiesta == fiesta.id ? _noche : null;
+                final dia = elegida != null && d.porDia.tiene(elegida)
+                    ? elegida
+                    : d.porDia.inicial(ahora: ahora, fechaDeLaFiesta: fiesta.fechaEvento, preferido: preferido);
+                final noche = d.delDia(dia);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _NochesDelCierre(
+                      dias: d.porDia.dias,
+                      cuantas: (x) => d.porDia.delDia(x).length,
+                      elegida: dia,
+                      isDark: isDark,
+                      onElegir: (x) => setState(() {
+                        _noche = x;
+                        _deLaFiesta = fiesta.id;
+                      }),
+                    ),
+                    if (noche.sinCajas)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          dia == DiaDeOperacion.de(ahora)
+                              ? 'Todavía no se abrió ninguna caja esta noche.'
+                              : 'Esa noche no se abrió ninguna caja de esta fiesta.',
+                          key: const Key('cierre_barra_sin_cajas_esa_noche'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: muted),
+                        ),
+                      )
+                    else
+                      _Resumen(resumen: noche.resumen, isDark: isDark),
+                  ],
+                );
+              },
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Las noches de la fiesta con cajas, para tocar: la que se mira marcada. Con una sola, la
+/// dice sin botones ("Las cajas del viernes 4 de diciembre").
+class _NochesDelCierre extends StatelessWidget {
+  final List<DiaDeOperacion> dias;
+  final int Function(DiaDeOperacion) cuantas;
+  final DiaDeOperacion elegida;
+  final bool isDark;
+  final ValueChanged<DiaDeOperacion> onElegir;
+
+  const _NochesDelCierre({
+    required this.dias,
+    required this.cuantas,
+    required this.elegida,
+    required this.isDark,
+    required this.onElegir,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = isDark ? Colors.white60 : Colors.black54;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Las cajas del ${elegida.largo}',
+            key: const Key('cierre_barra_noche'),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+          if (dias.length > 1 || !dias.contains(elegida)) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final x in dias.reversed)
+                  ChoiceChip(
+                    key: Key('cierre_barra_noche_${x.anio}-${x.mes}-${x.dia}'),
+                    label: Text('${x.corto} · ${cuantas(x) == 1 ? '1 caja' : '${cuantas(x)} cajas'}'),
+                    selected: x == elegida,
+                    selectedColor: _gold.withValues(alpha: 0.25),
+                    labelStyle: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    onSelected: (_) => onElegir(x),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Cada noche aparte, como un cierre de caja en su fecha.',
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
