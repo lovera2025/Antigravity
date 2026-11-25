@@ -17,10 +17,7 @@ de la app y sus tests) y el de este cierre (los arreglos de la búsqueda UDP, la
 roturas, este CONTEXTO y CLAUDE.md). **No se publicó nada ni se subió a GitHub.**
 
 **Lo que sigue, en orden:**
-1. **La suite entera:** quedó corriendo al cortar (`bash tool/suite_por_tandas.sh build/parte2/suite`; registro en
-   `build/parte2/suite.txt` del worktree). Las dos primeras tandas de nueve, en verde. Mirar el `FIN` y, si algo
-   falla, arreglarlo con su test. Antes del corte, los ~760 tests de la barra, la central, el cierre y la puerta
-   pasaban.
+1. ~~La suite entera~~ **hecha: 6.257 tests, 0 fallos** (`bash tool/suite_por_tandas.sh`, 25-nov).
 2. **Una revisión independiente** (pedido de la sesión que lanzó esta, por el usuario: "que todo esto no tenga bugs"):
    un subagente que lea el diff de la rama contra `feature/v4.6-cierre-por-sesiones` sin estas conclusiones. Lo que
    encuentre se arregla con su test y su rotura.
@@ -116,7 +113,7 @@ el código fuente; se pasaron a LF (contenido igual al repo). Si se vuelve a arm
   encargada de una barra a la otra, la tablet que se pasa a la otra central, la notebook que se reinicia).
 - **Roturas a propósito:** `bash tool/romper_una_regla.sh tool/roturas_barra_por_noche.txt`, 27 reglas: las 27 las
   atrapa un test.
-- La suite entera: quedó corriendo al cortar (ver "Lo que sigue", 1).
+- **La suite entera: 6.257 tests, 0 fallos** (`bash tool/suite_por_tandas.sh`).
 - **La prueba de punta a punta, con el mouse, en la ventana de verdad:** `flutter run -d windows -t
   tool/dos_barras_prueba.dart` (o compilarla con `flutter build windows --debug -t …` y abrir el exe). Pone lado a
   lado la tablet de la Barra 1 (Marta), su notebook, la encargada (Romi, en el wifi de la Barra 1), la tablet de la
