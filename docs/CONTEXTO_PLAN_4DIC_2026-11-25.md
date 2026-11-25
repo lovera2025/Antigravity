@@ -89,8 +89,22 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
    ventas, cajas y anulaciones. Después, **las roturas otra vez** (agregar las de esta revisión) y **una tercera
    revisión independiente**.
 2. Actualizar la sección de conteos del SPEC con lo de arriba.
-3. Lo que viaja por la central (`tablasDeLaRed`, `BarraConLaRed`) y los repositorios (`BarraLocal`, `BarraNube`):
-   **después de juntar la Parte 2**, que toca la central. `avisos_previos` lo cuenta el repositorio con el equipo que
+3. **Al juntar la Parte 2** (lo contestó esa sesión el 25-nov; rama `claude/sleepy-jepsen-bea21a`, commit `995be5b`
+   más cambios sin commitear todavía):
+   - **La barra de cada caja:** una lista fija, `kBarrasDelSalon` (`lib/features/barra/services/barras_del_salon.dart`;
+     no hay config por fiesta). La caja la elige obligatoria y se guarda tal cual en `sede`. Para leerla, `barraDe(sede)`
+     (trim, sin distinguir mayúsculas; **null si no es de la lista**: las cajas viejas con texto libre). Cada equipo
+     recuerda la suya (`barraDelEquipoProvider`) y la central también (`EstadoCentralBarra.barra`). → En
+     `StockPorBarra`, el mapa caja → barra tiene que salir de `barraDe(c.sede)` (no de `claveDeBarra` a secas), y el
+     reparto del jefe ofrecer las barras de `kBarrasDelSalon`. `claveDeBarra` sigue para comparar.
+   - **La noche:** `lib/features/barra/cuentas/dia_de_operacion.dart`. `DiaDeOperacion.de(momento)` y `.deLaCaja(caja)`;
+     "esta noche" = `DiaDeOperacion.de(ref.read(relojDeLaBarraProvider)())` (`providers/barra_del_jefe_provider.dart`,
+     **la única hora de la barra**). `CajasPorDia.de(cajas)`: `.delDia(dia)`, `.idsDelDia(dia)`,
+     `.ventasDelDia(ventas, dia)` (cada venta con su caja) e `.inicial(ahora:, fechaDeLaFiesta:)`. Modelo:
+     `StockDeLaBarra.deLaNoche(...)` en `cuentas/stock_de_la_barra.dart`, que usan CAJAS y el "Quedan" de VENDER. →
+     A `StockPorBarra.de` se le pasan `porDia.delDia(dia)` y `porDia.ventasDelDia(ventas, dia)`.
+   - Lo que viaja por la central (`tablasDeLaRed`, `BarraConLaRed`) y los repositorios (`BarraLocal`, `BarraNube`)
+     se hace sobre lo de esa sesión, que tocó la central. `avisos_previos` lo cuenta el repositorio con el equipo que
    va a guardar. En la página del iPhone, cada persona con su propio `device_id` ("pagina:<operador>"), o un aviso de
    un repositor lo cumpliría otro.
 4. Las pantallas del repositor y el bloqueo en VENDER (con la maqueta aprobada), y la Parte 3 (la página de la
