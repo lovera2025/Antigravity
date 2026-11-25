@@ -27,6 +27,17 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 - [Dar entradas para rendir también desde VENDER](dar-para-rendir-desde-vender.md) — que quien vende (la caja de
   AGOS) pueda darlas, no solo el jefe. Para el martes o miércoles; sin programar.
 
+### Después de la tele en la app de verdad (pedidos el 25-nov-2026)
+
+Primero va la tele como tótem en la app de verdad, si al jefe le gusta. Después, esto:
+
+- [El repositor de la barra y el stock con reposiciones](barra-repositor-y-stock.md) — un permiso nuevo: solo él y
+  el jefe tocan el stock; reposiciones por caja con notas; la encargada solo ve las cajas y acepta los cierres.
+- [Al abrir "Caja 1" aparecen cajas viejas con el mismo número](barra-cajas-viejas-con-el-mismo-numero.md) —
+  empezar de nuevo sin borrar el historial.
+- [Corregir cuántas entradas para rendir se le dieron a alguien](entradas-para-rendir-corregir-cantidad.md) — en vez
+  de anular y cargar de nuevo.
+
 ### La 6.1.0 (decidida el 16 y el 18-oct-2026)
 
 Una sola versión con todo junto, en este orden. El estado de cada parte está en
