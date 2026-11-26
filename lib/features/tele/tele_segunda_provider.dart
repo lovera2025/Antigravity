@@ -6,10 +6,14 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../barra/central/buscar_central.dart';
 import '../recepcion/central/pedidos_de_la_puerta.dart';
+import '../recepcion/providers/recepcion_provider.dart' show eventosActivosProvider;
 import '../recepcion/repositories/invitados_repository.dart';
+import '../recepcion/services/puerta_del_evento.dart' show etiquetaEventoRecepcion;
 import '../totem/providers/tiempos_a_mano_provider.dart';
 import '../totem/services/tiempos_a_mano.dart';
 import 'cliente_de_la_tele.dart';
+import 'giro_de_la_tele.dart';
+import 'modo_tele.dart';
 import 'red_de_la_tele.dart';
 
 /// Cómo abre la Tele 2 la conexión con la Tele 1. Las pruebas la reemplazan.
@@ -45,12 +49,15 @@ class TeleSegunda extends Notifier<ClienteDeLaTele?> {
   BienvenidaDeLaNoche? bienvenida(String personaId) => _bienvenidas[personaId];
 
   /// Se engancha a la Tele 1 para [eventoId]. Con [direccionAMano] no busca
-  /// por el wifi.
+  /// por el wifi. **Si ya está enganchada, cambiar de escuela no la
+  /// desconecta** (25-nov-2026): se le cuenta a la Tele 1, que la atiende.
   void conectar(String eventoId, {String? direccionAMano, int numero = 2}) {
     final actual = _cliente;
-    if (actual != null &&
-        _eventoId == eventoId &&
-        actual.direccionAMano == direccionAMano) {
+    if (actual != null && actual.direccionAMano == direccionAMano) {
+      if (_eventoId != eventoId) {
+        _eventoId = eventoId;
+        actual.cambiarEscuela(eventoId);
+      }
       return;
     }
     actual?.dispose();
@@ -68,24 +75,60 @@ class TeleSegunda extends Notifier<ClienteDeLaTele?> {
         destinos: destinos,
       ),
       alRecibirBienvenidas: _bienvenidas.addAll,
+      // La Tele 1 manda las filas de las escuelas que atiende: cada una a la
+      // suya.
       alRecibirFilas: (filas) async {
-        await ref
-            .read(invitadosRepositoryProvider)
-            .guardarDeOtraTele(eventoId, filas);
+        final porEscuela = <String, List<Map<String, dynamic>>>{};
+        for (final f in filas) {
+          final e = f['evento_id'];
+          (porEscuela[e is String && e.length == 36 ? e : _eventoId ?? eventoId] ??= []).add(f);
+        }
+        for (final e in porEscuela.entries) {
+          await ref.read(invitadosRepositoryProvider).guardarDeOtraTele(e.key, e.value);
+        }
       },
       alRecibirTiempos: (t) => unawaited(
-        ref.read(tiemposAManoProvider(eventoId).notifier).ponerDeOtraTele(t),
+        ref.read(tiemposAManoProvider(_eventoId ?? eventoId).notifier).ponerDeOtraTele(t),
       ),
       tiemposAlConectar: () {
-        final t = ref.read(tiemposAManoProvider(eventoId));
+        final id = _eventoId ?? eventoId;
+        final t = ref.read(tiemposAManoProvider(id));
         if (t != null) return t;
         try {
           return TiemposAMano.de(
-            ref.read(totemConfigDeLaNocheProvider(eventoId)),
+            ref.read(totemConfigDeLaNocheProvider(id)),
           );
         } catch (_) {
           return null;
         }
+      },
+      // La Tele 1 le pide otra escuela (un celular, o CAMBIAR): la tele la
+      // muestra.
+      alPedirEscuela: (id, por) {
+        // Una escuela que esta tele no tiene entre las que vienen: sigue con
+        // la suya y se lo cuenta a la Tele 1 (revisión del 26-nov). Si no, la
+        // Tele 1 la daría por cambiada y esta tele mostraría otra.
+        final eventos = ref.read(eventosActivosProvider).value;
+        final mia = _eventoId;
+        if (eventos != null &&
+            mia != null &&
+            FiestaDeLaTele.de(eventos, DateTime.now(), elegida: id).fiesta?.id != id) {
+          _cliente?.cambiarEscuela(mia);
+          ref.read(avisoEnLaTeleProvider.notifier).decir('Esta tele no tiene esa escuela: sigue con la suya.');
+          return;
+        }
+        _eventoId = id;
+        unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(id));
+        // El cartel: "Caro pasó la Tele 2 a ESCUELA B".
+        final e = ref.read(eventosActivosProvider).value?.where((x) => x.id == id).firstOrNull;
+        final titulo = e == null ? 'otra escuela' : etiquetaEventoRecepcion(e);
+        ref.read(avisoEnLaTeleProvider.notifier).decir(
+              por == null ? 'La Tele 2 pasó a $titulo' : '$por pasó la Tele 2 a $titulo',
+            );
+      },
+      alGirar: (como) {
+        final nuevo = Giro.segun(como, ref.read(giroDeLaTeleProvider));
+        if (nuevo != null) unawaited(ref.read(giroDeLaTeleProvider.notifier).poner(nuevo));
       },
     );
     _cliente = cliente;
@@ -94,18 +137,36 @@ class TeleSegunda extends Notifier<ClienteDeLaTele?> {
   }
 
   /// Pasa a principal (la Tele 1 se apagó): lo copiado esta noche se encola
-  /// para subir y la conexión se suelta. Devuelve los ids que se encolaron.
+  /// para subir, escuela por escuela, y la conexión se suelta. Devuelve los ids
+  /// que se encolaron. [escuelaDeLaTele1] queda con la que mostraba la Tele 1:
+  /// la nueva principal la atiende también.
   Future<Set<String>> soltarParaSerPrincipal() async {
     final eventoId = _eventoId;
-    final copiadas = {...?_cliente?.copiadas};
+    final cliente = _cliente;
+    final copiadas = {...?cliente?.copiadas};
+    // Solo lo de las escuelas que la Tele 1 atendía al final (y la de esta):
+    // lo de una escuela que soltó puede haber cambiado después en la nube
+    // (revisión del 26-nov).
+    final vigentes = {...?cliente?.atiende, ?eventoId};
+    final porEscuela = {
+      for (final e in (cliente?.copiadasDe ?? const <String, Set<String>>{}).entries)
+        if (vigentes.isEmpty || vigentes.contains(e.key)) e.key: {...e.value},
+    };
+    _escuelaDeLaTele1 = cliente?.escuelaDeLaTele1;
     soltar();
-    if (eventoId != null && copiadas.isNotEmpty) {
-      await ref
-          .read(invitadosRepositoryProvider)
-          .subirLoDeOtraTele(eventoId, copiadas);
+    if (porEscuela.isEmpty && eventoId != null && copiadas.isNotEmpty) {
+      porEscuela[eventoId] = copiadas;
+    }
+    for (final e in porEscuela.entries) {
+      await ref.read(invitadosRepositoryProvider).subirLoDeOtraTele(e.key, e.value);
     }
     return copiadas;
   }
+
+  String? _escuelaDeLaTele1;
+
+  /// La escuela que mostraba la Tele 1 cuando esta pasó a principal.
+  String? get escuelaDeLaTele1 => _escuelaDeLaTele1;
 
   void soltar() {
     _cliente?.dispose();

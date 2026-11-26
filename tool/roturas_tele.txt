@@ -1,0 +1,312 @@
+R1 parada, las flechas sin traducir (van a cualquier lado)
+lib/features/tele/giro_de_la_tele.dart
+test/giro_de_la_tele_test.dart
+            SingleActivator(tecla): FlechaEnLoQueSeVe(d),
+            SingleActivator(tecla): DirectionalFocusIntent(d),
+---
+R2 parada, las medidas sin cruzar
+lib/features/tele/giro_de_la_tele.dart
+test/giro_de_la_tele_test.dart
+      size: q.isOdd ? m.size.flipped : m.size,
+      size: m.size,
+---
+R3 la PC girada aunque no esté en modo tele
+lib/features/tele/giro_de_la_tele.dart
+test/giro_de_la_tele_test.dart
+      cuartos: enLaTele ? ref.watch(giroDeLaTeleProvider) : null,
+      cuartos: ref.watch(giroDeLaTeleProvider),
+---
+R4 Vertical pisa la parada para el otro lado
+lib/features/tele/giro_de_la_tele.dart
+test/giro_de_la_tele_test.dart
+  static int vertical(int cuartos) => esParada(cuartos) ? normal(cuartos) : 1;
+  static int vertical(int cuartos) => 1;
+---
+R5 la Tele 2 no queda con su escuela al conectarse
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    _deLaTele[numero] = evento;
+
+---
+R6 a la Tele 2 que cambió con su control se le vuelve a pedir
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+        if (!yaCambio) {
+        if (true) {
+---
+R7 "Las dos" con escuelas distintas
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+        if (n == kLasDosTeles && !_mismaEscuela) {
+        if (false) {
+---
+R8 el pedido va a la escuela de ahora y no a la que se miraba
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+        final escuela = _escuelas[evento] ?? _escuelas[_escuelaDe(conexion)]!;
+        final escuela = _escuelas[_escuelaDe(conexion)]!;
+---
+R9 la notebook atiende otra escuela
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    if (!esTele || _escuelas.containsKey(id) || !conoce(id)) return;
+    if (_escuelas.containsKey(id) || !conoce(id)) return;
+---
+R10 la pregunta MANTENER · CAMBIAR no se cierra con la primera respuesta
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    _cerrarPregunta(id, '${c.nombre} eligió ${cambiar ? 'CAMBIAR' : 'MANTENER'}.');
+
+---
+R11 en la tele, un código por escuela
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+    final codigo = await ref.read(codigoCentralProvider)(noche ?? eventoId);
+    final codigo = await ref.read(codigoCentralProvider)(eventoId);
+---
+R12 cambiar la escuela reinicia la central
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+    if (prendida != null && prendida.esTele == comoTele && _noche == noche) {
+    if (prendida != null && prendida.esTele == comoTele && _noche == noche && prendida.eventoId == eventoId) {
+---
+R13 el aviso de la apariencia cuenta el propio
+lib/core/services/pulso_entre_equipos.dart
+test/preparar_las_fiestas_test.dart
+  if (yo != null && datos['origen'] == yo) return const {};
+
+---
+R14 un masivo sin los alumnos queda listo
+lib/features/tele/preparar_las_fiestas.dart
+test/preparar_las_fiestas_test.dart
+      lista: lista && (puerta || e.modalidad != 'masivo'),
+      lista: lista,
+---
+R15 se preparan las fiestas de seis meses
+lib/features/tele/preparar_las_fiestas.dart
+test/preparar_las_fiestas_test.dart
+    final tope = DateTime(ahora.year, ahora.month, ahora.day + dias + 1);
+    final tope = DateTime(ahora.year, ahora.month + 6, ahora.day);
+---
+R16 se preparan más de 10
+lib/features/tele/preparar_las_fiestas.dart
+test/preparar_las_fiestas_test.dart
+    ).take(hasta).toList();
+    ).toList();
+---
+R17 "Lista para trabajar sin internet" sin mirar la apariencia
+lib/features/recepcion/services/lista_sin_internet.dart
+test/preparar_las_fiestas_test.dart
+    if (d.aparienciaGuardada == false) {
+    if (false) {
+---
+R18 cambiar la escuela con el control, sin cartel que confirma
+lib/features/tele/pantalla_tele.dart
+test/pantalla_tele_test.dart
+                setState(() => _porElegir = e);
+                unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(e.id));
+---
+R19 el PIN se ve al escribirlo
+lib/features/tele/teclado_de_la_tele.dart
+test/pantalla_tele_test.dart
+    final escrito = widget.oculto ? '•' * _texto.length : _texto;
+    final escrito = _texto;
+---
+R20 TU TELE también con la central en la notebook
+lib/features/recepcion/central/pantalla_puesto.dart
+test/celular_tu_tele_test.dart
+              if (conLista && _c.teles.isNotEmpty)
+              if (conLista)
+---
+R21 "Las dos" se ofrece con escuelas distintas
+lib/features/recepcion/central/pantalla_puesto.dart
+test/celular_tu_tele_test.dart
+          (n == kLasDosTeles && !_c.lasDosSePuede);
+          false;
+---
+R22 la noche nueva sigue con el código de ayer (la central no se vuelve a prender)
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+    if (prendida != null && prendida.esTele == comoTele && _noche == noche) {
+    if (prendida != null && prendida.esTele == comoTele) {
+---
+R23 la noche corta a la medianoche y no al mediodía
+lib/features/recepcion/central/codigo_central.dart
+test/tele_central_provider_test.dart
+    final dia = l.hour < 12 ? DateTime(l.year, l.month, l.day - 1) : DateTime(l.year, l.month, l.day);
+    final dia = DateTime(l.year, l.month, l.day);
+---
+R24 una tele con una escuela ajena entra a /tele y se lleva el código
+lib/features/recepcion/central/central_puerta.dart
+test/tele_central_test.dart
+        !conoce(evento) ||
+        false ||
+---
+R25 la Tele 1 contesta por el wifi por cualquier escuela
+lib/features/tele/busqueda_de_la_tele.dart
+test/tele_dos_escuelas_test.dart
+    if (evento is! String || evento.length != 36 || !conoce(evento)) return null;
+    if (evento is! String || evento.length != 36) return null;
+---
+R26 una tele cambia a una escuela que no es suya
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    if (!esTele || n < 1 || n > kTelesDeLaNoche || !conoce(evento)) return false;
+    if (!esTele || n < 1 || n > kTelesDeLaNoche) return false;
+---
+R27 la Tele 2 desconectada cambia de escuela sin enterarse
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    if (n >= 2 && !yaCambio && !_teles.containsKey(n)) return false;
+
+---
+R28 las escuelas que ninguna tele muestra no se sueltan
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    _soltarSinTele();
+
+---
+R29 la escuela soltada no se deja de escuchar (al volver queda sin lista)
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+        for (final s in _deCadaEscuela.remove(id) ?? const <ProviderSubscription<Object?>>[]) {
+        for (final s in _deCadaEscuela[id] ?? const <ProviderSubscription<Object?>>[]) {
+---
+R30 la pregunta de antes no se cierra cuando la tele vuelve a cambiar
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+      if (e.value.deTele == n || e.value.tele == n) {
+      if (false) {
+---
+R31 Pasar a principal: la escuela de la Tele 1 apagada no se atiende para la Tele 2
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    _deLaTele[2] = evento;
+
+---
+R32 Pasar a principal atiende la otra escuela sin ponerla en la Tele 2
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+    central.atenderSinTele(eventoId);
+    central.atender(eventoId);
+---
+R33 la central se queda en una escuela que la tele no muestra
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+        if (!_laTeleLaMuestra(id)) {
+        if (false) {
+---
+R34 el cartel de la tele dice un cambio que no se hizo
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+        if (aviso != null && !noVa) ref.read(avisoEnLaTeleProvider.notifier).decir(aviso);
+        if (aviso != null) ref.read(avisoEnLaTeleProvider.notifier).decir(aviso);
+---
+R35 apagar mientras se prende deja la central abierta
+lib/features/recepcion/central/central_provider.dart
+test/tele_central_provider_test.dart
+    if (vuelta != _vuelta) {
+    if (false) {
+---
+R36 la Tele 2 acepta una escuela que no tiene
+lib/features/tele/tele_segunda_provider.dart
+test/tele_segunda_provider_test.dart
+            FiestaDeLaTele.de(eventos, DateTime.now(), elegida: id).fiesta?.id != id) {
+            false) {
+---
+R37 al pasar a principal sube lo de una escuela que la Tele 1 ya había soltado
+lib/features/tele/tele_segunda_provider.dart
+test/tele_segunda_provider_test.dart
+        if (vigentes.isEmpty || vigentes.contains(e.key)) e.key: {...e.value},
+        e.key: {...e.value},
+---
+R38 el celular sigue con la lista de antes al pasar a una escuela sin lista
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+          _lista = null;
+
+---
+R39 el celular muestra el salón de otra escuela
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+  SalonParaLaPuerta? get salon => _salonDe == null || _salonDe == _eventoId ? _salon : null;
+  SalonParaLaPuerta? get salon => _salon;
+---
+R40 "esperando" sin la escuela
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+    c.mandar(e?.lista ?? jsonEncode({'t': 'esperando', if (esTele) 'evento': id}));
+    c.mandar(e?.lista ?? jsonEncode({'t': 'esperando'}));
+---
+R41 al pasar a una escuela sin salón queda el de antes
+lib/features/recepcion/central/central_puerta.dart
+test/tele_dos_escuelas_test.dart
+        jsonEncode({'t': 'salon', 'armado': null, 'cfg': null, if (esTele) 'evento': id}));
+        jsonEncode({'t': 'nada'}));
+---
+R42 sin conexión, la respuesta a la pregunta se pierde
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+    if (_canal == null || _estado != EstadoDelPuesto.conectado) return false;
+
+---
+R43 la pregunta de la otra tele queda al elegir la propia
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+    if (_pregunta != null && _pregunta!.tele != n) _pregunta = null;
+
+---
+R44 el celular no dice que la respuesta no salió
+lib/features/recepcion/central/pantalla_puesto.dart
+test/celular_tu_tele_test.dart
+    if (!_c.contestar(cambiar: cambiar)) {
+    if (!_c.contestar(cambiar: cambiar) && false) {
+---
+R45 Pasar a principal sin el QR de la otra escuela
+lib/features/tele/pantalla_tele.dart
+test/pantalla_tele_test.dart
+            central.atiende.length > 1 &&
+            central.atiende.length > 5 &&
+---
+R46 la foto de lo quieto sin el píxel de más alrededor (con la tele girada se pierde el borde)
+lib/features/common/widgets/foto_de_lo_quieto.dart
+test/foto_de_lo_quieto_test.dart
+        .inflate(_margen + unPixel)
+        .inflate(_margen)
+---
+R47 la foto de lo quieto sin correrse al píxel (con la tele girada sale borrosa)
+lib/features/common/widgets/foto_de_lo_quieto.dart
+test/foto_de_lo_quieto_test.dart
+        .shift(_corrimiento(escala, fase, m));
+        ;
+---
+R48 la foto de lo quieto con un pedazo de píxel de más (la última columna se estira)
+lib/features/common/widgets/foto_de_lo_quieto.dart
+test/foto_de_lo_quieto_test.dart
+      (alrededor.width * porPunto).ceilToDouble() / porPunto,
+      alrededor.width,
+---
+R49 el aviso de la apariencia no llega a la tele
+lib/core/services/sync_engine.dart
+test/sync_en_reposo_test.dart
+    if (apariencias.isNotEmpty && !_aparienciasController.isClosed) {
+    if (false) {
+---
+R50 lo que marca el celular va sin la escuela que miraba
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+        evento: _eventoId,
+
+---
+R51 la Tele 2 deja un error sin atender en cada reintento
+lib/features/tele/cliente_de_la_tele.dart
+test/cliente_de_la_tele_test.dart
+    unawaited(canal.ready.catchError((Object _) {}));
+
+---
+R52 el celular deja un error sin atender en cada reintento
+lib/features/recepcion/central/cliente_central.dart
+test/celular_tu_tele_test.dart
+    unawaited(canal.ready.catchError((Object _) {}));
+
+---

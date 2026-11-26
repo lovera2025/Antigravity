@@ -30,6 +30,7 @@ import 'package:arguello_events/features/recepcion/services/lista_puerta.dart'
     show PlanListaPuerta;
 import 'package:arguello_events/features/recepcion/services/lista_sin_internet.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
+import 'package:arguello_events/features/tele/preparar_las_fiestas.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -56,10 +57,13 @@ ContratoAlumno alumnoDePrueba(
   List<String> acomp = const [],
   String? musica,
   String division = '5° B',
+  // La escuela: otra que la de siempre, para la tele con dos escuelas
+  // (25-nov-2026).
+  String evento = eventoMasivo,
 }) =>
     ContratoAlumno(
       id: id,
-      eventoId: eventoMasivo,
+      eventoId: evento,
       nombreAlumno: nombre,
       cantidadAcompanantes: acomp.length,
       nombresAcompanantes: acomp,
@@ -149,6 +153,50 @@ class SinInternetEnMemoria {
         fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         contarSinSubir: (_) async => sinSubir,
         contarSillasSinSubir: (_) async => sillasSinSubir,
+        leerAlDia: (id) async => alDia[id],
+        anotarAlDia: (id, cuando) async => alDia[id] = cuando,
+        ahora: () => ahora,
+      );
+
+  // ── Las fiestas de la tele (25-nov-2026): todas listas sin internet ──────
+
+  /// La apariencia de cada fiesta en la nube, y la guardada en el equipo.
+  final aparienciasEnLaNube = <String, TotemConfig>{};
+  final aparienciasGuardadas = <String, TotemConfig>{};
+  var leeApariencias = true;
+  var aparienciasLeidas = 0;
+  var listasDeFiestas = <String>[];
+
+  AccesosDeLasFiestas get fiestas => AccesosDeLasFiestas(
+        bajarLista: (id) async {
+          listasBajadas++;
+          listasDeFiestas.add(id);
+          return bajaLista;
+        },
+        bajarParaLaPuerta: () async {
+          alumnosBajados++;
+          return bajanAlumnos;
+        },
+        leerApariencias: (ids) async {
+          aparienciasLeidas++;
+          if (!leeApariencias) throw StateError('sin internet');
+          return {
+            for (final id in ids)
+              if (aparienciasEnLaNube[id] != null) id: aparienciasEnLaNube[id]!,
+          };
+        },
+        guardarApariencia: (cfg) async => aparienciasGuardadas[cfg.eventoId] = cfg,
+        aparienciaGuardada: (id) async => aparienciasGuardadas[id],
+        guardarFoto: (url, _) async {
+          if (bajaFoto) fotosGuardadas.add(url);
+          return fotosGuardadas.contains(url);
+        },
+        fotoGuardada: (url, _) async => fotosGuardadas.contains(url),
+        guardarFondo: (url, _) async {
+          if (bajaFondo) fondosGuardados.add(url);
+          return fondosGuardados.contains(url);
+        },
+        fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,
         ahora: () => ahora,
@@ -365,9 +413,14 @@ class InvitadosEnMemoria extends InvitadosRepository {
     return escritas;
   }
 
+  /// Lo mismo, por escuela.
+  final subidasPorEscuela = <String, Set<String>>{};
+
   @override
-  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async =>
-      subidasDeOtraTele.addAll(ids);
+  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async {
+    subidasDeOtraTele.addAll(ids);
+    (subidasPorEscuela[eventoId] ??= {}).addAll(ids);
+  }
 
   /// Armar la lista desde los alumnos es de la oficina (las pantallas del
   /// salón), no de Recepción.
@@ -388,7 +441,7 @@ class ContratosEnMemoria extends ContratosRepository {
 
   @override
   Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
-      eventoId == eventoMasivo ? alumnos : const [];
+      [for (final a in alumnos) if (a.eventoId == eventoId) a];
 
   /// Nunca va a la base de la PC: sin esto la puerta se quedaba esperando.
   @override
@@ -484,8 +537,11 @@ class SillasPuertaEnMemoria extends SillasPuertaRepository {
 
 /// El plano de la fiesta masiva en esta PC: su salón ([armado]), o ninguno.
 class PlanosEnMemoria implements PlanosEventoRepository {
-  PlanosEnMemoria([this.armado]);
+  PlanosEnMemoria([this.armado, this.porEvento = const {}]);
   ArmadoSalon? armado;
+
+  /// El salón de otras escuelas (la tele con dos escuelas, 25-nov-2026).
+  final Map<String, ArmadoSalon> porEvento;
 
   /// Lo configurado del plano: las mesas libres y las reservadas para quien no
   /// es alumno (los profes).
@@ -495,8 +551,8 @@ class PlanosEnMemoria implements PlanosEventoRepository {
   @override
   Future<PlanoEvento?> obtener(String eventoId) async {
     lecturas++;
-    final a = armado;
-    if (a == null || eventoId != eventoMasivo) return null;
+    final a = eventoId == eventoMasivo ? armado : porEvento[eventoId];
+    if (a == null) return null;
     return PlanoEvento.nuevo(
       eventoId: eventoId,
       armado: a,
@@ -524,6 +580,12 @@ class MotorDePrueba implements SyncEngine {
   @override
   Stream<int> get pendingStream => pendiente.stream;
 
+  /// La apariencia que se guardó en otra PC (el pulso, 25-nov-2026).
+  final apariencias = StreamController<Set<String>>.broadcast();
+
+  @override
+  Stream<Set<String>> get aparienciasCambiadasStream => apariencias.stream;
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
@@ -538,12 +600,13 @@ class PuertaEnMemoria {
     Map<String, SillasReparto> repartos = const {},
     List<SillaPuerta> sillasDeLaNoche = const [],
     ArmadoSalon? plano,
+    Map<String, ArmadoSalon> planosDe = const {},
     Map<String, List<Map<String, dynamic>>>? pagos,
   })  : contratos = ContratosEnMemoria(supabase, alumnos, pagos: pagos),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
         sillas = SillasEnMemoria(repartos),
         sillasPuerta = SillasPuertaEnMemoria(sillasDeLaNoche),
-        planos = PlanosEnMemoria(plano);
+        planos = PlanosEnMemoria(plano, planosDe);
 
   final ContratosEnMemoria contratos;
   final InvitadosEnMemoria invitados;
@@ -621,6 +684,7 @@ class PuertaEnMemoria {
     bool puedeTotem = true,
     List<Override> extra = const [],
     List<Evento>? eventos,
+    TransitionBuilder? builder,
   }) =>
       ProviderScope(
         overrides: [
@@ -641,6 +705,9 @@ class PuertaEnMemoria {
           syncEngineProvider.overrideWithValue(motor),
           connectivityServiceProvider.overrideWithValue(conexion),
           accesosPuertaProvider.overrideWithValue(sinInternet.accesos),
+          // Las fiestas de la tele, preparadas en memoria (sin la carpeta de
+          // fotos ni la nube).
+          accesosDeLasFiestasProvider.overrideWithValue(sinInternet.fiestas),
           // La central de la puerta no se usó esta noche ([codigoCentral]
           // dice lo contrario), y si se prende, escucha solo en esta PC.
           codigoVigenteCentralProvider
@@ -671,6 +738,8 @@ class PuertaEnMemoria {
           debugShowCheckedModeBanner: false,
           theme: tema ??
               ThemeData(brightness: Brightness.dark, useMaterial3: true),
+          // La tele: girada como en la app (`GiroDeLaApp`).
+          builder: builder,
           home: home,
         ),
       );

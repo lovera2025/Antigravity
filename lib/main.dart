@@ -40,6 +40,7 @@ import 'features/recepcion/providers/recepcion_provider.dart'
 import 'features/recepcion/services/reservados_de_la_puerta.dart'
     show reservadosDeLaPuerta;
 import 'features/asesor/asesor_home_screen.dart';
+import 'features/tele/giro_de_la_tele.dart';
 import 'features/tele/modo_tele.dart';
 import 'features/tele/pantalla_tele.dart';
 import 'features/common/providers/user_role_provider.dart';
@@ -197,7 +198,11 @@ void main(List<String> args) async {
       }
       // La tele es el tótem (24-nov-2026): una tele en modo tele abre derecho
       // en el tótem, sin PIN.
-      if (Platform.isAndroid) await ModoTeleGuardado.cargar();
+      if (Platform.isAndroid) {
+        await ModoTeleGuardado.cargar();
+        // Y girada como quedó (la tele colgada parada, 25-nov-2026).
+        await GiroGuardado.cargar();
+      }
     }
     debugPrint('V4 >>> LANZANDO SECTOR PRIVADO: Junior Eventos App');
     runApp(const ProviderScope(child: JuniorEventsApp()));
@@ -388,8 +393,11 @@ class JuniorEventsApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Junior Eventos',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) =>
-          OperationalSyncCoordinator(child: child ?? const SizedBox.shrink()),
+      // En modo tele, todo girado como la tele (25-nov-2026); en la PC, el
+      // hijo tal cual.
+      builder: (context, child) => OperationalSyncCoordinator(
+        child: GiroDeLaApp(child: child ?? const SizedBox.shrink()),
+      ),
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: themeMode,

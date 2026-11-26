@@ -532,6 +532,11 @@ class SyncEngine {
   Stream<Set<String>> get cambiosBajadosStream =>
       _cambiosBajadosController.stream;
 
+  /// Las fiestas cuya apariencia del tótem se guardó en otro equipo (por el
+  /// pulso, `avisoDeLaApariencia`): la tele las vuelve a leer al momento.
+  final _aparienciasController = StreamController<Set<String>>.broadcast();
+  Stream<Set<String>> get aparienciasCambiadasStream => _aparienciasController.stream;
+
   final Set<String> _tablasConCambios = {};
   Timer? _timerAvisoCambios;
 
@@ -1215,8 +1220,15 @@ class SyncEngine {
   void _alRecibirPulso(Map<String, dynamic> mensaje) {
     // Por el socket llega suelto y por REST envuelto en `payload`: hasta la
     // 6.4.0 se leía solo el envuelto y todo lo del socket se tiraba.
+    final cuerpo = cuerpoDelBroadcast(mensaje);
+    // La apariencia del tótem que se guardó en otra PC (25-nov-2026): no es
+    // una tabla del motor, la vuelve a leer quien la muestra (la tele).
+    final apariencias = aparienciasDelPulso(cuerpo, yo: InstalacionId.valor);
+    if (apariencias.isNotEmpty && !_aparienciasController.isClosed) {
+      _aparienciasController.add(apariencias);
+    }
     final trabajo = trabajoDelPulso(
-      cuerpoDelBroadcast(mensaje),
+      cuerpo,
       yo: InstalacionId.valor,
       tablasConocidas: _incrementalColumns.keys.toSet(),
     );
@@ -4279,6 +4291,7 @@ class SyncEngine {
     _pendingController.close();
     _remoteProbeController.close();
     _cambiosBajadosController.close();
+    _aparienciasController.close();
   }
 }
 

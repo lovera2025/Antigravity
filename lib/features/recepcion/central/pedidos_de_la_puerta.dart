@@ -126,6 +126,12 @@ class PedidoPuerta {
   /// dos; null, un celular o una PC sin "Tu tele": como hasta ahora.
   final int? tele;
 
+  /// La escuela (el evento) que miraba el celular cuando lo tocó (25-nov-2026:
+  /// la Tele 1 atiende las dos escuelas de la noche). Un pedido que quedó sin
+  /// mandar va a su escuela aunque la tele ya haya cambiado. Null: un celular
+  /// de antes, o la PC: la de la central.
+  final String? evento;
+
   const PedidoPuerta({
     required this.id,
     required this.que,
@@ -134,6 +140,7 @@ class PedidoPuerta {
     this.silla,
     this.tiempos,
     this.tele,
+    this.evento,
   });
 
   /// El mismo, diciendo cuánto hace que se tocó.
@@ -145,6 +152,7 @@ class PedidoPuerta {
         silla: silla,
         tiempos: tiempos,
         tele: tele,
+        evento: evento,
       );
 
   /// El mismo, para la tele que eligió el celular al mandarlo.
@@ -156,6 +164,19 @@ class PedidoPuerta {
         silla: silla,
         tiempos: tiempos,
         tele: tele,
+        evento: evento,
+      );
+
+  /// El mismo, de la escuela [evento].
+  PedidoPuerta conEvento(String? evento) => PedidoPuerta(
+        id: id,
+        que: que,
+        personaId: personaId,
+        hace: hace,
+        silla: silla,
+        tiempos: tiempos,
+        tele: tele,
+        evento: evento,
       );
 
   Map<String, Object?> toJson() => {
@@ -167,6 +188,7 @@ class PedidoPuerta {
         if (silla != null) 'silla': silla!.toJson(),
         if (tiempos != null) 'tiempos': tiempos!.toJson(),
         if (tele != null) 'tele': tele,
+        if (evento != null) 'evento': evento,
       };
 
   /// Null si no es un pedido que se entienda: de la red puede llegar
@@ -193,6 +215,7 @@ class PedidoPuerta {
     }
     if (sinPersona && tiempos == null) return null;
     final tele = json['tele'];
+    final evento = json['evento'];
     return PedidoPuerta(
       id: id,
       que: quePide,
@@ -201,6 +224,8 @@ class PedidoPuerta {
       silla: silla,
       tiempos: tiempos,
       tele: tele is int && esTeleValida(tele) ? tele : null,
+      // Con forma de id: de la red puede llegar cualquier cosa.
+      evento: evento is String && evento.length == 36 ? evento : null,
     );
   }
 }

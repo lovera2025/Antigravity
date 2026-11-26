@@ -87,8 +87,12 @@ void main() {
     ]) {
       test('$nombre: prendida sí, apagada no', () {
         final f = leer(ruta);
-        // Las dos centrales ya reciben algo más que la fiesta (la tele, la barra).
-        final prender = f.substring(f.indexOf('Future<void> prender(String eventoId'));
+        // Por el principio de la firma: las dos centrales reciben algo más que la fiesta
+        // (la de la puerta, `{bool comoTele = false}`, la tele es el tótem, 24-nov-2026;
+        // la de la barra, su barra).
+        final desde = f.indexOf('Future<void> prender(String eventoId');
+        expect(desde, greaterThan(0), reason: 'no está prender en $ruta');
+        final prender = f.substring(desde);
         expect(
           prender.substring(0, prender.indexOf('Future<void> reanudar(')),
           contains('_despierta?.mantener(true)'),

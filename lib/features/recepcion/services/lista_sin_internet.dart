@@ -34,6 +34,11 @@ class DatosSinInternet {
   /// un fondo propio.
   final bool? fondoGuardado;
 
+  /// Si la apariencia del tótem (Personalizar: los colores, las letras, los
+  /// textos) está guardada en la PC (25-nov-2026). Null: el evento va con la
+  /// de siempre, o todavía no se sabe.
+  final bool? aparienciaGuardada;
+
   /// Ingresos marcados en esta PC que todavía no subieron.
   final int sinSubir;
 
@@ -49,6 +54,7 @@ class DatosSinInternet {
     this.fallo = false,
     this.fotoGuardada,
     this.fondoGuardado,
+    this.aparienciaGuardada,
     this.sinSubir = 0,
     this.sillasSinSubir = 0,
   });
@@ -62,6 +68,8 @@ class DatosSinInternet {
     bool sinFoto = false,
     bool? fondoGuardado,
     bool sinFondo = false,
+    bool? aparienciaGuardada,
+    bool sinApariencia = false,
     int? sinSubir,
     int? sillasSinSubir,
   }) =>
@@ -73,6 +81,9 @@ class DatosSinInternet {
         fotoGuardada: sinFoto ? null : (fotoGuardada ?? this.fotoGuardada),
         fondoGuardado:
             sinFondo ? null : (fondoGuardado ?? this.fondoGuardado),
+        aparienciaGuardada: sinApariencia
+            ? null
+            : (aparienciaGuardada ?? this.aparienciaGuardada),
         sinSubir: sinSubir ?? this.sinSubir,
         sillasSinSubir: sillasSinSubir ?? this.sillasSinSubir,
       );
@@ -129,6 +140,14 @@ class EstadoSinInternet {
           false => d.hayInternet ? 'no bajó · se reintenta' : 'no está guardada',
         },
       ),
+      // Solo si el evento tiene una apariencia propia (Personalizar).
+      if (d.aparienciaGuardada != null)
+        (
+          'Apariencia del tótem',
+          d.aparienciaGuardada!
+              ? 'guardada'
+              : (d.hayInternet ? 'no bajó · se reintenta' : 'no está guardada'),
+        ),
       // Solo si el tótem va con "Tu fondo": a los demás no les cambia nada.
       if (d.fondoGuardado != null)
         (
@@ -191,6 +210,9 @@ class EstadoSinInternet {
     }
     if (personas == 0) {
       return es(TipoSinInternet.falta, 'La lista de este evento está vacía.');
+    }
+    if (d.aparienciaGuardada == false) {
+      return es(TipoSinInternet.falta, '$falta: falta guardar la apariencia del tótem.');
     }
     if (d.fotoGuardada == false) {
       return es(TipoSinInternet.falta, '$falta: falta guardar la foto del tótem.');
@@ -255,6 +277,8 @@ class EstadoSinInternet {
 
 Future<int> _ningunaSilla(String eventoId) async => 0;
 
+Future<bool?> _sinApariencia(String eventoId) async => null;
+
 /// Con qué se pone al día un evento. La app usa los de la base, la nube y la
 /// carpeta de fotos de la PC (`accesosPuertaProvider`); los tests, unos en
 /// memoria.
@@ -279,6 +303,13 @@ class AccesosPuerta {
 
   /// Cuántas sillas de la noche esperan subir. Sin esto, ninguna.
   final Future<int> Function(String eventoId) contarSillasSinSubir;
+
+  /// La apariencia del tótem (25-nov-2026): con internet, la lee de la nube y
+  /// la deja en la PC; sin internet, mira si está. True: guardada; false: no
+  /// se pudo; null: el evento va con la de siempre (o no se sabe). Sin esto,
+  /// no se mira.
+  final Future<bool?> Function(String eventoId) guardarApariencia;
+  final Future<bool?> Function(String eventoId) aparienciaGuardada;
   final Future<DateTime?> Function(String eventoId) leerAlDia;
   final Future<void> Function(String eventoId, DateTime cuando) anotarAlDia;
   final DateTime Function() ahora;
@@ -292,6 +323,8 @@ class AccesosPuerta {
     required this.fondoGuardado,
     required this.contarSinSubir,
     this.contarSillasSinSubir = _ningunaSilla,
+    this.guardarApariencia = _sinApariencia,
+    this.aparienciaGuardada = _sinApariencia,
     this.leerAlDia = AlDiaDeLaPuerta.leer,
     this.anotarAlDia = AlDiaDeLaPuerta.anotar,
     this.ahora = DateTime.now,
@@ -378,7 +411,9 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     _timerCuenta = Timer.periodic(cadaCuenta, (_) => unawaited(recontar()));
     await Future.wait([
       recontar(),
-      if (_datos.hayInternet) ponerAlDia() else ...[_mirarFoto(), _mirarFondo()],
+      if (_datos.hayInternet)
+        ponerAlDia()
+      else ...[_mirarFoto(), _mirarFondo(), _mirarApariencia()],
     ]);
   }
 
@@ -431,6 +466,7 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
         if (_masivo) accesos.bajarAlumnos(),
         _guardarFoto(),
         _guardarFondo(),
+        _guardarApariencia(),
       ]);
       bien = resultados.every((r) => r != false);
     } catch (e) {
@@ -498,6 +534,30 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     if (!_cerrada && url == _fondoUrl) {
       _poner(_datos.copyWith(fondoGuardado: ok));
     }
+  }
+
+  /// Como la foto: la apariencia no cuenta para "todo bajó" (falta se dice
+  /// aparte).
+  Future<bool?> _guardarApariencia() async {
+    try {
+      final ok = await accesos.guardarApariencia(eventoId);
+      if (!_cerrada) {
+        _poner(ok == null ? _datos.copyWith(sinApariencia: true) : _datos.copyWith(aparienciaGuardada: ok));
+      }
+    } catch (e) {
+      debugPrint('No se pudo guardar la apariencia del tótem: $e');
+      if (!_cerrada) _poner(_datos.copyWith(aparienciaGuardada: false));
+    }
+    return null;
+  }
+
+  Future<void> _mirarApariencia() async {
+    try {
+      final ok = await accesos.aparienciaGuardada(eventoId);
+      if (!_cerrada) {
+        _poner(ok == null ? _datos.copyWith(sinApariencia: true) : _datos.copyWith(aparienciaGuardada: ok));
+      }
+    } catch (_) {}
   }
 
   /// Cuántos ingresos esperan subir.

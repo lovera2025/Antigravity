@@ -50,7 +50,7 @@ class _CentralFija extends CentralDeLaPuerta {
   EstadoCentral build() => fijo;
 
   @override
-  Future<void> prender(String eventoId) async {}
+  Future<void> prender(String eventoId, {bool comoTele = false}) async {}
 }
 
 final _familias = [

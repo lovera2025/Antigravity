@@ -41,11 +41,13 @@ import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/tele/aparato_de_la_tele.dart';
+import 'package:arguello_events/features/tele/giro_de_la_tele.dart';
 import 'package:arguello_events/features/tele/modo_tele.dart';
 import 'package:arguello_events/features/tele/pantalla_tele.dart';
 import 'package:arguello_events/features/tele/red_de_la_tele.dart';
 import 'package:arguello_events/features/tele/tele_segunda_provider.dart';
 import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
+import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
@@ -258,8 +260,47 @@ class _ModoFijo extends ModoTeleNotifier {
   Future<void> poner(ModoTele? modo) async => state = modo;
 }
 
-/// Una tele de la prueba: su lista, sus alumnos y su central, en memoria.
-Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
+/// El giro de cada tele de la prueba: sin escribir las preferencias del
+/// programa. `--dart-define=giro=1` arranca parada (el emulador).
+class _GiroDePrueba extends GiroDeLaTeleNotifier {
+  @override
+  int build() => Giro.normal(int.tryParse(const String.fromEnvironment('giro')) ?? 0);
+
+  @override
+  Future<void> poner(int cuartos) async => state = Giro.normal(cuartos);
+}
+
+/// La escuela de cada tele de la prueba, en memoria (25-nov-2026). Con
+/// `--dart-define=escuelas=distintas` la Tele 2 arranca con la escuela B.
+class _FiestaDePrueba extends FiestaDeLaTeleNotifier {
+  _FiestaDePrueba(this.inicial);
+  final String inicial;
+
+  @override
+  String? build() => inicial;
+
+  @override
+  Future<void> elegir(String eventoId) async => state = eventoId;
+}
+
+const _escuelas = String.fromEnvironment('escuelas');
+
+/// La segunda escuela de la noche (25-nov-2026): otras familias, con nombres
+/// inventados, sentadas en otro salón.
+final _familiasB = [
+  ('CEIBO, MALENA', ['CEIBO, RAÚL'], 'Tusa · Karol G'),
+  ('HORNERO, BRUNO', <String>[], null),
+  ('JACARANDÁ, SOFÍA', ['JACARANDÁ, IRIS'], 'Ella · Callejero Fino'),
+  ('ZORZAL, TOMÁS', <String>[], null),
+  ('TALA, CATALINA', ['TALA, MARIO', 'QUEBRACHO, ANA'], null),
+  ('CARDENAL, LUCAS', <String>[], 'Despechá · Rosalía'),
+  ('ESPINILLO, ROCÍO', <String>[], null),
+  ('BENTEVEO, JOAQUÍN', ['BENTEVEO, OLGA'], null),
+];
+
+/// Una tele de la prueba: su lista, sus alumnos y su central, en memoria. Con
+/// las dos escuelas de la noche: la A en [elegido] y la B en [salonB].
+Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido, _SalonDePrueba salonB) {
   final salon = elegido.armado;
   final alumnos = [
     for (var i = 0; i < _familias.length; i++)
@@ -271,6 +312,16 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
         musica: _familias[i].$3,
         division: i < 6 ? '5° A' : '5° B',
       ),
+    for (var i = 0; i < _familiasB.length; i++)
+      alumnoDePrueba(
+        'b${i.toString().padLeft(7, '0')}-0000-4000-8000-000000000000',
+        _familiasB[i].$1,
+        mesas: salonB.mesas[i],
+        acomp: _familiasB[i].$2,
+        musica: _familiasB[i].$3,
+        division: '6° A',
+        evento: eventoParticular,
+      ),
   ];
   final enAndroid = Platform.isAndroid;
   final mundo = PuertaEnMemoria(
@@ -279,6 +330,7 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
     alumnos: alumnos,
     filas: <Invitado>[],
     plano: salon,
+    planosDe: {eventoParticular: salonB.armado},
   // La página del celular: en el APK, la que la app copió de sí misma; en esta
   // PC, la de `build/puesto`.
   )..paginaDelCelular =
@@ -292,8 +344,11 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
   mundo.invitados.hora = () => DateTime.now().toUtc();
   mundo.sillasPuerta.hora = () => DateTime.now().toUtc();
 
-  // La fiesta inventada es hoy: la tele la elige sola.
-  final hoy = DateTime.now();
+  // Las dos escuelas inventadas son hoy: cada tele arranca con la suya.
+  final hoy = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  final inicial = papel == PapelDeLaTele.segunda && _escuelas == 'distintas'
+      ? eventoParticular
+      : eventoMasivo;
   return mundo.recepcion(
     // Con "Cómo anda": la prueba es para medir. La app de verdad no lo tiene.
     // `--dart-define=fluida=no`: como antes del 25-nov, para comparar.
@@ -303,15 +358,32 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido) {
       Evento(
         id: eventoMasivo,
         clienteId: 'c0000000-0000-4000-8000-000000000001',
+        cliente: Cliente(id: 'c0000000-0000-4000-8000-000000000001', nombreCompleto: 'ESCUELA DEL CEIBO'),
         tipo: 'Egresados',
-        fechaEvento: DateTime(hoy.year, hoy.month, hoy.day),
+        fechaEvento: hoy,
+        estado: EstadoEvento.confirmado,
+        modalidad: 'masivo',
+      ),
+      Evento(
+        id: eventoParticular,
+        clienteId: 'c0000000-0000-4000-8000-000000000002',
+        cliente: Cliente(id: 'c0000000-0000-4000-8000-000000000002', nombreCompleto: 'COLEGIO DEL HORNERO'),
+        tipo: 'Egresados',
+        fechaEvento: hoy,
         estado: EstadoEvento.confirmado,
         modalidad: 'masivo',
       ),
     ],
-    config: {eventoMasivo: TotemConfig.defaults(eventoMasivo)},
+    config: {
+      eventoMasivo: TotemConfig.defaults(eventoMasivo),
+      eventoParticular: TotemConfig.defaults(eventoParticular),
+    },
+    // Girada como en la app.
+    builder: (context, child) => GiroDeLaApp(child: child ?? const SizedBox.shrink()),
     extra: [
       modoTeleProvider.overrideWith(() => _ModoFijo(ModoTele(papel, fondoQuieto: _fondoQuieto))),
+      giroDeLaTeleProvider.overrideWith(_GiroDePrueba.new),
+      fiestaDeLaTeleProvider.overrideWith(() => _FiestaDePrueba(inicial)),
       totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria()),
       // En esta PC la Tele 2 pregunta solo acá; en el wifi, a toda la red.
       if (!enAndroid && !_red)
@@ -335,6 +407,9 @@ Future<void> main() async {
   // En esta PC, `--dart-define=salon=N` elige otro (1, el más grande).
   final n = int.tryParse(const String.fromEnvironment('salon')) ?? 1;
   final salon = salones[(n - 1).clamp(0, salones.length - 1)];
+  // La escuela B, en el salón que sigue (25-nov-2026: dos escuelas la misma noche).
+  _SalonDePrueba otroDe(_SalonDePrueba s) =>
+      salones.length < 2 ? s : salones[(salones.indexOf(s) + 1) % salones.length];
 
   if (Platform.isAndroid) {
     await PaginaDelCelularEnAndroid.preparar();
@@ -342,13 +417,14 @@ Future<void> main() async {
       runApp(_tele(
         _papel == 'segunda' ? PapelDeLaTele.segunda : PapelDeLaTele.principal,
         salon,
+        otroDe(salon),
       ));
       return;
     }
     // Un solo APK para la tele y el celular: al abrir, se elige qué es.
     runApp(_ElegirTele(
       salones: salones,
-      alElegir: (papel, elegido) => runApp(_tele(papel, elegido)),
+      alElegir: (papel, elegido) => runApp(_tele(papel, elegido, otroDe(elegido))),
     ));
     return;
   }
@@ -382,7 +458,7 @@ Future<void> main() async {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 // Cada tele con lo suyo: otro "equipo".
-                                child: _tele(papel, salon),
+                                child: _tele(papel, salon, otroDe(salon)),
                               ),
                             ),
                           ),

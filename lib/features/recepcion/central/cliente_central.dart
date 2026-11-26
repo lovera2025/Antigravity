@@ -116,6 +116,8 @@ class ClienteCentral extends ChangeNotifier {
   Future<void> elegirTele(int n) async {
     if (!esTeleValida(n)) return;
     _tele = n;
+    // La pregunta era para la otra tele (revisión del 26-nov).
+    if (_pregunta != null && _pregunta!.tele != n) _pregunta = null;
     await _guardado.guardar(_kTele, '$n');
     _mandar({'t': 'tele', 'n': n});
     if (!_cerrado) notifyListeners();
@@ -135,8 +137,85 @@ class ClienteCentral extends ChangeNotifier {
                 for (final x in j['maneja'] as List)
                   if (x is String) x,
             ],
+            evento: j['evento'] is String ? j['evento'] as String : null,
+            titulo: j['titulo'] is String ? j['titulo'] as String : null,
           ),
     ];
+    final escuelas = m['escuelas'];
+    _escuelas = [
+      if (escuelas is List)
+        for (final e in escuelas)
+          if (e is Map && e['id'] is String && e['titulo'] is String)
+            EscuelaDelCelular(e['id'] as String, e['titulo'] as String),
+    ];
+    _lasDos = m['lasDos'] != false;
+    if (!_cerrado) notifyListeners();
+  }
+
+  // ── TU TELE: la escuela y el giro, desde el celular (25-nov-2026) ─────────
+
+  /// Las escuelas que se pueden poner en una tele (las que vienen).
+  List<EscuelaDelCelular> _escuelas = const [];
+  List<EscuelaDelCelular> get escuelas => _escuelas;
+
+  /// Si "Las dos" se puede elegir: solo con la misma escuela en las dos.
+  bool _lasDos = true;
+  bool get lasDosSePuede => _lasDos;
+
+  /// La tele sobre la que se actúa desde TU TELE: la de este celular ("Las
+  /// dos", o sin elegir: la Tele 1).
+  int get teleQueManeja {
+    final t = _tele;
+    return t == null || t == kLasDosTeles ? 1 : t;
+  }
+
+  /// CAMBIAR LA ESCUELA de la tele [tele], sin PIN: la tele la cambia y sus
+  /// celulares pasan solos. Devuelve si se mandó (sin conexión no).
+  bool cambiarEscuela(int tele, String eventoId) {
+    if (_estado != EstadoDelPuesto.conectado || _canal == null) return false;
+    _mandar({'t': 'escuela', 'tele': tele, 'evento': eventoId});
+    return true;
+  }
+
+  /// GIRAR la tele [tele]: "horizontal", "vertical" o "dar_vuelta".
+  bool girarTele(int tele, String como) {
+    if (_estado != EstadoDelPuesto.conectado || _canal == null) return false;
+    _mandar({'t': 'girar', 'tele': tele, 'como': como});
+    return true;
+  }
+
+  /// "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR": la que está
+  /// esperando respuesta, si hay.
+  PreguntaDeLaTele? _pregunta;
+  PreguntaDeLaTele? get pregunta => _pregunta;
+
+  /// Contesta la pregunta: vale la primera respuesta de todos los celulares de
+  /// esta tele. Sin conexión no se manda y la pregunta queda (revisión del
+  /// 26-nov): devuelve si se mandó.
+  bool contestar({required bool cambiar}) {
+    final p = _pregunta;
+    if (p == null) return false;
+    if (_canal == null || _estado != EstadoDelPuesto.conectado) return false;
+    _mandar({'t': 'contesta', 'id': p.id, 'cambiar': cambiar});
+    _pregunta = null;
+    if (!_cerrado) notifyListeners();
+    return true;
+  }
+
+  void _recibirPregunta(Map<String, dynamic> m) {
+    final id = m['id'];
+    final texto = m['texto'];
+    final evento = m['evento'];
+    final tele = m['tele'];
+    if (id is! String || texto is! String || evento is! String) return;
+    _pregunta = PreguntaDeLaTele(id: id, texto: texto, evento: evento, tele: tele is int ? tele : null);
+    if (!_cerrado) notifyListeners();
+  }
+
+  void _cerrarPregunta(Map<String, dynamic> m) {
+    if (_pregunta?.id == m['id']) _pregunta = null;
+    final texto = m['texto'];
+    if (texto is String && texto.isNotEmpty && !_avisos.isClosed) _avisos.add(texto);
     if (!_cerrado) notifyListeners();
   }
 
@@ -286,7 +365,11 @@ class ClienteCentral extends ChangeNotifier {
   /// El salón para VER EN EL PLANO (6.5.0), como lo mandó la central. Null:
   /// sin salón, o una central de antes que no lo manda.
   SalonParaLaPuerta? _salon;
-  SalonParaLaPuerta? get salon => _salon;
+
+  /// De qué escuela es [_salon] (la central de una tele lo dice): el de otra
+  /// escuela no se muestra (revisión del 26-nov).
+  String? _salonDe;
+  SalonParaLaPuerta? get salon => _salonDe == null || _salonDe == _eventoId ? _salon : null;
 
   void _recibirSalon(Map<String, dynamic> m) {
     final armado = m['armado'];
@@ -304,6 +387,8 @@ class ClienteCentral extends ChangeNotifier {
       debugPrint('El salón que mandó la central no se entiende: $e');
     }
     _salon = nuevo;
+    final de = m['evento'];
+    _salonDe = de is String && de.length == 36 ? de : null;
     if (!_cerrado) notifyListeners();
   }
 
@@ -407,6 +492,9 @@ class ClienteCentral extends ChangeNotifier {
         // La tele de cuando se tocó: si se manda al volver el wifi, se saluda
         // (o no) en esa.
         tele: _tele,
+        // Y la escuela que se miraba (25-nov-2026): si la tele cambia antes de
+        // que se mande, va a la suya.
+        evento: _eventoId,
       ),
       marcado: _ahora(),
     );
@@ -453,6 +541,10 @@ class ClienteCentral extends ChangeNotifier {
       return;
     }
     _canal = canal;
+    // Si no conecta, el error llega también por `ready`: sin esto quedaba sin
+    // atender en cada reintento (lo mostró el emulador el 26-nov). Lo atiende
+    // el `onError` de abajo.
+    unawaited(canal.ready.catchError((Object _) {}));
     _ultimaNoticia = _ahora();
     _escucha = canal.stream.listen(
       _mensaje,
@@ -522,6 +614,18 @@ class ClienteCentral extends ChangeNotifier {
       case 'puerta':
         _recibirLista(json);
       case 'esperando':
+        // Su tele pasó a una escuela que la central recién empieza a
+        // atender: la lista de antes ya no vale y no se marca en ella
+        // (revisión del 26-nov). La de esta llega enseguida.
+        final evento = json['evento'];
+        if (evento is String && evento.length == 36 && evento != _eventoId) {
+          _eventoId = evento;
+          _lista = null;
+          _titulo = null;
+          _version = 0;
+          _puertaArmada = null;
+          _sucia = true;
+        }
         _intentos = 0;
         _poner(EstadoDelPuesto.conectado);
       case 'respuesta':
@@ -534,6 +638,23 @@ class ClienteCentral extends ChangeNotifier {
         _recibirPuestos(json);
       case 'teles':
         _recibirTeles(json);
+      case 'aviso':
+        // "Caro pasó la Tele 1 a ESCUELA B" (25-nov-2026).
+        final texto = json['texto'];
+        if (texto is String && texto.isNotEmpty && !_avisos.isClosed) _avisos.add(texto);
+      case 'tu_tele':
+        // La central cambió la tele de este celular ("Las dos" con escuelas
+        // distintas no va).
+        final n = json['n'];
+        if (n is int && esTeleValida(n)) {
+          _tele = n;
+          unawaited(_guardado.guardar(_kTele, '$n'));
+          if (!_cerrado) notifyListeners();
+        }
+      case 'pregunta':
+        _recibirPregunta(json);
+      case 'pregunta_cerrada':
+        _cerrarPregunta(json);
       case 'codigo':
       case 'espera':
       case 'nombre':
@@ -780,11 +901,37 @@ class TeleDelCelular {
   final int numero;
   final bool conectada;
   final List<String> manejan;
+
+  /// La escuela que muestra (25-nov-2026), si se sabe.
+  final String? evento;
+  final String? titulo;
   const TeleDelCelular({
     required this.numero,
     required this.conectada,
     this.manejan = const [],
+    this.evento,
+    this.titulo,
   });
+}
+
+/// Una escuela que se puede poner en una tele desde TU TELE.
+class EscuelaDelCelular {
+  final String id;
+  final String titulo;
+  const EscuelaDelCelular(this.id, this.titulo);
+}
+
+/// "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR".
+class PreguntaDeLaTele {
+  final String id;
+  final String texto;
+
+  /// La escuela a la que se cambiaría.
+  final String evento;
+
+  /// La tele por la que se pregunta.
+  final int? tele;
+  const PreguntaDeLaTele({required this.id, required this.texto, required this.evento, this.tele});
 }
 
 const _kTele = 'puesto_tele';

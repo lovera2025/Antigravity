@@ -29,3 +29,33 @@ Map<String, dynamic> avisoDeTablas({
       'tablas': tablas.toList(),
       'borrados': <String, List<String>>{},
     };
+
+/// La clave del aviso de que cambió la apariencia del tótem de unas fiestas
+/// (25-nov-2026). `totem_config` no es una tabla del motor (no se baja entera:
+/// la lee el tótem), así que no va en `tablas`.
+const kAparienciaDelPulso = 'totem_config';
+
+/// El aviso de que se guardó la apariencia del tótem de [eventoId]
+/// (Personalizar, o los segundos de la llegada): la tele que la muestra la
+/// vuelve a leer al momento.
+Map<String, dynamic> avisoDeLaApariencia({
+  required String origen,
+  required String eventoId,
+}) =>
+    {
+      ...avisoDeTablas(origen: origen, tablas: const []),
+      kAparienciaDelPulso: [eventoId],
+    };
+
+/// Las fiestas cuya apariencia cambió según un aviso ([avisoDeLaApariencia]).
+/// Como `trabajoDelPulso`: el aviso cruzó la red, así que solo se aceptan ids
+/// con forma de UUID, y el aviso propio ([yo]) no cuenta.
+Set<String> aparienciasDelPulso(Object? datos, {required String? yo}) {
+  if (datos is! Map) return const {};
+  if (yo != null && datos['origen'] == yo) return const {};
+  final ids = datos[kAparienciaDelPulso];
+  return {
+    for (final id in ids is List ? ids : const [])
+      if (id is String && id.length == 36) id,
+  };
+}

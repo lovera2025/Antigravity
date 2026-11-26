@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/instalacion_id.dart';
+import '../../../core/services/pulso_entre_equipos.dart';
 import '../../../core/services/totem_config_cache.dart';
 import '../../../main.dart';
 import '../../../models/totem_config.dart';
@@ -115,7 +117,34 @@ class TotemConfigRepository {
 
     final guardada = TotemConfig.fromJson(fila);
     await TotemConfigCache.save(guardada);
+    // Sin esperarlo: Personalizar no queda trabado si el aviso tarda
+    // (revisión del 26-nov).
+    unawaited(_avisarALasTeles(cfg.eventoId));
     return guardada;
+  }
+
+  RealtimeChannel? _canalDelAviso;
+
+  /// Les avisa a las teles que cambió la apariencia de [eventoId], para que la
+  /// lean ya (25-nov-2026): `totem_config` no está en Realtime. Es el mismo
+  /// aviso entre equipos que el del motor (`pulso_entre_equipos.dart`); sin
+  /// suscribirse, va por REST. Que no salga no rompe nada: lo guardado ya está
+  /// en la nube, y la tele la vuelve a leer al prepararse.
+  Future<void> _avisarALasTeles(String eventoId) async {
+    try {
+      final canal = _canalDelAviso ??= _client.channel(kCanalDelPulso);
+      await canal
+          .sendBroadcastMessage(
+            event: kEventoDelPulso,
+            payload: avisoDeLaApariencia(
+              origen: InstalacionId.valor ?? 'pc',
+              eventoId: eventoId,
+            ),
+          )
+          .timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('El aviso de la apariencia a las teles no salió: $e');
+    }
   }
 
   /// Los segundos de la llegada cambiados a mano esa noche (`TiemposAMano`):
@@ -148,6 +177,8 @@ class TotemConfigRepository {
           llegadaCaminoSeg: camino,
         ),
       );
+    } else {
+      unawaited(_avisarALasTeles(eventoId));
     }
   }
 

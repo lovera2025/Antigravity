@@ -19,6 +19,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:arguello_events/features/common/widgets/foto_de_lo_quieto.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/tele/giro_de_la_tele.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
@@ -90,6 +92,7 @@ Future<(ui.Image, Uint8List)> _dibujar(
   double? entrada,
   double? acomodo,
   double? camino,
+  int? cuartos,
 }) async {
   final clave = GlobalKey();
   final cfg = TotemConfig.defaults('e0000000-0000-4000-8000-000000000001');
@@ -99,9 +102,12 @@ Future<(ui.Image, Uint8List)> _dibujar(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(fontFamily: FuentesPlano.linea),
+        // En la tele, la app entera va adentro del giro (`GiroDeLaApp`), también
+        // acostada (0).
+        builder: (context, child) => TeleGirada(cuartos: cuartos, child: child!),
         home: EscenaTotem(
           // Cada escena se arma de cero: que no se lleve la foto de la otra.
-          key: ValueKey('$enLaTele-$momento-$estilo-${salon == null}-$entrada-$acomodo-$camino'),
+          key: ValueKey('$enLaTele-$momento-$estilo-${salon == null}-$entrada-$acomodo-$camino-$cuartos'),
           estilo: estilo,
           cfg: cfg,
           plano: salon,
@@ -185,19 +191,45 @@ Future<void> _guardarDiferencias(
   });
 }
 
-/// Las dos lado a lado, con su rótulo, a la mitad (960 × 540 cada una).
+/// [img] (la pantalla acostada, girada [cuartos]) vuelta a como la ve quien
+/// mira: parada, 1080 × 1920.
+Future<(ui.Image, Uint8List)> _comoSeVe(WidgetTester tester, ui.Image img, int cuartos) async {
+  late ui.Image derecha;
+  late Uint8List bytes;
+  await tester.runAsync(() async {
+    final grabador = ui.PictureRecorder();
+    final c = Canvas(grabador);
+    final parada = cuartos.isOdd;
+    final ancho = parada ? img.height : img.width;
+    final alto = parada ? img.width : img.height;
+    // Lo girado en el sentido del reloj, de vuelta para el otro lado.
+    c.translate(ancho / 2, alto / 2);
+    c.rotate(-cuartos * math.pi / 2);
+    c.translate(-img.width / 2, -img.height / 2);
+    c.drawImage(img, Offset.zero, Paint());
+    derecha = await grabador.endRecording().toImage(ancho, alto);
+    bytes = (await derecha.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+  });
+  return (derecha, bytes);
+}
+
+/// Las dos lado a lado, con su rótulo, a la mitad (960 × 540 cada una, o
+/// 540 × 960 paradas).
 Future<void> _guardarLadoALado(
   WidgetTester tester,
   ui.Image hoy,
   ui.Image tele,
-  String archivo,
-) async {
+  String archivo, {
+  String rotuloHoy = 'HOY',
+  String rotuloTele = 'EN LA TELE',
+}) async {
   await tester.runAsync(() async {
-    const ancho = 960.0, alto = 540.0, hueco = 24.0, arriba = 44.0;
+    final ancho = hoy.width / 2, alto = hoy.height / 2;
+    const hueco = 24.0, arriba = 44.0;
     final grabador = ui.PictureRecorder();
     final c = Canvas(grabador);
     c.drawRect(
-      const Rect.fromLTWH(0, 0, ancho * 2 + hueco, alto + arriba),
+      Rect.fromLTWH(0, 0, ancho * 2 + hueco, alto + arriba),
       Paint()..color = const Color(0xFF0E0E10),
     );
     void rotulo(String t, double x) {
@@ -205,12 +237,12 @@ Future<void> _guardarLadoALado(
             ..pushStyle(ui.TextStyle(color: const Color(0xFFE8E6F0)))
             ..addText(t))
           .build()
-        ..layout(const ui.ParagraphConstraints(width: ancho));
+        ..layout(ui.ParagraphConstraints(width: ancho));
       c.drawParagraph(p, Offset(x + 8, 8));
     }
 
-    rotulo('HOY', 0);
-    rotulo('EN LA TELE', ancho + hueco);
+    rotulo(rotuloHoy, 0);
+    rotulo(rotuloTele, ancho + hueco);
     for (final (i, img) in [hoy, tele].indexed) {
       c.drawImageRect(
         img,
@@ -272,7 +304,7 @@ void main() {
           salon: s.armado,
           momento: momento,
           llegada: llegada,
-          enLaTele: true,
+          enLaTele: true, cuartos: 0,
         );
         expect(FotoDeLoQuieto.fotosSacadas, greaterThan(fotosAntes),
             reason: 'en la tele, el salón y las letras van en foto');
@@ -292,6 +324,82 @@ void main() {
         } else {
           expect(d.promedio, lessThan(1), reason: 'el salón entero a la vista');
           expect(d.aLaVista, lessThan(0.002), reason: 'casi ningún píxel distinto a la vista');
+        }
+      }
+    });
+  }
+
+  // **La tele parada** (25-nov-2026): girada un cuarto de vuelta (y tres,
+  // colgada para el otro lado), tiene que verse igual que el tótem en una
+  // pantalla parada de 1080 × 1920. Se dibuja en la pantalla acostada de la
+  // tele, se vuelve a poner derecha y se compara píxel por píxel con el tótem
+  // dibujado parado: así se ve que lo quieto en foto quedó alineado a los
+  // píxeles también girado (`FotoDeLoQuieto._corrimiento`).
+  for (final (i, s) in salones.indexed) {
+    testWidgets('${s.nombre}: parada, se ve igual en la tele', (tester) async {
+      addTearDown(tester.view.reset);
+      tester.view.devicePixelRatio = _pixeles;
+      final llegada = _llegadaA(_masLejos(s));
+      for (final momento in _Momento.values) {
+        for (final cuartos in [1, 3]) {
+          if (cuartos == 3 && momento != _Momento.acomodada) continue;
+          // El tótem en una pantalla parada, como hoy (una PC con el monitor
+          // parado).
+          tester.view.physicalSize = _tele.flipped * _pixeles;
+          final (parada, bytesParada) = await _dibujar(tester,
+              salon: s.armado, momento: momento, llegada: llegada, enLaTele: false);
+          // Lo mismo como en la tele (lo quieto en foto, el fondo a la mitad),
+          // en una pantalla parada, sin girar nada.
+          final (_, bytesSinGirar) = await _dibujar(tester,
+              salon: s.armado, momento: momento, llegada: llegada, enLaTele: true, cuartos: 0);
+          // En la tele acostada, girado, y vuelto a poner derecho.
+          tester.view.physicalSize = _tele * _pixeles;
+          final (girada, _) = await _dibujar(tester,
+              salon: s.armado, momento: momento, llegada: llegada, enLaTele: true, cuartos: cuartos);
+          expect(girada.width, 1920, reason: 'la tele manda la imagen acostada');
+          final (tele, bytesTele) = await _comoSeVe(tester, girada, cuartos);
+          expect(tele.width, parada.width);
+          expect(tele.height, parada.height);
+          final nombre = '${s.nombre} · parada${cuartos == 3 ? ' para el otro lado' : ''} · ${momento.name}';
+          // Lo que cambia por girar: nada.
+          final g = _comparar(bytesSinGirar, bytesTele);
+          resumen.add('$nombre · girar: difiere ${g.promedio.toStringAsFixed(2)} de 255 en '
+              'promedio; a la vista, ${(g.aLaVista * 100).toStringAsFixed(3)} % de los píxeles');
+          // Contra hoy: solo el fondo a la mitad, que parada se ve arriba del
+          // salón (acostada lo tapa el salón entero).
+          final d = _comparar(bytesParada, bytesTele);
+          resumen.add('$nombre · contra hoy: difiere ${d.promedio.toStringAsFixed(2)} de 255 en '
+              'promedio; a la vista, ${(d.aLaVista * 100).toStringAsFixed(2)} % de los píxeles');
+          final archivo = 'Parada_Salon_${i + 1}_${momento.name}${cuartos == 3 ? '_otro_lado' : ''}';
+          await _guardarLadoALado(tester, parada, tele, '$archivo.png',
+              rotuloHoy: 'PANTALLA PARADA, HOY', rotuloTele: 'LA TELE GIRADA');
+          if (g.aLaVista > 0.0002) {
+            await _guardarDiferencias(tester, bytesSinGirar, bytesTele, parada.width,
+                parada.height, '${archivo}_diferencias_por_girar.png');
+            // Dónde: los renglones con puntos distintos.
+            final renglones = <int, int>{};
+            for (var p = 0; p < bytesTele.length; p += 4) {
+              var maximo = 0;
+              for (var k = 0; k < 3; k++) {
+                final x = (bytesTele[p + k] - bytesSinGirar[p + k]).abs();
+                if (x > maximo) maximo = x;
+              }
+              if (maximo > 24) {
+                final y = (p ~/ 4) ~/ parada.width;
+                renglones[y] = (renglones[y] ?? 0) + 1;
+              }
+            }
+            final y0 = renglones.keys.isEmpty ? 0 : renglones.keys.reduce(math.min);
+            String px(Uint8List b, int x, int y) {
+              final p = (y * parada.width + x) * 4;
+              return '${b[p]},${b[p + 1]},${b[p + 2]}';
+            }
+            resumen.add('  renglones: $renglones · en x=540: '
+                '${[for (var y = y0 - 2; y <= y0 + 2; y++) '$y: ${px(bytesSinGirar, 540, y)} → ${px(bytesTele, 540, y)}'].join(' | ')}');
+          }
+          expect(g.promedio, lessThan(0.2), reason: '$nombre: girar no cambia nada');
+          expect(g.aLaVista, lessThan(0.0005), reason: '$nombre: girar no cambia nada');
+          expect(d.promedio, lessThan(4), reason: '$nombre: contra hoy, solo el fondo');
         }
       }
     });
@@ -320,7 +428,7 @@ void main() {
           salon: s.armado, momento: momento, llegada: llegada, enLaTele: false,
           entrada: entrada, acomodo: acomodo, camino: camino);
       final (tele, bytesTele) = await _dibujar(tester,
-          salon: s.armado, momento: momento, llegada: llegada, enLaTele: true,
+          salon: s.armado, momento: momento, llegada: llegada, enLaTele: true, cuartos: 0,
           entrada: entrada, acomodo: acomodo, camino: camino);
       final d = _comparar(bytesHoy, bytesTele);
       resumen.add('Bienvenida $nombre: difiere ${d.promedio.toStringAsFixed(2)} de 255 en '
@@ -350,7 +458,7 @@ void main() {
               enLaTele: false, estilo: estilo);
           final (tele, bytesTele) = await _dibujar(tester,
               salon: conSalon ? s.armado : null, momento: momento, llegada: llegada,
-              enLaTele: true, estilo: estilo);
+              enLaTele: true, cuartos: 0, estilo: estilo);
           final d = _comparar(bytesHoy, bytesTele);
           final nombre = '${estilo.name} ${conSalon ? 'con salón' : 'sin salón'} · '
               '${momento == _Momento.espera ? 'espera' : 'llegada'}';

@@ -43,24 +43,55 @@ enum EstadoDeLaSegunda {
 /// Sin pantalla ni base: la pantalla de la tele lo escucha.
 class ClienteDeLaTele extends ChangeNotifier {
   ClienteDeLaTele({
-    required this.eventoId,
+    required String eventoId,
     required this.numero,
     required this.alRecibirFilas,
     required this.alRecibirBienvenidas,
     this.alRecibirTiempos,
     this.tiemposAlConectar,
+    this.alPedirEscuela,
+    this.alGirar,
     this.direccionAMano,
     WebSocketChannel Function(Uri)? abrir,
     BuscaCentral? busca,
     DateTime Function()? ahora,
     this.latido = const Duration(seconds: 5),
     this.silencioMaximo = const Duration(seconds: 15),
-  })  : _abrir = abrir ?? WebSocketChannel.connect,
+  })  : _eventoId = eventoId,
+        _abrir = abrir ?? WebSocketChannel.connect,
         _busca = busca,
         _ahora = ahora ?? DateTime.now;
 
-  final String eventoId;
+  /// La escuela que muestra esta tele. Cambia sin desconectarse
+  /// ([cambiarEscuela], 25-nov-2026).
+  String _eventoId;
+  String get eventoId => _eventoId;
   final int numero;
+
+  /// La Tele 1 pide que esta tele muestre otra escuela: la pidió un celular
+  /// desde TU TELE, o contestó CAMBIAR ("La Tele 1 cambió a ESCUELA B").
+  /// [por]: quién.
+  final void Function(String eventoId, String? por)? alPedirEscuela;
+
+  /// Un celular pidió girar esta tele: "horizontal", "vertical" o
+  /// "dar_vuelta".
+  final void Function(String como)? alGirar;
+
+  /// La escuela de la Tele 1 y las que atiende, según lo último que dijo: si
+  /// la Tele 1 se apaga, esta pasa a principal y atiende las dos.
+  String? _escuelaDeLaTele1;
+  String? get escuelaDeLaTele1 => _escuelaDeLaTele1;
+  List<String> _atiende = const [];
+  List<String> get atiende => _atiende;
+
+  /// Esta tele pasa a mostrar [eventoId] (con el control, o porque se lo pidió
+  /// la Tele 1): se le cuenta a la Tele 1, sin desconectarse.
+  void cambiarEscuela(String eventoId, {String? por}) {
+    if (eventoId == _eventoId) return;
+    _eventoId = eventoId;
+    _mandar({'t': 'escuela', 'evento': eventoId, 'por': ?por});
+    if (!_cerrado) notifyListeners();
+  }
 
   /// Copia las filas en la base de esta tele (`guardarDeOtraTele`).
   final Future<void> Function(List<Map<String, dynamic>> filas) alRecibirFilas;
@@ -102,8 +133,10 @@ class ClienteDeLaTele extends ChangeNotifier {
   List<String> get manejan => _manejan;
 
   /// Los ids que se copiaron de la Tele 1 esta noche: si la Tele 1 se apaga y
-  /// esta pasa a principal, se suben.
+  /// esta pasa a principal, se suben. [copiadasDe]: por escuela (la Tele 1
+  /// manda las filas de todas las que atiende).
   final copiadas = <String>{};
+  final copiadasDe = <String, Set<String>>{};
 
   /// Desde cuándo está cortada.
   DateTime? _desde;
@@ -165,7 +198,7 @@ class ClienteDeLaTele extends ChangeNotifier {
       host: donde.direccion,
       port: donde.puerto,
       path: '/tele',
-      queryParameters: {'evento': eventoId, 'n': '$numero'},
+      queryParameters: {'evento': _eventoId, 'n': '$numero'},
     );
     final WebSocketChannel canal;
     try {
@@ -175,6 +208,10 @@ class ClienteDeLaTele extends ChangeNotifier {
       return;
     }
     _canal = canal;
+    // Si no conecta, el error llega también por `ready`: sin esto quedaba sin
+    // atender en cada reintento (lo mostró el emulador el 26-nov). Lo atiende
+    // el `onError` de abajo.
+    unawaited(canal.ready.catchError((Object _) {}));
     _ultimaNoticia = _ahora();
     _escucha = canal.stream.listen(
       _mensaje,
@@ -244,6 +281,9 @@ class ClienteDeLaTele extends ChangeNotifier {
       case 'central':
         final c = json['codigo'];
         _codigo = c is String ? c : null;
+        final e = json['evento'];
+        _escuelaDeLaTele1 = e is String && e.length == 36 ? e : null;
+        _leerEscuelas(json['escuelas']);
         _intentos = 0;
         _desde = null;
         _poner(EstadoDeLaSegunda.conectada);
@@ -258,7 +298,27 @@ class ClienteDeLaTele extends ChangeNotifier {
         final n = json['nombres'];
         _manejan = n is List ? [for (final x in n) if (x is String) x] : const [];
         if (!_cerrado) notifyListeners();
+      case 'escuelas':
+        _leerEscuelas(json['escuelas']);
+      case 'escuela':
+        // La Tele 1 pide que esta tele pase a otra escuela (25-nov-2026).
+        final e = json['evento'];
+        final por = json['por'];
+        if (e is! String || e.length != 36 || e == _eventoId) return;
+        _eventoId = e;
+        alPedirEscuela?.call(e, por is String ? por : null);
+        if (!_cerrado) notifyListeners();
+      case 'girar':
+        final como = json['como'];
+        if (como is String) alGirar?.call(como);
     }
+  }
+
+  void _leerEscuelas(Object? lista) {
+    if (lista is! List) return;
+    _atiende = [for (final x in lista) if (x is String && x.length == 36) x];
+    // La primera es la de la Tele 1.
+    if (_atiende.isNotEmpty) _escuelaDeLaTele1 = _atiende.first;
   }
 
   /// De a una tanda por vez, en el orden en que llegaron: primero cómo se
@@ -286,7 +346,10 @@ class ClienteDeLaTele extends ChangeNotifier {
         await alRecibirFilas(lista);
         for (final f in lista) {
           final id = f['id'];
-          if (id is String) copiadas.add(id);
+          if (id is! String) continue;
+          copiadas.add(id);
+          final evento = f['evento_id'];
+          (copiadasDe[evento is String ? evento : _eventoId] ??= <String>{}).add(id);
         }
       } catch (e) {
         debugPrint('La Tele 2 no pudo copiar la lista: $e');

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,18 +12,23 @@ import '../../models/evento.dart';
 import '../barra/services/pantalla_despierta.dart';
 import '../common/providers/admin_provider.dart';
 import '../recepcion/central/central_provider.dart';
+import '../recepcion/central/codigo_central.dart';
 import '../recepcion/central/pedidos_de_la_puerta.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../recepcion/providers/sin_internet_provider.dart';
 import '../recepcion/services/puerta_del_evento.dart';
 import '../recepcion/widgets/linea_sin_internet.dart';
+import '../totem/providers/totem_config_provider.dart';
 import '../totem/widgets/totem_local.dart';
 import 'aparato_de_la_tele.dart';
 import 'calidad_de_la_tele.dart';
 import 'cliente_de_la_tele.dart';
 import 'fluidez.dart';
+import 'giro_de_la_tele.dart';
 import 'modo_tele.dart';
+import 'preparar_las_fiestas.dart';
 import 'red_de_la_tele.dart';
+import 'teclado_de_la_tele.dart';
 import 'tele_segunda_provider.dart';
 
 const _oro = Color(0xFFD4AF37);
@@ -76,15 +82,18 @@ class PantallaTele extends ConsumerStatefulWidget {
   ConsumerState<PantallaTele> createState() => _PantallaTeleState();
 }
 
-enum _Vista { menu, celulares, fiestas }
+enum _Vista { menu, celulares, fiestas, confirmarEscuela, girar, pin, direccion, dosRedes }
 
 class _PantallaTeleState extends ConsumerState<PantallaTele> {
   final _foco = FocusNode(debugLabel: 'tele');
   final _fluidez = Fluidez();
   _Vista? _vista;
-  String? _elegida;
   String? _prendidaPara;
+
+  /// La escuela que se eligió en LA FIESTA, esperando el OK del cartel.
+  Evento? _porElegir;
   StreamSubscription<Set<String>>? _bajadas;
+  StreamSubscription<Set<String>>? _apariencias;
   Timer? _relectura;
   Timer? _ayuda;
   bool _mostrarAyuda = true;
@@ -166,12 +175,16 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         if (mounted) setState(() => _aparato = a);
       }));
     }
-    unawaited(ModoTeleGuardado.fiestaElegida().then((id) {
-      if (mounted && id != null) setState(() => _elegida = id);
-    }));
     // Lo que se bajó en la oficina con internet: una fiesta nueva aparece sola.
     _bajadas = ref.read(syncEngineProvider).cambiosBajadosStream.listen((t) {
       if (t.contains('eventos')) ref.invalidate(eventosActivosProvider);
+    });
+    // Lo que se guardó en Personalizar, en otra PC: la tele lo vuelve a leer
+    // al momento (25-nov-2026).
+    _apariencias = ref.read(syncEngineProvider).aparienciasCambiadasStream.listen((ids) {
+      for (final id in ids) {
+        ref.invalidate(totemConfigProvider(id));
+      }
     });
     _relectura = Timer.periodic(const Duration(minutes: 10), (_) {
       ref.invalidate(eventosActivosProvider);
@@ -188,29 +201,54 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     _fluidez.dispose();
     _mirarFluidez?.cancel();
     unawaited(_bajadas?.cancel());
+    unawaited(_apariencias?.cancel());
     _relectura?.cancel();
     _ayuda?.cancel();
     _borrarManejan?.cancel();
+    _borrarAviso?.cancel();
     _foco.dispose();
     super.dispose();
+  }
+
+  /// El cartel chico: "Caro pasó la Tele 1 a ESCUELA B" (25-nov-2026).
+  String? _aviso;
+  Timer? _borrarAviso;
+
+  void _mostrarAviso(String texto) {
+    setState(() => _aviso = texto);
+    _borrarAviso?.cancel();
+    _borrarAviso = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => _aviso = null);
+    });
   }
 
   /// Prende la central (Tele 1) o se engancha a la Tele 1 (Tele 2) para la
   /// fiesta de esta noche, una vez por fiesta y papel.
   void _asegurar(String eventoId, ModoTele modo) {
-    final clave = '$eventoId|${modo.papel.name}|${modo.direccionAMano}';
+    // Con la noche: pasado el mediodía, la central sale con el código nuevo.
+    final clave = '$eventoId|${modo.papel.name}|${modo.direccionAMano}|'
+        '${CodigoCentral.claveDeLaNoche(widget.ahora())}';
     if (_prendidaPara == clave) return;
     _prendidaPara = clave;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (modo.papel == PapelDeLaTele.principal) {
         ref.read(teleSegundaProvider.notifier).soltar();
-        await PaginaDelCelularEnAndroid.preparar();
-        if (!mounted) return;
-        ref.invalidate(paginaDelCelularProvider);
-        await ref
-            .read(centralDeLaPuertaProvider.notifier)
-            .prender(eventoId, comoTele: true);
+        final central = ref.read(centralDeLaPuertaProvider.notifier);
+        // Prendida como tele, cambiar de escuela no la reinicia: la página
+        // del celular ya está (revisión del 26-nov: se volvía a copiar en
+        // cada cambio de escuela, antes de pasar a la otra).
+        final yaPrendida = ref.read(centralDeLaPuertaProvider);
+        if (!(yaPrendida.prendida && yaPrendida.esTele)) {
+          await PaginaDelCelularEnAndroid.preparar();
+          if (!mounted) return;
+          ref.invalidate(paginaDelCelularProvider);
+        }
+        await central.prender(eventoId, comoTele: true);
+        // Pasó a principal: la escuela de la Tele 1 que se apagó, también.
+        final otra = _atenderTambien;
+        _atenderTambien = null;
+        if (mounted && otra != null && otra != eventoId) central.atenderTambien(otra);
       } else {
         final central = ref.read(centralDeLaPuertaProvider);
         if (central.prendida) {
@@ -283,8 +321,16 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         _abrir(_Vista.menu);
       case _Vista.menu:
         _abrir(null);
+      case _Vista.pin:
+        _soltarPin(false);
+        _abrir(_Vista.menu);
+      case _Vista.confirmarEscuela:
+        _abrir(_Vista.fiestas);
       case _Vista.celulares:
       case _Vista.fiestas:
+      case _Vista.girar:
+      case _Vista.direccion:
+      case _Vista.dosRedes:
         _abrir(_Vista.menu);
     }
   }
@@ -295,11 +341,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
   Widget build(BuildContext context) {
     final modo = ref.watch(modoTeleProvider);
     if (modo == null) return const SizedBox.shrink();
+    // Todas las fiestas que vienen, listas sin internet (25-nov-2026).
+    ref.watch(prepararLasFiestasProvider);
+    // La escuela de esta tele: la cambia el control, un celular o la Tele 1.
+    final elegida = ref.watch(fiestaDeLaTeleProvider);
+    // "Caro pasó la Tele 1 a ESCUELA B": un rato, en un cartel chico.
+    ref.listen(avisoEnLaTeleProvider, (_, aviso) {
+      if (aviso != null) _mostrarAviso(aviso.$2);
+    });
     final eventos = ref.watch(eventosActivosProvider);
     final fiesta = FiestaDeLaTele.de(
       eventos.value ?? const [],
       widget.ahora(),
-      elegida: _elegida,
+      elegida: elegida,
     );
     final evento = fiesta.fiesta;
     _hayTotem = evento != null;
@@ -354,7 +408,20 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
                   bottom: 18,
                   child: _estadoAbajo(modo, central, segunda),
                 ),
-                if (_mostrarManejan && manejan.isNotEmpty && _vista == null)
+                if (_aviso != null && _vista == null)
+                  Positioned(
+                    top: 18,
+                    left: 24,
+                    right: 24,
+                    child: Center(
+                      child: _Pastilla(
+                        key: const ValueKey('tele_aviso'),
+                        texto: _aviso!,
+                        color: _oro,
+                      ),
+                    ),
+                  )
+                else if (_mostrarManejan && manejan.isNotEmpty && _vista == null)
                   Positioned(
                     top: 18,
                     right: 24,
@@ -475,11 +542,21 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
       _Vista.menu => _menu(modo, evento, central, segunda, manejan),
       _Vista.celulares => _celulares(modo, central, segunda),
       _Vista.fiestas => _fiestas(fiesta, evento),
+      _Vista.confirmarEscuela => _confirmarEscuela(modo, evento),
+      _Vista.girar => _girar(),
+      _Vista.pin => _pin(),
+      _Vista.direccion => _direccion(modo),
+      _Vista.dosRedes => _dosRedes(),
     };
+    // Con la tele parada (540 de ancho) el panel entra entero.
+    final ancho = MediaQuery.sizeOf(context).width;
+    final angosta = ancho < 640;
     return Container(
-      width: 560,
-      margin: const EdgeInsets.all(24),
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      width: math.min(560, ancho - (angosta ? 24 : 48)),
+      margin: EdgeInsets.all(angosta ? 12 : 24),
+      padding: angosta
+          ? const EdgeInsets.fromLTRB(20, 20, 20, 16)
+          : const EdgeInsets.fromLTRB(28, 24, 28, 20),
       decoration: BoxDecoration(
         color: _panel,
         borderRadius: BorderRadius.circular(24),
@@ -544,6 +621,12 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
           alElegir: () => _abrir(_Vista.fiestas),
         ),
         _Opcion(
+          key: const ValueKey('tele_girar'),
+          icono: Icons.screen_rotation_rounded,
+          texto: 'Girar la pantalla · ${Giro.nombre(ref.watch(giroDeLaTeleProvider))}',
+          alElegir: () => _abrir(_Vista.girar),
+        ),
+        _Opcion(
           key: const ValueKey('tele_fondo'),
           icono: quieto ? Icons.pause_circle_outline : Icons.play_circle_outline,
           texto: quieto ? 'Fondo quieto · tocá para animarlo' : 'Fondo animado · tocá para dejarlo quieto',
@@ -563,7 +646,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             texto: modo.direccionAMano == null
                 ? 'Escribir la dirección de la Tele 1'
                 : 'Tele 1 en ${modo.direccionAMano} · cambiar',
-            alElegir: () => _escribirDireccion(modo),
+            alElegir: () => _abrir(_Vista.direccion),
           ),
           _Opcion(
             key: const ValueKey('tele_pasar_a_principal'),
@@ -572,6 +655,12 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             alElegir: () => _pasarAPrincipal(modo),
           ),
         ],
+        _Opcion(
+          key: const ValueKey('tele_dos_redes'),
+          icono: Icons.router_outlined,
+          texto: 'Dos teles en routers separados',
+          alElegir: () => _abrir(_Vista.dosRedes),
+        ),
         // Los números, solo en la app de prueba.
         if (widget.conDiagnostico) ...[
           const SizedBox(height: 8),
@@ -623,6 +712,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     final direccion = principal ? central.direccion : segunda?.donde?.texto;
     final codigo = principal ? central.codigo : segunda?.codigo;
     final sinPagina = principal && ref.read(paginaDelCelularProvider) == null;
+    // Pasó a principal con la Tele 1 apagada: atiende también la escuela que
+    // mostraba aquella, sin tele que la salude. Sus celulares escanean este
+    // otro QR (revisión del 26-nov: no había cómo llegar a ella).
+    final otra = principal &&
+            central.enlace != null &&
+            central.atiende.length > 1 &&
+            !central.teles.any((t) => t.numero == 2 && t.conectada)
+        ? central.atiende[1]
+        : null;
+    String tituloDe(String id) {
+      final e = ref.read(eventosActivosProvider).value?.where((x) => x.id == id).firstOrNull;
+      return e == null ? 'La otra escuela' : etiquetaEventoRecepcion(e);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -649,22 +751,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
               style: _letra(18, color: _ambar),
             ),
           )
+        else if (otra == null)
+          Center(child: _qr(const ValueKey('tele_qr'), enlace, 260))
         else
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: QrImageView(
-                key: const ValueKey('tele_qr'),
-                data: enlace,
-                version: QrVersions.auto,
-                size: 260,
-                padding: EdgeInsets.zero,
-              ),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _qrConRotulo(const ValueKey('tele_qr'), enlace,
+                  'ESTA TELE · ${tituloDe(central.eventoId ?? '')}'),
+              const SizedBox(width: 24),
+              _qrConRotulo(const ValueKey('tele_qr_otra'), '${central.enlace}&t=2',
+                  'SIN TELE · ${tituloDe(otra)}'),
+            ],
           ),
         if (direccion != null && codigo != null) ...[
           const SizedBox(height: 14),
@@ -695,8 +794,53 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     );
   }
 
+  Widget _qr(Key key, String enlace, double tam) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: QrImageView(
+          key: key,
+          data: enlace,
+          version: QrVersions.auto,
+          size: tam,
+          padding: EdgeInsets.zero,
+        ),
+      );
+
+  Widget _qrConRotulo(Key key, String enlace, String rotulo) => SizedBox(
+        width: 232,
+        child: Column(
+          children: [
+            _qr(key, enlace, 200),
+            const SizedBox(height: 8),
+            Text(
+              rotulo.toUpperCase(),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _letra(15, color: _oro, negrita: true),
+            ),
+          ],
+        ),
+      );
+
   Widget _fiestas(FiestaDeLaTele fiesta, Evento? evento) {
     final lista = fiesta.todas;
+    final preparar = ref.watch(prepararLasFiestasProvider);
+    return ListenableBuilder(
+      listenable: preparar,
+      builder: (context, _) => _listaDeFiestas(lista, evento, preparar.como),
+    );
+  }
+
+  Widget _listaDeFiestas(
+    List<Evento> lista,
+    Evento? evento,
+    Map<String, ComoQuedoLaFiesta> como,
+  ) {
+    final ahora = widget.ahora();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -706,7 +850,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         Text(
           lista.isEmpty
               ? 'No hay ninguna fiesta que venga en esta tele.'
-              : 'La que muestra esta tele. Con dos teles, las dos van con la misma.',
+              : 'La que muestra esta tele. Con dos teles, cada una puede tener la suya.',
           style: _letra(16, color: Colors.white70),
         ),
         const SizedBox(height: 14),
@@ -715,12 +859,22 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             key: ValueKey('tele_fiesta_${e.id}'),
             icono: e.id == evento?.id ? Icons.check_circle_rounded : Icons.circle_outlined,
             texto: etiquetaEventoRecepcion(e),
+            // Cómo quedó para trabajar sin internet.
+            detalle: como[e.id]?.texto(ahora),
+            detalleBien: como[e.id]?.completa ?? false,
             autofocus: e.id == evento?.id || (evento == null && i == 0),
-            alElegir: () async {
-              await ModoTeleGuardado.elegirFiesta(e.id);
-              if (!mounted) return;
-              setState(() => _elegida = e.id);
-              _abrir(null);
+            alElegir: () {
+              if (e.id == evento?.id) {
+                _abrir(null);
+              } else if (evento == null) {
+                // La primera vez (más de una esta noche): sin cartel.
+                unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(e.id));
+                _abrir(null);
+              } else {
+                // Otra escuela, sin PIN, con un cartel que confirma.
+                setState(() => _porElegir = e);
+                _abrir(_Vista.confirmarEscuela);
+              }
             },
           ),
         const SizedBox(height: 8),
@@ -735,46 +889,203 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     );
   }
 
-  // ── Lo que pide el PIN ────────────────────────────────────────────────────
-
-  Future<bool> _pinDelJefe(String para) async {
-    final controlador = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1A2A),
-        title: Text(para, style: _letra(20, negrita: true)),
-        content: TextField(
-          controller: controlador,
-          autofocus: true,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: _letra(22),
-          decoration: const InputDecoration(labelText: 'PIN del jefe'),
-          onSubmitted: (_) => Navigator.of(context).pop(true),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('CANCELAR'),
+  /// Las dos teles en routers que no se ven (25-nov-2026): las dos como Tele 1,
+  /// cada una con su escuela y sus celulares.
+  Widget _dosRedes() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('DOS TELES EN ROUTERS SEPARADOS', style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 10),
+          Text(
+            'Si cada tele está en un router distinto y no se ven (la Tele 2 se queda '
+            '"buscando la Tele 1"), poné las dos como Tele 1: salí del modo tele con '
+            'el PIN y elegí Tele 1 en la otra. Cada una trabaja sola, con su escuela '
+            'y sus celulares (cada celular escanea el QR de su tele).',
+            style: _letra(16, color: Colors.white70),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('LISTO'),
+          const SizedBox(height: 10),
+          Text(
+            'Ojo: si las dos muestran la misma escuela, no se ven. Quién entró por '
+            'una puerta, la otra no lo sabe hasta que vuelve internet: una persona '
+            'podría entrar por las dos.',
+            style: _letra(16, color: _ambar),
+          ),
+          const SizedBox(height: 14),
+          _Opcion(
+            key: const ValueKey('tele_dos_redes_volver'),
+            icono: Icons.arrow_back_rounded,
+            texto: 'Volver',
+            autofocus: true,
+            alElegir: () => _abrir(_Vista.menu),
           ),
         ],
-      ),
-    );
-    final pin = controlador.text.trim();
-    controlador.dispose();
-    if (ok != true || pin.isEmpty) return false;
-    final bien = await ref.read(adminAuthProvider.notifier).esPinMaestro(pin);
-    if (!bien && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ese no es el PIN del jefe.')),
       );
+
+  /// "¿Pasar la Tele 1 a ESCUELA B?": cambiar de escuela no pide PIN (la tele
+  /// está con la cuenta del jefe), pero se confirma.
+  Widget _confirmarEscuela(ModoTele modo, Evento? actual) {
+    final nueva = _porElegir;
+    final central = ref.read(centralDeLaPuertaProvider);
+    final otra = modo.papel == PapelDeLaTele.principal
+        ? central.teles.where((t) => t.conectada && t.evento == actual?.id).isNotEmpty
+        : ref.read(teleSegundaProvider)?.escuelaDeLaTele1 == actual?.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('CAMBIAR LA ESCUELA', style: _letra(26, color: _oro, negrita: true)),
+        const SizedBox(height: 10),
+        Text(
+          nueva == null
+              ? ''
+              : '¿Pasar la ${modo.papel.nombre} a ${etiquetaEventoRecepcion(nueva)}?',
+          style: _letra(20, negrita: true),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Sus celulares pasan solos.'
+          '${otra ? ' La otra tele tiene esta misma escuela: a sus celulares se les pregunta '
+              'si la cambian también.' : ''}',
+          style: _letra(16, color: Colors.white70),
+        ),
+        const SizedBox(height: 16),
+        _Opcion(
+          key: const ValueKey('tele_escuela_cambiar'),
+          icono: Icons.swap_horiz_rounded,
+          texto: 'Cambiar',
+          autofocus: true,
+          alElegir: nueva == null
+              ? null
+              : () {
+                  unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(nueva.id));
+                  setState(() => _porElegir = null);
+                  _abrir(null);
+                },
+        ),
+        _Opcion(
+          key: const ValueKey('tele_escuela_volver'),
+          icono: Icons.arrow_back_rounded,
+          texto: 'Volver',
+          alElegir: () => _abrir(_Vista.fiestas),
+        ),
+      ],
+    );
+  }
+
+  // ── Lo que pide el PIN ────────────────────────────────────────────────────
+
+  /// El PIN que se está pidiendo: para qué, y quién espera la respuesta.
+  Completer<bool>? _esperaPin;
+  String _paraQuePin = '';
+  String? _errorDelPin;
+
+  /// El PIN del jefe, **con el teclado de la tele** (el de Google TV no gira:
+  /// con la tele parada salía acostado). Contesta true solo con el PIN bien;
+  /// Atrás o CANCELAR, false.
+  Future<bool> _pinDelJefe(String para) {
+    _soltarPin(false);
+    final espera = _esperaPin = Completer<bool>();
+    setState(() {
+      _paraQuePin = para;
+      _errorDelPin = null;
+    });
+    _abrir(_Vista.pin);
+    return espera.future;
+  }
+
+  void _soltarPin(bool bien) {
+    final espera = _esperaPin;
+    _esperaPin = null;
+    if (espera != null && !espera.isCompleted) espera.complete(bien);
+  }
+
+  Future<void> _probarPin(String pin) async {
+    if (pin.isEmpty) return;
+    final bien = await ref.read(adminAuthProvider.notifier).esPinMaestro(pin);
+    if (!mounted) return;
+    if (!bien) {
+      setState(() => _errorDelPin = 'Ese no es el PIN del jefe.');
+      return;
     }
-    return bien;
+    _abrir(_Vista.menu);
+    _soltarPin(true);
+  }
+
+  Widget _pin() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_paraQuePin.toUpperCase(), style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 6),
+          Text('PIN del jefe', style: _letra(16, color: Colors.white70)),
+          const SizedBox(height: 12),
+          TecladoDeLaTele(
+            key: ValueKey('tele_pin_$_paraQuePin'),
+            oculto: true,
+            error: _errorDelPin,
+            alEscribir: () {
+              if (_errorDelPin != null) setState(() => _errorDelPin = null);
+            },
+            alListo: _probarPin,
+            alCancelar: () {
+              _soltarPin(false);
+              _abrir(_Vista.menu);
+            },
+          ),
+        ],
+      );
+
+  // ── Girar ─────────────────────────────────────────────────────────────────
+
+  /// Horizontal · Vertical · Dar vuelta, **sin PIN**: cada tele recuerda la
+  /// suya ([GiroGuardado]).
+  Widget _girar() {
+    final giro = ref.watch(giroDeLaTeleProvider);
+    final parada = Giro.esParada(giro);
+    void poner(int cuartos) =>
+        unawaited(ref.read(giroDeLaTeleProvider.notifier).poner(cuartos));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('GIRAR LA PANTALLA', style: _letra(26, color: _oro, negrita: true)),
+        const SizedBox(height: 6),
+        Text(
+          'Vertical: para la tele colgada parada. Si se ve cabeza abajo, '
+          '"Dar vuelta". Cada tele recuerda la suya.',
+          style: _letra(16, color: Colors.white70),
+        ),
+        const SizedBox(height: 14),
+        _Opcion(
+          key: const ValueKey('tele_giro_horizontal'),
+          icono: parada ? Icons.circle_outlined : Icons.check_circle_rounded,
+          texto: 'Horizontal',
+          autofocus: !parada,
+          alElegir: () => poner(Giro.horizontal(giro)),
+        ),
+        _Opcion(
+          key: const ValueKey('tele_giro_vertical'),
+          icono: parada ? Icons.check_circle_rounded : Icons.circle_outlined,
+          texto: 'Vertical',
+          autofocus: parada,
+          alElegir: () => poner(Giro.vertical(giro)),
+        ),
+        _Opcion(
+          key: const ValueKey('tele_giro_dar_vuelta'),
+          icono: Icons.flip_camera_android_rounded,
+          texto: 'Dar vuelta (se ve cabeza abajo)',
+          alElegir: () => poner(Giro.darVuelta(giro)),
+        ),
+        const SizedBox(height: 8),
+        _Opcion(
+          key: const ValueKey('tele_girar_volver'),
+          icono: Icons.arrow_back_rounded,
+          texto: 'Volver',
+          alElegir: () => _abrir(_Vista.menu),
+        ),
+      ],
+    );
   }
 
   Future<void> _salirDelModoTele() async {
@@ -784,59 +1095,53 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     await ref.read(modoTeleProvider.notifier).poner(null);
   }
 
+  /// Al pasar a principal: la escuela que mostraba la Tele 1, para atenderla
+  /// también (25-nov-2026).
+  String? _atenderTambien;
+
+  /// "Pasar a principal" (la Tele 1 se apagó): esta tele lleva la lista y
+  /// **atiende las dos escuelas**, la suya y la que mostraba la Tele 1
+  /// (todas quedaron guardadas sin internet). Los celulares de la Tele 1
+  /// escanean el QR de esta.
   Future<void> _pasarAPrincipal(ModoTele modo) async {
     if (!await _pinDelJefe('Pasar a principal')) return;
-    await ref.read(teleSegundaProvider.notifier).soltarParaSerPrincipal();
+    final segunda = ref.read(teleSegundaProvider.notifier);
+    await segunda.soltarParaSerPrincipal();
+    _atenderTambien = segunda.escuelaDeLaTele1;
     await ref
         .read(modoTeleProvider.notifier)
         .poner(ModoTele(PapelDeLaTele.principal, fondoQuieto: modo.fondoQuieto));
     if (mounted) _abrir(_Vista.celulares);
   }
 
-  Future<void> _escribirDireccion(ModoTele modo) async {
-    final controlador = TextEditingController(text: modo.direccionAMano ?? '');
-    final texto = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1A2A),
-        title: Text('La dirección de la Tele 1', style: _letra(20, negrita: true)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'La que muestra la Tele 1 en "Sumar un celular", por ejemplo '
-              '192.168.0.10:8787. Vacía: la busca sola.',
-              style: _letra(15, color: Colors.white70),
-            ),
-            TextField(
-              controller: controlador,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              style: _letra(22),
-              onSubmitted: (v) => Navigator.of(context).pop(v),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('CANCELAR'),
+  /// La dirección de la Tele 1, **con el teclado de la tele** (el de Google TV
+  /// no gira). Vacía: la busca sola.
+  Widget _direccion(ModoTele modo) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('LA DIRECCIÓN DE LA TELE 1', style: _letra(24, color: _oro, negrita: true)),
+          const SizedBox(height: 6),
+          Text(
+            'La que muestra la Tele 1 en "Sumar un celular", por ejemplo '
+            '192.168.0.10:8787. Vacía: la busca sola.',
+            style: _letra(16, color: Colors.white70),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controlador.text),
-            child: const Text('LISTO'),
+          const SizedBox(height: 12),
+          TecladoDeLaTele(
+            key: const ValueKey('tele_teclado_direccion'),
+            inicial: modo.direccionAMano ?? '',
+            conPuntos: true,
+            alListo: (t) async {
+              final texto = t.trim();
+              _abrir(_Vista.menu);
+              await ref.read(modoTeleProvider.notifier).poner(
+                  texto.isEmpty ? modo.con(sinDireccion: true) : modo.con(direccionAMano: texto));
+            },
+            alCancelar: () => _abrir(_Vista.menu),
           ),
         ],
-      ),
-    );
-    controlador.dispose();
-    if (texto == null) return;
-    final t = texto.trim();
-    await ref
-        .read(modoTeleProvider.notifier)
-        .poner(t.isEmpty ? modo.con(sinDireccion: true) : modo.con(direccionAMano: t));
-  }
+      );
 }
 
 /// "Lista para trabajar sin internet" de la fiesta: la misma línea de
@@ -873,7 +1178,7 @@ class _Vigia extends ConsumerWidget {
 }
 
 class _Pastilla extends StatelessWidget {
-  const _Pastilla({required this.texto, required this.color});
+  const _Pastilla({super.key, required this.texto, required this.color});
   final String texto;
   final Color color;
 
@@ -898,12 +1203,18 @@ class _Opcion extends StatelessWidget {
     required this.texto,
     required this.alElegir,
     this.autofocus = false,
+    this.detalle,
+    this.detalleBien = false,
   });
 
   final IconData icono;
   final String texto;
   final VoidCallback? alElegir;
   final bool autofocus;
+
+  /// Una segunda línea, más chica (cómo quedó la fiesta sin internet).
+  final String? detalle;
+  final bool detalleBien;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -938,7 +1249,23 @@ class _Opcion extends StatelessWidget {
               Icon(icono, size: 26),
               const SizedBox(width: 14),
               // Sin color propio: el del botón (apagado si no se puede).
-              Expanded(child: Text(texto, style: GoogleFonts.outfit(fontSize: 19))),
+              Expanded(
+                child: detalle == null
+                    ? Text(texto, style: GoogleFonts.outfit(fontSize: 19))
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(texto, style: GoogleFonts.outfit(fontSize: 19)),
+                          Text(
+                            detalle!,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: detalleBien ? _verde : _ambar,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ],
           ),
         ),
