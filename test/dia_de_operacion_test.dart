@@ -15,6 +15,7 @@ import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/services/barras_del_salon.dart';
 import 'package:arguello_events/features/barra/services/fiestas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/services/fiestas_del_jefe.dart';
+import 'package:arguello_events/features/barra/widgets/aviso_de_la_noche.dart';
 import 'package:arguello_events/features/recepcion/services/vales_anulados.dart';
 
 import 'helpers/barra_en_memoria.dart' show fiestaDePrueba;
@@ -275,9 +276,15 @@ void main() {
     final sabado = fiestaDePrueba('e0000000-0000-4000-8000-000000000012', 'SÁBADO', DateTime(2026, 12, 5, 22));
 
     test('BARRA del jefe abre en la fiesta de esta noche, no en la de anoche', () {
-      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 20)).laQueAbre?.id, sabado.id);
-      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 9)).laQueAbre?.id, viernes.id,
+      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 20)).laQueAbreEnLaBarra?.id, sabado.id);
+      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 9)).laQueAbreEnLaBarra?.id, viernes.id,
           reason: 'a la mañana, la de anoche');
+    });
+
+    test('lo de fuera de la barra (ENTRADAS del cierre) abre como antes: la próxima desde ayer (26-nov)', () {
+      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 20)).laQueAbre?.id, viernes.id);
+      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 20)).elegida(null)?.id, viernes.id);
+      expect(FiestasDelJefe.de([viernes, sabado], ar(2026, 12, 5, 20)).elegida(null, enLaBarra: true)?.id, sabado.id);
     });
 
     test('la fiesta que ya pasó sigue en la lista de la barra mientras haya cajas de su noche', () {
@@ -308,9 +315,51 @@ void main() {
       expect(sigueLaNoche(guardada: deLaManana, ahora: ar(2026, 12, 4, 19), fechaDeLaFiesta: DateTime(2026, 12, 4)),
           isTrue, reason: 'prendida para probar a la mañana: vuelve la noche de la fiesta');
     });
+
+    // La revisión independiente del 26-nov: una caja de prueba abierta la misma noche en
+    // que se prendió la central la traía de vuelta para siempre.
+    test('una caja que quedó abierta la noche en que se prendió no la revive pasado el día siguiente', () {
+      final guardada = CentralGuardada(eventoId: _fiesta, desde: ar(2026, 11, 20, 17), barra: 'Barra 1');
+      final dePrueba = caja(3, ar(2026, 11, 20, 18));
+      expect(sigueLaNoche(guardada: guardada, ahora: ar(2026, 11, 21, 13), cajas: [dePrueba]), isTrue,
+          reason: 'el día siguiente, pasado el mediodía, sigue la noche de esa caja');
+      expect(sigueLaNoche(guardada: guardada, ahora: ar(2026, 11, 22, 20), cajas: [dePrueba]), isFalse,
+          reason: 'dos días después, no');
+      expect(sigueLaNoche(guardada: guardada, ahora: ar(2026, 12, 3, 20), cajas: [dePrueba]), isFalse,
+          reason: 'ni la semana siguiente, cada vez que se abre CAJAS');
+      // Una caja de la noche siguiente (una fiesta de dos noches) sí la trae, al otro día.
+      final deLaOtraNoche = caja(4, ar(2026, 11, 21, 21));
+      expect(sigueLaNoche(guardada: guardada, ahora: ar(2026, 11, 22, 14), cajas: [deLaOtraNoche]), isTrue);
+    });
+
+    test('VENDER avisa si la caja es de otra noche o si la hora de la tablet está corrida', () {
+      final delViernes = caja(1, ar(2026, 12, 4, 18));
+      expect(avisosDeLaNoche(caja: delViernes, ahora: ar(2026, 12, 5, 2)), isEmpty, reason: 'de madrugada, su noche');
+      expect(avisosDeLaNoche(caja: delViernes, ahora: ar(2026, 12, 5, 11, 59)), isEmpty);
+      final otraNoche = avisosDeLaNoche(caja: delViernes, ahora: ar(2026, 12, 5, 13));
+      expect(otraNoche, hasLength(1));
+      expect(otraNoche.single, contains('noche del Vie 04/12'));
+      // La de la mañana del día de la fiesta (probar la impresora) es de la noche anterior.
+      final deLaManana = caja(2, ar(2026, 12, 4, 11, 30));
+      expect(avisosDeLaNoche(caja: deLaManana, ahora: ar(2026, 12, 4, 21)).single, contains('noche del Jue 03/12'));
+      expect(avisosDeLaNoche(caja: delViernes, ahora: ar(2026, 12, 4, 21), relojCorrido: 75).single,
+          contains('atrasada 75 minutos'));
+      expect(avisosDeLaNoche(caja: delViernes, ahora: ar(2026, 12, 4, 21), relojCorrido: -30).single,
+          contains('adelantada 30 minutos'));
+    });
   });
 
   group('una central por barra', () {
+    // La revisión del 26-nov: el vale dice "Caja 1 · N° 0017", sin la barra; con dos
+    // "Caja 1" la puerta rechazaba un vale bueno.
+    test('cada barra tiene sus números de caja: nunca una "Caja 1" en las dos', () {
+      expect(numerosDeCaja('Barra 1'), [1, 2, 3, 4, 5, 6]);
+      expect(numerosDeCaja('Barra 2'), [7, 8, 9, 10, 11, 12]);
+      expect(numerosDeCaja(' barra 2 '), [7, 8, 9, 10, 11, 12]);
+      expect(numerosDeCaja(null), [1, 2, 3, 4, 5, 6]);
+      expect(numerosDeCaja('Barra 1').toSet().intersection(numerosDeCaja('Barra 2').toSet()), isEmpty);
+    });
+
     test('la barra se lee de la sede, como sea que esté escrita', () {
       expect(barraDe('Barra 1'), 'Barra 1');
       expect(barraDe(' barra 2 '), 'Barra 2');

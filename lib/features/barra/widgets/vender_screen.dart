@@ -22,6 +22,7 @@ import '../providers/barra_providers.dart';
 import '../services/imagen_de_producto.dart';
 import '../services/pantalla_despierta.dart';
 import '../services/productos_para_vender.dart';
+import 'aviso_de_la_noche.dart';
 import 'cerrar_caja_barra_screen.dart';
 import 'cobrar_hoja.dart';
 import 'elegir_disenio.dart';
@@ -396,6 +397,8 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
               ? Column(
                   children: [
                     const LineaDeLaCaja(),
+                    // Una caja de otra noche, o el reloj de la tablet corrido (26-nov-2026).
+                    AvisoDeLaNoche(caja: _caja),
                     // A la encargada: "la Caja 2 pide cerrar" (a una cajera común, nada).
                     AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
                     _filtros(),
@@ -411,6 +414,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                         children: [
                           // Lo que espera subir ("Todo subido") y la central de la barra.
                           const LineaDeLaCaja(),
+                          AvisoDeLaNoche(caja: _caja),
                           AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
                           _filtros(),
                           Expanded(child: _grilla(pc ? 4 : 3)),

@@ -811,7 +811,15 @@ feature; `docs/CONTEXTO_BARRA_POR_NOCHE_2026-11-25.md`, que empieza con "Para re
   (`CentralBarra.engancharConOtras`, una sola punta). **Para mandar por UDP, `mandarDatagrama`**: el `send` seguido
   de otro se perdía en Windows.
 - `PantallaDespierta` cuenta cuántas pantallas la piden (VENDER, LAS CAJAS, la tele).
-- Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (27, todas atrapadas).
+- **26-nov: revisión independiente, 9 arreglos** (el detalle en "Lo que encontró la revisión del 26-nov" del CONTEXTO):
+  **cada barra tiene sus números de caja** (`numerosDeCaja`: la 1, del 1 al 6; la 2, del 7 al 12; el vale no dice la
+  barra); el diálogo pide primero la barra; la caja vieja de otra noche se pregunta (CERRARLA PRIMERO · ABRIR LA DE
+  ESTA NOCHE) y VENDER avisa si la caja es de otra noche o la hora de la tablet está corrida (`AvisoDeLaNoche`); el
+  enganche tiene su propio id y la notebook que prende su central suelta su conexión de caja; prender, volver y
+  apagar la central van de a uno; **`FiestasDelJefe.laQueAbre` es la de antes (ENTRADAS del cierre) y la barra usa
+  `laQueAbreEnLaBarra`**. Para confirmar con el usuario: la caja abierta antes del mediodía del día de la fiesta es
+  de la noche anterior.
+- Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

@@ -6,10 +6,12 @@ import '../services/barras_del_salon.dart';
 /// Lo que se elige al abrir una caja de barra: el número y **la barra** (va en `sede`).
 typedef CajaElegida = ({int numero, String? sede});
 
-/// Abrir la caja: **el número (1 a 6) y la barra** ("Barra 1 · Barra 2", 25-nov-2026: cada
-/// barra tiene su notebook y su router, y la tablet se engancha a la central de su
-/// barra). Nada de cambio ni de turno: es de noche, y el cambio se pone después si hay
-/// (pedido del 3-nov). [barra] viene elegida: la última de este equipo.
+/// Abrir la caja: **la barra y el número** ("Barra 1 · Barra 2", 25-nov-2026: cada barra
+/// tiene su notebook y su router, y la tablet se engancha a la central de su barra). Cada
+/// barra tiene sus números (`numerosDeCaja`: la 1 de la 1 a la 6, la 2 de la 7 a la 12),
+/// así que primero va la barra. Nada de cambio ni de turno: es de noche, y el cambio se
+/// pone después si hay (pedido del 3-nov). [barra] viene elegida: la última de este
+/// equipo.
 ///
 /// Si otra caja abierta **de esta noche** ya tiene ese número, lo dice y deja seguir
 /// ([abiertas] ya viene solo con las de esta noche, `abiertasDeEstaNoche`): una caja de
@@ -23,6 +25,38 @@ Future<CajaElegida?> pedirAbrirCajaBarra(
     showDialog<CajaElegida>(
       context: context,
       builder: (_) => _AbrirCaja(fiesta: fiesta, abiertas: abiertas, barra: barraDe(barra)),
+    );
+
+/// Qué hace la cajera con su caja de otra noche que quedó abierta.
+enum ConLaCajaVieja { cerrarla, abrirOtra }
+
+/// **Su caja de otra noche sigue abierta** (26-nov-2026, la revisión independiente): esta
+/// noche no se la retoma sola (lo de esa noche va aparte), pero tampoco puede quedar
+/// abierta para siempre. CERRARLA PRIMERO la lleva a VENDER de esa caja, donde se cierra
+/// como siempre; ABRIR LA DE ESTA NOCHE sigue sin tocarla. Null: no eligió.
+Future<ConLaCajaVieja?> preguntarPorLaCajaVieja(BuildContext context, CajaBarra vieja) =>
+    showDialog<ConLaCajaVieja>(
+      context: context,
+      builder: (dialogo) => AlertDialog(
+        key: const Key('caja_vieja'),
+        title: const Text('Tenés una caja abierta de otra noche'),
+        content: Text(
+          'Tu Caja ${vieja.numeroCaja} de la noche del ${DiaDeOperacion.deLaCaja(vieja).corto} sigue '
+          'abierta. Lo de esa noche va aparte y no se suma con esta. Cerrala cuando puedas.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('caja_vieja_abrir_otra'),
+            onPressed: () => Navigator.pop(dialogo, ConLaCajaVieja.abrirOtra),
+            child: const Text('ABRIR LA DE ESTA NOCHE'),
+          ),
+          FilledButton(
+            key: const Key('caja_vieja_cerrar'),
+            onPressed: () => Navigator.pop(dialogo, ConLaCajaVieja.cerrarla),
+            child: const Text('CERRARLA PRIMERO'),
+          ),
+        ],
+      ),
     );
 
 class _AbrirCaja extends StatefulWidget {
@@ -61,21 +95,51 @@ class _AbrirCajaState extends State<_AbrirCaja> {
           children: [
             Text(widget.fiesta, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            const Text('¿Qué caja sos?'),
+            const Text('¿En qué barra?'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (var n = 1; n <= 6; n++)
+                for (final b in kBarrasDelSalon)
                   ChoiceChip(
-                    key: Key('caja_numero_$n'),
-                    label: Text('Caja $n'),
-                    selected: _numero == n,
-                    onSelected: (_) => setState(() => _numero = n),
+                    key: Key('caja_barra_${kBarrasDelSalon.indexOf(b) + 1}'),
+                    label: Text(b),
+                    selected: _barra == b,
+                    onSelected: (_) => setState(() {
+                      _barra = b;
+                      // El número de la otra barra no sirve en esta.
+                      if (_numero != null && !numerosDeCaja(b).contains(_numero)) _numero = null;
+                    }),
                   ),
               ],
             ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'La tablet se conecta con la notebook de esa barra.',
+                style: TextStyle(fontSize: 12.5),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('¿Qué caja sos?'),
+            const SizedBox(height: 8),
+            if (_barra == null)
+              const Text('Elegí primero la barra.', key: Key('caja_numero_sin_barra'))
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final n in numerosDeCaja(_barra))
+                    ChoiceChip(
+                      key: Key('caja_numero_$n'),
+                      label: Text('Caja $n'),
+                      selected: _numero == n,
+                      onSelected: (_) => setState(() => _numero = n),
+                    ),
+                ],
+              ),
             if (ocupada != null)
               Padding(
                 key: const Key('caja_numero_ocupada'),
@@ -88,29 +152,6 @@ class _AbrirCajaState extends State<_AbrirCaja> {
                   style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
                 ),
               ),
-            const SizedBox(height: 16),
-            const Text('¿En qué barra?'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final b in kBarrasDelSalon)
-                  ChoiceChip(
-                    key: Key('caja_barra_${kBarrasDelSalon.indexOf(b) + 1}'),
-                    label: Text(b),
-                    selected: _barra == b,
-                    onSelected: (_) => setState(() => _barra = b),
-                  ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'La tablet se conecta con la notebook de esa barra.',
-                style: TextStyle(fontSize: 12.5),
-              ),
-            ),
           ],
         ),
       ),

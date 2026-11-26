@@ -168,6 +168,15 @@ void main() {
   testWidgets('VENDER: el "Quedan" cuenta solo lo vendido esta noche', (tester) async {
     await montar(tester, VenderScreen(fiesta: tecnica, caja: caja1));
     expect(find.text('Quedan 7'), findsOneWidget, reason: '10 cargados, 3 vendidos esta noche (no 8 con la prueba)');
+    expect(find.byKey(const Key('vender_aviso_de_la_noche')), findsNothing, reason: 'su noche: sin aviso');
+  });
+
+  // La revisión del 26-nov: una caja de otra noche vende para esa noche, y no se veía.
+  testWidgets('VENDER con una caja de otra noche lo dice arriba', (tester) async {
+    ahora = ar(12, 5, 14);
+    await montar(tester, VenderScreen(fiesta: tecnica, caja: caja1));
+    expect(find.byKey(const Key('vender_aviso_de_la_noche')), findsOneWidget);
+    expect(find.textContaining('Esta caja es de la noche del Vie 04/12'), findsOneWidget);
   });
 
   group('BARRA del cierre de caja', () {
@@ -186,6 +195,33 @@ void main() {
       expect(texto(tester, 'cierre_barra_noche'), 'Las cajas del viernes 20 de noviembre');
       expect(find.byKey(Key('cierre_barra_caja_${deLaPrueba.id}')), findsOneWidget);
       expect(find.byKey(Key('cierre_barra_caja_${caja1.id}')), findsNothing);
+    });
+
+    // La revisión del 26-nov: con fiestas dos noches seguidas, el cierre del viernes
+    // mostraba la fiesta del sábado (la decidía la hora, no el día del cierre).
+    testWidgets('el cierre del viernes, el sábado a la tarde, muestra la fiesta del viernes', (tester) async {
+      prueba.eventos.add(fiestaDePrueba(BarraEnPrueba.id(2), 'COLEGIO DEL NORTE', DateTime(2026, 12, 5, 22)));
+      ahora = ar(12, 5, 14);
+      await montar(
+        tester,
+        SingleChildScrollView(child: SectorBarraDelCierre(isDark: false, diaDelCierre: DateTime(2026, 12, 4))),
+      );
+      expect(texto(tester, 'cierre_barra_noche'), 'Las cajas del viernes 4 de diciembre');
+      expect(find.byKey(Key('cierre_barra_caja_${caja1.id}')), findsOneWidget);
+    });
+
+    // Armado como en una PC al este de Argentina: la fecha del cierre a la medianoche UTC.
+    // Pasada por la hora de Argentina caía en la noche anterior, que también tiene cajas.
+    testWidgets('el día del cierre se lee como fecha, sin correrlo por la zona de la PC', (tester) async {
+      final del21 = await abrirCaja('lucas', 'Lucas', 2, ar(11, 21, 19), sede: 'Barra 1');
+      ahora = ar(12, 5, 14);
+      await montar(
+        tester,
+        SingleChildScrollView(child: SectorBarraDelCierre(isDark: false, diaDelCierre: DateTime.utc(2026, 11, 21))),
+      );
+      expect(texto(tester, 'cierre_barra_noche'), 'Las cajas del sábado 21 de noviembre');
+      expect(find.byKey(Key('cierre_barra_caja_${del21.id}')), findsOneWidget);
+      expect(find.byKey(Key('cierre_barra_caja_${deLaPrueba.id}')), findsNothing, reason: 'la del 20/11 es otra noche');
     });
   });
 
@@ -236,18 +272,23 @@ void main() {
       await entrar(tester, _marta, const PermisosEfectivos(barra: true), alAbrir: (_, _, c) => lista = c);
       await tester.tap(find.byKey(Key('barra_fiesta_${tecnica.id}')));
       await tester.pumpAndSettle();
+      // 26-nov: antes, le pregunta por la vieja; elige abrir la de esta noche.
+      expect(find.byKey(const Key('caja_vieja')), findsOneWidget);
+      expect(find.textContaining('Sáb 21/11'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('caja_vieja_abrir_otra')));
+      await tester.pumpAndSettle();
       expect(find.text('Abrir tu caja'), findsOneWidget, reason: 'no retoma la caja de prueba del 21/11');
+      await tester.tap(find.byKey(const Key('caja_barra_1')));
+      await tester.pump();
       await tester.tap(find.byKey(const Key('caja_numero_1')));
       await tester.pump();
       expect(find.byKey(const Key('caja_numero_ocupada')), findsNothing,
           reason: 'la Caja 1 de prueba de otra noche no avisa');
-      await tester.tap(find.byKey(const Key('caja_barra_2')));
-      await tester.pump();
       await tester.tap(find.byKey(const Key('caja_abrir')));
       await tester.pumpAndSettle();
       expect(lista, isNotNull);
       expect(lista!.id, isNot(vieja.id));
-      expect(lista!.sede, 'Barra 2');
+      expect(lista!.sede, 'Barra 1');
       expect(DiaDeOperacion.deLaCaja(lista!), const DiaDeOperacion(2026, 12, 4));
       expect(prueba.barra.cajasGuardadas.firstWhere((c) => c.id == vieja.id).abierta, isTrue,
           reason: 'nada se borra: la de prueba sigue en su día');
@@ -262,11 +303,44 @@ void main() {
       await entrar(tester, _marta, const PermisosEfectivos(barra: true), alAbrir: (_, _, c) => lista = c);
       await tester.tap(find.byKey(Key('barra_fiesta_${tecnica.id}')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('caja_numero_3')));
+      // Con la Barra 2 elegida, sus números: de la 7 a la 12 (26-nov).
+      expect(find.byKey(const Key('caja_numero_3')), findsNothing);
+      await tester.tap(find.byKey(const Key('caja_numero_9')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('caja_abrir')));
       await tester.pumpAndSettle();
       expect(lista?.sede, 'Barra 2', reason: 'venía elegida la de la vez anterior');
+      expect(lista?.numeroCaja, 9);
+    });
+
+    // La revisión del 26-nov: la lista y la caja usaban horas distintas (la del equipo y
+    // la de Argentina). El reloj de la barra da la hora UTC: a las 14 UTC son las 11 en
+    // Argentina, antes del mediodía, y la noche de la fiesta sigue.
+    testWidgets('a las 11 de la mañana de Argentina sigue la noche de la fiesta: abre su caja', (tester) async {
+      prueba.barra.cajasGuardadas.removeWhere((c) => c.id == caja1.id || c.id == caja2.id);
+      ahora = ar(12, 5, 11);
+      await entrar(tester, _marta, const PermisosEfectivos(barra: true));
+      expect(find.byKey(Key('barra_fiesta_${tecnica.id}')), findsOneWidget,
+          reason: 'hasta el mediodía de Argentina la fiesta de anoche está en la lista');
+      await tester.tap(find.byKey(Key('barra_fiesta_${tecnica.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('barra_fiesta_pasada_sin_caja')), findsNothing);
+      expect(find.text('Abrir tu caja'), findsOneWidget);
+    });
+
+    testWidgets('su caja vieja: CERRARLA PRIMERO la lleva a VENDER de esa caja (26-nov)', (tester) async {
+      prueba.barra.cajasGuardadas.removeWhere((c) => c.id == caja1.id || c.id == caja2.id);
+      final vieja = await abrirCaja(_marta, 'Marta', 1, ar(11, 21, 19));
+      ahora = ar(12, 4, 19);
+      prueba.barra.reloj = () => ahora;
+      CajaBarra? lista;
+      await entrar(tester, _marta, const PermisosEfectivos(barra: true), alAbrir: (_, _, c) => lista = c);
+      await tester.tap(find.byKey(Key('barra_fiesta_${tecnica.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('caja_vieja_cerrar')));
+      await tester.pumpAndSettle();
+      expect(find.text('Abrir tu caja'), findsNothing);
+      expect(lista?.id, vieja.id, reason: 'va a VENDER de la vieja, donde se cierra como siempre');
     });
   });
 }

@@ -84,8 +84,9 @@ void main() {
         (tester) async {
       var abiertas = await entrarYTocarLaFiesta(tester);
       expect(find.text('Abrir tu caja'), findsOneWidget, reason: 'la primera vez la abre');
-      await tester.tap(find.byKey(const Key('caja_numero_2')));
       await tester.tap(find.byKey(const Key('caja_barra_1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('caja_numero_2')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('caja_abrir')));
       await tester.pumpAndSettle();

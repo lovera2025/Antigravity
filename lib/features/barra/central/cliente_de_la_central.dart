@@ -7,6 +7,10 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'buscar_central.dart';
 import 'filas_de_la_red.dart';
 
+/// Desde cuánta diferencia con la hora de la central VENDER avisa que el reloj de la tablet
+/// está corrido (26-nov-2026).
+const kRelojCorridoMaximo = Duration(minutes: 10);
+
 /// Cómo está una caja con la central de la barra.
 enum EstadoDeLaCentral {
   /// Todavía no se la buscó (la cajera no abrió VENDER).
@@ -346,11 +350,34 @@ class ClienteDeLaCentral extends ChangeNotifier {
         if (filas is Map) await _guardar(filas);
       case 'hola':
         final c = json['cajas'];
+        var cambio = false;
         if (c is int && c != _cajas) {
           _cajas = c;
-          _avisar();
+          cambio = true;
         }
+        // La hora de la notebook: si la de esta tablet está muy corrida, sus cajas caen en
+        // otra noche (26-nov-2026, la revisión independiente). VENDER lo avisa.
+        final hora = json['hora'] is String ? DateTime.tryParse(json['hora'] as String) : null;
+        if (hora != null) {
+          final antes = relojCorrido;
+          _desfase = hora.difference(_ahora());
+          if (relojCorrido != antes) cambio = true;
+        }
+        if (cambio) _avisar();
     }
+  }
+
+  /// Cuánto adelanta la hora de la central sobre la de esta tablet, según el último latido
+  /// (negativo: la tablet va adelantada). Null: la central no la mandó (una de antes).
+  Duration? _desfase;
+
+  /// **La hora de esta tablet está corrida** contra la de la central más de
+  /// [kRelojCorridoMaximo]: cuánto, en minutos redondos (positivo: la tablet va atrasada).
+  /// Null: está bien, o no se sabe.
+  int? get relojCorrido {
+    final d = _desfase;
+    if (d == null || d.abs() <= kRelojCorridoMaximo) return null;
+    return d.inMinutes;
   }
 
   Future<void> _guardar(Map<dynamic, dynamic> filas) async {

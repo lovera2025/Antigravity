@@ -105,7 +105,8 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => const Center(child: Text('No se pudieron leer las fiestas.')),
         data: (datos) {
-          final fiesta = datos.elegida(ref.watch(fiestaElegidaDelJefeProvider));
+          // La de esta noche, si hay (25-nov-2026): la barra abre en la fiesta en curso.
+          final fiesta = datos.elegida(ref.watch(fiestaElegidaDelJefeProvider), enLaBarra: true);
           if (fiesta == null) {
             return const Center(
               key: Key('jefe_sin_fiestas'),
@@ -141,7 +142,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                       fecha: fechaConCuando(
                         fiesta.fechaEvento,
                         ref.read(relojDelJefeProvider)(),
-                        esLaQueAbre: fiesta.id == datos.laQueAbre?.id,
+                        esLaQueAbre: fiesta.id == datos.laQueAbreEnLaBarra?.id,
                       ),
                       onCambiar: datos.todas.length > 1 ? () => _cambiarFiesta(datos, fiesta, context) : null,
                     ),

@@ -10,19 +10,23 @@ borra y no hay columnas nuevas.
 ## Para retomar en otro chat
 
 **Dónde quedó (25-nov, ~16 hs, cortado por el usuario con "guardá contexto"):** la Parte 2 está programada, con sus
-tests nuevos en verde, las 27 roturas a propósito atrapadas, la prueba de punta a punta en la ventana de verdad (13
+tests nuevos en verde, las 27 roturas a propósito atrapadas (41 desde la revisión del 26-nov), la prueba de punta a punta en la ventana de verdad (13
 capturas, la huella de la base IGUAL antes y después). En la rama `claude/sleepy-jepsen-bea21a` (worktree
 `.claude/worktrees/sleepy-jepsen-bea21a`), que sale de `feature/v4.6-cierre-por-sesiones`. Commits: `995be5b` (todo lo
 de la app y sus tests) y el de este cierre (los arreglos de la búsqueda UDP, la ventana de las dos barras, las
 roturas, este CONTEXTO y CLAUDE.md). **No se publicó nada ni se subió a GitHub.**
 
+**26-nov: la revisión independiente, hecha y arreglada** (pedida por la sesión "Continuación post-6.9.4"). Un
+subagente leyó `git diff 2a0a0d2..HEAD` sin estas conclusiones y encontró 5 problemas confirmados y 6 dudosos; se
+arreglaron 9, cada uno con su test y su rotura (ver "Lo que encontró la revisión del 26-nov", abajo). **La rama
+sigue sin juntar con la feature y sin subir**: lo junta la sesión coordinadora.
+
 **Lo que sigue, en orden:**
 1. ~~La suite entera~~ **hecha: 6.257 tests, 0 fallos** (`bash tool/suite_por_tandas.sh`, 25-nov).
-2. **Una revisión independiente** (pedido de la sesión que lanzó esta, por el usuario: "que todo esto no tenga bugs"):
-   un subagente que lea el diff de la rama contra `feature/v4.6-cierre-por-sesiones` sin estas conclusiones. Lo que
-   encuentre se arregla con su test y su rotura.
+2. ~~Una revisión independiente~~ **hecha el 26-nov**, con sus 9 arreglos (abajo): la suite entera, 6.270 tests y 0
+   fallos; las 41 roturas, atrapadas.
 3. Juntar esta rama con `feature/v4.6-cierre-por-sesiones` (y la de la tele, que hace otra sesión en paralelo en otros
-   archivos) y correr la suite sobre lo junto.
+   archivos) y correr la suite sobre lo junto. **Lo hace la sesión coordinadora**, no esta.
 4. La Parte 3 (la página de la encargada en el iPhone, servida por la notebook) y la Parte 4 (el repositor y el stock
    por barra), cada una con su maqueta antes. **La Parte 4 ya la empezó la sesión "Totem pantallas orientación y
    multi-escuela"** con archivos nuevos (`datos/stock_en_la_barra.dart`, `datos/movimiento_de_stock.dart`,
@@ -34,7 +38,10 @@ roturas, este CONTEXTO y CLAUDE.md). **No se publicó nada ni se subió a GitHub
    separados; una tablet con la pantalla prendida en LAS CAJAS de madrugada; el vale de madrugada en la TP-POS58.
 
 **Lo que preguntó y se contestó:** nada quedó pendiente de él en esta parte. Para decirle: la fecha de la Técnica en la
-copia de la base (1-dic, "Planificación") contra el 4-dic que él dijo.
+copia de la base (1-dic, "Planificación") contra el 4-dic que él dijo. **Y para confirmar con él** (hallazgo 8 de la
+revisión): una caja abierta antes del mediodía del día de la fiesta (para probar la impresora) es de la noche
+anterior, como pide la regla del corte al mediodía; lo vendido con ella no suma en la noche de la fiesta. Ahora VENDER
+lo avisa y, al volver a la noche, se le pregunta por esa caja; la regla no se cambió.
 
 **Para trabajar en el worktree:** salió con finales de línea CRLF (el repo guarda LF) y eso rompía los tests que leen
 el código fuente; se pasaron a LF (contenido igual al repo). Si se vuelve a armar, repetirlo.
@@ -42,8 +49,14 @@ el código fuente; se pasaron a LF (contenido igual al repo). Si se vuelve a arm
 **Lo que tiene que saber el usuario:**
 - La caja ahora **elige su barra** al abrirse (Barra 1 · Barra 2; la última del equipo viene elegida) y la notebook
   dice de qué barra es antes de PRENDER LA CENTRAL. El texto libre "Dónde está" se fue.
-- Una caja de prueba vieja que quedó abierta **no se retoma** esa noche: se abre la de hoy y la vieja sigue en su día
-  (se ve tocando su fecha arriba de LAS CAJAS). Nadie la cierra sola: la cierra su cajera desde ese equipo si quiere.
+- **Primero la barra y después el número, y cada barra tiene sus números** (26-nov): la Barra 1, las cajas 1 a 6;
+  la Barra 2, de la 7 a la 12. El vale dice solo "Caja N · N° XXXX": con una "Caja 1" en cada barra, la puerta
+  rechazaba un vale bueno.
+- Una caja de prueba vieja que quedó abierta **no se retoma** esa noche: al tocar la fiesta, a su cajera se le
+  pregunta (26-nov): **CERRARLA PRIMERO** (va a VENDER de esa caja, donde se cierra como siempre) o **ABRIR LA DE ESTA
+  NOCHE** (la vieja sigue en su día, y se ve tocando su fecha arriba de LAS CAJAS). Nadie la cierra sola.
+- **VENDER avisa en ámbar** si la caja es de otra noche ("lo que vendas va a esa noche") o si la hora de la tablet
+  está corrida más de 10 minutos contra la de la notebook (sus cajas caerían en otra noche).
 - **Entradas de prueba en la Técnica:** en la copia de la base de esta PC (abierta por última vez el 23-nov a las
   7:37) la Técnica no tiene ninguna venta ni caja de entradas. En la barra sí: 2 cajas de prueba (10 y 11-nov) y 1
   venta, que ahora quedan en sus días. Lo que se haya probado después del 23-nov no está en esa copia. (En esa copia
@@ -103,6 +116,40 @@ el código fuente; se pasaron a LF (contenido igual al repo). Si se vuelve a arm
 - **Cortar a mano** (la dirección escrita, o separar las redes) dejaba la caja "conectada": al volver no mandaba lo
   suyo. Y una conexión rechazada (la notebook apagada) dejaba un error suelto.
 
+## Lo que encontró la revisión del 26-nov
+
+Un subagente leyó el diff de la rama sin las conclusiones de esta sesión. Lo que encontró y qué se hizo (cada arreglo
+con su test y su rotura en `tool/roturas_barra_por_noche.txt`, las que dicen "revisión 26-nov"):
+
+1. **La notebook conectada como caja a la otra central (VENDER o LAS CAJAS de la encargada) y después prendida como
+   central:** su enganche y su caja usaban el mismo id, y la otra central los echaba por turno sin fin (cada uno
+   mandando la fiesta entera). Ahora el enganche lleva su propio id (`kSufijoDelEnganche`) y, al prender la central,
+   la notebook suelta su conexión de caja de esa fiesta (`ClienteDeLaBarra.soltarSiEsDe`).
+2. **El mismo número de caja en las dos barras:** el vale no dice la barra, y la puerta rechazaba un vale bueno o no
+   marcaba uno anulado. Ahora cada barra tiene sus números (`numerosDeCaja`: 1-6 y 7-12) y el diálogo pide primero la
+   barra.
+3. **Una caja de prueba abierta la noche en que se prendió la central la traía de vuelta para siempre** y no se podía
+   cerrar hasta que pasara la fiesta. `sigueLaNoche` ahora vuelve el día siguiente solo con cajas abiertas **de
+   anoche**, y la cajera con una caja vieja tiene CERRARLA PRIMERO.
+4. **`laQueAbre` había cambiado también para ENTRADAS del cierre de caja.** Volvió a ser la de antes; la barra usa
+   `laQueAbreEnLaBarra`. Y BARRA del cierre de otro día muestra la fiesta de ese día (`FiestasDelJefe.deLaNoche`), no
+   la de la hora.
+5. **El día del cierre se pasaba dos veces por la hora de Argentina** (en una PC con otra zona, el cierre del 4-dic
+   miraba el 3): ahora va como fecha (`delCalendario`).
+6. **Tocar PRENDER mientras la central volvía sola** podía dejar una central a medio cerrar contestando con un puerto
+   muerto, o dos centrales: prender, volver y apagar van de a uno, en orden (`_enOrden`).
+7. **Una tablet con el reloj corrido** pone su caja en otra noche: la central manda su hora en cada latido y VENDER
+   lo avisa (`relojCorrido`, más de 10 minutos). No se corrige solo.
+8. **Una caja abierta antes del mediodía del día de la fiesta es de la noche anterior:** es la regla pedida; VENDER lo
+   avisa y se pregunta por esa caja al volver a la noche. **Para confirmar con el usuario.**
+9. **La lista de la barra y abrir la caja usaban la hora del equipo y no la de Argentina:** ahora la de Argentina.
+
+**No se tocaron** (quedan anotados): 10, una central de una versión anterior (sin barra) sirve a cualquier tablet y no
+se engancha con la nueva, y en una fiesta con una sola barra la caja que elige la otra barra espera 10 s más tras un
+corte; 11, el cortafuegos de una notebook recién instalada (el instalador abre el TCP 8797-8806 y el UDP 8777 de
+entrada por programa; la respuesta a la búsqueda de la notebook es la respuesta a lo que ella mandó): a mirar con los
+aparatos.
+
 ## Cómo se probó
 
 - Tests nuevos: `test/dia_de_operacion_test.dart` (el mediodía, la medianoche, el cambio de mes y de año, la zona;
@@ -112,8 +159,19 @@ el código fuente; se pasaron a LF (contenido igual al repo). Si se vuelve a arm
   (las dos centrales de verdad por la red de esta PC: separadas, juntas, cortadas y vueltas a juntar, el OK de la
   encargada de una barra a la otra, la tablet que se pasa a la otra central, la notebook que se reinicia).
 - **Roturas a propósito:** `bash tool/romper_una_regla.sh tool/roturas_barra_por_noche.txt`, 27 reglas: las 27 las
-  atrapa un test.
-- **La suite entera: 6.257 tests, 0 fallos** (`bash tool/suite_por_tandas.sh`).
+  atrapa un test. **El 26-nov, 14 más** (las de la revisión, "revisión 26-nov, N"): **41, todas atrapadas**. La del
+  día del cierre (5) no la atrapaba el primer test (la noche corrida no tenía cajas y caía en la misma): el test
+  quedó con cajas en las dos noches.
+- **Los tests de la revisión del 26-nov:** en `test/dia_de_operacion_test.dart` (los números de cada barra, la
+  central que no vuelve para siempre, los avisos de VENDER, ENTRADAS del cierre como antes),
+  `test/barra_por_noche_pantallas_test.dart` (la caja vieja con sus dos botones, la Barra 2 con la 9, VENDER con una
+  caja de otra noche, el cierre del viernes con dos fiestas seguidas, el día del cierre en otra zona, las 11 de la
+  mañana de Argentina), `test/central_barra_provider_test.dart` (la notebook que suelta su conexión de caja, prender
+  mientras vuelve sola) y `test/dos_barras_con_su_central_test.dart` (la caja con el id de la notebook no choca con el
+  enganche, la hora corrida de la tablet).
+- **La suite entera: 6.257 tests, 0 fallos** (`bash tool/suite_por_tandas.sh`, 25-nov); **con los arreglos de la
+  revisión, 6.270 tests, 0 fallos** (26-nov). `flutter analyze`: nada en lo tocado (el único error, en
+  `tool/celulares_muestra_test.dart`, es de la puerta y de antes: su `prender` no tiene `comoTele`).
 - **La prueba de punta a punta, con el mouse, en la ventana de verdad:** `flutter run -d windows -t
   tool/dos_barras_prueba.dart` (o compilarla con `flutter build windows --debug -t …` y abrir el exe). Pone lado a
   lado la tablet de la Barra 1 (Marta), su notebook, la encargada (Romi, en el wifi de la Barra 1), la tablet de la

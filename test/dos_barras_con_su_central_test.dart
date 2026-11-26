@@ -46,7 +46,7 @@ Future<(int, int)> dosPuertosLibres() async {
 
 /// Una notebook: su barra en memoria, su central y lo que contesta a la búsqueda.
 class _Notebook {
-  _Notebook(this.equipo, this.barraDelSalon, this.puertoBusqueda)
+  _Notebook(this.equipo, this.barraDelSalon, this.puertoBusqueda, {this.ahora})
       : barra = BarraEnMemoria()..equipo = equipo {
     barra.reloj = () => DateTime.now().toUtc();
   }
@@ -55,6 +55,9 @@ class _Notebook {
   final String barraDelSalon;
   final int puertoBusqueda;
   final BarraEnMemoria barra;
+
+  /// La hora de la notebook (null: la de esta PC).
+  final DateTime Function()? ahora;
 
   /// A qué puertos pregunta su enganche: con la otra red "junta", también al de la otra.
   final preguntaA = <int>[];
@@ -65,7 +68,7 @@ class _Notebook {
     preguntaA
       ..clear()
       ..add(puertoBusqueda);
-    final c = CentralBarra(eventoId: _fiesta, barra: barra, barraDelSalon: barraDelSalon);
+    final c = CentralBarra(eventoId: _fiesta, barra: barra, barraDelSalon: barraDelSalon, ahora: ahora);
     final puerto = await c.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     final r = RespondeBusqueda(eventoId: _fiesta, puertoCentral: puerto, barra: barraDelSalon, equipo: equipo);
     await r.escuchar(puerto: puertoBusqueda, en: InternetAddress.loopbackIPv4);
@@ -265,6 +268,40 @@ void main() {
     await hasta(() => llegaron == 40, que: 'llegaron las 40 (llegaron $llegaron)', segundos: 3);
     recibe.close();
     manda.close();
+  });
+
+  // La revisión independiente del 26-nov: el enganche y una caja de la misma notebook
+  // usaban el mismo id, y la otra central los echaba por turno sin fin.
+  test('una caja con el id de la notebook conectada a la otra central no choca con el enganche', () async {
+    final caja = tablet('a-notebook', 'Encargada · Romi', 'Barra 2', [barra2.puertoBusqueda]);
+    await hasta(() => caja.cliente.conectada, que: 'la caja de la notebook A, en la central B');
+    var contar = false;
+    var cayo = 0;
+    caja.cliente.addListener(() {
+      if (contar && !caja.cliente.conectada) cayo++;
+    });
+    juntar();
+    await hasta(() => barra1.enganchada(), que: 'A enganchada con B');
+    contar = true;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(cayo, 0, reason: 'B no echa a la caja por el enganche');
+    expect(barra1.enganchada(), isTrue);
+    expect(caja.cliente.conectada, isTrue);
+  });
+
+  test('la tablet sabe si su hora está corrida contra la de la notebook', () async {
+    final (p, _) = await dosPuertosLibres();
+    final adelantada = _Notebook('c-notebook', 'Barra 1', p,
+        ahora: () => DateTime.now().add(const Duration(minutes: 75)));
+    await adelantada.prender();
+    addTearDown(adelantada.apagar);
+    final atrasada = tablet('tablet-c', 'Caja 3', 'Barra 1', [p]);
+    final bien = tablet('tablet-a', 'Caja 1', 'Barra 1', [barra1.puertoBusqueda]);
+    await hasta(() => atrasada.cliente.relojCorrido != null, que: 'la tablet ve la hora de la notebook');
+    expect(atrasada.cliente.relojCorrido, inInclusiveRange(74, 75), reason: 'atrasada una hora y cuarto');
+    await hasta(() => bien.cliente.conectada, que: 'la otra conectada');
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(bien.cliente.relojCorrido, isNull, reason: 'con la misma hora no hay nada que avisar');
   });
 
   test('el OK de la encargada cruza de una barra a la otra', () async {

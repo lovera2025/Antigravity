@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/ar_time.dart';
 import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
@@ -53,12 +54,25 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
       // caja, sea de la noche que sea, y no se abren cajas nuevas. Si no, solo su caja de
       // esta noche (25-nov-2026): una de prueba de otro día que quedó abierta sigue
       // aparte, en su día, y esta noche se abre una nueva.
-      final yaPaso = laFiestaYaPaso(fiesta, ahora);
+      // En hora de Argentina, como la noche de la caja: con la zona del equipo mal puesta,
+      // la lista y la caja no se contradicen (26-nov-2026).
+      final yaPaso = laFiestaYaPaso(fiesta, ArTime.toAr(ahora));
       var caja = await barra.cajaAbierta(
         eventoId: fiesta.id,
         operadorId: op.id,
         desdeLaNoche: yaPaso ? null : DiaDeOperacion.de(ahora),
       );
+      if (caja == null && !yaPaso) {
+        // Su caja de otra noche que quedó abierta (una de prueba): no se retoma sola, pero
+        // se le ofrece cerrarla, así no queda abierta para siempre (26-nov-2026).
+        final vieja = await barra.cajaAbierta(eventoId: fiesta.id, operadorId: op.id);
+        if (vieja != null) {
+          if (!mounted) return;
+          final que = await preguntarPorLaCajaVieja(context, vieja);
+          if (que == null) return;
+          if (que == ConLaCajaVieja.cerrarla) caja = vieja;
+        }
+      }
       if (caja == null) {
         if (yaPaso) {
           if (mounted) {
@@ -138,7 +152,8 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
     final app = ref.watch(appRoleProvider);
     final fiestas = ref.watch(fiestasDeLaBarraProvider);
     final siguen = ref.watch(fiestasQueSiguenProvider).value ?? const FiestasQueSiguen();
-    final ahora = ref.watch(relojDeLaBarraProvider)();
+    // En hora de Argentina, como en _abrir y la lista (26-nov-2026).
+    final ahora = ArTime.toAr(ref.watch(relojDeLaBarraProvider)());
     final puesta = ref.watch(puestaAlDiaBarraProvider);
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;

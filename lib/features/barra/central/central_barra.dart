@@ -65,6 +65,9 @@ class CajaConectada {
       );
 }
 
+/// Lo que se le agrega al id de la notebook para su enganche con otra central.
+const kSufijoDelEnganche = '-central';
+
 /// Cómo está el enganche de esta central con la de la otra barra (25-nov-2026).
 @immutable
 class EngancheConOtra {
@@ -100,7 +103,8 @@ class EngancheConOtra {
 /// JSON que llevan su tipo en `t`:
 /// - de la caja: `{t:'filas', filas:{tabla:[fila…]}}` y `{t:'hola', ventas, otros}` (el
 ///   latido, con lo que tiene sin subir a la nube);
-/// - de la central: `{t:'filas', …}` y `{t:'hola', cajas}` (cuántas cajas están conectadas).
+/// - de la central: `{t:'filas', …}` y `{t:'hola', cajas, hora}` (cuántas cajas están
+///   conectadas, y la hora de la notebook para que la tablet vea si su reloj está corrido).
 ///
 /// Solo atiende a su fiesta: una caja de otra fiesta se cierra con 4001.
 ///
@@ -193,7 +197,10 @@ class CentralBarra {
     if (_puente != null) return;
     final puente = ClienteDeLaCentral(
       eventoId: eventoId,
-      equipo: equipo,
+      // Su propio id, distinto del de esta notebook: si en esta notebook quedara también
+      // una caja conectada a la otra central, la otra no los confunde ni los echa por turno
+      // (cierra la conexión anterior del mismo equipo; 26-nov-2026).
+      equipo: '$equipo$kSufijoDelEnganche',
       nombreCaja: 'Central${barraDelSalon == null ? '' : ' · $barraDelSalon'}',
       barra: _barra,
       barraDeLaCaja: barraDelSalon,
@@ -381,7 +388,12 @@ class CentralBarra {
             otros: otros is int ? otros : 0,
           ),
         );
-        conexion.mandar(jsonEncode({'t': 'hola', 'cajas': conectadas}));
+        // Con la hora de la notebook: la tablet ve si su reloj está corrido (26-nov-2026).
+        conexion.mandar(jsonEncode({
+          't': 'hola',
+          'cajas': conectadas,
+          'hora': _ahora().toUtc().toIso8601String(),
+        }));
       case 'filas':
         final filas = json['filas'];
         if (filas is Map) unawaited(_recibir(conexion, filas));

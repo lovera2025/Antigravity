@@ -66,6 +66,7 @@ void main() {
     BarraEnMemoria? deAntes,
     _GuardadoEnMemoria? guardadoDeAntes,
     DateTime Function()? reloj,
+    Future<String> Function()? elEquipo,
   }) {
     final barra = deAntes ??
         (BarraEnMemoria()
@@ -83,7 +84,7 @@ void main() {
       puertoBusquedaBarraProvider.overrideWithValue(puertoBusqueda),
       destinosBusquedaBarraProvider.overrideWithValue(() async => [InternetAddress.loopbackIPv4]),
       direccionesCentralBarraProvider.overrideWithValue(() async => ['192.168.0.10']),
-      equipoDeLaBarraProvider.overrideWithValue(() async => id),
+      equipoDeLaBarraProvider.overrideWithValue(elEquipo ?? () async => id),
       guardadoDeLaCentralProvider.overrideWithValue(guardado),
     ]);
     addTearDown(c.dispose);
@@ -174,6 +175,50 @@ void main() {
     final otraVez = equipo('notebook', deAntes: antes.barra, guardadoDeAntes: antes.guardado, reloj: () => ahora);
     await otraVez.c.read(centralDeLaBarraProvider.notifier).reanudar(_fiesta);
     expect(otraVez.c.read(centralDeLaBarraProvider).prendida, isFalse);
+  });
+
+  // La revisión independiente del 26-nov.
+  test('la notebook conectada como caja a otra central suelta esa conexión al prender la suya', () async {
+    final otra = equipo('b-notebook');
+    await otra.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta, barra: 'Barra 2');
+    final esta = equipo('a-notebook');
+    await esta.c.read(clienteDeLaBarraProvider.notifier).arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada · Romi');
+    final cliente = esta.c.read(clienteDeLaBarraProvider)!;
+    await hasta(() => cliente.conectada, que: 'LAS CAJAS de la encargada conectada a la otra central');
+    await esta.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta, barra: 'Barra 1');
+    expect(esta.c.read(centralDeLaBarraProvider).prendida, isTrue);
+    expect(esta.c.read(clienteDeLaBarraProvider), isNull,
+        reason: 'con el mismo id que su enganche, la otra central los echaba por turno');
+  });
+
+  test('prender mientras vuelve sola: de a uno, y queda la última que se pidió', () async {
+    var enCurso = 0;
+    var masALaVez = 0;
+    final notebook = equipo('notebook', elEquipo: () async {
+      enCurso++;
+      if (enCurso > masALaVez) masALaVez = enCurso;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      enCurso--;
+      return 'notebook';
+    });
+    notebook.guardado.central =
+        CentralGuardada(eventoId: _fiesta, desde: DateTime.now().toUtc(), barra: 'Barra 1');
+    final central = notebook.c.read(centralDeLaBarraProvider.notifier);
+    // Abrir CAJAS la vuelve a prender sola, y enseguida tocan PRENDER con la otra barra.
+    final vuelve = central.reanudar(_fiesta);
+    final prende = central.prender(_fiesta, barra: 'Barra 2');
+    await Future.wait([vuelve, prende]);
+    expect(masALaVez, 1, reason: 'nunca dos a medio armar');
+    final estado = notebook.c.read(centralDeLaBarraProvider);
+    expect(estado.prendida, isTrue);
+    expect(estado.barra, 'Barra 2');
+
+    final tablet = equipo('tablet-a');
+    await tablet.c
+        .read(clienteDeLaBarraProvider.notifier)
+        .arrancar(eventoId: _fiesta, nombreCaja: 'Caja 7 · Sofía', barra: 'Barra 2');
+    await hasta(() => tablet.c.read(clienteDeLaBarraProvider)!.conectada, que: 'la tablet la encuentra');
+    await hasta(() => notebook.c.read(centralDeLaBarraProvider).conectadas == 1, que: 'una sola central la ve');
   });
 
   test('en la notebook con la central prendida, VENDER no arranca otro cliente', () async {

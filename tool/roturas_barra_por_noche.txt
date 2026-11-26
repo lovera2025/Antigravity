@@ -160,3 +160,87 @@ test/dos_barras_con_su_central_test.dart
     if (_estado == EstadoDeLaCentral.conectada) {
     if (false) {
 ---
+la notebook que prende su central suelta su conexión de caja (revisión 26-nov, 1)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    ref.read(clienteDeLaBarraProvider.notifier).soltarSiEsDe(eventoId);
+
+---
+el enganche con otro id que la caja de la notebook (revisión 26-nov, 1)
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+      equipo: '$equipo$kSufijoDelEnganche',
+      equipo: equipo,
+---
+cada barra con sus números de caja (revisión 26-nov, 2)
+lib/features/barra/services/barras_del_salon.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+  final desde = i * kCajasPorBarra + 1;
+  final desde = 1;
+---
+la central no vuelve para siempre por una caja de prueba (revisión 26-nov, 3)
+lib/features/barra/central/central_barra_provider.dart
+test/dia_de_operacion_test.dart
+  return cajas.any((c) => c.abierta && DiaDeOperacion.deLaCaja(c) == anoche);
+  return cajas.any((c) => c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(noche));
+---
+se pregunta por la caja vieja de otra noche (revisión 26-nov, 3 y 8)
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+      if (caja == null && !yaPaso) {
+      if (false) {
+---
+ENTRADAS del cierre abre como antes (revisión 26-nov, 4)
+lib/features/barra/services/fiestas_del_jefe.dart
+test/dia_de_operacion_test.dart
+  Evento? get laQueAbre => lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+  Evento? get laQueAbre => laDeEstaNoche ?? lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+---
+BARRA del cierre de otro día muestra la fiesta de ese día (revisión 26-nov, 4)
+lib/features/cierre_caja/widgets/sector_barra.dart
+test/barra_por_noche_pantallas_test.dart
+            : (datos.deLaNoche(preferido) ?? datos.laQueAbreEnLaBarra);
+            : datos.laQueAbreEnLaBarra;
+---
+el día del cierre sin correrlo por la zona (revisión 26-nov, 5)
+lib/features/cierre_caja/widgets/sector_barra.dart
+test/barra_por_noche_pantallas_test.dart
+    final delCierre = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(diaDelCierre);
+    final delCierre = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(ArTime.toAr(diaDelCierre));
+---
+prender, volver a prender y apagar de a uno (revisión 26-nov, 6)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    final hecho = _enCurso.then((_) => hacer());
+    final hecho = hacer();
+---
+la central manda su hora en el latido (revisión 26-nov, 7)
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+          'hora': _ahora().toUtc().toIso8601String(),
+
+---
+la tablet compara su hora con la de la central (revisión 26-nov, 7)
+lib/features/barra/central/cliente_de_la_central.dart
+test/dos_barras_con_su_central_test.dart
+          _desfase = hora.difference(_ahora());
+          _desfase = Duration.zero;
+---
+VENDER avisa que la caja es de otra noche (revisión 26-nov, 8)
+lib/features/barra/widgets/aviso_de_la_noche.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+    if (!noche.esSinFecha && noche.isBefore(DiaDeOperacion.de(ahora)))
+    if (false)
+---
+la lista de la barra en hora de Argentina (revisión 26-nov, 9)
+lib/features/barra/providers/barra_providers.dart
+test/barra_por_noche_pantallas_test.dart
+    ArTime.toAr(ref.read(relojDeLaBarraProvider)()),
+    ref.read(relojDeLaBarraProvider)(),
+---
+abrir la caja en hora de Argentina (revisión 26-nov, 9)
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+      final yaPaso = laFiestaYaPaso(fiesta, ArTime.toAr(ahora));
+      final yaPaso = laFiestaYaPaso(fiesta, ahora);
+---

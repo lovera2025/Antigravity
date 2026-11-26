@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../models/evento.dart';
 import '../../common/services/pdf_service.dart';
@@ -58,7 +59,8 @@ final fiestasDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
   return fiestasParaLaBarra(
     eventos,
     conPrecio,
-    ref.read(relojDeLaBarraProvider)(),
+    // En hora de Argentina: la noche de una caja se cuenta así (26-nov-2026).
+    ArTime.toAr(ref.read(relojDeLaBarraProvider)()),
     conCajaAbierta: {...siguen.conSuCaja, ...siguen.conCajasDeSuNoche},
   );
 });
@@ -88,7 +90,7 @@ Future<FiestasQueSiguen> _queSiguen(Ref ref) async {
   final eventos = await ref.watch(eventosDeLaBarraProvider.future);
   final barra = ref.read(barraDeLaCajaProvider);
   final conPrecio = await barra.fiestasConPrecio();
-  final ahora = ref.read(relojDeLaBarraProvider)();
+  final ahora = ArTime.toAr(ref.read(relojDeLaBarraProvider)());
   final porDelante = {for (final e in fiestasParaLaBarra(eventos, conPrecio, ahora)) e.id};
   final conSuCaja = <String>{};
   final deSuNoche = <String>{};

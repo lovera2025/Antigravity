@@ -58,7 +58,14 @@ class _SectorBarraDelCierreState extends ConsumerState<SectorBarraDelCierre> {
     final fiestas = ref.watch(fiestasDelJefeProvider);
     final ahora = ref.watch(relojDelJefeProvider)();
     final diaDelCierre = widget.diaDelCierre;
-    final preferido = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(ArTime.toAr(diaDelCierre));
+    // El día del cierre ya es una fecha de Argentina sin la hora: va tal cual. Pasarlo de
+    // nuevo por la hora de Argentina lo corría un día en una PC con otra zona (26-nov-2026).
+    final delCierre = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(diaDelCierre);
+    // El cierre de hoy mira la noche en curso (a la mañana, la de anoche); el de otro día,
+    // la noche de ese día. Esa noche elige la fiesta y sus cajas.
+    final hoyCalendario = DiaDeOperacion.delCalendario(ArTime.toAr(ahora));
+    final preferido =
+        delCierre == null || delCierre == hoyCalendario ? DiaDeOperacion.de(ahora) : delCierre;
     return fiestas.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(24),
@@ -66,7 +73,13 @@ class _SectorBarraDelCierreState extends ConsumerState<SectorBarraDelCierre> {
       ),
       error: (_, _) => const Text('No se pudieron leer las fiestas.'),
       data: (datos) {
-        final fiesta = datos.elegida(ref.watch(fiestaElegidaDelJefeProvider));
+        // La elegida con CAMBIAR DE FIESTA; si no, la fiesta de la noche del cierre; si
+        // no hay, la de esta noche o la próxima (26-nov-2026: antes la decidía la hora, y
+        // el cierre de otro día mostraba la fiesta de hoy).
+        final id = ref.watch(fiestaElegidaDelJefeProvider);
+        final fiesta = id != null
+            ? datos.elegida(id, enLaBarra: true)
+            : (datos.deLaNoche(preferido) ?? datos.laQueAbreEnLaBarra);
         if (fiesta == null) {
           return Text(
             'Todavía no hay fiestas cargadas.',

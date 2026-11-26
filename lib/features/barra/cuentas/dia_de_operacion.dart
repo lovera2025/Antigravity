@@ -82,6 +82,11 @@ class DiaDeOperacion implements Comparable<DiaDeOperacion> {
     return DiaDeOperacion(t.year, t.month, t.day);
   }
 
+  DiaDeOperacion get anterior {
+    final t = _fecha.subtract(const Duration(days: 1));
+    return DiaDeOperacion(t.year, t.month, t.day);
+  }
+
   bool isBefore(DiaDeOperacion otro) => compareTo(otro) < 0;
 
   @override

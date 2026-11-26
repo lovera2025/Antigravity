@@ -142,21 +142,24 @@ void main() {
     expect(
       tester.widget<ButtonStyleButton>(find.byKey(const Key('caja_abrir'))).onPressed,
       isNull,
-      reason: 'sin número no abre',
+      reason: 'sin barra ni número no abre (25-nov: cada barra tiene su central)',
     );
-    await tester.tap(find.byKey(const Key('caja_numero_2')));
+    expect(find.byKey(const Key('caja_numero_sin_barra')), findsOneWidget, reason: 'primero la barra');
+    // 26-nov: cada barra tiene sus números; la Barra 2, de la 7 a la 12.
+    await tester.tap(find.byKey(const Key('caja_barra_2')));
     await tester.pump();
+    expect(find.byKey(const Key('caja_numero_2')), findsNothing);
     expect(
       tester.widget<ButtonStyleButton>(find.byKey(const Key('caja_abrir'))).onPressed,
       isNull,
-      reason: 'sin barra no abre (25-nov: cada barra tiene su central)',
+      reason: 'sin número no abre',
     );
-    await tester.tap(find.byKey(const Key('caja_barra_2')));
+    await tester.tap(find.byKey(const Key('caja_numero_8')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('caja_abrir')));
     await tester.pumpAndSettle();
     expect(lista, isNotNull);
-    expect(lista!.numeroCaja, 2);
+    expect(lista!.numeroCaja, 8);
     expect(lista!.sede, 'Barra 2');
     expect(lista!.cambioInicial, 0);
     expect(lista!.operadorNombre, 'Marta');
@@ -190,12 +193,12 @@ void main() {
     await abrir(tester, alAbrir: (_, _, caja) => lista = caja);
     await tester.tap(find.byKey(Key('barra_fiesta_${puertoViejo.id}')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('caja_barra_1')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('caja_numero_2')));
     await tester.pump();
     expect(find.byKey(const Key('caja_numero_ocupada')), findsOneWidget);
     expect(find.textContaining('Juan'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('caja_barra_1')));
-    await tester.pump();
     await tester.tap(find.byKey(const Key('caja_abrir')));
     await tester.pumpAndSettle();
     expect(lista!.numeroCaja, 2);
