@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/barra/cuentas/cuenta_barra.dart';
@@ -111,7 +113,7 @@ void main() {
 
   /// El repositor cuenta [contadas] en [lugar] con lo que sabe [visto].
   MovimientoDeStock contar(StockPorBarra visto, String lugar, String producto, int contadas,
-      {String? motivo, String equipo = _celu}) {
+      {String? motivo, String equipo = _celu, DateTime? cuando}) {
     final ajuste = visto.ajustePara(lugar, producto, contadas);
     return MovimientoDeStock.conteo(
       eventoId: _evento,
@@ -121,7 +123,7 @@ void main() {
       foto: visto.fotoDe(lugar, producto),
       ajuste: ajuste,
       motivo: motivo ?? (ajuste == 0 ? null : 'Se perdió'),
-      ahora: ahora,
+      ahora: cuando ?? ahora,
     ).conEquipo(equipo);
   }
 
@@ -702,6 +704,204 @@ void main() {
       final c = caja(1, _b1);
       expect(stock(repartos: repartos, precios: precios, cajas: [c], ventas: [vender(c, _agua, 3)]).enAviso(),
           hasLength(1));
+    });
+  });
+
+  // Lo que pidió la segunda revisión independiente (25-nov): el código ya estaba, faltaban
+  // las pruebas. Cada una está armada para que la vigile una sola regla.
+  group('LA SEGUNDA REVISIÓN', () {
+    test('dos conteos que no se conocen, a distinta hora: queda el menor, sea el primero o el segundo', () {
+      final s0 = stock();
+      final temprano = DateTime.utc(2026, 12, 4, 22, 10), tarde = DateTime.utc(2026, 12, 5, 1, 40);
+      final c = caja(1, _b1);
+      final despuesDeLosDos = vender(c, _cerveza, 3, cuando: DateTime.utc(2026, 12, 5, 2));
+      // El menor es el de más temprano…
+      final a = contar(s0, _b1, _cerveza, 50, equipo: _celu, cuando: temprano);
+      final b = contar(s0, _b1, _cerveza, 54, equipo: _otro, cuando: tarde);
+      // …o el de más tarde.
+      final x = contar(s0, _b1, _cerveza, 54, equipo: _celu, cuando: temprano);
+      final y = contar(s0, _b1, _cerveza, 50, equipo: _otro, cuando: tarde);
+      for (final movs in [
+        [a, b],
+        [b, a],
+        [x, y],
+        [y, x],
+      ]) {
+        expect(stock(movimientos: movs).en(_b1, _cerveza)!.queda, 50);
+        expect(stock(movimientos: movs, cajas: [c], ventas: [despuesDeLosDos]).en(_b1, _cerveza)!.queda, 47,
+            reason: 'lo vendido después de los dos se descuenta una vez');
+      }
+    });
+
+    test('tres conteos con un reloj corrido que se "conocen" en ronda: nunca queda sin ninguno', () {
+      // El celular C tuvo la hora adelantada y la corrigió: lo que anotó antes dice las 2,
+      // y su conteo, las 00:30. Así A "conoce" a C, B a A y C a B: cada uno parece anterior
+      // a otro. Sin el respaldo, no quedaría ningún conteo y volvería la cuenta (60).
+      MovimientoDeStock conteo(int contadas, String equipo, DateTime cuando, Map<String, String> conocia) =>
+          MovimientoDeStock.conteo(
+            eventoId: _evento,
+            productoId: _cerveza,
+            lugar: _b1,
+            contadas: contadas,
+            foto: FotoDeStock(equiposHasta: conocia),
+            ajuste: contadas - 60,
+            motivo: 'Rota',
+            ahora: cuando,
+          ).conEquipo(equipo);
+      final a = conteo(52, 'celu-a', DateTime.utc(2026, 12, 4, 23), {'celu-c': DateTime.utc(2026, 12, 5, 2).toIso8601String()});
+      final b = conteo(55, 'celu-b', DateTime.utc(2026, 12, 4, 23, 30), {'celu-a': a.createdAt});
+      final c = conteo(50, 'celu-c', DateTime.utc(2026, 12, 5, 0, 30), {'celu-b': b.createdAt});
+      for (final movs in [
+        [a, b, c],
+        [c, b, a],
+        [b, c, a],
+      ]) {
+        final s = stock(movimientos: movs);
+        expect(s.en(_b1, _cerveza)!.queda, 50, reason: 'vale el que da menos');
+        expect(s.en(_b1, _cerveza)!.porConteos, -10);
+      }
+    });
+
+    test('una venta que llegó antes que su caja: manda el número, aunque la tablet haya corrido la hora', () {
+      final c = caja(2, _b1);
+      // Las 4 primeras con la hora adelantada; después la tablet se corrigió.
+      final adelantada = DateTime.utc(2026, 12, 5, 4);
+      final previas = [for (var i = 0; i < 4; i++) vender(c, _cerveza, 1, cuando: adelantada)];
+      final quinta = vender(c, _cerveza, 1, cuando: DateTime.utc(2026, 12, 4, 22, 30));
+      // El celular tiene la quinta, pero no la caja: todavía no sabe de qué barra es.
+      final visto = stock(cajas: const [], ventas: [quinta]);
+      expect(visto.ventasSinCaja, 1);
+      expect(visto.en(_b1, _cerveza)!.queda, 60);
+      final conteo = contar(visto, _b1, _cerveza, 55);
+      expect(conteo.foto!.ventasHasta[c.id], 5);
+      final sexta = vender(c, _cerveza, 1, cuando: DateTime.utc(2026, 12, 4, 23, 40));
+      final s = stock(cajas: [c], ventas: [...previas, quinta, sexta], movimientos: [conteo]);
+      expect(s.en(_b1, _cerveza)!.queda, 54,
+          reason: 'las 5 primeras ya estaban fuera de la barra al contar; la sexta se vendió después');
+    });
+
+    test('una anulación de otro equipo que conocía al contar ya estaba hecha, aunque su hora diga después', () {
+      final c = caja(1, _b1);
+      final v = vender(c, _cerveza, 3, cuando: antes);
+      // La PC del jefe anuló con la hora adelantada.
+      final anulacion =
+          AnulacionBarra.de(v, motivo: 'Se equivocó', deviceId: 'pc-jefe', ahora: DateTime.utc(2026, 12, 5, 1));
+      final visto = stock(cajas: [c], ventas: [v], anulaciones: [anulacion]);
+      expect(visto.en(_b1, _cerveza)!.queda, 60);
+      final conteo = contar(visto, _b1, _cerveza, 60);
+      expect(conteo.foto!.conoce('pc-jefe', anulacion.createdAt), isTrue);
+      final s = stock(cajas: [c], ventas: [v], anulaciones: [anulacion], movimientos: [conteo]);
+      expect(s.en(_b1, _cerveza)!.queda, 60, reason: 'la botella ya había vuelto al contar: no se suma dos veces');
+    });
+
+    test('con un producto ya contado, el jefe no cambia su stock general ni su reparto', () {
+      final s = stock(movimientos: [contar(stock(), _b1, _cerveza, 58, motivo: 'Rota')]);
+      const frena = 'Este producto ya se contó: lo que cambie, que lo anote el repositor '
+          '(entró mercadería, reponer o faltante).';
+      expect(s.errorDelReparto(_cerveza, 250, {}), frena);
+      expect(s.errorDelReparto(_cerveza, 240, {_b2: 70}), frena);
+      expect(s.errorDelReparto(_cerveza, 240, {_b1: 60, 'barra 2': 60}), isNull,
+          reason: 'guardar sin cambiar nada siempre se puede');
+      expect(s.errorDelReparto(_speed, 96, {_b1: 30}), isNull, reason: 'otro producto, sin contar, sí');
+      // Contar el depósito también frena.
+      final d = stock(movimientos: [contar(stock(), kDeposito, _speed, 48)]);
+      expect(d.errorDelReparto(_speed, 96, {_b1: 20}), frena);
+    });
+
+    test('no se saca del reparto mientras haya ventas cuya caja no llegó (las anuladas no frenan)', () {
+      final c = caja(4, _b2);
+      final v = vender(c, _speed, 2);
+      expect(stock(cajas: const [], ventas: [v]).errorAlSacarDelReparto(_speed, _b2),
+          'Hay ventas de cajas que todavía no llegaron a este equipo: probá de nuevo en un rato.');
+      final anulada = AnulacionBarra.de(v, motivo: 'Se equivocó', ahora: ahora);
+      expect(stock(cajas: const [], ventas: [v], anulaciones: [anulada]).errorAlSacarDelReparto(_speed, _b2), isNull);
+      expect(stock(cajas: [c], ventas: [v]).errorAlSacarDelReparto(_speed, _b2), contains('no se puede sacar'));
+    });
+
+    test('el primer reparto de un producto cuenta lo que ya entró y faltó en el depósito', () {
+      final precios = [precio(_cerveza, 240), precio(_speed, 96), precio(_agua, 30)];
+      final s = stock(precios: precios, movimientos: [
+        MovimientoDeStock.entrada(
+            eventoId: _evento, productoId: _agua, cantidad: 10, deDonde: 'Trajo el jefe', ahora: ahora),
+        MovimientoDeStock.faltante(
+            eventoId: _evento, productoId: _agua, lugar: kDeposito, cantidad: 2, motivo: 'Rota', ahora: ahora),
+      ]);
+      expect(s.controla(_b1, _agua), isFalse, reason: 'todavía no se repartió');
+      expect(s.errorDelReparto(_agua, 30, {_b1: 20, _b2: 18}), isNull, reason: '30 + 10 − 2 = 38');
+      expect(s.errorDelReparto(_agua, 30, {_b1: 20, _b2: 19}), 'Hay 38: no se puede repartir 39.');
+      expect(s.errorDelReparto(_agua, 40, {_b1: 20, _b2: 28}), isNull, reason: 'subir el stock general suma');
+    });
+
+    test('dos "voy en camino" a la misma barra y producto: se ve uno solo, el más nuevo, en cualquier orden', () {
+      MovimientoDeStock avisar(String equipo, String quien, DateTime cuando) => MovimientoDeStock.enCamino(
+            eventoId: _evento,
+            productoId: _speed,
+            barra: _b2,
+            avisosPrevios: 0,
+            hechoPor: quien,
+            ahora: cuando,
+          ).conEquipo(equipo);
+      final deNico = avisar(_celu, 'Nico', DateTime.utc(2026, 12, 5, 0, 10));
+      final deSole = avisar(_otro, 'Sole', DateTime.utc(2026, 12, 5, 0, 20));
+      for (final movs in [
+        [deNico, deSole],
+        [deSole, deNico],
+      ]) {
+        final s = stock(movimientos: movs);
+        expect(s.enCamino(_b2), hasLength(1));
+        expect(s.enCaminoDe(_b2, _speed)!.quien, 'Sole');
+      }
+      // Si Sole ya repuso, queda el de Nico.
+      final repusoSole = reponer(_speed, _b2, 6, equipo: _otro, cuando: DateTime.utc(2026, 12, 5, 0, 30));
+      expect(stock(movimientos: [deSole, repusoSole, deNico]).enCaminoDe(_b2, _speed)!.quien, 'Nico');
+      // A la misma hora decide el id: el mismo en todos los equipos.
+      final otroDeNico = avisar(_celu, 'Nico', DateTime.utc(2026, 12, 5, 0, 20));
+      expect(stock(movimientos: [otroDeNico, deSole]).enCaminoDe(_b2, _speed)!.aviso.id,
+          stock(movimientos: [deSole, otroDeNico]).enCaminoDe(_b2, _speed)!.aviso.id);
+    });
+
+    test('el orden en que llegan ventas, cajas, anulaciones y movimientos no cambia nada', () {
+      final c1 = caja(1, _b1), c4 = caja(4, _b2), c5 = caja(5, null);
+      final ventas = [
+        vender(c1, _cerveza, 5, cuando: antes),
+        vender(c4, _cerveza, 3, cuando: antes),
+        vender(c1, _speed, 2),
+        vender(c4, _speed, 4, cuando: despues),
+        vender(c5, _cerveza, 1),
+        vender(c1, _cerveza, 2, cuando: despues),
+      ];
+      final anulaciones = [
+        AnulacionBarra.de(ventas[2], motivo: 'No la sirvió', deviceId: 'pc-jefe', ahora: despues),
+        AnulacionBarra.de(ventas[1], motivo: 'Se equivocó', deviceId: 'pc-jefe', ahora: antes),
+      ];
+      final repuesto = reponer(_cerveza, _b1, 12, cuando: antes);
+      final visto = stock(cajas: [c1], ventas: ventas.sublist(0, 1), movimientos: [repuesto]);
+      final movs = [
+        repuesto,
+        contar(visto, _b1, _cerveza, 66, motivo: 'Rota'),
+        reponer(_speed, _b2, 6, equipo: _otro, cuando: despues),
+        MovimientoDeStock.faltante(
+            eventoId: _evento, productoId: _speed, lugar: _b2, cantidad: 1, motivo: 'Rota', ahora: despues),
+      ];
+      String todo(StockPorBarra s) => [
+            for (final l in [kDeposito, _b1, _b2])
+              for (final p in [_cerveza, _speed]) '$l $p ${s.en(l, p)?.queda}',
+            'sin barra ${s.vendidoSinBarra}',
+            'sin caja ${s.ventasSinCaja}',
+          ].join('\n');
+      final base = stock(cajas: [c1, c4, c5], ventas: ventas, anulaciones: anulaciones, movimientos: movs);
+      expect(base.en(_b1, _cerveza)!.queda, 64, reason: 'contó 66; después se vendieron 2');
+      expect(base.en(_b2, _cerveza)!.queda, 60, reason: 'la única venta de cerveza de la Barra 2 se anuló');
+      final azar = Random(4);
+      for (var i = 0; i < 25; i++) {
+        final s = stock(
+          cajas: [c1, c4, c5]..shuffle(azar),
+          ventas: [...ventas]..shuffle(azar),
+          anulaciones: [...anulaciones]..shuffle(azar),
+          movimientos: [...movs]..shuffle(azar),
+        );
+        expect(todo(s), todo(base));
+      }
     });
   });
 

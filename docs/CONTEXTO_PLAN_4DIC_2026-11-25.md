@@ -2,9 +2,12 @@
 
 ## Para retomar en otro chat
 
-**En pausa desde el 25-nov a la tarde por la 6.9.4** (la planilla por número de mesa y DAR MESA, urgente, a
-publicar el 26-nov: `docs/CONTEXTO_v6.9.4_2026-11-25.md`). Al volver a esto, lo de la 6.9.4 ya está en esta rama;
-la base del repositor sigue donde quedó abajo.
+**26-nov: retomado después de la 6.9.4** (ya publicada; está en esta rama). Este chat coordina las sesiones en
+paralelo: **cuando el usuario dice "actualizá", se actualiza acá y se les manda lo mismo a todas** (memoria
+`actualiza-va-para-todas-las-sesiones`). El plan de esta vuelta, aprobado el 26-nov:
+`C:\Users\lover\.claude\plans\sigamos-donde-nos-quedamos-expressive-matsumoto-of-dc76a2f7-5e35-44c8-9dc7-efce16acf58a.md`
+(hasta el paso 3 de su lista, **y juntar cada rama apenas cierre su revisión**, con la suite, las roturas y el sandbox
+sobre lo junto: lo pidió él).
 
 **El plan aprobado** (25-nov, con el usuario):
 `C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-inherited-sedgewick-of-b24f55ff-68c4-4d3e-875a-b0916b95685c.md`.
@@ -14,13 +17,13 @@ quiere **todo prolijo, punto por punto, y sin bugs** ("lo importante es que todo
 
 ### Dónde está cada parte
 
-| Parte | Dónde | Estado (25-nov, tarde) |
+| Parte | Dónde | Estado (26-nov) |
 |---|---|---|
 | 0. Maquetas | acá | **Hechas y contestadas**: `docs/maqueta_encargada_iphone_y_repositor_2026-11-25.html` (`preview_start` con `maquetas`) |
-| 1. La tele | sesión aparte "La tele: girar, cada tele con su escuela, todo guardado" (`local_054d7dae…`, worktree `claude/peaceful-golick-fa7148`) | programándose; sin commits al 25-nov a la tarde |
-| 2. La barra por día de operación y la madrugada | sesión aparte "La barra por día de operación y la madrugada" (`local_c225fee6…`, worktree `claude/sleepy-jepsen-bea21a`) | programándose; sin commits al 25-nov a la tarde |
-| 3. La encargada en el iPhone por el wifi | acá, **después de la Parte 2** (toca los mismos archivos) | sin empezar |
-| 4. El repositor y el stock por barra | acá | **la base, en curso** (ver abajo) |
+| 1. La tele | sesión aparte "La tele: girar, cada tele con su escuela, todo guardado" (`local_054d7dae…`, worktree `claude/peaceful-golick-fa7148`) | programada (etapas 1 a 5); el 26-nov se le mandó cerrar sus puntos 1 a 6 (suite, ventana con dos escuelas, sandbox, capturas, roturas, revisión independiente) y avisar; **no la junta ella** |
+| 2. La barra por día de operación y la madrugada | sesión aparte "La barra por día de operación y la madrugada" (`local_c225fee6…`, worktree `claude/sleepy-jepsen-bea21a`) | programada, suite 6.257 en verde, 27 roturas, sandbox hecho; el 26-nov se le mandó la revisión independiente y avisar; **no la junta ella** |
+| 3. La encargada en el iPhone por el wifi | acá, **después de juntar la Parte 2** (toca los mismos archivos) | sin empezar |
+| 4. El repositor y el stock por barra | acá | **la base (sin pantallas) cerrada el 26-nov**: las pruebas de la segunda revisión, las roturas y el SPEC (ver abajo) |
 | 5. Publicar | con el usuario, cuando él diga | — |
 
 Las dos sesiones salieron de la rama feature (comprobado: su base es `2a0a0d2`). A las dos se les mandó el 25-nov
@@ -69,8 +72,9 @@ independiente**. Cuando terminen, sus ramas hay que juntarlas acá (preguntarle 
   listas: columnas, lo del cobro, la bajada, el orden de subida y `_tablasSinRevisarBorrados`). **El locutor pasa a la
   v84.** SQL de la nube `supabase/migrations/20261125120000_barra_stock.sql`, **sin correr**.
 - Tests: `test/stock_por_barra_test.dart`, `test/migracion_v83_test.dart`, `test/sync_tablas_v83_test.dart` (y
-  `migracion_v82_test.dart` quedó con la versión fija en 82). **97 en verde al 25-nov a la tarde.** Roturas:
-  `tool/roturas_repositor.txt` (22, todas detectadas **antes** de la segunda revisión: hay que volver a correrlas).
+  `migracion_v82_test.dart` quedó con la versión fija en 82). **106 en verde al 26-nov** (72 del stock, con el grupo
+  "LA SEGUNDA REVISIÓN"). Roturas: `tool/roturas_repositor.txt`, **31 de 31 atrapadas el 26-nov** (las 22 de antes,
+  cuatro con el texto puesto al día con el código, y 9 nuevas de la segunda revisión).
 
 **Cómo cuenta un conteo (lo más delicado; lo encontraron dos revisiones independientes):** un conteo ("quedan 40")
 guarda en `conocido` una `FotoDeStock`: **de toda la fiesta**, la venta más alta que conocía de cada caja y la fila
@@ -85,16 +89,15 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
 
 ### Lo que falta, en orden
 
-1. **Terminar lo de la segunda revisión en los tests** (el código ya está; faltan las pruebas): dos conteos que no se
-   conocen con horas distintas en los dos órdenes (tiene que quedar el menor); tres conteos con un reloj corrido
-   (nunca queda sin ninguno vigente); una venta que llegó antes que su caja (manda el número); una anulación de otro
-   equipo conocida antes de contar; el reparto frenado después de contar; sacar del reparto con ventas sin caja;
-   `errorDelReparto` sin reparto con entradas; dos avisos a la misma barra (se ve el más nuevo); un orden mezclando
-   ventas, cajas y anulaciones. Después, **las roturas otra vez** (agregar las de esta revisión) y **una tercera
-   revisión independiente**.
-2. Actualizar la sección de conteos del SPEC con lo de arriba.
-3. **Al juntar la Parte 2** (lo contestó esa sesión el 25-nov; rama `claude/sleepy-jepsen-bea21a`, commit `995be5b`
-   más cambios sin commitear todavía):
+1. ~~Las pruebas de la segunda revisión, las roturas otra vez y el SPEC~~ **hechos el 26-nov** (9 pruebas nuevas,
+   ninguna encontró un error en el código; 31 de 31 roturas; la sección de conteos del SPEC al día). **La tercera
+   revisión independiente va con el paso 3**, sobre el stock ya unido con la barra por noche.
+2. **Juntar las ramas** (aprobado el 26-nov): cada una apenas cierre su revisión, primero la barra y después la tele,
+   con `git merge` acá. Sobre lo junto: conflictos, finales de línea LF, que nada nombre a un alumno real (contra
+   `build/nombres_reemplazados_2026-11-26.md`), `flutter analyze`, la suite entera, las roturas de esa parte y la
+   ventana de prueba con la huella IGUAL (`tool/dos_barras_prueba.dart`; `tool/tele_prueba.dart` con dos escuelas).
+3. **Al juntar la Parte 2 con el stock**, con la tercera revisión independiente (lo contestó esa sesión el 25-nov;
+   rama `claude/sleepy-jepsen-bea21a`, commits `995be5b`, `927c22f` y `6493a20`):
    - **La barra de cada caja:** una lista fija, `kBarrasDelSalon` (`lib/features/barra/services/barras_del_salon.dart`;
      no hay config por fiesta). La caja la elige obligatoria y se guarda tal cual en `sede`. Para leerla, `barraDe(sede)`
      (trim, sin distinguir mayúsculas; **null si no es de la lista**: las cajas viejas con texto libre). Cada equipo

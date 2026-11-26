@@ -43,20 +43,20 @@ test/stock_por_barra_test.dart
 8. lo que no conocía al contar se toma siempre como posterior (la venta se resta dos veces)
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
-          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || _cmp(v.createdAt, r.createdAt) < 0;
-          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero;
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || antes(v.deviceId, v.createdAt);
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || f.conoce(v.deviceId, v.createdAt);
 ---
 9. el número de venta no ordena: solo la hora
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
-          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || _cmp(v.createdAt, r.createdAt) < 0;
-          _cmp(v.createdAt, r.createdAt) < 0;
+          (f.ventasHasta[v.cajaBarraId] ?? 0) >= v.numero || antes(v.deviceId, v.createdAt);
+          antes(v.deviceId, v.createdAt);
 ---
 10. lo conocido de un equipo no ordena: solo la hora
-lib/features/barra/cuentas/stock_por_barra.dart
+lib/features/barra/datos/movimiento_de_stock.dart
 test/stock_por_barra_test.dart
-    if (conocido != null && _cmp(m.createdAt, conocido) <= 0) return true;
-
+    return hasta != null && compararMomentos(momento, hasta) <= 0;
+    return false;
 ---
 11. dos conteos a la vez se suman en vez de quedarse con uno
 lib/features/barra/cuentas/stock_por_barra.dart
@@ -67,8 +67,8 @@ test/stock_por_barra_test.dart
 12. un conteo que conoce al anterior no lo reemplaza
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
-    if (_sabidoAntes(a, b)) return true;
-
+      b.foto?.conoce(a.deviceId, a.createdAt) ?? false;
+      false;
 ---
 13. "voy en camino" se resuelve con reposiciones de cualquier equipo
 lib/features/barra/cuentas/stock_por_barra.dart
@@ -121,12 +121,66 @@ test/stock_por_barra_test.dart
 21. una anulación posterior al conteo no devuelve la botella
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
-          vendida: (v) => ventaAntes(v) && !anuladaAntes(v),
-          vendida: (v) => ventaAntes(v) && !anuladas.contains(v.id),
+          vendida: (v) => ventaAntes(v) && !anuladaAntes(v));
+          vendida: (v) => ventaAntes(v) && !anuladas.contains(v.id));
 ---
 22. el aviso por barra usa el de otra
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
             r.productoId: datos.stock(e.key, r.productoId, aviso: r.aviso, nombre: nombres[e.key]!),
             r.productoId: datos.stock(e.key, r.productoId, aviso: 10, nombre: nombres[e.key]!),
+---
+23. la foto no guarda lo que conocía de las anulaciones (una anulación conocida se toma por la hora)
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      anotar(a.deviceId, a.createdAt);
+
+---
+24. sin el respaldo de los relojes rotos: tres conteos en ronda no dejan ninguno
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (vigentes.isEmpty) vigentes = conteos; // relojes rotos: que no se pierda ninguno
+
+---
+25. el jefe cambia el reparto de un producto ya contado
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (cambia && _datos.tieneConteos(productoId)) {
+    if (false) {
+---
+26. se saca del reparto con ventas cuya caja no llegó
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    if (ventasSinCaja > 0) {
+    if (false) {
+---
+27. el primer reparto no cuenta lo que entró y faltó en el depósito
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+    final sinReparto = (d?.queda ?? _datos.cuentaDelDeposito(productoId)) +
+    final sinReparto = (d?.queda ?? generalAntes) +
+---
+28. dos "voy en camino" a la misma barra se ven los dos
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      enPie.putIfAbsent('$c|${a.productoId}', () => EnCamino(aviso: a, barra: nombres[c]!));
+      enPie['${a.id}'] = EnCamino(aviso: a, barra: nombres[c]!);
+---
+29. el "voy en camino" más viejo le gana al más nuevo
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+        final t = compararMomentos(b.createdAt, a.createdAt);
+        final t = compararMomentos(a.createdAt, b.createdAt);
+---
+30. de dos conteos que no se conocen gana el último que llegó, no el menor
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      queda = queda == null ? desde : math.min(queda, desde);
+      queda = desde;
+---
+31. la foto no guarda la venta más alta de cada caja
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+      hasta[v.cajaBarraId] = math.max(hasta[v.cajaBarraId] ?? 0, v.numero);
+
 ---
