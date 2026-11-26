@@ -343,6 +343,8 @@ Widget _tele(PapelDeLaTele papel, _SalonDePrueba elegido, _SalonDePrueba salonB)
   if (enAndroid || _red) mundo.leerDirecciones = direccionesDeEstaPc;
   mundo.invitados.hora = () => DateTime.now().toUtc();
   mundo.sillasPuerta.hora = () => DateTime.now().toUtc();
+  // "Preparar las fiestas" con la hora de verdad: las dos escuelas son hoy.
+  mundo.sinInternet.reloj = DateTime.now;
 
   // Las dos escuelas inventadas son hoy: cada tele arranca con la suya.
   final hoy = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);

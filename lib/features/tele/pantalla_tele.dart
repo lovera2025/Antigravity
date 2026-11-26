@@ -859,8 +859,8 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             key: ValueKey('tele_fiesta_${e.id}'),
             icono: e.id == evento?.id ? Icons.check_circle_rounded : Icons.circle_outlined,
             texto: etiquetaEventoRecepcion(e),
-            // Cómo quedó para trabajar sin internet.
-            detalle: como[e.id]?.texto(ahora),
+            // Cómo quedó para trabajar sin internet; cada una dice algo.
+            detalle: como[e.id]?.texto(ahora) ?? PrepararLasFiestas.sinPreparar(e, lista, ahora),
             detalleBien: como[e.id]?.completa ?? false,
             autofocus: e.id == evento?.id || (evento == null && i == 0),
             alElegir: () {

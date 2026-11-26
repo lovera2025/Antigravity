@@ -5,6 +5,52 @@ sandbox y darle la app de prueba para sus pruebas internas, sin publicar.
 
 ## Para retomar en otro chat
 
+**26-nov (noche): el APK de la app de verdad para la Google TV — el paso 0 del plan del 26-nov** (plan:
+`C:\Users\lover\.claude\plans\c-users-lover-desktop-plan-sp-fancy-wall-of-db314a36-8fe0-4cf2-ad8e-bd040753c86b.md`).
+Sesión aparte en la rama `claude/priceless-borg-e85cd6` (sobre la feature en `173037f`); **sin juntar con la feature, sin
+tag, sin release y sin web**: lo junta la sesión que coordina. El usuario pidió que **las pruebas las haga Claude en el
+sandbox** (no está en casa).
+1. **La nube sin las tablas del stock** (el SQL `20261125120000_barra_stock.sql` sigue **sin correr**): la app con la v83
+   **baja todo lo demás igual**. La nube contesta `PGRST205` (404) y eso **no es una caída** (`esCaidaDeLaNube`): cada
+   tabla baja por su lado y la que falta queda nombrada. Prueba nueva `test/nube_sin_las_tablas_del_stock_test.dart`
+   (`NubeDePrueba.faltan`, en `test/helpers/`): el arranque pide cada tabla del cobro y de carga y guarda lo que hay; el
+   estado dice "No bajaron: barra_stock_barras, barra_stock_movimientos" y nada más; en reposo, silencio; la red de 5
+   minutos y un aviso que nombra el stock bajan lo demás; "Lista para trabajar sin internet" queda lista. Roturas:
+   `tool/roturas_nube_sin_stock.txt`, **3 de 3**. **No hizo falta tocar el motor ni correr el SQL.**
+   - **Lo que sí cambia mientras falte ese SQL** (no se tocó; con el SQL corrido desaparece): el ícono de sincronización
+     queda en error con ese "No bajaron"; la revisión de la mora **no corre sola** en esa sesión (espera una bajada
+     entera, `_bajar`: `_tablasConFalloPull.isEmpty`; en la tele no hace falta, y así la tele no sube correcciones de
+     mora); la revisión de borrados la hace la de los 20 s en vez del arranque.
+2. **LA FIESTA sin la línea de cada escuela, en la app de prueba del emulador: la causa era la app de prueba.**
+   `tool/tele_prueba.dart` pone las escuelas con la fecha de hoy, pero "preparar las fiestas" en memoria
+   (`SinInternetEnMemoria`) usaba la hora fija de las pruebas (12-dic-2026): las daba por pasadas y no les armaba la
+   línea. Ahora `SinInternetEnMemoria.reloj` y la app de prueba le pasa la hora de verdad. **En la app de verdad había
+   una variante:** LA FIESTA lista todas las que vienen, pero se preparan solo las 10 primeras de los próximos 30 días;
+   las demás salían sin línea. Ahora cada una dice algo (`PrepararLasFiestas.sinPreparar`: "Se prepara sola cuando
+   falte un mes", "Todavía no se prepara: primero las 10 que vienen antes" o "Preparándose…"). Pruebas en
+   `preparar_las_fiestas_test` y `pantalla_tele_test`; roturas R53 y R54 en `tool/roturas_tele.txt` (atrapadas).
+   **Confirmado en el emulador `Recepcion_Tablet`** (sin ventana, `-gpu host`, la app de prueba x86_64): las dos
+   escuelas con "Lista sin internet · al día hoy 18:42" (`build/capturas_tele/Emulador_LaFiesta_26nov.png`).
+3. **El APK: `installer\dist\prueba\Junior Eventos app de verdad tele.apk`** (del checkout principal; fuera de git;
+   SHA-256 que empieza con `cc98bc1bba955054`, 116 MB). `lib/main.dart`, `ar.com.junioreventos.app`, **6.9.4 (79)** (el
+   número del `pubspec.yaml`, que no se tocó), armado con `flutter build apk --release --target-platform
+   android-arm,android-arm64` (**32 y 64 bits**), firmado con la clave de siempre (`apksigner`: CN=Junior Eventos;
+   `android/key.properties` copiado del checkout principal, fuera de git) y con la página del celular entera (145
+   archivos en `assets/puesto`, con `FontManifest.json`, los íconos y Roboto; `build/puesto` armado de cero en esta
+   carpeta). Trae una carpeta `lib/x86_64` incompleta (solo `libsqlite3` y `libdatastore_shared_counter`, de dos
+   plugins): en un aparato ARM no importa; en el emulador x86_64 se instala con `adb install --abi arm64-v8a`.
+   **En el emulador abrió hasta el login** (arm64 traducido); el registro mostró que **la nube de verdad contesta
+   `PGRST205`** por las dos tablas del stock, como la prueba, y "No bajaron: barra_stock_barras,
+   barra_stock_movimientos". Sin usuario no subió nada. Huella de la base de esta PC antes y después: **IGUAL**.
+   - Ojo: es 6.9.4 (79) con la base v83. Si en esa tele se instalara después la 6.9.4 publicada (la de la v82), la base
+     quedaría más nueva que la app: no hacerlo; la próxima versión publicada (mayor) la reemplaza bien.
+4. **Al usuario se le avisó** que es la app de verdad contra la nube de verdad (lo que marque como ingresado en una
+   escuela real queda marcado en esa fiesta: probar con una fiesta de prueba o deshacer los ingresos), y se le pidió la
+   foto de "Cómo anda" y qué no anda. "Cómo anda" está solo en la app de prueba: en la de verdad no aparece.
+
+**Lo que falta (de este paso 0):** la prueba en la Quint de verdad (la hace el usuario cuando vuelva: no está en casa);
+lo que encuentre entra en el paso 2 del plan. Juntar esta rama con la feature lo hace la sesión que coordina.
+
 **26-nov: la revisión independiente de la Parte 1, arreglada con sus pruebas y sus roturas** (sin publicar, en la misma
 rama; el detalle de cada hallazgo, abajo en "La revisión del 26-nov"). Lo pidió la sesión que coordina (la
 "Continuación post-6.9.4"): suite + `flutter analyze`, la ventana con dos escuelas, la prueba de punta a punta con la

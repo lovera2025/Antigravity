@@ -342,6 +342,28 @@ void main() {
       expect(find.textContaining('Lista sin internet · al día'), findsOneWidget);
     });
 
+    testWidgets('LA FIESTA dice algo de cada una, también de la que no se prepara '
+        '(26-nov: salía sin ninguna línea)', (tester) async {
+      final lejos = Evento(
+        id: 'e0000000-0000-4000-8000-00000000a1e0',
+        clienteId: 'c0000000-0000-4000-8000-000000000001',
+        tipo: 'Egresados',
+        fechaEvento: DateTime(2027, 1, 30),
+        estado: EstadoEvento.confirmado,
+        modalidad: 'masivo',
+      );
+      await abrir(tester, eventos: [eventoDePrueba(eventoMasivo, 'masivo'), lejos]);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(mundo.sinInternet.listasDeFiestas, [eventoMasivo],
+          reason: 'la de enero no se prepara todavía');
+      await tecla(tester, LogicalKeyboardKey.select);
+      await tester.tap(find.byKey(const ValueKey('tele_fiesta')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('Lista sin internet · al día'), findsOneWidget);
+      expect(find.text('Se prepara sola cuando falte un mes'), findsOneWidget);
+    });
+
     testWidgets('lo guardado en Personalizar en otra PC se vuelve a leer al momento', (tester) async {
       await abrir(tester);
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

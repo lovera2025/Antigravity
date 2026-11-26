@@ -49,6 +49,23 @@ void main() {
       final pocas = PrepararLasFiestas.cuales(eventos.take(5).toList(), ahora);
       expect(pocas.map((e) => e.id), [eventos[1].id, eventos[2].id, eventos[3].id]);
     });
+
+    test('LA FIESTA dice algo también de la que no se prepara (26-nov)', () {
+      final hoy = fiesta(1, DateTime(2026, 11, 23));
+      final eventos = [
+        hoy,
+        for (var i = 0; i < 9; i++) fiesta(10 + i, DateTime(2026, 11, 24 + i)),
+      ];
+      final once = fiesta(30, DateTime(2026, 12, 15)); // la 11ª del mes
+      final lejos = fiesta(31, DateTime(2027, 1, 15)); // a más de un mes
+      final todas = [...eventos, once, lejos];
+      expect(PrepararLasFiestas.sinPreparar(hoy, todas, ahora),
+          'Preparándose para trabajar sin internet…');
+      expect(PrepararLasFiestas.sinPreparar(once, todas, ahora),
+          'Todavía no se prepara: primero las 10 que vienen antes');
+      expect(PrepararLasFiestas.sinPreparar(lejos, todas, ahora),
+          'Se prepara sola cuando falte un mes');
+    });
   });
 
   group('con internet', () {
