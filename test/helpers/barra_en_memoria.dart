@@ -7,6 +7,8 @@ import 'package:arguello_events/features/barra/central/central_barra_provider.da
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
+import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
 import 'package:arguello_events/features/barra/estilos/disenio_barra.dart';
 import 'package:arguello_events/features/barra/services/imagen_de_producto.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
@@ -30,6 +32,10 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   /// Los pasos del cierre con el OK de la encargada (`barra_cierres`, v79).
   final pasosGuardados = <PasoDelCierre>[];
+
+  /// El stock por barra (v83): el reparto del jefe y lo que anota el repositor.
+  final repartosGuardados = <StockEnLaBarra>[];
+  final movimientosGuardados = <MovimientoDeStock>[];
   String equipo = 'tablet-1';
   DateTime Function() reloj = () => DateTime.utc(2026, 12, 5, 2);
 
@@ -287,6 +293,8 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
       'barra_anulaciones' => de(anulacionesGuardadas, (a) => a.id, (a) => a.toMap()),
       'barra_vales' => de(valesGuardados, (v) => v.id, (v) => v.toMap()),
       'barra_cierres' => de(pasosGuardados, (p) => p.id, (p) => p.toMap()),
+      'barra_stock_barras' => de(repartosGuardados, (r) => r.id, (r) => r.toMap()),
+      'barra_stock_movimientos' => de(movimientosGuardados, (m) => m.id, (m) => m.toMap()),
       _ => null,
     };
   }
@@ -320,6 +328,10 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
         _ponerDeOtro(valesGuardados, ValeBarra.fromMap(m), (v) => v.id);
       case 'barra_cierres':
         _ponerDeOtro(pasosGuardados, PasoDelCierre.fromMap(m), (p) => p.id);
+      case 'barra_stock_barras':
+        _ponerDeOtro(repartosGuardados, StockEnLaBarra.fromMap(m), (r) => r.id);
+      case 'barra_stock_movimientos':
+        _ponerDeOtro(movimientosGuardados, MovimientoDeStock.fromMap(m), (x) => x.id);
     }
     llegaronDeOtro++;
     return true;
@@ -334,6 +346,10 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
         ],
         'barra_vales': [for (final v in valesGuardados) if (v.eventoId == eventoId) v.toMap()],
         'barra_cierres': [for (final p in pasosGuardados) if (p.eventoId == eventoId) p.toMap()],
+        'barra_stock_barras': [for (final r in repartosGuardados) if (r.eventoId == eventoId) r.toMap()],
+        'barra_stock_movimientos': [
+          for (final x in movimientosGuardados) if (x.eventoId == eventoId) x.toMap(),
+        ],
       };
 
   @override

@@ -10,6 +10,8 @@ import 'package:arguello_events/features/barra/central/cliente_de_la_central.dar
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
+import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
 
 import 'helpers/barra_en_memoria.dart';
 
@@ -323,6 +325,28 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     expect(otra.cliente.conectada, isFalse);
     expect(central.cajas, isEmpty);
+  });
+
+  // 26-nov-2026: el stock por barra cruza por la red del salón, como las ventas.
+  test('el reparto del jefe y lo que anota el repositor llegan a todas las cajas, sin internet', () async {
+    final ahora = DateTime.now().toUtc();
+    // El jefe repartió en la notebook antes de que se conectaran las cajas.
+    final reparto = StockEnLaBarra.para(
+        eventoId: _fiesta, productoId: 'p', barra: 'Barra 1', arranque: 60, aviso: 10, ahora: ahora);
+    notebook.repartosGuardados.add(reparto);
+    final a = tablet('tablet-a', 'Caja 1 · Marta');
+    final b = tablet('tablet-b', 'Repositor · Nico');
+    await hasta(() => a.cliente.conectada && b.cliente.conectada);
+    await hasta(() => a.barra.repartosGuardados.any((r) => r.id == reparto.id), que: 'el reparto llegó a la caja');
+
+    // El repositor repone desde su celular: llega a la notebook y a la caja.
+    final repuso = MovimientoDeStock.reposicion(
+        eventoId: _fiesta, productoId: 'p', barra: 'Barra 1', cantidad: 12, hechoPor: 'Nico', ahora: ahora)
+        .conEquipo('tablet-b');
+    b.barra.movimientosGuardados.add(repuso);
+    await b.cliente.mandar('barra_stock_movimientos', repuso.id);
+    await hasta(() => a.barra.movimientosGuardados.any((m) => m.id == repuso.id), que: 'la reposición en la caja');
+    expect(notebook.movimientosGuardados.where((m) => m.id == repuso.id), hasLength(1));
   });
 
   test('la caja encuentra sola a la central, preguntando por la red', () async {

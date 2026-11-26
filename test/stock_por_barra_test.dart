@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/barra/cuentas/cuenta_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/dia_de_operacion.dart';
 import 'package:arguello_events/features/barra/cuentas/nombre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/stock_por_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
@@ -930,6 +931,47 @@ void main() {
       expect(() => reparto(_cerveza, _b1, -1), throwsArgumentError);
       expect(() => reparto(_cerveza, '  ', 3), throwsArgumentError);
       expect(() => reparto(_cerveza, _b1, 3, aviso: -1), throwsArgumentError);
+    });
+  });
+
+  // 26-nov-2026: el stock junto con la barra por noche (paso 3 del plan del 4-dic).
+  group('con la barra por noche', () {
+    test('una caja de prueba de otro día no descuenta: solo las ventas de las cajas de esa noche', () {
+      final prueba = CajaBarra.abrir(
+          eventoId: _evento, numeroCaja: 1, sede: _b1, ahora: DateTime.utc(2026, 11, 20, 22)); // 19 hs del 20-nov
+      final noche = caja(2, _b1);
+      final ventas = [
+        vender(prueba, _cerveza, 5, cuando: DateTime.utc(2026, 11, 20, 23)),
+        vender(noche, _cerveza, 2, cuando: DateTime.utc(2026, 12, 5, 4)), // 1 de la mañana
+      ];
+      final porDia = CajasPorDia.de([prueba, noche]);
+      final s = StockPorBarra.deLaNoche(
+        eventoId: _evento,
+        precios: [precio(_cerveza, 240), precio(_speed, 96)],
+        repartos: repartoDeSiempre,
+        movimientos: const [],
+        ventas: ventas,
+        anulaciones: const [],
+        cajas: porDia,
+        dia: const DiaDeOperacion(2026, 12, 4),
+      );
+      expect(s.en(_b1, _cerveza)!.queda, 58, reason: '60 de arranque menos las 2 de esa noche');
+      expect(s.ventasSinCaja, 0);
+    });
+
+    test('la barra de cada caja sale de la lista del salón: " BARRA 1 " es la Barra 1; otro texto, ninguna', () {
+      final bien = caja(1, '  BARRA 1 ');
+      final vieja = caja(2, 'Barra del fondo');
+      final s = stock(
+        // Un reparto viejo escrito a mano con el texto de la caja vieja: no la hace barra.
+        repartos: [...repartoDeSiempre, reparto(_cerveza, 'Barra del fondo', 10)],
+        cajas: [bien, vieja],
+        ventas: [vender(bien, _cerveza, 3), vender(vieja, _cerveza, 4)],
+      );
+      expect(s.en(_b1, _cerveza)!.queda, 57);
+      expect(s.en(_b2, _cerveza)!.queda, 60);
+      expect(s.en('Barra del fondo', _cerveza)!.queda, 10);
+      expect(s.vendidoSinBarra, 4, reason: 'la caja vieja no es de ninguna barra: se le avisa al jefe');
     });
   });
 }

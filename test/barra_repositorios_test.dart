@@ -7,6 +7,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/barra/datos/barra_local.dart';
+import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
+import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 
 /// Los datos de la barra en el equipo: lo que se guarda, lo que se encola para subir,
@@ -145,6 +147,24 @@ void main() {
       expect(todo['barra_cajas'], hasLength(1));
       expect(todo['barra_ventas'], hasLength(1));
       expect((await barra.filasDeLaFiesta(_otraFiesta))['barra_ventas'], isEmpty);
+    });
+
+    // 26-nov-2026: el stock por barra (v83) también cruza por la red del salón.
+    test('el reparto y lo que anota el repositor, de otro equipo, se guardan sin encolar y se mandan', () async {
+      await LocalDatabase.crearTablasV83(db);
+      final reparto = StockEnLaBarra.para(
+          eventoId: _evento, productoId: 'p', barra: 'Barra 1', arranque: 60, aviso: 10, ahora: reloj);
+      final repuso = MovimientoDeStock.reposicion(
+          eventoId: _evento, productoId: 'p', barra: 'Barra 1', cantidad: 12, hechoPor: 'Nico', ahora: reloj)
+          .conEquipo('celular-nico');
+      expect(await barra.guardarDeOtroEquipo('barra_stock_barras', reparto.toMap()), isTrue);
+      expect(await barra.guardarDeOtroEquipo('barra_stock_movimientos', repuso.toMap()), isTrue);
+      expect(await barra.guardarDeOtroEquipo('barra_stock_movimientos', repuso.toMap()), isFalse,
+          reason: 'repetida no cambia nada');
+      expect((await barra.pendientesDeLaBarra()).total, 0, reason: 'lo sube el equipo que lo hizo');
+      final todo = await barra.filasDeLaFiesta(_evento);
+      expect(todo['barra_stock_barras'], hasLength(1));
+      expect(todo['barra_stock_movimientos']!.single['id'], repuso.id);
     });
   });
 

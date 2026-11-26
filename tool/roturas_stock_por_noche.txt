@@ -1,0 +1,30 @@
+el stock de una noche cuenta solo las ventas de esa noche
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+        ventas: cajas.ventasDelDia(ventas, dia),
+        ventas: ventas,
+---
+la barra de cada caja sale de la lista del salón
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart
+        if (barraDe(c.sede) case final b?) c.id: claveDeBarra(b),
+        if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: claveDeBarra(c.sede!),
+---
+barraDe compara como todo lo que compara barras
+lib/features/barra/services/barras_del_salon.dart
+test/stock_por_barra_test.dart
+  final s = claveDeBarra(sede);
+  final s = sede.trim().toLowerCase();
+---
+lo que anota el repositor cruza por la red del salón
+lib/features/barra/central/filas_de_la_red.dart
+test/central_barra_test.dart test/barra_repositorios_test.dart
+  'barra_stock_movimientos',
+
+---
+el reparto del jefe cruza por la red del salón
+lib/features/barra/central/filas_de_la_red.dart
+test/central_barra_test.dart test/barra_repositorios_test.dart
+  'barra_stock_barras',
+
+---

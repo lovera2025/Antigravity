@@ -9,12 +9,18 @@
 ///
 /// `barra_cierres` (v79) es el pedido de cierre de la cajera y el OK de la encargada:
 /// tiene que cruzar sin internet, o una caja no cierra.
+///
+/// **El stock por barra (v83) también cruza** (26-nov-2026): el reparto del jefe y lo que
+/// anota el repositor. Sin internet, sin esto una barra no se enteraba de lo que se le
+/// repuso y seguía sin vender. Una versión que no conoce estas tablas las ignora.
 const tablasDeLaRed = [
   'barra_cajas',
   'barra_ventas',
   'barra_anulaciones',
   'barra_vales',
   'barra_cierres',
+  'barra_stock_barras',
+  'barra_stock_movimientos',
 ];
 
 /// Lo que la central y las cajas necesitan de la base del equipo. La implementan

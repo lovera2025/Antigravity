@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import '../datos/barra_repositorio.dart';
 import '../datos/movimiento_de_stock.dart';
 import '../datos/stock_en_la_barra.dart';
+import '../services/barras_del_salon.dart' show barraDe;
 import 'cierre_de_barra.dart' show ventasAnuladas;
+import 'dia_de_operacion.dart';
 import 'nombre_de_barra.dart';
 
 /// Cuánto hay de un producto en un lugar: el depósito ([kDeposito]) o una barra.
@@ -178,9 +180,12 @@ class StockPorBarra {
     final repartidos = {for (final m in reparto.values) ...m.keys};
 
     final cajasDeLaFiesta = [for (final c in cajas) if (c.eventoId == eventoId) c];
+    // La barra de cada caja sale de la lista fija del salón (`barraDe`, 26-nov-2026: la
+    // caja la elige de "Barra 1 · Barra 2"); una caja vieja con otro texto no es de
+    // ninguna barra y su venta va a `vendidoSinBarra`.
     final barraDeCaja = <String, String>{
       for (final c in cajasDeLaFiesta)
-        if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: claveDeBarra(c.sede!),
+        if (barraDe(c.sede) case final b?) c.id: claveDeBarra(b),
     };
     final idsDeCajas = {for (final c in cajasDeLaFiesta) c.id};
     final lasVentas = [for (final v in ventas) if (v.eventoId == eventoId) v];
@@ -236,6 +241,30 @@ class StockPorBarra {
       ventasSinCaja: sinCaja,
     );
   }
+
+  /// **El stock de una noche** (26-nov-2026, junto con la barra por noche): las cajas y
+  /// las ventas de esa noche ([CajasPorDia.delDia] y [CajasPorDia.ventasDelDia]); una caja
+  /// de prueba de otro día no descuenta. Los movimientos del repositor y el reparto del
+  /// jefe son de la fiesta entera. **Las pantallas usan esta, no [de].**
+  factory StockPorBarra.deLaNoche({
+    required String eventoId,
+    required Iterable<PrecioBarra> precios,
+    required Iterable<StockEnLaBarra> repartos,
+    required Iterable<MovimientoDeStock> movimientos,
+    required Iterable<VentaBarra> ventas,
+    required Iterable<AnulacionBarra> anulaciones,
+    required CajasPorDia cajas,
+    required DiaDeOperacion dia,
+  }) =>
+      StockPorBarra.de(
+        eventoId: eventoId,
+        precios: precios,
+        repartos: repartos,
+        movimientos: movimientos,
+        ventas: cajas.ventasDelDia(ventas, dia),
+        cajas: cajas.delDia(dia),
+        anulaciones: anulaciones,
+      );
 
   static String? _clave(String lugar) {
     final t = lugar.trim();
