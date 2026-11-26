@@ -97,17 +97,17 @@ Auditoría en **9 eventos masivos activos** (~636 contratos). Tras clasificar bi
 
 | Alumno | Colegio | Saldo antes → después | Patrón |
 |--------|---------|------------------------|--------|
-| **CHAMORRO AMARILLA, NEREA VICTORIA** | Colegio Nacional | $96.500 → **$120.000** | 2 cuotas + adelanto $23.500 en C3; cobro $66.500 (C3–C5). Fantasma **$23.500**. |
-| **DIAZ LEIVA, JAZMIN ANA BELEN** | Sagrado Corazón | $166.000 → **$168.000** | Cuota pura **$28.000**; C1 $30.000 (+$2.000); C3 $26.000 "Completada". Fantasma **$2.000**. |
-| **AYALA, YAMILA ITATI** | Sagrado Corazón | $170.000 → **$180.000** | Abono $10.000 C3 + $20.000 cierre. Fantasma **$10.000**. |
-| **PEREZ, PABLO ALEJANDRO** | Técnica Pinaroli | $194.444,42 → **$197.222,20** | Cuota **$27.777,78**; C1 $25.000 parcial + segundo pago; cuotas DB **2 → 1**. Fantasma **$2.777,78**. |
+| **Alumno A** | Colegio Nacional | $96.500 → **$120.000** | 2 cuotas + adelanto $23.500 en C3; cobro $66.500 (C3–C5). Fantasma **$23.500**. |
+| **Alumno B** | Sagrado Corazón | $166.000 → **$168.000** | Cuota pura **$28.000**; C1 $30.000 (+$2.000); C3 $26.000 "Completada". Fantasma **$2.000**. |
+| **Alumno C** | Sagrado Corazón | $170.000 → **$180.000** | Abono $10.000 C3 + $20.000 cierre. Fantasma **$10.000**. |
+| **Alumno D** | Técnica Pinaroli | $194.444,42 → **$197.222,20** | Cuota **$27.777,78**; C1 $25.000 parcial + segundo pago; cuotas DB **2 → 1**. Fantasma **$2.777,78**. |
 
 ### Falsos positivos (no tocar)
 
 | Alumno | Motivo |
 |--------|--------|
-| **BENITEZ GUARDERES, SANTINO** | Auditoría naive sumó **cargo canal $2.000** como cuota base. Saldo $220.000 correcto. |
-| **PEREZ, NICOLE MILAGROS** | Igual: **cargo canal $1.000** confundido con base. Saldo $194.444,42 correcto. |
+| **Alumno E** | Auditoría naive sumó **cargo canal $2.000** como cuota base. Saldo $220.000 correcto. |
+| **Alumno F** | Igual: **cargo canal $1.000** confundido con base. Saldo $194.444,42 correcto. |
 
 **Estado post-saneamiento:** 0 descuadres en las 9 instituciones activas.
 
