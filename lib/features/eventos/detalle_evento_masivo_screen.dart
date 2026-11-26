@@ -83,6 +83,7 @@ import 'widgets/link_del_delegado_ventana.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/dar_mesa_a_todos_dialog.dart';
+import 'widgets/chip_dar_mesa.dart';
 import 'widgets/chip_mesas_sillas.dart';
 import 'widgets/grupo_fiesta_toolbar.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
@@ -1528,10 +1529,10 @@ class _DetalleEventoMasivoScreenState
             ],
             if (aDarMesa.isNotEmpty) ...[
               SizedBox(width: layoutCompact ? 6 : 10),
-              _chipDarMesa(
+              ChipDarMesa(
                 cantidad: aDarMesa.length,
-                layoutCompact: layoutCompact,
-                habilitado: puedeCambiarSalon,
+                compacto: layoutCompact,
+                onTap: puedeCambiarSalon ? _darMesaATodos : null,
               ),
             ],
             if (sillasAConfirmar > 0 || _soloSillasAConfirmar) ...[
@@ -3057,67 +3058,6 @@ class _DetalleEventoMasivoScreenState
 
   /// Chip "Sillas a confirmar": cuántas familias tienen que elegir dónde van sus
   /// sillas extra. Tocarlo deja en la grilla solo a esas, para llamarlas.
-  /// DAR MESA A TODOS (6.9.4): cuántas familias esperan mesa. Sin modo jefe
-  /// se ve apagado y dice por qué.
-  Widget _chipDarMesa({
-    required int cantidad,
-    required bool layoutCompact,
-    required bool habilitado,
-  }) {
-    final color = habilitado ? Colors.indigo : Colors.grey.shade500;
-    return Tooltip(
-      message: habilitado
-          ? 'Familias sin todas sus mesas. Tocá para darles la mesa a todas '
-              'juntas.'
-          : '$kSoloEnModoJefe: la mesa la da el jefe.',
-      child: InkWell(
-        key: const Key('dar_mesa_a_todos'),
-        borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
-        onTap: habilitado ? _darMesaATodos : null,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: layoutCompact ? 6 : 10,
-            vertical: layoutCompact ? 2 : 4,
-          ),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
-            border: Border.all(color: color.withValues(alpha: 0.45)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_open_rounded,
-                size: layoutCompact ? 13 : 14,
-                color: color,
-              ),
-              SizedBox(width: layoutCompact ? 4 : 6),
-              Text(
-                '$cantidad',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: layoutCompact ? 12 : 13,
-                  color: color,
-                ),
-              ),
-              SizedBox(width: layoutCompact ? 3 : 5),
-              Text(
-                'SIN MESA · DAR MESA A TODOS',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: layoutCompact ? 9 : 10,
-                  letterSpacing: 0.4,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   /// DAR MESA A TODOS: el cartel con las familias tildadas y qué recibiría cada
   /// una (con lo de esta PC), y después [_darMesa] con las elegidas.
   Future<void> _darMesaATodos() async {

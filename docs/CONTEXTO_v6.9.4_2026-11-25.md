@@ -1,6 +1,7 @@
 # CONTEXTO — la 6.9.4: la planilla del sorteo por número de mesa, y DAR MESA
 
-**Estado (25-nov-2026, noche): programada y probada, SIN PUBLICAR.** El usuario la quiere publicar el **26-nov**
+**Estado (25-nov-2026, noche, 95 %): programada, probada y mostrada, SIN PUBLICAR.** Falta solo que él la mire
+y publicar juntos. El usuario la quiere publicar el **26-nov**
 ("esto lo saco para mañana"), con él. Sale de la rama **`release/6.9.x`** (desde el tag `v6.9.3`, en la carpeta
 `..\arguello_events_6.9.x`), como la 6.3.x y la 6.8.x: la rama feature tiene la v83 y lo del 4-dic a medio hacer y
 **no se publica de ahí**. Cada commit va también a la feature con `cherry-pick`. Versión `6.9.4+79`. **Sin SQL ni
@@ -101,6 +102,22 @@ otra), la que no figura en el plano de la nube la pierde (`_sinRepetidos`) y, si
 vuelve a tocar DAR MESA. Y la flecha del tótem, con las dos mesas pagas, apunta a la más baja de las dos (son
 pegadas). "12, 13" reacomodado a "11, 12" se guarda "12, 11" (la principal de antes sigue primera): da igual.
 
+### Lo último del 25-nov (noche), después de mostrársela
+
+- **La columna MESA de la grilla dice primero la principal** (`SalonMesas.textoMesas`): "107 y 106 (1 extra)"; con
+  las adicionales al final, "12 + 67-68 (separada)". Lo sorteado se ve igual que siempre. Sin esto la grilla decía
+  "106-107" y parecía que la principal había cambiado.
+- El botón de la barra pasó a su propio archivo, `widgets/chip_dar_mesa.dart` (`ChipDarMesa`), para que la muestra
+  use el de verdad.
+- **Los PDF ya se pueden pasar a imagen en esta PC**: `tool/pdf_a_png.ps1` (PowerShell, con el lector de PDF de
+  Windows, `Windows.Data.Pdf`): `& tool/pdf_a_png.ps1 -Pdf <archivo.pdf> -Carpeta <carpeta> [-Ancho 1600]`.
+- Capturas mandadas al usuario (en `build/pruebas_6.9.4/` y `build/muestras_6.9.4/` de la carpeta principal, fuera
+  de git): la grilla antes (con y sin modo jefe) y después de DAR MESA (`tool/dar_mesa_muestra_test.dart`), el plano
+  de la Técnica real antes y después y la planilla por número de mesa de ese después
+  (`tool/simulacro_dar_mesa_test.dart --dart-define=datos=<json> --dart-define=salida=<carpeta>`), y las hojas de las
+  muestras interna parada y para repartir acostada. **La grilla entera no se puede abrir sin la base**: la muestra
+  usa las piezas de verdad (la celda MESA y el botón) con el resto de las columnas resumido.
+
 ### Lo que se probó
 
 - Pruebas nuevas: `test/principal_primera_anotada_test.dart` (15, con una SQLite temporal para
@@ -122,13 +139,12 @@ pegadas). "12, 13" reacomodado a "11, 12" se guarda "12, 11" (la principal de an
   tests que buscaban `\n  }\n` y en una carpeta recién creada git deja `\r\n` (ahora los normalizan), y uno que
   esperaba la regla vieja de las sillas con "40, 12, 13".
 - Muestras mandadas al usuario el 25-nov: `build/muestras_6.9.4/` de la carpeta principal (tres PDF por número de
-  mesa y cuatro PNG). **Los PDF no se pudieron mirar en esta PC** (sin `pdftoppm`): que los mire él.
+  mesa y cuatro PNG), y después las hojas pasadas a imagen con `tool/pdf_a_png.ps1` (se ven bien).
 
 ### Lo que falta, en orden
 
-1. Que mire las muestras.
-2. Juntar en la rama feature con `cherry-pick` lo de esta rama (los archivos de la planilla y del salón no
-   cambiaron en la feature desde la 6.9.3).
+1. Que diga si lo que vio está bien (se le mandó todo el 25-nov a la noche).
+2. Lo de esta rama ya está también en la feature (`cherry-pick`, sin conflictos); cada commit nuevo, igual.
 3. **Publicar con él (26-nov):** la foto de la mora "antes de 6.9.4"; versión `6.9.4+79` en `pubspec.yaml` e
    `installer/junior_eventos_setup.iss`; el instalador **por pasos** desde `..\arguello_events_6.9.x` (con las tres
    comprobaciones de la página del celular antes de `ISCC`), tag `v6.9.4`, release con el Setup y el APK, novedades
