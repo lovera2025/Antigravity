@@ -52,7 +52,7 @@ void main() {
       expect(dialogo, isNot(contains("'Restaurar")));
       expect(dialogo, isNot(contains("'Individual'")));
       expect(dialogo, isNot(contains('TabBar')));
-      // Mover el Reg (`created_at`) causó lo de TOÑANEZ; restaurar en masa
+      // Mover el Reg (`created_at`) causó lo de YACARE; restaurar en masa
       // contaba dos veces la mora.
       expect(dialogo, isNot(contains('created_at')));
       expect(dialogo, isNot(contains('restaurarMoraBulk')));

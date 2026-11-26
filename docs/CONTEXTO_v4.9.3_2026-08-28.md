@@ -16,7 +16,7 @@ agrega cuatro columnas a `contratos_alumnos`. Es aditiva y no toca datos, pero
 
 ## De dónde salió
 
-MOREIRA, FACUNDO N (Técnica Pinaroli). El jefe le perdonó la mora en la PC de
+ALISO, HORACIO (Técnica Pinaroli). El jefe le perdonó la mora en la PC de
 oficina y la ficha quedó en $0. En la notebook de operarios el mismo alumno seguía
 mostrando la mora corriendo: 89 días, **$92.783**. Las dos máquinas con la 4.9.2
 instalada.
@@ -128,8 +128,8 @@ esos, solo **2** le mostraban mora al operario el 28-ago:
 
 | Alumno | Institución | Vto. | Días | Mora que veía el operario |
 |---|---|---|---|---|
-| MOREIRA, FACUNDO N | TECNICA PINAROLI | 2026-05-31 | 89 | $92.783 |
-| ARRIETA, BRENDA ANAHI | COLEGIO NACIONAL | 2026-05-31 | 89 | $75.027 |
+| ALISO, HORACIO | TECNICA PINAROLI | 2026-05-31 | 89 | $92.783 |
+| QUEBRACHO, INES | COLEGIO NACIONAL | 2026-05-31 | 89 | $75.027 |
 
 Los otros 12 tienen la próxima cuota sin vencer (31/8 o 30/9), así que jefe y
 operario coincidían en $0. Son **latentes**: divergen cuando pase el vencimiento si
@@ -152,10 +152,10 @@ el `data.db` del jefe a la vista (`Documents\Junior Eventos\data.db` — con esp
 cobrado a familias que no la debían. No eran los 12 latentes estimados: son otros
 alumnos y el problema arranca en **junio**, no en agosto.
 
-- **10 perdones** (`reinicia = 0`): Moreira, Arrieta, los dos Espíndola, Barrios,
-  Romero, Fernández, Toledo, Álvarez y Espinoza. Son permanentes: no se arreglaban
+- **10 perdones** (`reinicia = 0`): Aliso, Quebracho, los dos Viraro, Barrios,
+  Romero, Fernández, Toledo, Álvarez y Guatambu. Son permanentes: no se arreglaban
   solos nunca.
-- **2 exenciones de rutina** post-cobro: Lezcano y Pared, que pasaban de $8.400 a
+- **2 exenciones de rutina** post-cobro: Radal y Pared, que pasaban de $8.400 a
   $26.700.
 
 De las 156 exenciones locales, **10 son perdones** y 146 salieron de cobros normales
@@ -225,7 +225,7 @@ de oficina ni a la notebook. La verificación fue por SQL y por el arnés.
 
 Para la primera oportunidad, en este orden:
 
-1. **Antes de instalar nada**, abrir la app y confirmar que MOREIRA y ARRIETA figuran
+1. **Antes de instalar nada**, abrir la app y confirmar que ALISO y QUEBRACHO figuran
    sin mora. Eso valida la parte de Supabase por separado del código.
 2. Instalar la 4.9.3 en las dos máquinas.
 3. Perdonar una mora nueva en la PC de oficina y confirmar que aparece en la notebook

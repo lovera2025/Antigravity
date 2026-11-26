@@ -36,7 +36,7 @@ corto y su OK antes de programar.
    sección 14 del plan del salón.
 6. **La etapa 5 del salón: HECHA el 19-oct** (muestras `16a44f7`, arreglos `9478f3c`). Ver "La etapa 5" abajo.
 7. **La versión: PUBLICADA el 19-oct** e instalada en la PC de la casa. **Sigue instalar la del operario y la del
-   jefe, y después lo de TOÑANEZ** (ver "La publicación").
+   jefe, y después lo de YACARE** (ver "La publicación").
 
 Sin la fase 2 la versión es más chica, pero quedan los predios (con una migración) y la etapa 5: no llega al lunes 20.
 
@@ -48,7 +48,7 @@ Sin la fase 2 la versión es más chica, pero quedan los predios (con una migrac
   playón" (la Normal 138 mesas, Gregoria Morales 41, Puerto Viejo 31).
 - El jefe pidió "el salón primero": el usuario lo resolvió con Claude en claude.ai, y el plan y la maqueta quedaron
   en `docs/`.
-- En la oficina reincorporaron a TOÑANEZ, AGUSTINA (la Normal) y le cargaron $166.200 de mora a mano en la PC del
+- En la oficina reincorporaron a YACARE, ZULMA (la Normal) y le cargaron $166.200 de mora a mano en la PC del
   jefe. Esa tarde, desde claude.ai, se pusieron en 0 a mano en la nube (18:19) y se escribió la especificación
   `SPEC — Mora por cuota y bajas temporales`.
 
@@ -65,7 +65,7 @@ Lo que se hizo, el porqué y lo comprobado: [mora-por-cuota](pendientes/mora-por
 - **El ajuste de la mora lo manda la nube.** Una PC ya no se queda con el suyo si la nube trae 0, y si lo pierde,
   queda escrito en `revision_mora.txt`.
 - **Editar alumno manda la mora solo si alguien la cambió.**
-- **Apareció ESPINOZA, DENIS AIMARA:** $87.600 de ficha que la 6.0.0 inventó contando la mora de pagos viejos hasta
+- **Apareció GUATAMBU, DENIS AIMARA:** $87.600 de ficha que la 6.0.0 inventó contando la mora de pagos viejos hasta
   el día de su baja. Con la 6.1.0 queda en $0, y su mora real hoy es $43.500.
 - **Preguntó si perdonar mora traía problemas.** No: un perdón nuevo llega como siempre, y uno sin subir no se pisa.
   Lo único nuevo es que sacar un perdón también llega a las otras PCs. De los 40 ajustes de su PC, 39 están igual
@@ -76,7 +76,7 @@ Lo que se hizo, el porqué y lo comprobado: [mora-por-cuota](pendientes/mora-por
     (`build/muestras_6.1.0/bajas/Simulacro_bajas.html`, abierto en Edge).
 - **Me equivoqué y lo corregí en el momento:**
   - le dije que la revisión automática dejaba afuera a las bajas; la que corre al abrir el programa las incluye;
-  - le dije que TOÑANEZ se había reincorporado a las 18:19; a esa hora fue el arreglo a mano en la nube.
+  - le dije que YACARE se había reincorporado a las 18:19; a esa hora fue el arreglo a mano en la nube.
 
 ## El aviso "Revisar la ficha" (18-oct, `964b141`)
 
@@ -238,12 +238,12 @@ las PCs siguieron cobrando y subiendo normal.
 - **El cobro, 6.0.0 contra 6.1.0**, con `tool/cobro_igual_que_hoy_test.dart` sobre la misma copia de su base de las
   12:53 (sacada con `VACUUM INTO` y la app cerrada; la 6.0.0 desde `4595dde` en una carpeta aparte, ya borrada):
   - **629 de 643 alumnos idénticos** (ficha, ventana, papel, mora y recibo) y **las operaciones del día idénticas**;
-  - **cambian 14: las 13 bajas y TOÑANEZ, AGUSTINA** ($9.300 en la 6.0.0, $171.600 en la 6.1.0, como las otras 0/9).
+  - **cambian 14: las 13 bajas y YACARE, ZULMA** ($9.300 en la 6.0.0, $171.600 en la 6.1.0, como las otras 0/9).
     En la planilla de la Normal es el único renglón distinto: el total pasa de $3.944.300 a $4.106.600;
-  - los papeles de los cinco del 15-oct (ARANDA, SILVA, MACHUCA, GOMEZ GIMENA, PEREZ MAIA) más ESPINOZA, DENIS AIMARA,
+  - los papeles de los cinco del 15-oct (ARANDA, SILVA, MACHUCA, GOMEZ GIMENA, PEREZ MAIA) más GUATAMBU, DENIS AIMARA,
     lado a lado en `build/muestras_6.1.0/cobro/Comparar.html` (se le abrió en Edge).
 - **El simulacro de la revisión de la mora** (`tool/simulacro_revision_mora_test.dart`, la misma copia): la primera vez
-  que abra la 6.1.0 corrige **a un solo alumno, ESPINOZA, DENIS AIMARA** (baja: la ficha de $87.600 a $0, la mora de
+  que abra la 6.1.0 corrige **a un solo alumno, GUATAMBU, DENIS AIMARA** (baja: la ficha de $87.600 a $0, la mora de
   hoy $132.000 → $44.400). Ningún perdón.
 - Las novedades (`build/novedades_6.1.0.md`), aprobadas tal cual: el salón primero, los predios, "lejos" en el salón,
   y las bajas con el aviso de la ficha.
@@ -268,7 +268,7 @@ catálogo.
 
 **La PC del operario: instalada por él el 19-oct, a la tarde.**
 
-**TOÑANEZ, la primera vez (19-oct, 16:15, a pedido suyo con la del jefe todavía en la 6.0.0):** su fila en la nube
+**YACARE, la primera vez (19-oct, 16:15, a pedido suyo con la del jefe todavía en la 6.0.0):** su fila en la nube
 (`475867b9-a41e-4685-8601-c80ecdafe801`) estaba con el ajuste, la ficha y el "ya usado" en $0, sin eximición, sin
 tocar desde el 16-oct 21:19 UTC. Se reescribió `mora_tracked_ajuste = 0` (el mismo valor, con `and mora_tracked_ajuste
 = 0` de guarda): `updated_at` pasó a 19-oct 19:15 UTC. Conteos iguales antes y después (643 contratos, $95.396.671,17,
@@ -277,7 +277,7 @@ tocar desde el 16-oct 21:19 UTC. Se reescribió `mora_tracked_ajuste = 0` (el mi
 
 **Falta, en la oficina y con él:**
 1. **La PC del jefe.** Después, mirar la versión y su `revision_mora.txt`.
-2. **TOÑANEZ otra vez, con la del jefe ya en la 6.1.0:** la misma sentencia. La PC del jefe bajó la de las 16:15 con la
+2. **YACARE otra vez, con la del jefe ya en la 6.1.0:** la misma sentencia. La PC del jefe bajó la de las 16:15 con la
    6.0.0 y se quedó con sus $166.200, y después de instalar no la vuelve a bajar sola (la fila no cambió desde su
    última bajada). Después, en la PC del jefe, que su ventana de cobro se vea como una 0/9 ($171.600 hoy). Hasta
    entonces, **en la PC del jefe** no se le cobra ni se la edita.
@@ -285,7 +285,7 @@ tocar desde el 16-oct 21:19 UTC. Se reescribió `mora_tracked_ajuste = 0` (el mi
 
 ## Para el día de instalar la 6.1.0
 
-- **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
+- **YACARE:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
   para que todas las PCs la vuelvan a bajar. Después, mirar en la PC del jefe que su ventana de cobro se vea como
   la de un 0/9. **Hasta entonces, en la oficina no le cobran ni le editan nada**; si va a pagar, se calcula su mora
   al día.
@@ -320,9 +320,9 @@ verdad; y los PREDIOS CON NOMBRE (sección 14 del plan), con su tabla nueva
 (migración v74), y la etapa 5 del salón. La 6.1.0 está PUBLICADA (19-oct) e
 instalada en mi PC de la casa, con el SQL de los predios corrido y la web
 publicada. Falta instalar la PC del operario (antes de abrir la caja) y la del
-jefe, conmigo, y después lo de TOÑANEZ (paso 4 de "La publicación").
+jefe, conmigo, y después lo de YACARE (paso 4 de "La publicación").
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
-TOÑANEZ, AGUSTINA.
+YACARE, ZULMA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se
 cobra la siguiente si no se abonó. Los perdones no se tocan. Un reincorporado
 tiene la misma mora que uno que nunca estuvo de baja.

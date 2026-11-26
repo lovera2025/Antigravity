@@ -75,7 +75,7 @@ const queHizoAjustesQueSeFueron =
 /// la mora que subía), así que no hay ajustes viejos que solo estén en una PC.
 /// Antes, si la nube traía 0, la PC se quedaba con el suyo: sacar un perdón en
 /// una PC no llegaba a las otras, y el arreglo a mano de la nube del 16-oct
-/// (TOÑANEZ, AGUSTINA: los $166.200 cargados a mano, puestos en 0) no le
+/// (YACARE, ZULMA: los $166.200 cargados a mano, puestos en 0) no le
 /// llegaba a la PC del jefe.
 Map<String, dynamic> contratoAlBajar(
   Map<String, dynamic> filaNube,

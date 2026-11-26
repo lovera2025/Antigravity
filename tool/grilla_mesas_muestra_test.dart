@@ -66,7 +66,7 @@ final _casos = <_Caso>[
       const PagoAlumno(base: 90000, mesas: 70000)),
   _Caso('Una mesa agregada, en cuotas', _a('DOMÍNGUEZ, BRUNO', extras: 1),
       const PagoAlumno(base: 90000, mesas: 20000)),
-  _Caso('Una mesa agregada, sin pagar', _a('ESPÍNDOLA, CAMILA', extras: 1),
+  _Caso('Una mesa agregada, sin pagar', _a('VIRARO, CAMILA', extras: 1),
       const PagoAlumno(base: 90000)),
   _Caso('Dos agregadas y 3 sillas pagadas',
       _a('FERREYRA, LUCAS', extras: 2, sillas: 3),

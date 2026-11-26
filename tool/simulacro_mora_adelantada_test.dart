@@ -8,7 +8,7 @@
 // los desvíos viejos de cada ficha.
 //
 //   Grupo A: la mora baja. Se le estaba pidiendo mora que ya había pagado por
-//            adelantado (el caso de LOPEZ, MORENA AILEN).
+//            adelantado (el caso de ULMO, CELIA).
 //   Grupo B: la mora sube. Se le estaba descontando de una cuota mora que había
 //            pagado sobre otra ya cerrada. Subirle la deuda a una familia lo
 //            decide el jefe: esta lista se le muestra antes de instalar.

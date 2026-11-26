@@ -60,7 +60,7 @@ Del 10-nov a la noche:
 - **A quien tiene un perdón, la revisión de la mora no le sube la mora** (etapa 12): la foto de la mora encontró a una alumna con
   $372.368 que no debía. Su ficha se corrige a mano después de instalar.
 
-**La revisión del 10-nov, antes de tocar nada:** `flutter analyze` sin errores en la app (los 3 que da son de `tool/_tmp_espindola_audit.dart`,
+**La revisión del 10-nov, antes de tocar nada:** `flutter analyze` sin errores en la app (los 3 que da son de `tool/_tmp_viraro_audit.dart`,
 un script viejo que no está en git) y **4.108 tests en verde** sobre `cf991ae`. Leídos enteros, sin encontrar fallas: el cobro
 (`a5458f6`), el sorteo (`e654fb0`: sin tildar nada da lo mismo que la 6.4.0), las sillas sueltas (`84a9361`: la nube no tiene CHECK en
 `sillas_puerta.mesa`) y la central del chat. **No se leyeron línea por línea** las pantallas nuevas (`hoja_plano_puerta.dart`,

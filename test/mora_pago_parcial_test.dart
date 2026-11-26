@@ -116,7 +116,7 @@ void main() {
       expect(reparto(4001), [4000, 1]);
     });
 
-    test('VAREIRO: \$25.000 sobre arrastre \$19.400 y calendario vivo', () {
+    test('TATU: \$25.000 sobre arrastre \$19.400 y calendario vivo', () {
       // Recibo Nº FF677977. El arrastre entero primero; al calendario le llega
       // el resto, y la cuota más vieja del calendario queda parcial.
       final r = MoraConceptoRotulo.repartirMoraParcial(

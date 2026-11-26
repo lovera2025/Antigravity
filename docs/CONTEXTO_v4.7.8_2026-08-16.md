@@ -35,7 +35,7 @@ recalculaba `mora_pendiente_tracked` **solo desde el historial de pagos** y lo
 pisaba. La exención de cuotas (`mora_exenta_hasta`) ya estaba protegida;
 la ficha no.
 
-Caso Bernel: historial ⇒ tracked $15.000. Perdonar ficha a $0. Al sync siguiente
+Caso Araza: historial ⇒ tracked $15.000. Perdonar ficha a $0. Al sync siguiente
 volvían los $15.000. Igual al perdonar cuotas + ficha (exención ok, remanente no)
 y al poner mora a mano.
 

@@ -2,7 +2,7 @@
 //
 // El 15-oct-2026, comparando la PC del usuario con la nube, aparecieron 21
 // alumnos a los que la mora ya pagada se les descontaba otra vez de la de los
-// meses siguientes: cobraba de menos. VERON, DALMA pagó en agosto la mora de
+// meses siguientes: cobraba de menos. VIZCACHA, CAROLA pagó en agosto la mora de
 // julio ($31.900) y la PC le mostraba $1.100 en vez de $33.000 por agosto y
 // septiembre. Tres causas, una por grupo de tests:
 //
@@ -11,12 +11,12 @@
 //      la nube quedó en 0 y la bajada lo volvía a pisar.
 //   2. Mora pagada en dos veces: una parte un día (sin completar cuota) y el
 //      resto otro día con la cuota. El offset sumaba solo lo del segundo día, y
-//      lo del primero se volvía a descontar (MOLINA, CARLOS LAUTARO).
+//      lo del primero se volvía a descontar (ABEDUL, ALBERTO).
 //   3. Anular un cobro dejaba la eximición que ese cobro había dado
-//      (MONTENEGRO, FRANCISCO NAHUEL).
+//      (ACEBO, CESAR).
 //
 // Y una que apareció con los datos de esa noche: la revisión le borraba la
-// ficha a quien ya había terminado de pagar (ALTAMIRANO, CELESTE ABIGAIL).
+// ficha a quien ya había terminado de pagar (ESPINILLO, BRUNO).
 //
 // Los datos son los de esos alumnos, con nombres de prueba. Corre contra una
 // base SQLite temporal: nunca toca la de producción.
@@ -65,9 +65,9 @@ Map<String, Object?> _pago(
   'anulado': anulado ? 1 : 0,
 };
 
-/// VERON, DALMA: 3 cuotas de $55.000 pagadas, la 4 en parte, y el 24/08 la
+/// VIZCACHA, CAROLA: 3 cuotas de $55.000 pagadas, la 4 en parte, y el 24/08 la
 /// mora de julio. Eximida al 31/08, permanente; el "ya usado" quedó en 0.
-Future<void> _sembrarVeron(String alumno, {double ajuste = 0}) async {
+Future<void> _sembrarVizcacha(String alumno, {double ajuste = 0}) async {
   final db = await LocalDatabase.instance;
   await db.insert('contratos_alumnos', {
     'id': uid(alumno),
@@ -101,7 +101,7 @@ Future<void> _sembrarVeron(String alumno, {double ajuste = 0}) async {
   }
 }
 
-/// MOLINA, CARLOS LAUTARO: mora pagada en dos veces. $29.400 el 22/09 sin
+/// ABEDUL, ALBERTO: mora pagada en dos veces. $29.400 el 22/09 sin
 /// completar la cuota 3, y $52.850 el 13/10 con la cuota. El "ya usado" quedó
 /// en $71.400 ($18.550 de junio + $52.850): le faltan los $29.400 del 22/09.
 Future<void> _sembrarMolina(String alumno) async {
@@ -141,10 +141,10 @@ Future<void> _sembrarMolina(String alumno) async {
   }
 }
 
-/// MONTENEGRO, FRANCISCO NAHUEL: el cobro del 19/09 con la mora ($39.300) se
+/// ACEBO, CESAR: el cobro del 19/09 con la mora ($39.300) se
 /// anuló (dos veces cargado, las dos anuladas), pero la eximición al 30/09 que
 /// ese cobro había dado quedó.
-Future<void> _sembrarMontenegro(String alumno, {double ajuste = 0}) async {
+Future<void> _sembrarAcebo(String alumno, {double ajuste = 0}) async {
   final db = await LocalDatabase.instance;
   await db.insert('contratos_alumnos', {
     'id': uid(alumno),
@@ -192,7 +192,7 @@ Future<void> _sembrarMontenegro(String alumno, {double ajuste = 0}) async {
   }
 }
 
-/// MONTENEGRO, GISEL: eximida al 31/07, permanente (el cobro del 24/07 no
+/// ACEBO, EMILIO: eximida al 31/07, permanente (el cobro del 24/07 no
 /// completó cuota). El 21/08 completó la 3 y saldó la mora: esa vuelve a contar.
 Future<void> _sembrarGisel(String a) async {
     final db = await LocalDatabase.instance;
@@ -244,11 +244,11 @@ Future<void> _sembrarGisel(String a) async {
     }
 }
 
-/// ALTAMIRANO, CELESTE ABIGAIL: cuota única. Se acordó un precio de $407.000 y
+/// ESPINILLO, BRUNO: cuota única. Se acordó un precio de $407.000 y
 /// el 15/10 lo pagó entero, sin la mora: el cobro dejó $683.760 en la ficha
 /// (168 días desde el 30/04, al 1 % por día) para que el jefe los perdone como
 /// liquidación. Con [perdonada], el jefe ya la perdonó: la ficha en 0.
-Future<void> _sembrarAltamirano(String a, {bool perdonada = false}) async {
+Future<void> _sembrarEspinillo(String a, {bool perdonada = false}) async {
   final db = await LocalDatabase.instance;
   await db.insert('contratos_alumnos', {
     'id': uid(a),
@@ -346,10 +346,10 @@ void main() {
   });
 
   group('1. la revisión sube lo que corrige', () {
-    test('VERON: la mora de julio ya pagada deja de tapar la de agosto y '
+    test('VIZCACHA: la mora de julio ya pagada deja de tapar la de agosto y '
         'septiembre: \$1.100 pasa a \$33.000', () async {
-      const a = 'PRUEBA VERON';
-      await _sembrarVeron(a);
+      const a = 'PRUEBA VIZCACHA';
+      await _sembrarVizcacha(a);
       expect(await _moraDe(a), closeTo(1100, 0.01));
 
       final renglones = <String>[];
@@ -370,13 +370,13 @@ void main() {
       expect(cola['mora_exencion_reinicia'], 0);
 
       expect(renglones, hasLength(1));
-      expect(renglones.single, contains('PRUEBA VERON'));
+      expect(renglones.single, contains('PRUEBA VIZCACHA'));
       expect(renglones.single, contains(r'mora $1100 -> $33000'));
     });
 
     test('corrida dos veces, la segunda no toca nada', () async {
-      const a = 'PRUEBA VERON';
-      await _sembrarVeron(a);
+      const a = 'PRUEBA VIZCACHA';
+      await _sembrarVizcacha(a);
       expect(await _revisar(), 1);
       final db = await LocalDatabase.instance;
       await db.delete('_sync_queue');
@@ -385,8 +385,8 @@ void main() {
     });
 
     test('sin encolarSync corrige la PC y no sube nada (como antes)', () async {
-      const a = 'PRUEBA VERON';
-      await _sembrarVeron(a);
+      const a = 'PRUEBA VIZCACHA';
+      await _sembrarVizcacha(a);
       expect(await _revisar(encolar: false), 1);
       expect((await _contrato(a)).moraCobradaOffset, closeTo(31900, 0.01));
       expect(await _colaDe(a), isNull);
@@ -477,10 +477,10 @@ void main() {
   });
 
   group('3. la eximición de un cobro anulado', () {
-    test('MONTENEGRO: la revisión le saca la eximición que había dejado el '
+    test('ACEBO: la revisión le saca la eximición que había dejado el '
         'cobro anulado, y lo sube', () async {
-      const a = 'PRUEBA MONTENEGRO';
-      await _sembrarMontenegro(a);
+      const a = 'PRUEBA ACEBO';
+      await _sembrarAcebo(a);
       final c0 = await _contrato(a);
       expect(
         MoraTrackedRecovery.exencionDeCobroAnulado(
@@ -503,8 +503,8 @@ void main() {
 
     test('un perdón no se toca: con ajuste de ficha, la eximición queda',
         () async {
-      const a = 'PRUEBA MONTENEGRO PERDONADO';
-      await _sembrarMontenegro(a, ajuste: -1200);
+      const a = 'PRUEBA ACEBO PERDONADO';
+      await _sembrarAcebo(a, ajuste: -1200);
       final c0 = await _contrato(a);
       expect(
         MoraTrackedRecovery.exencionDeCobroAnulado(
@@ -554,7 +554,7 @@ void main() {
   });
 
   group('4. una eximición vieja no le pasa su "permanente" a una nueva', () {
-    test('MONTENEGRO, GISEL: la del 24/07 era permanente (no completó cuota); '
+    test('ACEBO, EMILIO: la del 24/07 era permanente (no completó cuota); '
         'la del 21/08 completó la 3 y vuelve a contar: queda esa', () async {
       const a = 'PRUEBA GISEL';
       await _sembrarGisel(a);
@@ -569,8 +569,8 @@ void main() {
     test('la reparación de eximiciones usa la misma regla y sube', () async {
       const a = 'PRUEBA GISEL';
       await _sembrarGisel(a);
-      const b = 'PRUEBA MONTENEGRO';
-      await _sembrarMontenegro(b);
+      const b = 'PRUEBA ACEBO';
+      await _sembrarAcebo(b);
       final db = await LocalDatabase.instance;
       final n = await MoraTrackedRecovery.repararExencionDesdeHistorial(
         db: db,
@@ -587,7 +587,7 @@ void main() {
   });
 
   group('6. al reincorporar una baja, se revisa en el momento (6.1.0)', () {
-    // ESPINOZA, DENIS AIMARA: pagó las cuotas 1, 2 y 3 antes de que vencieran
+    // GUATAMBU, DENIS AIMARA: pagó las cuotas 1, 2 y 3 antes de que vencieran
     // (31/03, 13/05 y 10/06). La 6.0.0 le rehízo la ficha contando la mora
     // hasta el día de su baja (05/09) también para esos pagos: 128, 97 y 67
     // días, $87.600 que nunca existieron.
@@ -626,10 +626,10 @@ void main() {
 
     test('DENIS: la ficha de \$87.600 queda en 0 y sube; nadie más se toca',
         () async {
-      const denis = 'PRUEBA ESPINOZA DENIS';
-      const veron = 'PRUEBA VERON';
+      const denis = 'PRUEBA GUATAMBU DENIS';
+      const vizcacha = 'PRUEBA VIZCACHA';
       await sembrarDenis(denis);
-      await _sembrarVeron(veron);
+      await _sembrarVizcacha(vizcacha);
 
       final db = await LocalDatabase.instance;
       final renglones = <String>[];
@@ -650,17 +650,17 @@ void main() {
       expect((await _colaDe(denis))!['mora_pendiente_tracked'], 0);
       expect(renglones.single, contains('de ficha \$87600 -> \$0'));
 
-      // VERON también necesita la revisión, pero no se la pidieron.
-      expect((await _contrato(veron)).moraCobradaOffset, closeTo(0, 0.01));
-      expect(await _colaDe(veron), isNull);
+      // VIZCACHA también necesita la revisión, pero no se la pidieron.
+      expect((await _contrato(vizcacha)).moraCobradaOffset, closeTo(0, 0.01));
+      expect(await _colaDe(vizcacha), isNull);
     });
 
     test('la ficha de DENIS no se explica cuota por cuota hasta que se revisa',
         () async {
-      const denis = 'PRUEBA ESPINOZA DENIS';
-      const veron = 'PRUEBA VERON';
+      const denis = 'PRUEBA GUATAMBU DENIS';
+      const vizcacha = 'PRUEBA VIZCACHA';
       await sembrarDenis(denis);
-      await _sembrarVeron(veron);
+      await _sembrarVizcacha(vizcacha);
       final db = await LocalDatabase.instance;
 
       expect(await MoraTrackedRecovery.fichasSinExplicar(db), [
@@ -800,8 +800,8 @@ void main() {
 
     test('la eximición que dejó un cobro anulado no cuenta como perdón: '
         'se deshace igual', () async {
-      const a = 'PRUEBA MONTENEGRO';
-      await _sembrarMontenegro(a);
+      const a = 'PRUEBA ACEBO';
+      await _sembrarAcebo(a);
       expect(
         MoraTrackedRecovery.tienePerdon(contrato: await _contrato(a), pagos: await _pagos(a)),
         isFalse,
@@ -855,10 +855,10 @@ void main() {
   });
 
   group('quien ya terminó de pagar no se revisa', () {
-    test('ALTAMIRANO: la mora que dejó el cobro queda en la ficha hasta que el '
+    test('ESPINILLO: la mora que dejó el cobro queda en la ficha hasta que el '
         'jefe la perdone', () async {
-      const a = 'PRUEBA ALTAMIRANO';
-      await _sembrarAltamirano(a);
+      const a = 'PRUEBA ESPINILLO';
+      await _sembrarEspinillo(a);
       expect(await _moraDe(a), closeTo(683760, 0.01));
 
       expect(await _revisar(), 0);
@@ -867,20 +867,20 @@ void main() {
       expect(await _colaDe(a), isNull, reason: 'No se sube nada: no cambió.');
     });
 
-    test('ALTAMIRANO perdonada por el jefe: queda en 0 y no se revive',
+    test('ESPINILLO perdonada por el jefe: queda en 0 y no se revive',
         () async {
-      const a = 'PRUEBA ALTAMIRANO PERDONADA';
-      await _sembrarAltamirano(a, perdonada: true);
+      const a = 'PRUEBA ESPINILLO PERDONADA';
+      await _sembrarEspinillo(a, perdonada: true);
       expect(await _revisar(), 0);
       expect(await _moraDe(a), closeTo(0, 0.01));
       expect(await _colaDe(a), isNull);
     });
 
     test('con saldo, la misma revisión sigue corrigiendo', () async {
-      const a = 'PRUEBA ALTAMIRANO';
-      await _sembrarAltamirano(a);
-      const b = 'PRUEBA VERON';
-      await _sembrarVeron(b);
+      const a = 'PRUEBA ESPINILLO';
+      await _sembrarEspinillo(a);
+      const b = 'PRUEBA VIZCACHA';
+      await _sembrarVizcacha(b);
       expect(await _revisar(), 1);
       expect((await _contrato(b)).moraCobradaOffset, closeTo(31900, 0.01));
       expect((await _contrato(a)).moraPendienteTracked, closeTo(683760, 0.01));
@@ -977,11 +977,11 @@ void main() {
 
   test('la constancia: la fecha y un renglón por alumno', () {
     final t = RevisionMoraConstancia.textoDe(
-      ['PRUEBA VERON: mora \$1100 -> \$33000'],
+      ['PRUEBA VIZCACHA: mora \$1100 -> \$33000'],
       DateTime(2026, 10, 16, 9, 5),
     );
     expect(t, startsWith('16/10/2026 09:05 · la revisión automática de la mora '
         'corrigió 1 alumno(s):'));
-    expect(t, contains('  PRUEBA VERON: mora \$1100 -> \$33000'));
+    expect(t, contains('  PRUEBA VIZCACHA: mora \$1100 -> \$33000'));
   });
 }

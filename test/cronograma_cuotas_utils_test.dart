@@ -2,10 +2,10 @@ import 'package:arguello_events/features/eventos/services/cronograma_cuotas_util
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-ContratoAlumno _contratoLezcano() => ContratoAlumno(
-      id: 'lezcano',
+ContratoAlumno _contratoRadal() => ContratoAlumno(
+      id: 'radal',
       eventoId: 'evt',
-      nombreAlumno: 'LEZCANO, BLAS',
+      nombreAlumno: 'RADAL, RAUL',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       saldoDeudor: 240000,
@@ -31,26 +31,26 @@ ContratoAlumno _contratoAlDia() => ContratoAlumno(
 
 void main() {
   group('CronogramaCuotasUtils', () {
-    test('Lezcano: 2 cuotas impagas vencidas al 7-jul', () {
+    test('Radal: 2 cuotas impagas vencidas al 7-jul', () {
       expect(
         CronogramaCuotasUtils.cuotasImpagasVencidas(
-          _contratoLezcano(),
+          _contratoRadal(),
           DateTime(2026, 7, 7),
         ),
         2,
       );
       expect(
         CronogramaCuotasUtils.cronogramaAlDia(
-          _contratoLezcano(),
+          _contratoRadal(),
           DateTime(2026, 7, 7),
         ),
         isFalse,
       );
     });
 
-    test('Lezcano: estado CUOTAS ATRASADAS con mora \$0', () {
+    test('Radal: estado CUOTAS ATRASADAS con mora \$0', () {
       final ui = CronogramaCuotasUtils.resolverEstadoUi(
-        contrato: _contratoLezcano(),
+        contrato: _contratoRadal(),
         moraEnMora: false,
         moraPendientePesos: 0,
         ahoraAr: DateTime(2026, 7, 7),
@@ -59,9 +59,9 @@ void main() {
       expect(ui.texto, 'CUOTAS ATRASADAS');
     });
 
-    test('Lezcano: próximo vencimiento futuro cuota 4 = 31-jul', () {
+    test('Radal: próximo vencimiento futuro cuota 4 = 31-jul', () {
       final futuro = CronogramaCuotasUtils.proximoVencimientoFuturo(
-        _contratoLezcano(),
+        _contratoRadal(),
         DateTime(2026, 7, 7),
       );
       expect(futuro, isNotNull);
@@ -70,9 +70,9 @@ void main() {
       expect(futuro.vencimiento.month, 7);
     });
 
-    test('Lezcano: líneas informativas con la eximición', () {
+    test('Radal: líneas informativas con la eximición', () {
       final lineas = CronogramaCuotasUtils.lineasInformativas(
-        _contratoLezcano(),
+        _contratoRadal(),
         ahoraAr: DateTime(2026, 7, 7),
         moraPendientePesos: 0,
       );
@@ -106,9 +106,9 @@ void main() {
     // renglones más abajo "Mora pendiente: $1.200".
     group('plan saldado con mora en ficha', () {
       ContratoAlumno saldado({required double tracked}) => ContratoAlumno(
-        id: 'riquelme',
+        id: 'gorrion',
         eventoId: 'evt',
-        nombreAlumno: 'RIQUELME, AYLEN PRISCILA',
+        nombreAlumno: 'GORRION, OFELIA',
         cantidadAcompanantes: 0,
         montoTotalPactado: 340000,
         saldoDeudor: 0,
@@ -147,7 +147,7 @@ void main() {
         // Los 623 contratos con saldo son el 100% de lo que se cobra por día:
         // el arreglo no puede tocarles el estado.
         final atrasado = CronogramaCuotasUtils.resolverEstadoUi(
-          contrato: _contratoLezcano(),
+          contrato: _contratoRadal(),
           moraEnMora: false,
           moraPendientePesos: 5000,
           ahoraAr: DateTime(2026, 7, 7),
@@ -155,7 +155,7 @@ void main() {
         expect(atrasado.kind, ContratoEstadoDeudaKind.cuotasAtrasadas);
 
         final enMora = CronogramaCuotasUtils.resolverEstadoUi(
-          contrato: _contratoLezcano(),
+          contrato: _contratoRadal(),
           moraEnMora: true,
           moraPendientePesos: 5000,
           ahoraAr: DateTime(2026, 7, 7),

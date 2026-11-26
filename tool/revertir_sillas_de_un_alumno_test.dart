@@ -1,4 +1,4 @@
-// ESMAY, THIAGO: el pago de sillas del 25/06 vuelve a $12.000, como lo pagó la
+// URUNDAY, HECTOR: el pago de sillas del 25/06 vuelve a $12.000, como lo pagó la
 // familia, y sus sillas vuelven a $36.000, pagadas. Pedido del cliente el
 // 29-sep, solo para este alumno.
 //
@@ -12,7 +12,7 @@
 // Los $4.000 de más son el redondeo que el cliente da por descartado.
 //
 // Uso:
-//   flutter test tool/revertir_sillas_esmay_test.dart                  (DRY-RUN)
+//   flutter test tool/revertir_sillas_de_un_alumno_test.dart                  (DRY-RUN)
 //   ... --dart-define=APPLY=1   (escribe: con la app CERRADA y después de las 20 hs)
 //
 // Aborta SIN ESCRIBIR NADA si algún valor de hoy no es el revisado, si hay algo
@@ -33,7 +33,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 const _id = 'dd8af936-8880-4a50-8ee0-4de0086ce0e5';
-const _nombre = 'ESMAY, THIAGO';
+const _nombre = 'URUNDAY, HECTOR';
 
 /// Valores de hoy, revisados con el usuario el 29-sep.
 const _esperado = <String, num>{
@@ -275,7 +275,7 @@ Future<bool> _appAbierta() async {
 void main() {
   final apply = const String.fromEnvironment('APPLY') == '1';
 
-  test('ESMAY: el pago de sillas del 25/06 vuelve a \$12.000', () async {
+  test('URUNDAY: el pago de sillas del 25/06 vuelve a \$12.000', () async {
     sqfliteFfiInit();
     final home = Platform.environment['USERPROFILE'] ?? '';
     final sep = Platform.pathSeparator;
@@ -293,7 +293,7 @@ void main() {
           .replaceAll(':', '-')
           .split('.')
           .first;
-      final copia = '$dbPath.bak.esmay.$stamp';
+      final copia = '$dbPath.bak.urunday.$stamp';
       await File(dbPath).copy(copia);
       print('Copia: $copia\n');
     }

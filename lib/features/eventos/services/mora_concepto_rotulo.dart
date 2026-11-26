@@ -76,7 +76,7 @@ class MoraConceptoRotulo {
   /// origen: "Mora pendiente cuota 3 (no cobrada al pagar)" quiere decir que esa
   /// mora quedó sin cobrar **cuando se pagó la cuota 3**. En el estado de cuenta
   /// esa misma frase queda arriba de $3.150 que sí entraron, y se lee como que el
-  /// cobro no se hizo (recibo Nº 11408158, VIZGARRA 08/07/2026). Acá se traduce:
+  /// cobro no se hizo (recibo Nº 11408158, CARDO 08/07/2026). Acá se traduce:
   /// el título dice de qué cuota es y el subtexto dice que se cobró en este pago.
   ///
   /// Los conceptos que ya se entienden —`Interés mora cuota 3 (vto Jun 2026)`—

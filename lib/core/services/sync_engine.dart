@@ -1045,7 +1045,7 @@ class SyncEngine {
   // revisión (`_reconcileDeletes`) o la consulta de un alumno al abrirlo
   // (`revisarPagosDelAlumno`). Por eso los borrados del pulso no se tiran
   // cuando la PC está ocupada: se guardan y se aplican a los pocos segundos. El
-  // 19-oct-2026 el jefe borró un pago de DE CARLO y la PC del operario, prendida
+  // 19-oct-2026 el jefe borró un pago de ARAUCARIA y la PC del operario, prendida
   // y cobrando, se lo quedó: al cobrarle contó los dos y le pisó el saldo a la
   // nube.
 
@@ -2138,7 +2138,7 @@ class SyncEngine {
     // Un registro que falló mucho NO se abandona: se reintenta espaciado.
     // Antes se salteaba para siempre y, como el contador de pendientes
     // tampoco lo mostraba, el cobro moría en el disco de esa PC sin que
-    // nadie se enterara (caso OSORIO 07/07, caso VALENTINA 18/04).
+    // nadie se enterara (caso BENTEVEO 07/07, caso VALENTINA 18/04).
     //
     // Si toca o no se decide **una vez por pasada**, antes de recorrer. Cuando
     // se miraba adentro del bucle, el primer trabado sellaba la hora y los
@@ -3928,7 +3928,7 @@ class SyncEngine {
   /// caen por cascada". Eso vale cuando se borra el padre, no cuando se borra
   /// una hija suelta con el padre vivo. Un pago se borra solo, con su alumno
   /// vivo, y entonces no lo alcanzaba nada: el 19-oct-2026 el jefe borró un
-  /// pago de $60.000 de DE CARLO, MICAELA ESTEFANIA, la PC del operario se lo
+  /// pago de $60.000 de ARAUCARIA, VALERIA, la PC del operario se lo
   /// quedó y, al cobrarle, contó los dos pagos y le pisó el saldo a la nube
   /// ($176.100 en vez de $236.100). Lo mismo dejaba renglones de presupuesto
   /// borrados en la otra PC, que se veía más caro.

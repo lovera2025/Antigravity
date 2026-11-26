@@ -9,7 +9,7 @@
 //   1. BUENA VISTA y PUERTO VIEJO → Reg 01/04/2026 y mora rehecha desde el
 //      historial de pagos sobre esa fecha.
 //   2. Las 3 bajas sin fecha de corte → mora congelada al 31/05/2026.
-//   3. MONTIEL, MELANIE MELISA → saldo y cuotas recalculados desde los pagos.
+//   3. ENEBRO, FELIPE → saldo y cuotas recalculados desde los pagos.
 //   4. Cinco contratos con `mora_cobrada_offset` divergente → offset del replay.
 //
 // No borra ni edita pagos. Encola sync por contrato para que la corrección
@@ -35,9 +35,9 @@ final kRegAbril = DateTime(2026, 4, 1);
 const kCongelarBajasIso = '2026-05-31';
 
 const kNombresOffset = [
-  'MARTINEZ, LUZMILA',
-  'OCAMPO, JUANA',
-  'STORTI, NELSON',
+  'TAMARINDO, FLORA',
+  'FRESNO, LIDIA',
+  'CARPINCHO, FEDERICO',
   'MOLINA SPAGNOLO',
   'STANCICH',
 ];
@@ -314,16 +314,16 @@ void main() {
     }
     w('');
 
-    // ── 3) MONTIEL: saldo y cuotas desde los pagos ────────────────────────
+    // ── 3) ENEBRO: saldo y cuotas desde los pagos ────────────────────────
     w('=' * 76);
-    w('3) MONTIEL, MELANIE MELISA → saldo y cuotas desde los pagos');
+    w('3) ENEBRO, FELIPE → saldo y cuotas desde los pagos');
     w('=' * 76);
 
-    final montiel = await db.query(
+    final enebro = await db.query(
       'contratos_alumnos',
-      where: "nombre_alumno LIKE '%MONTIEL%MELANIE%'",
+      where: "nombre_alumno LIKE '%ENEBRO%MELANIE%'",
     );
-    for (final row in montiel) {
+    for (final row in enebro) {
       final c = ContratoAlumno.fromJson(row);
       final pagos = await pagosDe(c.id);
       final activos = pagos

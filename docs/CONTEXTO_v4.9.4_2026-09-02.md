@@ -164,7 +164,7 @@ Contraste que cierra el caso: `MoraTrackedRecovery.reconciliarTodos` hace un
 recálculo automático después de cada sync y está bien hecho —
 *"Solo escribe exención si el merge la mejora; nunca degrada admin. No toca
 `mora_tracked_ajuste`: el perdón/poner admin tiene que sobrevivir."*
-(`mora_tracked_recovery.dart:520`). Esa lección se aprendió con MOREIRA y se
+(`mora_tracked_recovery.dart:520`). Esa lección se aprendió con ALISO y se
 aplicó ahí. El botón nunca la recibió.
 
 **Era además el mayor generador de escritura de la base:**
@@ -226,6 +226,6 @@ apunta a `Documents\JuniorEventos` (sin espacio) cuando la base vive en
 
 ## Docs hermanos
 
-- **`docs/CONTEXTO_v4.9.3_2026-08-28.md`** — el incidente MOREIRA y las cuatro columnas de mora que faltaban en la nube.
+- **`docs/CONTEXTO_v4.9.3_2026-08-28.md`** — el incidente ALISO y las cuatro columnas de mora que faltaban en la nube.
 - **`docs/CONTEXTO_COBRO_PARCIALES_SALDO.md`** — saldo, parciales, y la historia larga de la auditoría.
 - **`docs/pendientes/PENDIENTES.md`** — lo que quedó a medio hacer de esta tanda y por qué.

@@ -1,8 +1,8 @@
-// Arnés manual: reimprime el recibo Nº FF677977 (VAREIRO, 04/08/2026) con el
+// Arnés manual: reimprime el recibo Nº FF677977 (TATU, 04/08/2026) con el
 // código de producción, para mirar el papel sin levantar la app ni tocar la base
 // ni la red.
 //
-//   flutter test tool/recibo_muestra_vareiro_test.dart
+//   flutter test tool/recibo_muestra_caso_b_test.dart
 //
 // El papel original decía, sobre un cobro de $25.000 de mora:
 //
@@ -69,7 +69,7 @@ void main() {
 
   final destino = _salida.isNotEmpty
       ? _salida
-      : Directory.systemTemp.createTempSync('recibo_vareiro').path;
+      : Directory.systemTemp.createTempSync('recibo_tatu').path;
 
   setUp(() {
     // El PDF se guarda en <docs>/Junior Eventos/PDFs. Redirigimos "docs" a la
@@ -81,13 +81,13 @@ void main() {
         );
   });
 
-  test('recibo VAREIRO 04/08/2026 — cuotas 2-3-4 + mora parcial', () async {
+  test('recibo TATU 04/08/2026 — cuotas 2-3-4 + mora parcial', () async {
     final fechaCobro = DateTime(2026, 8, 4, 11, 6);
 
     final contrato = ContratoAlumno(
-      id: 'vareiro-muestra',
+      id: 'tatu-muestra',
       eventoId: 'ev-muestra',
-      nombreAlumno: 'VAREIRO, YOSELIE ANAHI',
+      nombreAlumno: 'TATU, HUGO',
       cantidadAcompanantes: 0,
       montoTotalPactado: 360000,
       saldoDeudor: 200000,
@@ -191,7 +191,7 @@ void main() {
     // se leía como si el pago hubiera saldado la mora.
     await PdfService.generarReciboAlumno(
       alumno: contrato.copyWith(
-        nombreAlumno: 'VAREIRO, YOSELIE ANAHI (REIMPRESION)',
+        nombreAlumno: 'TATU, HUGO (REIMPRESION)',
       ),
       evento: evento,
       montoPagado: total,

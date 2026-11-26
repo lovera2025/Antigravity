@@ -70,7 +70,7 @@ Con ese estado, antes de esta versión:
 **Cuántos.** Cero contratos hoy. Pero **73 arrastran $1.014.576** con el plan
 abierto, los 13 eventos en planificación tienen 642 alumnos que van a terminar de
 pagar antes de su fiesta, y solo 19 contratos están saldados: la ola no pasó
-todavía. `RIQUELME, AYLEN PRISCILA` está a un pago — base 9/9 paga, le queda la
+todavía. `GORRION, OFELIA` está a un pago — base 9/9 paga, le queda la
 mesa de $70.000 y arrastra $1.200.
 
 **Qué se hizo.**
@@ -108,7 +108,7 @@ mora. Si algo fallaba en el medio quedaban líneas ya escritas, el cartel decía
 *"No se pudo guardar el cobro. Reintentá"*, y **no hay deduplicación en ninguna
 parte**: el reintento las volvía a insertar y `recalcularProgresoContrato`
 recalcula el saldo desde los pagos, así que la familia terminaba figurando como
-que pagó el doble. Es la forma del incidente MONTIEL, que se había cerrado solo
+que pagó el doble. Es la forma del incidente ENEBRO, que se había cerrado solo
 por el lado del doble clic.
 
 **Probabilidad baja, daño alto.** Verificado: `flushBestEffort` se traga todo, así
@@ -182,7 +182,7 @@ compartido del chip y la planilla.
 **El modo solo-mora no se ejecutó nunca.** Está razonado y la matemática está
 cubierta por tests, pero hoy no hay ni un contrato con saldo cero y mora, así que
 ni el arnés ni la app pueden recorrerlo. Se va a ejercitar con el primer caso
-real — el candidato es RIQUELME cuando pague la mesa.
+real — el candidato es GORRION cuando pague la mesa.
 
 **La construcción de las líneas del lote vive dentro del modal** y ningún test la
 alcanza. La traducción se revisó campo por campo contra el diff, pero es el
@@ -195,7 +195,7 @@ riesgo residual de esta versión.
 **El subtítulo naranja de la grilla usa `calcularDesglose` bruto** mientras la
 planilla usa el neto, así que puede nombrar meses ya saldados. Medido: 6
 contratos discrepan y en 5 el total operativo es $0, o sea que el bloque ni se
-dibuja. El único visible hoy es **ROMERO, THIAGO** — título "Mora pendiente:
+dibuja. El único visible hoy es **CHINGOLO, SAUL** — título "Mora pendiente:
 $1.400", la grilla dice `C3 (Jun) · C4 (Jul)` y la planilla solo `C4 (Jul)`. El
 neto ya está calculado arriba y gratis. El mismo bloque está copiado en
 `cobro_masivos_tab.dart`.

@@ -136,7 +136,7 @@ enum MoraOrigenRecorte {
   /// La diferencia entre lo que la cola suma y el monto que hay en ficha se
   /// descuenta desde la **cabeza**, no desde la cola: si no, un perdón baja el
   /// número pero el rótulo sigue nombrando el mes más viejo, que es justo el
-  /// que se quiso perdonar (caso VAREIRO, 22-ago-2026).
+  /// que se quiso perdonar (caso TATU, 22-ago-2026).
   loQueQueda,
 }
 
@@ -151,7 +151,7 @@ class MoraTrackedOrigen {
   /// La ventana de cobro y el perdón muestran la ficha cuota por cuota con esa
   /// reconstrucción; lo que no se explica sale como un renglón genérico ("sin
   /// origen identificado"). El 18-oct eran 50 de 51 fichas explicadas: la otra,
-  /// ESPINOZA, DENIS AIMARA, tenía $87.600 que la 6.0.0 había inventado (ver
+  /// GUATAMBU, DENIS AIMARA, tenía $87.600 que la 6.0.0 había inventado (ver
   /// `MoraTrackedRecovery.reconciliarTodos`). Esto avisa si vuelve a pasar.
   static double sinExplicar({
     required double tracked,

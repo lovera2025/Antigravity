@@ -60,7 +60,7 @@ moraPendienteOperativa = sum(desgloseNeto) + tracked
 
 **Tracked** (v54) es el **carry-over acumulado**: mora de cuotas liquidadas sin cobrar el interés + remanentes de pagos parciales. Si se paga una cuota sin cobrar mora, esa mora **NO desaparece**: se suma al tracked existente. Queda congelada (no crece día a día).
 
-> ⚠️ Hasta v53 el tracked se **pisaba** en cada cobro con la mora de la última cuota liquidada — el remanente anterior se perdía (caso Bernel: C2 $6.900 borrados al cobrar C3). Corregido el 27-jul-2026 en `postCobroTrackedOffset`.
+> ⚠️ Hasta v53 el tracked se **pisaba** en cada cobro con la mora de la última cuota liquidada — el remanente anterior se perdía (caso Araza: C2 $6.900 borrados al cobrar C3). Corregido el 27-jul-2026 en `postCobroTrackedOffset`.
 
 **Offset** (`moraCobradaOffset`) absorbe los pagos de mora de cuotas que ya salieron del desglose calendario. Se actualiza al confirmar cada cobro.
 
@@ -126,7 +126,7 @@ es de cuotas ya liquidadas), así que acumular **no** puede duplicar.
 
 | Escenario | tracked | offset | Resultado |
 |-----------|---------|--------|-----------|
-| Pagar cuota sin mora | remanente + mora de la cuota | sin cambio | El carry-over se ACUMULA (Bernel: 6.900 → 15.000) |
+| Pagar cuota sin mora | remanente + mora de la cuota | sin cambio | El carry-over se ACUMULA (Araza: 6.900 → 15.000) |
 | Pagar cuota + mora parcial ($5k de $8.7k) | $3,700 | hist + $5k | Remanente legítimo |
 | Pagar cuota + mora completa | 0 | hist + mora | Todo pagado |
 | Pagar solo una cuota del arrastre | resto del arrastre | hist + lo cobrado | Check por cuota en el modal (v54) |
@@ -151,11 +151,11 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 ## Incidentes previos
 
-### 0. MOREIRA — el perdón que se veía en una PC y no en la otra (28-ago-2026)
+### 0. ALISO — el perdón que se veía en una PC y no en la otra (28-ago-2026)
 
 - **Síntoma:** el jefe le perdonó la mora en la PC de oficina y la ficha quedó en $0.
   En la notebook de operarios el mismo alumno seguía con la mora corriendo: 89 días,
-  **$92.783**. Las dos máquinas con la 4.9.2 instalada. Mismo caso en ARRIETA
+  **$92.783**. Las dos máquinas con la 4.9.2 instalada. Mismo caso en QUEBRACHO
   ($75.027).
 - **Causa:** de los cinco campos del perdón, en Supabase existían **dos**
   (`mora_pendiente_tracked` y `mora_tracked_ajuste`). `mora_exenta_hasta`,
@@ -190,8 +190,8 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
   mostró que el agujero era mucho mayor de lo que se veía desde la nube — **156
   exenciones, 183 offsets y 15 ajustes** que nunca habían subido, con el problema
   arrancando en **junio**. Divergían de verdad **12 contratos por $436.260**: 10
-  perdones permanentes (Moreira, Arrieta, los dos Espíndola, Barrios, Romero,
-  Fernández, Toledo, Álvarez, Espinoza) y 2 exenciones de rutina (Lezcano y Pared,
+  perdones permanentes (Aliso, Quebracho, los dos Viraro, Barrios, Romero,
+  Fernández, Toledo, Álvarez, Guatambu) y 2 exenciones de rutina (Radal y Pared,
   $8.400 → $26.700). Se subió el estado completo de los cuatro campos con `coalesce`,
   verificado campo por campo contra la base local.
 - **Trampa del rescate:** el generador usaba `int(r[2] or 1)` para
@@ -202,7 +202,7 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
   exenciones que ésta no tiene, y hay que sacarlas **antes** de instalarle la 4.9.3:
   con la 4.9.2 el pull conserva lo local, con la 4.9.3 manda la nube.
 
-### 1. VAREIRO — perdonar abril y que abril siguiera ahí (22-ago-2026)
+### 1. TATU — perdonar abril y que abril siguiera ahí (22-ago-2026)
 
 - **Síntoma:** remanente $16.600 rotulado "cuotas 1, 2 y 3" (abril, mayo, junio). Se
   perdonaron $5.600 —exactamente la mora de abril— esperando que abril
@@ -221,10 +221,10 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
   cuenta, aviso del recibo, diálogo de perdón, cobro masivos). El perdón del
   remanente pasa a prefijo para no prometer un cherry-pick que la ficha no puede
   recordar.
-- **Arnés:** `flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=vareiro`
+- **Arnés:** `flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=tatu`
   (solo lectura) imprime la cola del historial y el rótulo bajo las dos reglas.
 
-### 2. VIZGARRA — la mora cobrada que la ficha llamaba "no cobrada" (10-ago-2026)
+### 2. CARDO — la mora cobrada que la ficha llamaba "no cobrada" (10-ago-2026)
 
 - **Síntoma:** recibo Nº 11408158 (08/07/2026): `Interés mora (cuota base — este cobro)
   $3.150`. El Estado de cuenta, del mismo movimiento, `Mora pendiente cuota 3 (no cobrada
@@ -238,7 +238,7 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
   `normalizarBanderasLineasPdf` deriva las banderas del texto; la ficha muestra
   `rotuloFichaMora` en vez del concepto crudo. Ventana del lote de Finanzas: 2 s → 10 s,
   igual que `getUltimosPagosLote`.
-- **Arnés:** `flutter test tool/recibo_muestra_vizgarra_test.dart`.
+- **Arnés:** `flutter test tool/recibo_muestra_caso_c_test.dart`.
 
 ### 3. Barrientos — grilla inflaba mora (28-jun-2026)
 
@@ -337,8 +337,8 @@ flutter test test/mora_pendiente_display_test.dart
 |-------|-----|
 | 28-ago-2026 (**v4.9.3**, migración Supabase) | **El perdón cruza entre las dos PCs.** De los cinco campos del perdón, cuatro nunca se crearon en Supabase: se agregaron al SQLite local (v44, v52, v56, v61) y la migración de la nube quedó sin escribir. `_cleanForRemote` los borraba del payload —correcto mientras no existieran, porque si no PostgREST rechazaba el update entero— así que subía `mora_tracked_ajuste` y **la exención se perdía sin un solo error**: el jefe veía la mora perdonada, el operario la veía corriendo. Nueva migración `20260828000000_mora_exencion_columns.sql`; en el merge del pull pasa a mandar la nube, con la exención tratada como **par indivisible** (hasta + reinicia) y la excepción de conservar la local cuando la nube no trae ninguna. Se arregla también `_pullByEvento`, que borraba el perdón en la máquina del jefe al refrescar masivos. **Rescate:** abrir la base local mostró 156 exenciones, 183 offsets y 15 ajustes que nunca habían subido, con el problema arrancando en junio; divergían 12 contratos por **$436.260**. Se subió el estado completo de los cuatro campos, verificado campo por campo. **La migración va antes que el instalador**, y la PC de oficina hay que rescatarla antes de actualizarla. Ver `CONTEXTO_v4.9.3_2026-08-28.md`. |
 | 24-ago-2026 (**v4.9.1**) | **El plan saldado con mora en ficha vuelve a ser cobrable.** La guarda del modal miraba solo el saldo, así que un alumno que terminaba de pagar debiendo mora quedaba sin ninguna pantalla capaz de cobrarle, mientras el chip lo contaba y la planilla lo mandaba a llamar. Nuevo estado `planSaldadoConMora` (“PLAN SALDADO · DEBE MORA”): antes esa ficha decía **LIQUIDADO en verde** con “Mora pendiente” dos renglones abajo. Cobro masivos deja de gatear su línea de mora con `enMora`, que no ve el arrastre — eran 33 alumnos y $380.380 que la grilla ya mostraba. **Chip:** pasa a contar lo mismo que la grilla y que su propia planilla (curso + búsqueda + filtro de mora); ignoraba los tres y rotulaba el filtro igual, así que con “Mora no cobrada al pagar” decía 59 · $3.530.504 con 18 filas abajo. Regla única en `cumpleCursoYBusqueda`. **Cobro atómico:** `registrarPagosLote` mete las líneas y el patch del contrato en una sola transacción, encolado de sync incluido; antes una falla a mitad dejaba líneas escritas y el reintento las duplicaba. Ver `CONTEXTO_v4.9.1_2026-08-24.md`. |
-| 22-ago-2026 | **El perdón del remanente suelta la cuota más vieja** (`MoraOrigenRecorte`). El rótulo del arrastre se recorta por la **cabeza** cuando la pregunta es "qué queda debiéndose" y por la cola cuando es "de qué cuotas salió lo que entró". El perdón del remanente pasa a **prefijo** (`seleccionPerdonRemanentePrefijo`). Además: un cobro parcial de mora ya no le borra los días de atraso a la cuota. Caso VAREIRO, abajo. |
-| 21-ago-2026 (**v4.9**) | **La mora se cobra de la más vieja a la más nueva**, siempre: el arrastre se consume entero antes del calendario, en la ficha (`postCobroTrackedOffset`), en las líneas del papel (`repartirMoraParcial` / `lineasPdfDesdePreviewMora`) y en los checks del modal (prefijo sobre la cola combinada). **Recibo:** verde = lo que entró (“Pago parcial: la mora era de $X”), rojo = lo que falta (“FALTA PAGAR DE MORA”); nunca los dos diciendo lo mismo. En **reimpresión** el rojo ahora sale **fechado** (“FALTA PAGAR DE MORA AL DD/MM/AAAA” + “Es la mora al día de hoy, no la del día de este recibo”) y el verde solo dice “Es un pago parcial de la mora”, sin el total pre-cobro: sumar el restante de hoy daría un total que nunca existió. Omitir el aviso era peor — el papel mostraba lo que entró y nada de lo que seguía debiéndose. Además, y los renglones de arrastre dejan de repetir el título del bloque (`Cuota 1 (May)`, `De cuotas ya pagadas`). Se eliminó `detalleMoraCobradaRecibo`. **Perdón:** el remanente se abre por cuota de origen (`simularPerdonMora(trackedPerdonado:)`); el corte va por prefijo, igual que el calendario (corregido el 22-ago, ver abajo). **Grilla:** chip MORA con filtro por tipo + planilla de mora en PDF para llamar (`generarPlanillaMoraPdf`, ajustada con `_ajustarParaPaginas`). Arneses: `tool/recibo_muestra_vareiro_test.dart`, `tool/planilla_mora_muestra_test.dart`. |
+| 22-ago-2026 | **El perdón del remanente suelta la cuota más vieja** (`MoraOrigenRecorte`). El rótulo del arrastre se recorta por la **cabeza** cuando la pregunta es "qué queda debiéndose" y por la cola cuando es "de qué cuotas salió lo que entró". El perdón del remanente pasa a **prefijo** (`seleccionPerdonRemanentePrefijo`). Además: un cobro parcial de mora ya no le borra los días de atraso a la cuota. Caso TATU, abajo. |
+| 21-ago-2026 (**v4.9**) | **La mora se cobra de la más vieja a la más nueva**, siempre: el arrastre se consume entero antes del calendario, en la ficha (`postCobroTrackedOffset`), en las líneas del papel (`repartirMoraParcial` / `lineasPdfDesdePreviewMora`) y en los checks del modal (prefijo sobre la cola combinada). **Recibo:** verde = lo que entró (“Pago parcial: la mora era de $X”), rojo = lo que falta (“FALTA PAGAR DE MORA”); nunca los dos diciendo lo mismo. En **reimpresión** el rojo ahora sale **fechado** (“FALTA PAGAR DE MORA AL DD/MM/AAAA” + “Es la mora al día de hoy, no la del día de este recibo”) y el verde solo dice “Es un pago parcial de la mora”, sin el total pre-cobro: sumar el restante de hoy daría un total que nunca existió. Omitir el aviso era peor — el papel mostraba lo que entró y nada de lo que seguía debiéndose. Además, y los renglones de arrastre dejan de repetir el título del bloque (`Cuota 1 (May)`, `De cuotas ya pagadas`). Se eliminó `detalleMoraCobradaRecibo`. **Perdón:** el remanente se abre por cuota de origen (`simularPerdonMora(trackedPerdonado:)`); el corte va por prefijo, igual que el calendario (corregido el 22-ago, ver abajo). **Grilla:** chip MORA con filtro por tipo + planilla de mora en PDF para llamar (`generarPlanillaMoraPdf`, ajustada con `_ajustarParaPaginas`). Arneses: `tool/recibo_muestra_caso_b_test.dart`, `tool/planilla_mora_muestra_test.dart`. |
 | 16-ago-2026 (**v4.7.8**, v68) | **Perdón durable:** `mora_tracked_ajuste` (SQLite + Supabase). Recovery: `tracked = max(0, historial + ajuste)`. Botón perdonar en cada alumno (modo jefe). No mueve Reg. Ver `CONTEXTO_v4.7.8_2026-08-16.md`. |
 | 27-jul-2026 (**v54**) | **Fix carry-over**: `postCobroTrackedOffset` acumula el remanente en vez de pisarlo (guarda estructural `cuotasPreCobro > 0`). `MoraTrackedOrigen` también acumula orígenes (desglose por cuota con vencimiento/días/cobrado). Modal: un check por cuota arrastrada. Grillas: arrastre abierto por cuota. PDFs: "DETALLE DE PAGO" / "LO QUE SE PAGA HOY", mora anidada bajo su cuota (capa `display`, sin tocar `concepto` persistido), franja "ATENCIÓN: queda debiendo mora" en resumen y recibo, nuevo `generarEstadoCuentaAlumno` (botón PDF en Estado de Cuenta). Dry-run read-only `scripts/dry_run_mora_tracked.dart` (47 contratos, $195.630). La reconciliación retroactiva corre sola en el post-pull del sync (decisión 27-jul). El pendiente de “perdón solo-ficha sin marcador” se cerró en **v4.7.8**. |
 | 10-jul-2026 (**v4.3.1**) | Perdón solo ficha (tracked independiente, sin exención); filtro masivo Solo ficha. Ver `CONTEXTO_v4.3.1_2026-07-10.md`. |

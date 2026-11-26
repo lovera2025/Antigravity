@@ -8,27 +8,27 @@ en claude.ai el 16-oct, `SPEC — Mora por cuota y bajas temporales`.
 
 "Un alumno que vuelve de una baja temporal tiene que verse exactamente igual que uno que nunca estuvo en baja: cada
 cuota vencida con su propia mora, calculada desde su vencimiento." En la ventana de cobro: cuota 1 y su mora,
-cuota 2 y su mora, cada una con su casilla, como la de un alumno 0/9. El caso real fue TOÑANEZ, AGUSTINA (la
+cuota 2 y su mora, cada una con su casilla, como la de un alumno 0/9. El caso real fue YACARE, ZULMA (la
 Normal, 0 de 9 cuotas de $30.000).
 
 La cuenta de la especificación es la del programa: vencimiento a fin de mes desde la inscripción
-(`_ultimoDiaMesK`), 1 % de la cuota por día. Los números de TOÑANEZ al 16/10 ($50.700, $41.400, $32.400,
+(`_ultimoDiaMesK`), 1 % de la cuota por día. Los números de YACARE al 16/10 ($50.700, $41.400, $32.400,
 $23.100, $13.800 y $4.800: $166.200) están en `test/baja_temporal_mora_test.dart` tal cual.
 
 ## Lo que pasaba (leído el 18-oct)
 
 - Dar de baja ponía `[BAJA]` en el nombre y el día en `mora_fecha_referencia`. `fechaEfectivaMoraAr` usaba esa
-  fecha en vez de hoy, y la mora quedaba cortada ahí **también después de reincorporar**: TOÑANEZ volvía con $9.300
+  fecha en vez de hoy, y la mora quedaba cortada ahí **también después de reincorporar**: YACARE volvía con $9.300
   en vez de $166.200.
-- **Los $166.200 de TOÑANEZ no los escribió la reincorporación**, como dice la especificación. Se cargaron a mano
+- **Los $166.200 de YACARE no los escribió la reincorporación**, como dice la especificación. Se cargaron a mano
   en modo jefe con "poner mora" (`aplicarTrackedDeseado`) en la PC del jefe, seguramente para compensar la mora
   congelada. Esa tarde se pusieron en 0 a mano en la nube.
 - **Ese arreglo de la nube no llegaba a las PCs.** Al bajar un contrato, la PC conservaba su `mora_tracked_ajuste`
   si la nube traía 0 (`sync_engine.dart`, de cuando esas columnas no subían). Tampoco llegaba sacar un perdón.
 - **Editar alumno mandaba toda la mora de esa PC** (`datosEdicionAlumno` usa `toJson()` entero). Editarle el
-  teléfono a TOÑANEZ en la PC del jefe habría vuelto a subir los $166.200.
+  teléfono a YACARE en la PC del jefe habría vuelto a subir los $166.200.
 - **La fecha congelada inventó mora vieja.** La revisión automática rehace la ficha repasando los pagos, y con la
-  fecha de la baja calculaba todos los pagos viejos a ese día. ESPINOZA, DENIS AIMARA pagó las cuotas 1 a 3 antes
+  fecha de la baja calculaba todos los pagos viejos a ese día. GUATAMBU, DENIS AIMARA pagó las cuotas 1 a 3 antes
   de que vencieran y quedó con $87.600 de ficha (128, 97 y 67 días al 05/09).
 
 ## Lo que se hizo (fase 1, adaptada)
@@ -55,14 +55,14 @@ $23.100, $13.800 y $4.800: $166.200) están en `test/baja_temporal_mora_test.dar
   - con la 6.0.0 y la 6.1.0, los 629 activos dan idénticos en la ventana, el papel, la mora y el recibo, y las
     operaciones del día también;
   - cambian solo las 14 bajas;
-  - de los 40 ajustes de la PC, 39 están igual en la nube. MOREIRA, FACUNDO N lo cambiaron en la oficina después
+  - de los 40 ajustes de la PC, 39 están igual en la nube. ALISO, HORACIO lo cambiaron en la oficina después
     de que se cerró la PC.
 
   Página: `build/muestras_6.1.0/bajas/Simulacro_bajas.html`.
 
 ## El día de instalar la 6.1.0
 
-- **TOÑANEZ:** con su OK en el momento, tocar su ficha en la nube sin cambiar plata (reescribir
+- **YACARE:** con su OK en el momento, tocar su ficha en la nube sin cambiar plata (reescribir
   `mora_tracked_ajuste = 0`; el trigger renueva `updated_at`). Así todas las PCs la vuelven a bajar y la del jefe
   toma el 0. Después, mirar en la PC del jefe que su ventana de cobro se vea como la de un 0/9.
 - **Hasta entonces, en la oficina no le cobran ni le editan nada.**

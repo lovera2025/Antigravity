@@ -16,7 +16,7 @@ void main() async {
   
   var db = await databaseFactory.openDatabase(dbPath);
   
-  final res = await db.rawQuery("SELECT id, nombre_alumno, mesa_extra_precio, mesa_extra_pagado FROM contratos_alumnos WHERE nombre_alumno LIKE '%INSAURRALDE%'");
+  final res = await db.rawQuery("SELECT id, nombre_alumno, mesa_extra_precio, mesa_extra_pagado FROM contratos_alumnos WHERE nombre_alumno LIKE '%LUMA%'");
   for (var r in res) {
     print('Alumno: ${r['nombre_alumno']}');
     print('Mesa Precio: ${r['mesa_extra_precio']}');

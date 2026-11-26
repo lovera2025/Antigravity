@@ -33,7 +33,7 @@ enum CaminoDelBorrado {
 /// `borrados_en_otra_pc.txt`, en la carpeta de la base (Documentos\Junior
 /// Eventos): cada vez, la fecha, por qué camino se enteró y un renglón por cosa.
 ///
-/// Existe por el 19-oct-2026: el jefe borró un pago de DE CARLO, MICAELA
+/// Existe por el 19-oct-2026: el jefe borró un pago de ARAUCARIA, VALERIA
 /// ESTEFANIA en su PC y la del operario se lo quedó; al cobrarle, contó los dos
 /// pagos y le pisó el saldo a la nube. Con esto, al instalar en cada PC se ve
 /// qué tenía de más.

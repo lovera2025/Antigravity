@@ -54,7 +54,7 @@ const _salida = String.fromEnvironment('salida', defaultValue: '');
 
 const _apellidos = [
   'ACOSTA', 'AGUIRRE', 'ALVAREZ', 'BARRIOS', 'BENÍTEZ', 'CABRERA', 'CANTEROS',
-  'CÁCERES', 'DUARTE', 'ESCOBAR', 'FERNÁNDEZ', 'FIGUEROA', 'GIMÉNEZ', 'GÓMEZ',
+  'CEDRO', 'DUARTE', 'ESCOBAR', 'FERNÁNDEZ', 'FIGUEROA', 'GIMÉNEZ', 'GÓMEZ',
   'HERRERA', 'INSFRÁN', 'JARA', 'LEDESMA', 'LÓPEZ', 'MEDINA', 'MOLINA',
   'NÚÑEZ', 'OJEDA', 'ORTIZ', 'PEREYRA', 'QUIROGA', 'RAMÍREZ', 'RÍOS', 'ROMERO',
   'SOSA', 'TORRES', 'VALLEJOS', 'VERA', 'ZARATE',

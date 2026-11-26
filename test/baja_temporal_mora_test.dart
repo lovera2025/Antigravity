@@ -13,19 +13,19 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 /// Un alumno que vuelve de una baja tiene que verse exactamente igual que uno
 /// que nunca estuvo de baja: cada cuota vencida con su mora desde su
 /// vencimiento. Los números son los de la especificación del usuario
-/// (`SPEC — Mora por cuota y bajas temporales`, 16-oct): TOÑANEZ, AGUSTINA, de
+/// (`SPEC — Mora por cuota y bajas temporales`, 16-oct): YACARE, ZULMA, de
 /// la Normal, 0 de 9 cuotas de $30.000, inscripta el 30-mar, al 16-oct.
 void main() {
   final alDieciseis = DateTime(2026, 10, 16);
 
   /// La gemela: nunca estuvo de baja.
   ContratoAlumno gemela({
-    String nombre = 'TOÑANEZ, AGUSTINA',
+    String nombre = 'YACARE, ZULMA',
     DateTime? moraFechaReferencia,
     double moraPendienteTracked = 0,
   }) =>
       ContratoAlumno(
-        id: 'tonanez',
+        id: 'yacare',
         eventoId: 'normal',
         nombreAlumno: nombre,
         cantidadAcompanantes: 0,
@@ -46,7 +46,7 @@ void main() {
 
   /// Todavía de baja.
   ContratoAlumno deBaja() => gemela(
-        nombre: '[BAJA] TOÑANEZ, AGUSTINA',
+        nombre: '[BAJA] YACARE, ZULMA',
         moraFechaReferencia: DateTime(2026, 5, 31),
       );
 
@@ -179,7 +179,7 @@ void main() {
         ahoraUtcIso: '2026-10-18T12:00:00.000Z',
       );
       expect(datos, {
-        'nombre_alumno': '[BAJA] TOÑANEZ, AGUSTINA',
+        'nombre_alumno': '[BAJA] YACARE, ZULMA',
         'baja_temporal_desde': '2026-10-18T12:00:00.000Z',
       });
       expect(datos.keys.where((k) => k.startsWith('mora')), isEmpty);
@@ -187,7 +187,7 @@ void main() {
 
     test('reincorporar solo devuelve el nombre', () {
       expect(BajaTemporal.alReincorporar(deBaja()), {
-        'nombre_alumno': 'TOÑANEZ, AGUSTINA',
+        'nombre_alumno': 'YACARE, ZULMA',
       });
     });
 
@@ -228,7 +228,7 @@ void main() {
     test('el [BAJA] no se duplica ni deja espacios', () {
       expect(
         BajaTemporal.alDarDeBaja(deBaja(), ahoraUtcIso: 'x')['nombre_alumno'],
-        '[BAJA] TOÑANEZ, AGUSTINA',
+        '[BAJA] YACARE, ZULMA',
       );
       expect(BajaTemporal.nombreLimpio('[BAJA]  PEREZ, ANA '), 'PEREZ, ANA');
     });

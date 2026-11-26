@@ -18,11 +18,11 @@ Lo contó él: "en la PC del modo jefe borré un dato y en la PC del modo jefe s
 operario". Lo que quiere: **lo que se borra o se cambia en modo jefe tiene que verse al instante en la del operario,
 como pasa cuando se perdona la mora.**
 
-- **DE CARLO, MICAELA ESTEFANIA** (Colegio Nacional, pactado $296.100). A las 18:08 el jefe borró con la escobita
+- **ARAUCARIA, VALERIA** (Colegio Nacional, pactado $296.100). A las 18:08 el jefe borró con la escobita
   una entrega de $60.000 del 28/05. A las 18:09 el operario le cobró la entrega de $60.000 de ese día. Su PC todavía
   tenía el pago borrado, contó los dos y subió un saldo de **$176.100 en vez de $236.100**. Lo volvió a subir a las
   18:27, al guardar una nota. El usuario corrigió el saldo en la nube y borró a mano el pago en la PC del operario.
-- **ZAMPALLONI, JOSIAS**: a las 17:31 el jefe borró un pago de $35.000 del 21/04 ("Cuota Base (1/9)"). En la nube
+- **JUNCO, MATEO**: a las 17:31 el jefe borró un pago de $35.000 del 21/04 ("Cuota Base (1/9)"). En la nube
   está bien (pactado $350.000, dos pagos del 19-oct, saldo $230.000). Pero el pago seguía en la PC de la casa y casi
   seguro en la del operario: si le cobraban ahí, le pisaban el saldo con $195.000.
 
@@ -38,9 +38,9 @@ como pasa cuando se perdona la mora.**
 - Los permisos de la nube dejan ver todas las filas de esas tablas a cualquier usuario con sesión: una foto de la nube
   es entera.
 
-## ROTELA, FABIO DANIEL: los pagos restaurados (19-oct, 20:39)
+## BIGUA, ULISES: los pagos restaurados (19-oct, 20:39)
 
-Ya publicada la 6.1.1, el usuario avisó desde su casa: "ROTELA, FABIO DANIEL, de Técnica Pinaroli, hay que recuperar
+Ya publicada la 6.1.1, el usuario avisó desde su casa: "BIGUA, ULISES, de Técnica Pinaroli, hay que recuperar
 lo que se borró".
 
 - **Cómo estaba, en la base de la PC de la casa** (cerrada desde las 14:16, la única copia): pactado $315.000 en 9
@@ -70,11 +70,11 @@ casa: "Mora pendiente cuotas 2 y 3: $240.955" y un total de $292.755, mientras e
 - **Qué pasó:**
   - a las 20:45 la PC de la casa abrió **todavía con la 6.1.0** y su revisión de la mora corrió con el plan que había
     en la nube ($338.500 en 1 cuota): le puso de ficha $240.955 y la subió;
-  - enseguida se actualizó a la 6.1.1, que sacó lo borrado y volvió a revisar en el orden bueno (DE CARLO quedó en $0);
+  - enseguida se actualizó a la 6.1.1, que sacó lo borrado y volvió a revisar en el orden bueno (ARAUCARIA quedó en $0);
   - a las 20:46:56 el usuario le volvió a poner $315.000 en 9 cuotas desde esa PC (lo confirmó él), pero la ficha
     quedó con la cuenta del plan de 1 cuota.
 - **El cálculo, sobre una copia de la base de la casa** (`VACUUM INTO`, el programa abierto), con
-  `tool/simulacro_revision_mora_test.dart`: corrige a un solo alumno, ROTELA. La ficha pasa de $240.955 a **$51.700**
+  `tool/simulacro_revision_mora_test.dart`: corrige a un solo alumno, BIGUA. La ficha pasa de $240.955 a **$51.700**
   ($12.850 de la cuota 2 + $38.850 de la cuota 3, completada el 19-oct con 111 días de atraso), el "ya usado" queda en
   $40.000 y la mora de $292.755 a **$103.500**. Es la cuenta que ya mostraba el detalle de la ventana.
 - **En la nube, con su OK:** `mora_pendiente_tracked = 51700`, solo si seguía en 240955. Para volver atrás:
@@ -144,7 +144,7 @@ Todo en `lib/core/services/sync_engine.dart`, el archivo nuevo `lib/core/service
 ## Lo que se probó
 
 - `test/borrados_de_otra_pc_test.dart`, 20 tests sobre una base temporal y una nube simulada:
-  - DE CARLO con sus números: al abrirla queda un pago, el saldo $236.100, se sube ese saldo y no se manda ningún
+  - ARAUCARIA con sus números: al abrirla queda un pago, el saldo $236.100, se sube ese saldo y no se manda ningún
     borrado. Igual por el historial, antes de cobrar, por la revisión y por la cuenta de cada ciclo;
   - un cobro que espera subir no se toca, tampoco si sube en el medio de la revisión;
   - con una foto incompleta, o una nube que no devuelve ni el alumno, no se toca nada;
@@ -163,12 +163,12 @@ Todo en `lib/core/services/sync_engine.dart`, el archivo nuevo `lib/core/service
 
 ## Hasta instalar
 
-- **ZAMPALLONI, JOSIAS en la PC del operario:** si su estado de cuenta muestra el pago de $35.000 del 21/04,
+- **JUNCO, MATEO en la PC del operario:** si su estado de cuenta muestra el pago de $35.000 del 21/04,
   borrarlo ahí con la escobita (el borrado que va a la nube no toca nada: ese pago ya no está). Hasta entonces, en
   esa PC no se le cobra, no se lo edita y no se le anota nada.
 - **Después de borrar un pago en una PC, mirar en la otra** que haya desaparecido; si sigue, borrarlo también ahí.
 - **En la PC de la casa, no abrir el programa** hasta instalar la 6.1.1: la revisión de la mora haría la cuenta de
-  DE CARLO y ZAMPALLONI con el pago de más.
+  ARAUCARIA y JUNCO con el pago de más.
 
 ## Publicar (con él presente; cada paso con su OK)
 
@@ -184,10 +184,10 @@ Todo en `lib/core/services/sync_engine.dart`, el archivo nuevo `lib/core/service
    casa. Lo de la casa (los 2 pagos y los 23 renglones) se comprueba cuando vuelva.
 1. **La PC de la casa**: copia de la base con el programa cerrado, instalar, y mirar que saque **exactamente** los 2
    pagos y los 23 renglones, y nada más (comparado con la nube y con la copia, tabla por tabla).
-2. **La del operario**, cuando no esté atendiendo. Mirar qué escribió en `borrados_en_otra_pc.txt` y que ZAMPALLONI quede igual que la nube.
+2. **La del operario**, cuando no esté atendiendo. Mirar qué escribió en `borrados_en_otra_pc.txt` y que JUNCO quede igual que la nube.
    Prueba sin plata, con las dos PCs abiertas: anotar una nota en ARGUELLO, TOMAS en una y borrarla; en la otra tiene
    que desaparecer en segundos, y el archivo dice por qué camino.
-3. **La del jefe**, de la 6.0.0 directo a la 6.1.1. Después, **lo de TOÑANEZ** que quedó de la 6.1.0 (ver "La
+3. **La del jefe**, de la 6.0.0 directo a la 6.1.1. Después, **lo de YACARE** que quedó de la 6.1.0 (ver "La
    publicación" en su CONTEXTO): la misma sentencia de las 16:15, con su OK, y que su ventana de cobro diga $171.600.
 4. La web no cambia (no tiene base en la PC).
 
@@ -206,7 +206,7 @@ Está PUBLICADA (release v6.1.1, 19-oct) y sin instalar en ninguna PC. Sigue
 instalarla conmigo: la del operario cuando no esté atendiendo, la del jefe
 (de la 6.0.0 directo a la 6.1.1) y la de la casa (tiene que sacar los 2
 pagos y los 23 renglones de presupuesto); con la del jefe instalada, lo de
-TOÑANEZ.
+YACARE.
 Contestame primero lo que te pregunto, en una línea, y siempre en español.
 Lo que toque la base real o la nube, con mi OK en el momento. No corras la app
 desde el working tree. Con "actualizá el contexto", frená y dejá todo anotado.

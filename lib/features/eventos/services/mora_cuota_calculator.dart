@@ -172,7 +172,7 @@ class MoraCuotaCalculator {
   /// [ContratoAlumno.moraFechaReferencia] ya no congela nada (6.1.0). La baja
   /// temporal la guardaba con el día de la baja, y al reincorporar quedaba: el
   /// alumno volvía con la mora cortada en ese día, muy por debajo de la de un
-  /// compañero que tampoco pagó (TOÑANEZ, AGUSTINA: $9.300 contra $166.200 al
+  /// compañero que tampoco pagó (YACARE, ZULMA: $9.300 contra $166.200 al
   /// 16-oct). La regla del usuario es que un reincorporado tenga exactamente la
   /// mora de uno que nunca estuvo de baja, cuota por cuota desde su vencimiento.
   ///
@@ -400,7 +400,7 @@ class MoraCuotaCalculator {
   ///
   /// La regla que cumple después de cualquier cobro: `historial − offset` (el
   /// crédito FIFO) es exactamente la mora pagada por adelantado de cuotas que
-  /// **siguen abiertas**. El caso: LOPEZ, MORENA AILEN pagó el 6/11/2026
+  /// **siguen abiertas**. El caso: ULMO, CELIA pagó el 6/11/2026
   /// $130.900 de mora de las cuotas 2, 3 y 4 completando solo la 2 y la 3
   /// ($98.000). El offset se quedaba con los $130.900, los $32.900 de la 4
   /// dejaban de ser crédito y la app se los volvía a pedir: $268.100 en vez de
@@ -413,7 +413,7 @@ class MoraCuotaCalculator {
   /// no es el offset —que sube junto con el historial y deja el crédito FIFO
   /// igual que antes— sino la exención. Calcular tracked/offset por un lado y la
   /// exención por otro dejaba una ventana en la que el estado post-cobro estaba
-  /// a medias: el recibo del 07/08/2026 (BERNEL) se emitió ahí y reclamó como
+  /// a medias: el recibo del 07/08/2026 (ARAZA) se emitió ahí y reclamó como
   /// impaga la misma mora de julio que estaba cobrando en su primera línea.
   /// Van juntos y se aplican juntos con [EstadoMoraPostCobro.aplicarA].
   static EstadoMoraPostCobro postCobroTrackedOffset({
@@ -442,7 +442,7 @@ class MoraCuotaCalculator {
     /// los meses que vienen. Sin ella (`null`) el offset solo suma lo de este
     /// cobro, como antes.
     ///
-    /// El caso: mora pagada en dos veces. MOLINA, CARLOS LAUTARO pagó $29.400
+    /// El caso: mora pagada en dos veces. ABEDUL, ALBERTO pagó $29.400
     /// de mora el 22/09 (sin completar cuota, sin exención) y $52.850 el 13/10
     /// (completó la cuota y saldó todo). El offset quedó en lo del 13/10 más lo
     /// anterior a septiembre, y los $29.400 del 22/09 se volvían a descontar de

@@ -18,8 +18,8 @@ void main() async {
   
   var db = await databaseFactory.openDatabase(dbPath);
   
-  // Obtener a Insaurralde
-  final res = await db.rawQuery("SELECT * FROM contratos_alumnos WHERE nombre_alumno LIKE '%INSAURRALDE, ANGEL IVAN%' LIMIT 1");
+  // Obtener a Luma
+  final res = await db.rawQuery("SELECT * FROM contratos_alumnos WHERE nombre_alumno LIKE '%LUMA, NESTOR%' LIMIT 1");
   if (res.isNotEmpty) {
       final alumno = Map<String, dynamic>.from(res.first);
       final id = alumno['id'];
@@ -45,7 +45,7 @@ void main() async {
       });
       
       print('====================================================');
-      print('¡LISTO! Se restauraron los \$15.000 para Insaurralde.');
+      print('¡LISTO! Se restauraron los \$15.000 para Luma.');
       print('El cambio ya está en la cola para subir a la nube.');
       print('Inicia la app presionando F5 (flutter run).');
       print('====================================================');

@@ -8,8 +8,8 @@
 // sync_queue.dart → package:flutter/foundation.dart:
 //
 //   flutter test scripts/dry_run_mora_tracked.dart
-//   MORA_ALUMNO=BERNEL flutter test scripts/dry_run_mora_tracked.dart
-//   $env:MORA_ALUMNO='BORDA'; flutter test scripts/dry_run_mora_tracked.dart
+//   MORA_ALUMNO=ARAZA flutter test scripts/dry_run_mora_tracked.dart
+//   $env:MORA_ALUMNO='NOGAL'; flutter test scripts/dry_run_mora_tracked.dart
 import 'dart:io';
 
 import 'package:arguello_events/features/eventos/services/mora_tracked_recovery.dart';
@@ -145,7 +145,7 @@ void _tablaComparativa(Database db, List<Map<String, dynamic>> contratos) {
           objetivo.tracked > 0.01 &&
           MoraTrackedRecovery.tienePagosCuotaBaseEnHistorial(pagos),
       // Ya se cobró mora y aun así queda remanente: puede venir de un criterio
-      // de mora viejo, no del carry-over perdido (el caso Borda).
+      // de mora viejo, no del carry-over perdido (el caso Nogal).
       revisar: moraPagada > 0.01 && objetivo.tracked > 0.01,
       moraPagada: moraPagada,
     ));

@@ -47,7 +47,7 @@ const _nombres = [
   'FERNANDEZ, IVAN',
   'GIMENEZ, LUCIA',
   'HERRERA, MATEO',
-  'INSAURRALDE, SOL',
+  'LUMA, SOL',
   'JARA, THIAGO',
   'LEDESMA, ABRIL',
   'MEZA, BAUTISTA',

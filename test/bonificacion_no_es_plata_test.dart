@@ -7,7 +7,7 @@
 // Mi Empresa era el único lugar que las mezclaba: las contaba como cobrado. Y
 // como se guardan sin medio de pago, caían en el bucket de EFECTIVO — que es
 // contra lo que se compara la caja física. Eran $869.500 de efectivo que el
-// sistema decía tener y en la caja no estaban (RAMON CACERES $720.000 el
+// sistema decía tener y en la caja no estaban (RAMON CEDRO $720.000 el
 // 15/04/2026 y Maria y Jose $149.500 el 13/06/2026).
 //
 // La regla vive en una sola función para que no se escriba distinto en cada
@@ -53,7 +53,7 @@ void main() {
   });
 
   group('la plata recibida excluye las bonificaciones', () {
-    test('el caso de RAMON CACERES', () {
+    test('el caso de RAMON CEDRO', () {
       // Presupuesto $7.200.000: entraron $6.480.000 y $720.000 fueron descuento.
       final movimientos = [
         _t('SEÑA'),

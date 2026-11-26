@@ -1,7 +1,7 @@
 # Contexto — Junior Eventos v4.7.2 (11 de agosto de 2026)
 
 > **Referencia:** `CONTEXTO_v4.7.2` · `mora cobrada que decía "no cobrada"` · `recibo de Finanzas` · `un solo motor de conceptos` · `Reg movido y auditorías retroactivas`
-> Si en un chat futuro decís *"leé el contexto de 4.7.2"*, *"lo de VIZGARRA"*,
+> Si en un chat futuro decís *"leé el contexto de 4.7.2"*, *"lo de CARDO"*,
 > *"por qué la ficha decía que no se cobró"* o *"por qué no se puede auditar mora vieja
 > con el Reg de hoy"*, apuntá a este archivo.
 
@@ -17,7 +17,7 @@ los rótulos se arman al mostrar, no se guardan.
 
 ## El caso
 
-Foto del 10-ago: recibo Nº 11408158 (VIZGARRA, SONIA — cobro del 08/07/2026 10:14) al
+Foto del 10-ago: recibo Nº 11408158 (CARDO, DELIA — cobro del 08/07/2026 10:14) al
 lado del Estado de cuenta del **mismo movimiento**.
 
 | Papel | Dice | $ |
@@ -126,7 +126,7 @@ nada. Con varias, repartir sería fabricar un desglose que nadie calculó.
 
 ## El Reg movido: por qué una auditoría retroactiva miente
 
-Durante el análisis de VIZGARRA se concluyó que había un **cobro de más de $3.150**.
+Durante el análisis de CARDO se concluyó que había un **cobro de más de $3.150**.
 **Esa conclusión era incorrecta** y quedó registrada acá para que nadie la repita.
 
 El razonamiento fue: con el Reg actual (30/03/2026) la cuota 3 vencía el 30/06 y se pagó
@@ -139,7 +139,7 @@ calculó contra el Reg vigente ese día, que ya no existe en la base.
 > no conserva los payloads viejos y no hay tabla de auditoría. Un barrido así da falsos
 > positivos.
 
-Con ese criterio se marcaron como sospechosos VIZGARRA, OJEDA y JUAREZ sobre 38 arrastres
+Con ese criterio se marcaron como sospechosos CARDO, OJEDA y JUAREZ sobre 38 arrastres
 del evento. **Los tres son falsos positivos.**
 
 ---
@@ -168,16 +168,16 @@ este caso.
 | `lib/features/eventos/detalle_evento_masivo_screen.dart` | Banderas en el reimprimir por fila; `concepto_ficha` + subtexto; tilde en mora |
 | `lib/features/eventos/services/mora_concepto_rotulo.dart` | `rotuloFichaMora`, `numerosCuotaPendienteDesdeConcepto`, `sufijoNoCobradaAlPagar` |
 | `lib/features/eventos/services/concepto_pago_display.dart` | `concepto_ficha`/`subtexto_ficha`; `_detalleDesdeElConcepto` |
-| `docs/CONTEXTO_MORA_OPERATIVA.md` | Sección "Persistido vs display" + incidente VIZGARRA |
+| `docs/CONTEXTO_MORA_OPERATIVA.md` | Sección "Persistido vs display" + incidente CARDO |
 
 **Tests:** `test/mora_concepto_rotulo_test.dart` (`rotuloFichaMora`),
 `test/cobro_pdf_display_test.dart` (mapas armados a mano),
-`test/concepto_pago_display_test.dart` (historial VIZGARRA completo).
+`test/concepto_pago_display_test.dart` (historial CARDO completo).
 
 **Arnés manual**, emite el papel sin base ni red:
 
 ```powershell
-flutter test tool/recibo_muestra_vizgarra_test.dart
+flutter test tool/recibo_muestra_caso_c_test.dart
 ```
 
 Sale `Cuota 4 de 9 $35.000` + `Mora de la cuota 3 $3.150` en el bloque de arrastre,

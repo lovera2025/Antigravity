@@ -23,7 +23,7 @@ Ramificar de `main` significa trabajar sobre código de hace meses.
 (hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón, los predios
 con nombre (la migración v74 ya probada sobre una copia de la base real) y las muestras de
 la etapa 5, en una sola versión. **Publicada el 19-oct** (el SQL de los predios corrido y la
-web también). Lo de TOÑANEZ en la PC del jefe quedó resuelto. La mora por cuota suelta (fase 2) quedó descartada.
+web también). Lo de YACARE en la PC del jefe quedó resuelto. La mora por cuota suelta (fase 2) quedó descartada.
 Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 **La 6.1.1** (publicada el 19-oct; al 23-oct, instalada en las tres PCs): lo que se borra a mano en una PC desaparece
@@ -62,13 +62,13 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
   (Mi Empresa → lápiz → Corregir medio de pago; `cajaTrasCambioDeFecha`, `cierre_caja/services/fecha_y_caja.dart`). Regla del usuario:
   esa plata no entró ese día. Una caja cerrada no se toca. Cambia todo el cobro junto (`lineasDelMismoCobro`), sin fechas futuras, y al
   cambiar la fecha o anular se revisa la mora del alumno en el momento. **No sale como 6.3.4 sola: va con todo junto en la 6.4.0**
-  (decidido el 7-nov a la noche). Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta entonces. Entrada:
+  (decidido el 7-nov a la noche). Caso: TIPA, GASTON, que sigue en la caja del modo jefe del 7-nov hasta entonces. Entrada:
   `docs/CONTEXTO_v6.3.4_2026-11-07.md`, que empieza con "Para retomar en otro chat".
 - **Programado el 8-nov (noche), sin publicar: el aviso entre PCs que llega por el socket ya no se tira**
   (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`, `cuerpoDelBroadcast`). Ver "El sync en reposo", en Arquitectura. Sale con todo junto
   en la 6.4.0.
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
-  por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
+  por adelantado de una cuota que no se completa se volvía a pedir (ULMO, CELIA: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
 - **El sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final; entrada:
   `docs/CONTEXTO_v6.3.3_2026-11-06.md`): sin el ciclo de 10 s, el pulso como transporte, red de seguridad de 5 y 30 min, latido
@@ -876,6 +876,11 @@ Hay convenciones propias, y conviene respetarlas antes de inventar otras:
 Los mensajes de commit describen el efecto para el usuario, no el cambio
 técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 
+**Los nombres de alumnos del repositorio son inventados desde el 26-nov-2026** (el repositorio es público). Los reales
+se cambiaron por apellidos de árboles y pájaros ("CEIBO, ANA", "ULMO, CELIA") en las ramas feature y `release/6.9.x`;
+la tabla real → inventado está en `build/nombres_reemplazados_2026-11-26.md` (fuera de git, solo en la PC de la casa).
+En la historia de git y en las ramas viejas siguen los reales. Un caso nuevo va sin nombre o con uno inventado.
+
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
@@ -1572,7 +1577,7 @@ históricos y la pantalla se ve como siempre.
   número de mesa, los acompañantes y la música **solo si alguien los cambió a mano**. Editar alumno manda la ficha
   entera: una PC que todavía no bajó el sorteo o el Excel del delegado los mandaría vacíos al editar un teléfono, y
   los borraría en la nube y en las demás. Un dato nuevo que se cargue de a muchos tiene que entrar en esa regla.
-  **La mora, igual** (6.1.0, `camposMoraDelAlumno`): editar a TOÑANEZ desde la PC del jefe habría vuelto a subir
+  **La mora, igual** (6.1.0, `camposMoraDelAlumno`): editar a YACARE desde la PC del jefe habría vuelto a subir
   los $166.200 que en la nube ya estaban en 0.
 
 - **La mora congelada (6.2.1): resta días, nunca cambia una fecha.** El jefe congela la mora de un alumno (el copo de
@@ -1646,8 +1651,7 @@ históricos y la pantalla se ve como siempre.
   pasar por ahí**, no reimplementar la comparación al lado.
 
 - **Lo que se borra a mano en una PC tiene que llegar a la otra, y el pull no lo trae** (6.1.1). El pull baja lo
-  nuevo y lo cambiado, nunca lo que dejó de existir. El 19-oct-2026 el jefe borró un pago de $60.000 de DE CARLO,
-  MICAELA ESTEFANIA. La PC del operario, prendida y cobrando, se lo quedó: el aviso al instante (el pulso) se tiraba
+  nuevo y lo cambiado, nunca lo que dejó de existir. El 19-oct-2026 el jefe borró un pago de $60.000 de ARAUCARIA, VALERIA. La PC del operario, prendida y cobrando, se lo quedó: el aviso al instante (el pulso) se tiraba
   si la PC estaba ocupada, y la revisión de cada 10 minutos miraba solo seis tablas padre ("las hijas caen por
   cascada", que vale si se borra el padre, no una hija suelta). Al cobrarle, contó los dos pagos y le pisó el saldo
   a la nube ($176.100 en vez de $236.100). En la PC de la casa había además 23 renglones de presupuesto borrados.
@@ -1709,7 +1713,7 @@ históricos y la pantalla se ve como siempre.
 - **La mora que ya se pagó no se puede volver a descontar** (regla del usuario: la mora de un mes pagada no se
   cobra más; la siguiente sí). Lo cuida el "ya usado" (`mora_cobrada_offset`): cuando un cobro salda toda la mora
   y da la eximición, cubre **todo** lo cobrado (`postCobroTrackedOffset(moraCobradaHistorialPreCobro:)`). En
-  oct-2026 a 33 alumnos se les cobraba de menos (VERON, DALMA: $1.100 en vez de $33.000), por tres caminos:
+  oct-2026 a 33 alumnos se les cobraba de menos (VIZCACHA, CAROLA: $1.100 en vez de $33.000), por tres caminos:
   - la revisión automática (`MoraTrackedRecovery.reconciliarTodos`) corregía en la PC pero **no subía** el "ya
     usado" ni la eximición, y solo corría con "Bajar": ahora sube todo y corre sola una vez por sesión
     (`SyncEngine.revisarMora`), con constancia en `revision_mora.txt`;
@@ -1717,8 +1721,7 @@ históricos y la pantalla se ve como siempre.
   - anular un cobro dejaba su eximición.
 
   **El "ya usado" se queda solo con la mora de lo que se cierra** (6.3.2). Después de cualquier cobro, `historial − offset`
-  (el crédito FIFO) tiene que ser exactamente la mora pagada por adelantado de cuotas que **siguen abiertas**. LOPEZ, MORENA
-  AILEN pagó $130.900 de mora de las cuotas 2, 3 y 4 cerrando la 2 y la 3: el offset se quedaba con todo y los $32.900 de la 4
+  (el crédito FIFO) tiene que ser exactamente la mora pagada por adelantado de cuotas que **siguen abiertas**. ULMO, CELIA pagó $130.900 de mora de las cuotas 2, 3 y 4 cerrando la 2 y la 3: el offset se quedaba con todo y los $32.900 de la 4
   se le volvían a pedir. Y al revés, mora pagada de a partes sobre una cuota que después se completaba sin mora se descontaba
   también de la siguiente. `postCobroTrackedOffset` ahora lee el desglose bruto (un `assert` frena si llega vacío);
   `test/mora_adelantada_cuota_abierta_test.dart`. Para comparar una regla vieja con la nueva sobre una copia, el repaso del
@@ -1738,7 +1741,7 @@ históricos y la pantalla se ve como siempre.
 
   **La revisión no toca a quien ya terminó de pagar** (saldo 0). Su ficha la dejó el cobro, y el jefe la perdona en
   modo jefe como liquidación (queda en verde). El repaso de los cobros usa el saldo de hoy, y sin saldo da siempre
-  $0: le borraba la mora a ALTAMIRANO, CELESTE ABIGAIL (15-oct). No rehacerla con el saldo de cada cobro: los
+  $0: le borraba la mora a ESPINILLO, BRUNO (15-oct). No rehacerla con el saldo de cada cobro: los
   perdones de esos alumnos se anotaron con la cuenta vieja (ajuste 0) y se revivirían.
 - **En una fila de un PDF, un hijo sin `flex` no tiene tope de ancho: el texto no baja de renglón y se sale de la hoja, sin error.** Así
   salía recortado el encabezado del recibo de los eventos particulares (10-nov-2026): la columna de la derecha, sin `pw.Expanded`, se

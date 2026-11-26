@@ -38,6 +38,6 @@ insert into public.contratos_alumnos
   (id, evento_id, nombre_alumno, curso_division, nombres_acompanantes, cantidad_acompanantes, musica_elegida) values
   ('b0000000-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'AGUIRRE, NICOLÁS',  '5° U', null, 0, null),
   ('b0000000-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000001', 'BLANCO, JULIETA',   '5° U', null, 0, null),
-  ('b0000000-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000001', 'CORREA, LAUTARO',   '5° U', null, 0, null),
+  ('b0000000-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000001', 'ACACIA, ANDRES',   '5° U', null, 0, null),
   ('b0000000-0000-4000-8000-000000000004', 'bbbbbbbb-0000-4000-8000-000000000001', 'DUARTE, ABRIL',     '5° U', null, 0, null),
-  ('b0000000-0000-4000-8000-000000000005', 'bbbbbbbb-0000-4000-8000-000000000001', 'ESPINOZA, BAUTISTA','5° U', null, 0, null);
+  ('b0000000-0000-4000-8000-000000000005', 'bbbbbbbb-0000-4000-8000-000000000001', 'GUATAMBU, BAUTISTA','5° U', null, 0, null);

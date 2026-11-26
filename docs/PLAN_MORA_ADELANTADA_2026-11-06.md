@@ -16,7 +16,7 @@ Fecha: 6-nov-2026 · Rama: `feature/v4.6-cierre-por-sesiones` (pubspec 6.3.1+63)
 
 ## 1. El caso que lo destapó
 
-**LOPEZ, MORENA AILEN** — GREGORIA MORALES — contrato `31f442c5-de9d-479b-842d-e8ecd1baeb91`
+**ULMO, CELIA** — GREGORIA MORALES — contrato `31f442c5-de9d-479b-842d-e8ecd1baeb91`
 
 - Plan base $315.000 en 9 cuotas de $35.000. Alta 30/03/2026: la cuota N vence el último día del mes `marzo + N`.
 - Mora congelada "Todas" desde el 2/11 (`mora_congelada.pausas = [{cuota: null, desde: 2026-11-02}]`).
@@ -121,7 +121,7 @@ offset = moraCobradaOffsetActual
 ```
 
 - Redondear como hoy (`toStringAsFixed(2)` al devolver).
-- Actualizar el comentario de la función: explicar (a), (b) y (c) y nombrar a LOPEZ, MORENA AILEN como el caso, igual que BERNEL y MOLINA.
+- Actualizar el comentario de la función: explicar (a), (b) y (c) y nombrar a ULMO, CELIA como el caso, igual que ARAZA y MOLINA.
 - `mora_tracked_origen.dart` replica el corte de las liquidadas alrededor de la línea 375. Revisar que siga cerrando con el nuevo offset; el tracked no cambia.
 
 **[Revisión] Dos cosas que el código de hoy no dice y hay que tener en cuenta:**
@@ -164,7 +164,7 @@ La revisión de la mora corre sola al abrir la app en cada PC (`revisarMora` →
    - Comparar el **objetivo con la regla vieja contra el objetivo con la regla nueva**, contrato por contrato. No contra la ficha actual: así se ve solo el efecto de este cambio y no los desvíos viejos de las altas movidas a mano (ver la cabecera de `mora_offset_pago_parcial_test.dart`).
    - Sacar un CSV en `build/`: nombre, institución, offset viejo → nuevo, mora de hoy vieja → nueva, y a qué grupo pertenece.
 2. **Grupo A — se les estaba pidiendo mora ya cobrada** (el caso de Morena). Su mora **baja**. Se aplica sin más.
-   - Candidatos que ya vi en la nube con mora cobrada de cuotas sin completar: ESCOBAR ULISES, MELGAREJO MAIARA, FRANCO JUAN NICOLAS, QUIROZ JAQUELINE, PEÑA GAMBOA, CUEVAS, DIAZ RITA, AYALA YAMILA, ROMERO MARIA VICTORIA, MEZA CASTILLO, CORREA, VELAZQUEZ JONATHAN y otros.
+   - Candidatos que ya vi en la nube con mora cobrada de cuotas sin completar: ESCOBAR ULISES, CAOBA MAIARA, FRANCO JUAN NICOLAS, TUCAN JAQUELINE, PEÑA GAMBOA, CUEVAS, DIAZ RITA, AYALA YAMILA, ROMERO MARIA VICTORIA, MEZA CASTILLO, CORREA, VELAZQUEZ JONATHAN y otros.
    - Muchos seguramente saldaron toda la mora y no cambian. Que lo diga el simulacro.
 3. **Grupo B — se les estaba cobrando de menos** (sección 3). Su mora **sube**.
    - **Frenar y mostrarle la lista a Maxi antes de publicar.** Subirle la deuda a una familia es decisión de él (puede preferir perdonar esa diferencia en modo jefe). No aplicar nada automático para este grupo sin su OK.

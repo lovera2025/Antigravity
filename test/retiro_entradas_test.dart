@@ -105,7 +105,7 @@ void main() {
       expect(e.conDescuento, 0);
     });
 
-    test('con 4 mesas adicionales (GAUNA, GERALDINE): 8 sin cargo y 32 al 50 %', () {
+    test('con 4 mesas adicionales (CANELO, EMMA): 8 sin cargo y 32 al 50 %', () {
       final e = RetiroEntradas.entradasDe(_alumno(extras: 4, mesas: [1, 2, 3, 4, 5]));
       expect(e.lugares, 40);
       expect(e.sinCargo, 8);

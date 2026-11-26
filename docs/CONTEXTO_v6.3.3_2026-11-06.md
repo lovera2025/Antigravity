@@ -16,7 +16,7 @@ mora corrigió en la nube a los 4 del simulacro y a nadie más, con los mismos n
 oficina, instaladas el 7-nov a las 08:18.** Pasó lo previsto: a las 08:17 una de ellas abrió todavía con la 6.3.1 y su revisión vieja
 les devolvió la mora vieja a los 4; a las 08:18, ya con la 6.3.3, los volvió a corregir (los dos pasos en `mora_cambios`). **Foto
 "después de 6.3.3 (las tres PCs)"** (08:26, 643 alumnos): contra la de antes cambian solo los 4 del simulacro, con sus números; la
-comparación marca "ya usado BAJÓ" en LOPEZ y MELGAREJO, que es el arreglo mismo. **Los logs, una primera mirada** (08:19 a 08:24, con
+comparación marca "ya usado BAJÓ" en LOPEZ y CAOBA, que es el arreglo mismo. **Los logs, una primera mirada** (08:19 a 08:24, con
 las PCs recién abiertas): cada PC hace la red del cobro (16 GET) cada 5 minutos y nada más; los minutos del medio, en cero; a las
 08:24 alguien abrió una caja y se bajó todo, como corresponde. **Medido el reposo (paso 7), 08:35 a 08:55,
 con una caja abierta y nadie cobrando: 246 pedidos entre las dos PCs de la oficina** (unos 370 por hora por PC, debajo de lo estimado).

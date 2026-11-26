@@ -39,7 +39,7 @@ hora. Con 15 alumnos la lista era ilegible y el papel no entraba en ninguna hoja
 para que el test no necesite bindings). La fila pasa a ser:
 
 ```
-DESCALZO, JONATHAN GABRIEL                             $ 37.100,00
+MIRTO, ELIAS                             $ 37.100,00
 17:54 hs · Efectivo · cuota base 4/9, int. mora Jul
 ```
 

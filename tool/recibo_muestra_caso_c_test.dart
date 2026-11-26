@@ -1,8 +1,8 @@
-// Arnés manual: reimprime el recibo Nº 11408158 (VIZGARRA, 08/07/2026) con el
+// Arnés manual: reimprime el recibo Nº 11408158 (CARDO, 08/07/2026) con el
 // código de producción, para mirar el papel sin levantar la app ni tocar la base
 // ni la red.
 //
-//   flutter test tool/recibo_muestra_vizgarra_test.dart
+//   flutter test tool/recibo_muestra_caso_c_test.dart
 //
 // El papel original decía "Interés mora (cuota base — este cobro) $3.150" y el
 // estado de cuenta del MISMO movimiento decía "Mora pendiente cuota 3 (no
@@ -68,14 +68,14 @@ void main() {
         );
   });
 
-  test('recibo VIZGARRA 08/07/2026 — cuota 4 + arrastre de la cuota 3', () async {
+  test('recibo CARDO 08/07/2026 — cuota 4 + arrastre de la cuota 3', () async {
     final fechaCobro = DateTime(2026, 7, 8, 10, 14);
 
     // Contrato como quedó después del cobro: 4/9, saldo $175.000.
     final contrato = ContratoAlumno(
-      id: 'vizgarra-muestra',
+      id: 'cardo-muestra',
       eventoId: 'ev-muestra',
-      nombreAlumno: 'VIZGARRA, SONIA',
+      nombreAlumno: 'CARDO, DELIA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 315000,
       saldoDeudor: 175000,

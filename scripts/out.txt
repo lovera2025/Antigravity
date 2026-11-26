@@ -1,8 +1,8 @@
-Alumno: INSAURRALDE, ANGEL IVAN
+Alumno: LUMA, NESTOR
 Mesa Precio: 70000.0
 Mesa Pagado: 0.0
 ---
-Alumno: INSAURRALDE, ANA CLARA
+Alumno: LUMA, BEATRIZ
 Mesa Precio: 0.0
 Mesa Pagado: 0.0
 ---

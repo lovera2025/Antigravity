@@ -2,7 +2,7 @@
 // alumnos: que la reimpresión de su último recibo diga las cuotas que tiene.
 //
 // Antes el recuadro "X/9 pagadas" de una reimpresión se deducía del saldo con
-// mesas y sillas adentro: GAUNA, GERALDINE (Puerto Viejo) tenía 6 cuotas y el
+// mesas y sillas adentro: CANELO, EMMA (Puerto Viejo) tenía 6 cuotas y el
 // papel decía 4/9. Ahora sale de los pagos (`progresoAlDia`).
 //
 // La base real se abre SOLO LECTURA y se copia con `VACUUM INTO` a una carpeta
@@ -34,8 +34,8 @@ String _baseReal() {
 }
 
 const _muestras = {
-  '626ec708-19d0-4c68-83b7-dda451608f55': 'GAUNA, GERALDINE',
-  '2646f9b8-db60-42a0-9cf1-5b307d0db589': 'SEGOVIA, PABLO',
+  '626ec708-19d0-4c68-83b7-dda451608f55': 'CANELO, EMMA',
+  '2646f9b8-db60-42a0-9cf1-5b307d0db589': 'CHIMANGO, BRUNO',
 };
 
 void main() {

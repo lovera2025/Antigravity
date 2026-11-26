@@ -3153,7 +3153,7 @@ class LocalDatabase {
       }
 
       try {
-        // Exenciones existentes: default reinicia=1 (comportamiento Lezcano).
+        // Exenciones existentes: default reinicia=1 (comportamiento Radal).
         // Casos solo-mora (abono sin liquidar cuota) → permanente (0).
         final exenciones =
             await MoraTrackedRecovery.repararExencionDesdeHistorial(

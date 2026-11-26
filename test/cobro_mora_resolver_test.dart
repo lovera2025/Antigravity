@@ -12,15 +12,15 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 void main() {
   // Reg 15/03/2026 → C4 vence 31/07. Plan $270.000 / 9 → cuota $30.000.
   // Al 07/08/2026 son 7 días de atraso → $2.100 de mora en la C4.
-  ContratoAlumno bernel({
+  ContratoAlumno araza({
     double saldoDeudor = 180000,
     int cuotasPagadas = 3,
     double moraPendienteTracked = 15000,
     DateTime? moraFechaReferencia,
   }) => ContratoAlumno(
-    id: 'bernel-test',
+    id: 'araza-test',
     eventoId: 'ev-test',
-    nombreAlumno: 'BERNEL, LUCILA FATIMA',
+    nombreAlumno: 'ARAZA, NORA',
     cantidadAcompanantes: 0,
     montoTotalPactado: 270000,
     saldoDeudor: saldoDeudor,
@@ -41,7 +41,7 @@ void main() {
     int cuotasLiquidadas = 0,
     double? saldoDeudorPost,
   }) {
-    final contratoPre = pre ?? bernel();
+    final contratoPre = pre ?? araza();
     final contratoPost = post ?? contratoPre;
     return resolverMoraDeCobro(
       contratoPre: contratoPre,
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('no cobrar mora al liquidar una cuota: se acumula en ficha', () {
-      final post = bernel(saldoDeudor: 150000, cuotasPagadas: 4);
+      final post = araza(saldoDeudor: 150000, cuotasPagadas: 4);
       final r = resolver(moraEsteCobro: 0, post: post, cuotasLiquidadas: 1);
 
       // Los $15.000 previos + los $2.100 de la cuota 4 que se liquidó sin mora.
@@ -122,7 +122,7 @@ void main() {
     });
 
     test('contrato que queda saldado: no se exime nada', () {
-      final post = bernel(saldoDeudor: 0, cuotasPagadas: 9);
+      final post = araza(saldoDeudor: 0, cuotasPagadas: 9);
       final r = resolver(
         moraEsteCobro: 17100,
         post: post,
@@ -140,7 +140,7 @@ void main() {
     test('saldar toda la mora descongela', () {
       final r = resolver(
         moraEsteCobro: 17100,
-        pre: bernel(moraFechaReferencia: congelado),
+        pre: araza(moraFechaReferencia: congelado),
       );
 
       expect(r.limpiarMoraReferencia, isTrue);
@@ -150,7 +150,7 @@ void main() {
     test('cobro parcial la deja congelada', () {
       final r = resolver(
         moraEsteCobro: 10000,
-        pre: bernel(moraFechaReferencia: congelado),
+        pre: araza(moraFechaReferencia: congelado),
       );
 
       expect(r.limpiarMoraReferencia, isFalse);

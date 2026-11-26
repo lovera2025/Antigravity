@@ -8,7 +8,7 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 /// La mora cobrada **por adelantado** de una cuota que no se completa no se
 /// vuelve a pedir (6-nov-2026, `docs/PLAN_MORA_ADELANTADA_2026-11-06.md`).
 ///
-/// LOPEZ, MORENA AILEN (contrato 31f442c5…, GREGORIA MORALES) pagó el 6/11 la
+/// ULMO, CELIA (contrato 31f442c5…, GREGORIA MORALES) pagó el 6/11 la
 /// cuota 2 completa, la 3, $9.100 a cuenta de la 4 y $130.900 de mora de las
 /// cuotas 2, 3 y 4. Se cerraron la 2 y la 3 ($98.000 de mora); los $32.900 de
 /// la 4 fueron un adelanto. El "ya usado" (`mora_cobrada_offset`) se quedaba
@@ -36,7 +36,7 @@ void main() {
       ContratoAlumno(
         id: idMorena,
         eventoId: 'evt',
-        nombreAlumno: 'LOPEZ, MORENA AILEN',
+        nombreAlumno: 'ULMO, CELIA',
         cantidadAcompanantes: 0,
         montoTotalPactado: 315000,
         saldoDeudor: saldoDeudor,

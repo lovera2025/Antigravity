@@ -50,7 +50,7 @@ Se publicó con `tool/publish_windows_release.ps1 -SoloNotas -NotesFile <notas>`
    números de versión. Tiene que estar instalada en las dos PCs **antes de noviembre**, que es cuando se sortea.
 3. **La app sigue funcionando como hoy, pero mejor.** Cobros, mora, saldos y recibos no se tocan.
 4. **No se borra ningún dato.** Las correcciones se hacen modificando, **solo en los alumnos señalados** y con los
-   pagos intactos. La única excepción es el pago de ESMAY que se parte (aprobado).
+   pagos intactos. La única excepción es el pago de URUNDAY que se parte (aprobado).
 5. **Prevenir, no manejar.** El sorteo está "hecho para no fallar"; la validación final es solo una red de
    seguridad.
 6. **Las correcciones de datos se aplican después de las 20 hs y cuando el usuario avise**, porque durante el día
@@ -149,12 +149,12 @@ Buena Vista 54, Rotonda 53, Gregoria 41, Puerto Viejo 31.
 
 **Aplicado el 24-sep a las 06:08** (commit del script: `f7e1724`), sin cobros en curso y con la app cerrada.
 - Copia previa: `Documents\Junior Eventos\data.db.bak.extras.2026-09-24T06-08-25`.
-- **Local:** cambiaron solo los 6 contratos y los pagos de Esmay (1 partido y 1 nuevo); no se borró nada.
+- **Local:** cambiaron solo los 6 contratos y los pagos de Urunday (1 partido y 1 nuevo); no se borró nada.
 - **Supabase**, después de "Subir pendientes":
   - los otros 637 contratos y 3463 pagos quedaron con el mismo hash que antes;
   - los 6 dan exactamente lo acordado;
-  - el 25-jun de Esmay suma $57.000 igual que antes.
-- El pago nuevo de Esmay se rotuló como la app: "Entrega parcial — Cuota Base (7/9)", misma fecha y medio.
+  - el 25-jun de Urunday suma $57.000 igual que antes.
+- El pago nuevo de Urunday se rotuló como la app: "Entrega parcial — Cuota Base (7/9)", misma fecha y medio.
 
 Lo que sigue es cómo se armó el script, para referencia.
 - Sigue el patrón de `tool/aplicar_fix_mora_5_test.dart`: sqflite ffi sobre `Documents\Junior Eventos\data.db`,
@@ -173,26 +173,26 @@ Lo que sigue es cómo se armó el script, para referencia.
 
 | Alumno (id) | Institución | Cambio | Plata |
 |---|---|---|---|
-| PONCE, AYELEN MILAGROS (`9544c706-81a2-4e85-89af-281f6322a1af`) | Colegio Nacional B | `mesa_extra_cantidad` 1→**2** (el precio total sigue en 140.000) | total y saldo iguales |
-| SILVERO, MAXIMILIANO NAHUEL (`fbbd5418-7c44-4099-be9c-78b07af6baec`) | Técnica Pinaroli 1 | mesas extra 1→**2** | iguales |
-| GONZALES, ALINA JAZMÍN (`424c1630-73dd-4839-95e5-3b358e46b0f1`) | Técnica Pinaroli 1RA | mesas extra 1→**2** (sus sillas 2×$16.000 ya están bien) | iguales |
-| QUIROZ MEZA, MATÍAS NAHUEL (`3199a441-cc45-41d0-af94-13b820b75ce9`) | Normal Iloza 3 | sillas 2→**4** (total sillas sigue en $32.000) | iguales |
-| ESMAY, THIAGO (`dd8af936-8880-4a50-8ee0-4de0086ce0e5`) | Güemez 3 | sillas 2→**4** a $8.000 (total sillas $36.000→$32.000) **y** se parte el pago del 25-jun "Sillas Extras - Entrega" $12.000 en $8.000 de sillas + $4.000 de abono de cuota base (misma fecha, medio y sesión de caja) | total 421.000→417.000, saldo 115.000→111.000 |
-| BALDI, JUAN MARTÍN (`d5f01890-84f6-4d6e-be33-670e6e6aa348`) | Técnica Pinaroli 1 | silla 1 × $6.000 → **$8.000** | total +2.000, saldo +2.000 |
-| CACERES, ANAEL (`b9fe4391-053a-4582-9758-5da1a7512150`) | Normal Iloza 5 | **NO SE TOCA**: su "2" de sillas sin precio no está en su cuenta; la app ya no lo muestra | — |
+| TERO, NELIDA (`9544c706-81a2-4e85-89af-281f6322a1af`) | Colegio Nacional B | `mesa_extra_cantidad` 1→**2** (el precio total sigue en 140.000) | total y saldo iguales |
+| MARTINETA, DIEGO (`fbbd5418-7c44-4099-be9c-78b07af6baec`) | Técnica Pinaroli 1 | mesas extra 1→**2** | iguales |
+| COIHUE, IRENE (`424c1630-73dd-4839-95e5-3b358e46b0f1`) | Técnica Pinaroli 1RA | mesas extra 1→**2** (sus sillas 2×$16.000 ya están bien) | iguales |
+| COLIBRI, OSVALDO (`3199a441-cc45-41d0-af94-13b820b75ce9`) | Normal Iloza 3 | sillas 2→**4** (total sillas sigue en $32.000) | iguales |
+| URUNDAY, HECTOR (`dd8af936-8880-4a50-8ee0-4de0086ce0e5`) | Güemez 3 | sillas 2→**4** a $8.000 (total sillas $36.000→$32.000) **y** se parte el pago del 25-jun "Sillas Extras - Entrega" $12.000 en $8.000 de sillas + $4.000 de abono de cuota base (misma fecha, medio y sesión de caja) | total 421.000→417.000, saldo 115.000→111.000 |
+| JACARANDA, FEDERICO (`d5f01890-84f6-4d6e-be33-670e6e6aa348`) | Técnica Pinaroli 1 | silla 1 × $6.000 → **$8.000** | total +2.000, saldo +2.000 |
+| CEDRO, OSCAR (`b9fe4391-053a-4582-9758-5da1a7512150`) | Normal Iloza 5 | **NO SE TOCA**: su "2" de sillas sin precio no está en su cuenta; la app ya no lo muestra | — |
 
 - **Orden de aplicación:**
   1. primero los 3 de mesas: Ponce, Silvero, Gonzales;
-  2. después Quiroz, Baldi y Esmay.
-- **Aprobaciones:** Esmay está aprobado por el usuario (23-sep). Antes de partir su pago hay que revisar dos cosas:
+  2. después Tucan, Jacaranda y Urunday.
+- **Aprobaciones:** Urunday está aprobado por el usuario (23-sep). Antes de partir su pago hay que revisar dos cosas:
   con qué rótulo guarda la app un abono de cuota base, y que la caja de esa sesión siga sumando igual.
 - **Valores al 23-sep** (se vuelven a leer ese día; los frenos comparan):
   - PONCE 410.000 / 260.000, pagado de mesa 60.000;
   - SILVERO 455.000 / 192.500, 87.500;
   - GONZALES 471.000 / 236.000, 60.000;
-  - QUIROZ 372.000 / 100.000;
-  - ESMAY 421.000 / 115.000;
-  - BALDI 391.000 / 105.000.
+  - TUCAN 372.000 / 100.000;
+  - URUNDAY 421.000 / 115.000;
+  - JACARANDA 391.000 / 105.000.
 - **Cómo queda el detalle por mesa:** lo pagado va primero a la Mesa 1. La mora no cambia, porque se calcula solo
   sobre la base.
 

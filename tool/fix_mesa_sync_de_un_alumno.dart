@@ -1,7 +1,7 @@
-// Vacía cola sync, reclasifica $55k Insaurralde Base→Mesa, encola solo ese arreglo.
+// Vacía cola sync, reclasifica $55k Luma Base→Mesa, encola solo ese arreglo.
 //
-//   dart run tool/fix_insaurralde_mesa_sync.dart
-//   dart run tool/fix_insaurralde_mesa_sync.dart --dry-run
+//   dart run tool/fix_mesa_sync_de_un_alumno.dart
+//   dart run tool/fix_mesa_sync_de_un_alumno.dart --dry-run
 
 import 'dart:convert';
 import 'dart:io';
@@ -37,7 +37,7 @@ void main(List<String> args) {
       [_contratoId],
     );
     if (contrato.isEmpty) {
-      stderr.writeln('Contrato Insaurralde no encontrado');
+      stderr.writeln('Contrato Luma no encontrado');
       exit(1);
     }
     final c = contrato.first;

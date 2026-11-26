@@ -9,7 +9,7 @@
 arreglo del aviso entre PCs (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`, sin programar), la barra y Entradas. Lo dijo así: "sumalo al
 plan en general, entonces después sacamos todo junto". `release/6.3.x` queda como está.
 
-**El pago de ENRIQUE, MAXIMO sigue en la caja del modo jefe del 7-nov** (abajo, "Qué pasó"). Dos maneras de sacarlo:
+**El pago de TIPA, GASTON sigue en la caja del modo jefe del 7-nov** (abajo, "Qué pasó"). Dos maneras de sacarlo:
 - con la versión nueva instalada, volver a ponerle la fecha 23/10 en Corregir medio de pago: sale solo;
 - antes, a mano en la nube (`sesion_caja_id` en null de ese solo pago, `770cb528-7e79-43ef-8690-a4eeedd70548`): **después de las 20,
   con el antes y el después a la vista y su OK** (`correcciones-de-datos-acotadas`). Las PCs lo bajan en 5 minutos como mucho; ninguna
@@ -20,7 +20,7 @@ plan en general, entonces después sacamos todo junto". `release/6.3.x` queda co
 
 ## Qué pasó
 
-El jefe cargó el 7-nov a las 09:26 un pago de **ENRIQUE, MAXIMO** ($50.000 en efectivo, entrega de la cuota base) que la familia había
+El jefe cargó el 7-nov a las 09:26 un pago de **TIPA, GASTON** ($50.000 en efectivo, entrega de la cuota base) que la familia había
 pagado el **23-oct**, y a las 09:27 le cambió la fecha al 23 en Mi Empresa → lápiz → **Corregir medio de pago**. El pago siguió en su
 cierre de caja del 7 (la caja automática del modo jefe, "Sesión automática · cobro en modo jefe", abierta a las 09:26).
 

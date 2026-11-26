@@ -2043,7 +2043,7 @@ class PdfService {
       if (!esReimpresionPdf) return alumno.cuotasPagadas;
       // Red para una reimpresión que no lo mande. Dividir lo abonado por el
       // total del contrato contaba mal: el total incluye mesas y sillas, y lo
-      // abonado también (GAUNA, GERALDINE: 6 cuotas pagadas, 4 mesas, y el
+      // abonado también (CANELO, EMMA: 6 cuotas pagadas, 4 mesas, y el
       // recibo reimpreso decía 4/9). Se cuenta solo la parte de la cuota base.
       final base = alumno.montoTotalPactado -
           alumno.mesaExtraPrecio -

@@ -341,13 +341,13 @@ cambios de datos (puntos 3 a 5) sí están aplicados en la base y en la nube.
 Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
 
 1. **El recibo reimpreso contaba mal las cuotas** (`0c679ad`).
-   - GAUNA, GERALDINE (Puerto Viejo) tenía 6 cuotas y el papel decía 4/9; SEGOVIA, PABLO daba 5 o 4.
+   - CANELO, EMMA (Puerto Viejo) tenía 6 cuotas y el papel decía 4/9; CHIMANGO, BRUNO daba 5 o 4.
    - La causa: el recuadro dividía por el total del contrato, que incluye las mesas y sillas extra. Le pasaba a 42
      alumnos.
    - Ahora cuenta desde los pagos hasta esa fecha (`progresoAlDia`, en `cobro_abono_acumulado.dart`), por los dos
      caminos: la ficha y Finanzas.
    - Con `tool/recibo_reimpreso_muestra_test.dart` se revisaron 538 alumnos con los datos reales. Solo uno no
-     coincide: MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional). La ficha dice 6 cuotas, pero no existe el pago de la
+     coincide: ACEBO, CESAR (Colegio Nacional). La ficha dice 6 cuotas, pero no existe el pago de la
      cuota 4, ni en la base local ni en la nube. **Falta contárselo al usuario.**
 2. **Mi Empresa, panel SALDO DEL NEGOCIO** (`9faf522`):
    - "Disponible en efectivo" y "Disponible en transferencia" debajo del total;
@@ -356,8 +356,8 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
    - "Traer del negocio" y "Registrar pago" vienen sin medio elegido y controlan contra lo disponible en el medio.
    - Las categorías mal cargadas (EXTRACCION, COMPRA BEAM y AUTO 408 dentro de "Operadores") **no se tocan**, por
      decisión del usuario.
-   - La cuenta del recibo reimpreso marca a MONTENEGRO como único alumno que no coincide (ver abajo).
-3. **ESMAY, THIAGO**, aplicado en la base real con OK y copia (`tool/revertir_sillas_esmay_test.dart`):
+   - La cuenta del recibo reimpreso marca a ACEBO como único alumno que no coincide (ver abajo).
+3. **URUNDAY, HECTOR**, aplicado en la base real con OK y copia (`tool/revertir_sillas_de_un_alumno_test.dart`):
    - el pago de sillas del 25/06 volvió de $8.000 a $12.000;
    - las sillas quedaron en $36.000, pagadas;
    - el saldo sigue en $70.000 y las cuotas en 7.
@@ -374,11 +374,11 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
    - Arreglo en el código (`0f4a799`): el total del bolsillo ahora es lo apartado menos lo gastado, y cada medio
      queda entre cero y ese total (`saldoBolsillo`, en `bolsa_personal_helpers.dart`).
 
-Los tres cambios de datos (Esmay, el retiro y el gasto) se subieron con "Subir pendientes" y se verificaron en
-Supabase. Las copias de antes están en `Documents\Junior Eventos\data.db.bak.{esmay,retiro,gasto}.*`. La suite pasa:
+Los tres cambios de datos (Urunday, el retiro y el gasto) se subieron con "Subir pendientes" y se verificaron en
+Supabase. Las copias de antes están en `Documents\Junior Eventos\data.db.bak.{urunday,retiro,gasto}.*`. La suite pasa:
 **873 tests**.
 
-**MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional): quedó pendiente el 29 y lo resolvió el usuario el 30-sep** (ver
+**ACEBO, CESAR (Colegio Nacional): quedó pendiente el 29 y lo resolvió el usuario el 30-sep** (ver
 "Qué pasó el 30-sep"). Lo de abajo es cómo estaba el 29.
 - Tiene 5 pagos de cuota, pero la ficha dice 6 cuotas y una deuda de $150.235. Contado desde los pagos serían 5 y
   $180.235.
@@ -408,11 +408,11 @@ usa la `data.db` real, la migraría.
   camino para volver atrás, porque restaurarla dejaría afuera lo cobrado después de instalar.
 - Para volver atrás en el código quedó el tag `antes-de-6.0.0` sobre `af2970d`.
 
-**MONTENEGRO, FRANCISCO NAHUEL: resuelto por el usuario el 30-sep.** En la nube la ficha dice 5 cuotas y $180.235.
+**ACEBO, CESAR: resuelto por el usuario el 30-sep.** En la nube la ficha dice 5 cuotas y $180.235.
 Los dos cobros del 19/09 de las 13:36 (cuota 4, mora $39.300 y cargo $3.465), que estaban trabados en la otra PC,
 quedaron anulados; el de las 13:45 quedó como cuotas 4/9 y 5/9. No hay nada más que hacer.
 
-**CACERES, ANAEL** (Normal Mariano Iloza) tiene 2 sillas extra guardadas sin precio desde antes de agosto: figura así
+**CEDRO, OSCAR** (Normal Mariano Iloza) tiene 2 sillas extra guardadas sin precio desde antes de agosto: figura así
 en todas las copias locales desde el 3-ago. Es el único caso de la base. **Decisión del usuario: lo que no tiene
 precio no cuenta ni se muestra**, igual que hoy. Se toma como un error de carga y no se avisa.
 
@@ -514,7 +514,7 @@ su bloque, van las 3 después del último bloque); el modo forzado a entero deja
   30-sep a las 23:19; es una foto del momento y hay que volver a correrlo cerca del sorteo. Lo que dio:
   - 9 fiestas con alumnos, ninguna sorteada todavía;
   - mesas agregadas sin pagar: 19 alumnos en total; sillas sin pagar: 5; sin pago de la base: 99;
-  - un solo aviso: ESMAY, THIAGO, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía: es el redondeo del 29-sep.
+  - un solo aviso: URUNDAY, HECTOR, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía: es el redondeo del 29-sep.
 - **`tool/grilla_mesas_muestra_test.dart`**: la imagen de muestra de la columna, con familias inventadas. El usuario
   ya la vio.
 
@@ -1420,7 +1420,7 @@ el usuario lo recibió.
 
 - **94 sin pago de la base** (99 el 30-sep), **17 con una mesa agregada sin pagar** (19) y **4 con sillas sin pagar**
   (5). Ninguna fiesta está sorteada.
-- **Para revisar, uno solo:** ESMAY, THIAGO, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía.
+- **Para revisar, uno solo:** URUNDAY, HECTOR, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía.
 - **La Normal tiene 137 mesas cargadas**, más que las 132 de las que se venía hablando. Con lo pagado hoy son 116.
 - **Técnica tiene 99**: con las 130 comunes le sobra, sin el pasto.
 - No se corrigió nada. Es una foto del día: hay que volver a sacarla cerca del sorteo y verla con el usuario.
@@ -1430,15 +1430,15 @@ los que había" ya estaba arreglado). Solo lectura, en la base de esta PC y en l
 
 | Alumno | Hoy |
 |---|---|
-| GONZALES, ALINA JAZMIN | 2 mesas agregadas ($140.000, pagó $60.000); 2 sillas por $16.000, sin pagar |
-| PONCE, AYELEN MILAGROS | 2 mesas agregadas ($140.000, pagó $60.000) |
-| SILVERO, MAXIMILIANO NAHUEL | 2 mesas agregadas ($140.000, pagó $105.000) |
-| QUIROZ MEZA, MATIAS NAHUEL | 4 sillas por $32.000, pagadas |
-| BALDI, JUAN MARTIN | 1 silla a $8.000 (pagó $6.000) |
-| ESMAY, THIAGO | Deshecho el 29-sep: 4 sillas por $36.000, pagadas; el pago del 25/06, en $12.000 |
+| COIHUE, IRENE | 2 mesas agregadas ($140.000, pagó $60.000); 2 sillas por $16.000, sin pagar |
+| TERO, NELIDA | 2 mesas agregadas ($140.000, pagó $60.000) |
+| MARTINETA, DIEGO | 2 mesas agregadas ($140.000, pagó $105.000) |
+| COLIBRI, OSVALDO | 4 sillas por $32.000, pagadas |
+| JACARANDA, FEDERICO | 1 silla a $8.000 (pagó $6.000) |
+| URUNDAY, HECTOR | Deshecho el 29-sep: 4 sillas por $36.000, pagadas; el pago del 25/06, en $12.000 |
 
 - Alina sale en "sillas sin pagar" porque no las pagó todavía, no por un error de carga.
-- Esmay sale en "Para revisar" por el precio ($9.000 por silla contra $8.000). **El usuario confirmó el 11-oct que
+- Urunday sale en "Para revisar" por el precio ($9.000 por silla contra $8.000). **El usuario confirmó el 11-oct que
   sigue de acuerdo con haberlo deshecho**: ese aviso queda, no hay nada que tocar.
 
 ### La mesa fijada alta (`f70fec2`)
@@ -1546,7 +1546,7 @@ un id fijo por alumno (`UuidUtils.notaOperativaContratoId`), y ninguno de esos 3
   y hoy no. Una nota se borra de una sola forma: el botón Eliminar de la nota, con su "¿Borrar nota?"
   (`nota_operativa_bottom_sheet.dart`); ninguna herramienta las borra. Acá quedaron porque el borrado viaja por el
   aviso entre PCs y esta estaba cerrada, y la reconciliación de borrados no mira las notas
-  (`_tablasAReconciliar` son solo las tablas padre). La de OVELAR (4-sep, tocada el 7) es la única dudosa.
+  (`_tablasAReconciliar` son solo las tablas padre). La de CALANDRIA (4-sep, tocada el 7) es la única dudosa.
 - La que está solo en la nube ("MORA CONDONADA", 29-jul) no bajó a esta PC; no se investigó por qué.
 - Son notas de texto sobre cuentas. No cambian el saldo de nadie.
 - **No frena la publicación:** la 6.0.0 no toca cómo viajan las notas.

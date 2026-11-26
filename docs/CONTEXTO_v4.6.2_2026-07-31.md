@@ -106,7 +106,7 @@ contratos o para uno, **sin hacer un cobro de prueba**. Solo lectura.
 
 ```
 flutter test tool/verificar_origen_mora_recibo_test.dart
-flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=bernel
+flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=araza
 ```
 
 Falla si lo atribuido a las cuotas no suma el tracked, así que sirve de chequeo
@@ -117,7 +117,7 @@ después de tocar cualquier cosa de mora.
 ## Auditoría de mora en Mi Empresa — RESUELTO en v4.7.8
 
 Se auditó "perdonar mora" y "poner mora por días/monto"
-(`restaurar_mora_dialog.dart`). Hallazgo, con prueba sobre datos de Bernel
+(`restaurar_mora_dialog.dart`). Hallazgo, con prueba sobre datos de Araza
 (historial que implica tracked $15.000):
 
 > **Hasta 4.7.7:** todo lo que escribía `mora_pendiente_tracked` se revertía en

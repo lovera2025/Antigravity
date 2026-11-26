@@ -159,7 +159,7 @@ final _familias = [
   _familia('BENITEZ', [2, 3], '5° A'),
   _familia('CASTRO', [4], '5° A'),
   _familia('DOMINGUEZ', [6, 7, 8, 9], '5° A'),
-  _familia('ESPINDOLA', [11, 30], '5° B'),
+  _familia('VIRARO', [11, 30], '5° B'),
   _familia('FERREYRA', [13], '5° B'),
   _familia('GOMEZ', [15, 16, 26], '5° B'),
   _familia('HERRERA', [20, 21], '5° B'),
@@ -239,7 +239,7 @@ void main() {
           cursoDivision: '5° A',
         );
     final alumnos = [
-      sinMesa('ESPINDOLA', extras: 1),
+      sinMesa('VIRARO', extras: 1),
       sinMesa('GOMEZ', extras: 2),
       sinMesa('HERRERA', extras: 1),
       for (final a in ['ACOSTA', 'CASTRO', 'FERREYRA', 'IBARRA']) sinMesa(a),
@@ -260,9 +260,9 @@ void main() {
               pagos: const {},
               inicial: const SorteoMesasDialogResult(
                 capacidadSalon: 0,
-                separaciones: {'ESPINDOLA': 1, 'GOMEZ': 1},
+                separaciones: {'VIRARO': 1, 'GOMEZ': 1},
                 distancias: {
-                  'ESPINDOLA': DistanciaLejos.cerca,
+                  'VIRARO': DistanciaLejos.cerca,
                   'GOMEZ': DistanciaLejos.aUnasMesas,
                 },
               ),

@@ -48,7 +48,7 @@ $372.368 a 0. Es la corrección, no algo de la 6.5.1.
 **Las pruebas del 11-nov:** la corrida entera dio 4.332 de 4.333; el único que falló, `chat_de_la_noche_test` ("cada celular sabe con
 quién puede hablar", con sockets de verdad), pasa corrido solo (14 de 14) y había pasado en la corrida anterior del mismo día: es de
 tiempos con la PC cargada, no de lo de hoy. El análisis no nombra ningún archivo tocado (los 3 errores que da son de
-`tool/_tmp_espindola_audit.dart`, un archivo viejo fuera de git). **El simulacro se repitió sobre una copia fresca de la base** (la
+`tool/_tmp_viraro_audit.dart`, un archivo viejo fuera de git). **El simulacro se repitió sobre una copia fresca de la base** (la
 real, con el mismo SHA-256 antes y después): sigue dando **una sola familia**, la que recibe la 102 en la escuela ya sorteada.
 
 **Para la tarde del sorteo**, en la PC con la 6.5.1: PLANO → Personalizar → Acomodar → "La numeración termina: Al fondo" → GUARDAR

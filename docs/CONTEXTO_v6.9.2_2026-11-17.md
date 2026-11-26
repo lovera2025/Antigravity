@@ -447,7 +447,7 @@ Parte 4 (18-nov, tercer chat): 5.439 pruebas, ninguna falla; las roturas a propÃ
 
 `flutter analyze` sobre `lib`, `test` y `tool`: nada en los archivos tocados el 18-nov. Lo que queda es de antes:
 avisos en `detalle_evento_masivo_screen.dart` y `dry_run_cobro_simulator.dart`, y tres errores en
-`tool/_tmp_espindola_audit.dart` (un script viejo de un solo uso, que no es parte del programa).
+`tool/_tmp_viraro_audit.dart` (un script viejo de un solo uso, que no es parte del programa).
 
 **Queda para mirar** (del 17-nov): el panel del PLANO usa la misma cuenta que la planilla ("4 con cena Â· 4
 generales") y no dice las entradas que se compran aparte (las de las sillas y la adicional); si hace falta, se le

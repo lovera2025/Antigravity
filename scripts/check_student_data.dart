@@ -16,10 +16,10 @@ void main() async {
   
   var db = await databaseFactory.openDatabase(dbPath);
   
-  print('--- Analyzing Student: INSAURRALDE, ANGEL IVAN ---');
+  print('--- Analyzing Student: LUMA, NESTOR ---');
   final students = await db.query('contratos_alumnos', 
     where: 'nombre_alumno LIKE ?', 
-    whereArgs: ['%INSAURRALDE%']);
+    whereArgs: ['%LUMA%']);
   
   if (students.isEmpty) {
     print('Student not found');

@@ -133,7 +133,7 @@ El usuario pidió dejar la versión "bien prolija" y eligió qué sacar:
   PRESUPUESTOS (sigue en la barra lateral, en modo jefe).
 - **"Restaurar / perdonar mora" queda solo como "Perdonar mora (por curso)".** "Restaurar (vencidos)" contaba dos veces la
   mora de todos los masivos (Buena Vista quedaba afuera porque estaba fijo en el código) y borraba perdones;
-  "Individual" movía el Reg y ponía mora a mano, lo de TOÑANEZ.
+  "Individual" movía el Reg y ponía mora a mano, lo de YACARE.
 - **El QR de cotizar** llevaba a la web vieja de Firebase (de marzo): ahora a la de Vercel.
 - **Saneamiento** pide el PIN otra vez y arranca sin nada tildado.
 - **El menú de la nube:** sin "Verificar nube" ni "Subir y bajar"; "Pull completo forzado" solo en modo jefe.
