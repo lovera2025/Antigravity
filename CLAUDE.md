@@ -835,8 +835,8 @@ Cada barra tiene su router Mercusys MW305R y su notebook: el programa tiene que 
 cada una sola (`docs/GUIA_ROUTERS_DE_LAS_BARRAS.md`).
 
 **25-nov, para la Técnica del 4-dic (Parte 2 del plan): la barra por noche, la madrugada y una central por barra —
-programado y probado en el sandbox, SIN PUBLICAR, en la rama `claude/sleepy-jepsen-bea21a`** (falta juntarla con la
-feature; `docs/CONTEXTO_BARRA_POR_NOCHE_2026-11-25.md`, que empieza con "Para retomar en otro chat"). Sin SQL.
+programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov** (venía de
+`claude/sleepy-jepsen-bea21a`; `docs/CONTEXTO_BARRA_POR_NOCHE_2026-11-25.md`, que empieza con "Para retomar en otro chat"). Sin SQL.
 - **La noche de una caja es el día en que se abrió, en hora de Argentina, con el corte al mediodía**
   (`barra/cuentas/dia_de_operacion.dart`, `DiaDeOperacion`, `CajasPorDia`: **la única cuenta del día de la barra**);
   las ventas van con su caja aunque sean de madrugada. Una pantalla o cuenta nueva de la barra que sume cajas **pasa
