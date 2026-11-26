@@ -58,7 +58,9 @@ class ClienteDeLaCentral extends ChangeNotifier {
     this.latido = const Duration(seconds: 5),
     this.silencioMaximo = const Duration(seconds: 12),
     this.pausa = const Duration(seconds: 1),
+    Stream<void>? cambiosDeRed,
   })  : _barra = barra,
+        _cambiosDeRed = cambiosDeRed,
         eleccion = eleccion ?? EleccionDeCentral.deLaCaja(barra: barraDeLaCaja),
         _buscador = buscador ?? BuscaCentral(eventoId: eventoId),
         _aMano = aMano,
@@ -85,6 +87,11 @@ class ClienteDeLaCentral extends ChangeNotifier {
   /// engancharse con otra lo reparte entre sus cajas.
   final void Function(Map<String, List<Map<String, Object?>>> nuevas)? alRecibir;
   final BuscaCentral _buscador;
+
+  /// Avisa cuando este equipo cambió de red ([VigiaDeLaRed]): sin central, se busca de
+  /// nuevo desde cero, con un socket nuevo y sin la dirección de antes.
+  final Stream<void>? _cambiosDeRed;
+  StreamSubscription<void>? _escuchaDeRed;
   final WebSocketChannel Function(Uri) _abrir;
   final DateTime Function() _ahora;
   final Duration latido;
@@ -134,6 +141,28 @@ class ClienteDeLaCentral extends ChangeNotifier {
   void arrancar() {
     if (_cerrado || _estado != EstadoDeLaCentral.apagada) return;
     _poner(EstadoDeLaCentral.buscando);
+    _escuchaDeRed ??= _cambiosDeRed?.listen((_) => _cambioLaRed());
+    _buscarOIr();
+  }
+
+  /// **Este equipo cambió de red** (26-nov-2026: volvió al wifi de la barra y no se
+  /// actualizaba hasta apagar y prender la central). Conectada, se le pregunta a la
+  /// central: si no contesta, el silencio la corta como siempre. Sin central, se busca de
+  /// nuevo ya, con un socket nuevo y sin la dirección de la otra red.
+  void _cambioLaRed() {
+    if (_cerrado || _estado == EstadoDeLaCentral.apagada) return;
+    if (conectada) {
+      unawaited(_latir());
+      return;
+    }
+    _cortar();
+    _intentos = 0;
+    final aMano = _aMano;
+    if (aMano != null) {
+      _conectar(aMano);
+      return;
+    }
+    _donde = null;
     _buscarOIr();
   }
 
@@ -184,6 +213,8 @@ class ClienteDeLaCentral extends ChangeNotifier {
   @override
   void dispose() {
     _cerrado = true;
+    unawaited(_escuchaDeRed?.cancel());
+    _escuchaDeRed = null;
     _cortar();
     _buscador.parar();
     super.dispose();

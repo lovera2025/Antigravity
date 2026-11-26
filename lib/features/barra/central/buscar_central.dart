@@ -101,44 +101,100 @@ class EleccionDeCentral {
 /// Contesta a todas las preguntas de su fiesta, sean de la barra que sean: la que elige
 /// es la caja.
 class RespondeBusqueda {
-  RespondeBusqueda({required this.eventoId, required this.puertoCentral, this.barra, this.equipo});
+  RespondeBusqueda({
+    required this.eventoId,
+    required this.puertoCentral,
+    this.barra,
+    this.equipo,
+    this.esperaParaReabrir = const Duration(seconds: 1),
+  });
 
   final String eventoId;
   final int puertoCentral;
   final String? barra;
   final String? equipo;
+
+  /// Cuánto espera para volver a abrir el socket que se murió.
+  final Duration esperaParaReabrir;
   RawDatagramSocket? _socket;
+  int _puerto = kPuertoBusquedaBarra;
+  InternetAddress? _en;
+  var _cerrado = false;
+  Timer? _reabrir;
 
   /// Empieza a escuchar en [puerto], en todas las conexiones de la PC ([en] en las
   /// pruebas: solo esta PC). Si no puede (el puerto está tomado), sigue sin contestar: la
   /// cajera todavía puede escribir la dirección.
+  ///
+  /// **Si después el socket se muere** (un cambio de wifi, 26-nov-2026: la notebook dejaba
+  /// de contestar hasta apagar y prender la central), **se vuelve a abrir solo**.
   Future<bool> escuchar({int puerto = kPuertoBusquedaBarra, InternetAddress? en}) async {
+    _cerrado = false;
+    _puerto = puerto;
+    _en = en;
+    return _abrir();
+  }
+
+  /// Cambió la red de este equipo: se cierra el socket y se abre otro, aunque el de antes
+  /// parezca vivo.
+  Future<void> reabrir() async {
+    if (_cerrado) return;
+    _reabrir?.cancel();
+    final viejo = _socket;
+    _socket = null;
+    viejo?.close();
+    if (!await _abrir()) _seMurio(null);
+  }
+
+  void _seMurio(RawDatagramSocket? s) {
+    if (_cerrado || (s != null && !identical(s, _socket))) return;
+    _socket = null;
+    _reabrir?.cancel();
+    _reabrir = Timer(esperaParaReabrir, () async {
+      if (_cerrado || _socket != null) return;
+      if (!await _abrir()) _seMurio(null);
+    });
+  }
+
+  Future<bool> _abrir() async {
     try {
-      final s = await RawDatagramSocket.bind(en ?? InternetAddress.anyIPv4, puerto, reuseAddress: true);
+      final s = await RawDatagramSocket.bind(_en ?? InternetAddress.anyIPv4, _puerto, reuseAddress: true);
+      if (_cerrado) {
+        s.close();
+        return false;
+      }
       _socket = s;
-      s.listen((evento) {
-        if (evento != RawSocketEvent.read) return;
-        final d = s.receive();
-        if (d == null || d.data.length > 512) return;
-        try {
-          final json = jsonDecode(utf8.decode(d.data));
-          if (json is Map && json['t'] == 'buscar' && json['evento'] == eventoId) {
-            // Con varias tablets preguntando a la vez, una respuesta podía perderse.
-            unawaited(mandarDatagrama(
-              s,
-              utf8.encode(jsonEncode({
-                't': 'central',
-                'evento': eventoId,
-                'puerto': puertoCentral,
-                if (barra != null) 'barra': barra,
-                if (equipo != null) 'equipo': equipo,
-              })),
-              d.address,
-              d.port,
-            ));
+      s.listen(
+        (evento) {
+          if (evento == RawSocketEvent.closed) {
+            _seMurio(s);
+            return;
           }
-        } catch (_) {}
-      });
+          if (evento != RawSocketEvent.read) return;
+          final d = s.receive();
+          if (d == null || d.data.length > 512) return;
+          try {
+            final json = jsonDecode(utf8.decode(d.data));
+            if (json is Map && json['t'] == 'buscar' && json['evento'] == eventoId) {
+              // Con varias tablets preguntando a la vez, una respuesta podía perderse.
+              unawaited(mandarDatagrama(
+                s,
+                utf8.encode(jsonEncode({
+                  't': 'central',
+                  'evento': eventoId,
+                  'puerto': puertoCentral,
+                  if (barra != null) 'barra': barra,
+                  if (equipo != null) 'equipo': equipo,
+                })),
+                d.address,
+                d.port,
+              ));
+            }
+          } catch (_) {}
+        },
+        onError: (Object _) => _seMurio(s),
+        onDone: () => _seMurio(s),
+      );
       return true;
     } catch (e) {
       debugPrint('Central de la barra: no se pudo escuchar la búsqueda: $e');
@@ -147,9 +203,15 @@ class RespondeBusqueda {
   }
 
   void cerrar() {
+    _cerrado = true;
+    _reabrir?.cancel();
     _socket?.close();
     _socket = null;
   }
+
+  /// Lo que le hace al socket un cambio de red: se muere sin que nadie lo cierre.
+  @visibleForTesting
+  void matarElSocketParaPrueba() => _socket?.close();
 }
 
 /// En la caja: pregunta a toda la red del salón dónde está la central de la fiesta, hasta
@@ -159,6 +221,7 @@ class BuscaCentral {
   BuscaCentral({
     required this.eventoId,
     this.cada = const Duration(seconds: 3),
+    this.renovarCada = const Duration(seconds: 30),
     int puerto = kPuertoBusquedaBarra,
     List<int>? puertos,
     Future<List<InternetAddress>> Function()? destinos,
@@ -167,6 +230,11 @@ class BuscaCentral {
 
   final String eventoId;
   final Duration cada;
+
+  /// **Mientras nadie contesta, cada tanto se pregunta con un socket nuevo** (26-nov-2026):
+  /// el de antes pudo quedar atado a la red de antes (la tablet se fue a otro wifi y
+  /// volvió) y no recibir más las respuestas, sin ningún error.
+  final Duration renovarCada;
 
   /// A qué puertos se pregunta. En la app, uno solo (el 8777); las ventanas de prueba,
   /// con dos centrales en la misma PC, preguntan a los dos.
@@ -177,14 +245,29 @@ class BuscaCentral {
   RawDatagramSocket? _socket;
   Timer? _timer;
 
+  /// Cuántos sockets abrió para preguntar (las pruebas miran que se renueve).
+  @visibleForTesting
+  int socketsAbiertos = 0;
+
   /// Cuántas veces se empezó a buscar: si se vuelve a empezar mientras la anterior
   /// todavía abría su socket, la anterior se descarta (no quedan dos buscando).
   var _vuelta = 0;
 
   /// Busca. [encontrada] se llama una vez por cada respuesta.
+  ///
+  /// **No deja de buscar nunca por un socket muerto** (26-nov-2026: un cambio de wifi lo
+  /// mataba y la tablet ya no encontraba la central hasta que se apagaba y prendía): si el
+  /// socket se muere o no se puede abrir, se vuelve a empezar al segundo; y cada
+  /// [renovarCada] sin respuesta, también.
   Future<void> buscar(void Function(DondeEstaLaCentral) encontrada) async {
     parar();
     final esta = ++_vuelta;
+    void empezarDeNuevo(Duration espera) {
+      Timer(espera, () {
+        if (esta == _vuelta) unawaited(buscar(encontrada));
+      });
+    }
+
     try {
       final s = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       if (esta != _vuelta) {
@@ -193,24 +276,41 @@ class BuscaCentral {
       }
       s.broadcastEnabled = true;
       _socket = s;
-      s.listen((evento) {
-        if (evento != RawSocketEvent.read) return;
-        final d = s.receive();
-        if (d == null || d.data.length > 512) return;
-        try {
-          final json = jsonDecode(utf8.decode(d.data));
-          final p = json is Map ? json['puerto'] : null;
-          if (json is Map && json['t'] == 'central' && json['evento'] == eventoId && p is int) {
-            final barra = json['barra'], equipo = json['equipo'];
-            encontrada(DondeEstaLaCentral(
-              d.address.address,
-              p,
-              barra: barra is String && barra.length <= 40 ? barra : null,
-              equipo: equipo is String && equipo.length <= 64 ? equipo : null,
-            ));
+      socketsAbiertos++;
+      void murio() {
+        if (esta != _vuelta || !identical(s, _socket)) return;
+        _timer?.cancel();
+        _timer = null;
+        _socket = null;
+        empezarDeNuevo(const Duration(seconds: 1));
+      }
+
+      s.listen(
+        (evento) {
+          if (evento == RawSocketEvent.closed) {
+            murio();
+            return;
           }
-        } catch (_) {}
-      });
+          if (evento != RawSocketEvent.read) return;
+          final d = s.receive();
+          if (d == null || d.data.length > 512) return;
+          try {
+            final json = jsonDecode(utf8.decode(d.data));
+            final p = json is Map ? json['puerto'] : null;
+            if (json is Map && json['t'] == 'central' && json['evento'] == eventoId && p is int) {
+              final barra = json['barra'], equipo = json['equipo'];
+              encontrada(DondeEstaLaCentral(
+                d.address.address,
+                p,
+                barra: barra is String && barra.length <= 40 ? barra : null,
+                equipo: equipo is String && equipo.length <= 64 ? equipo : null,
+              ));
+            }
+          } catch (_) {}
+        },
+        onError: (Object _) => murio(),
+        onDone: murio,
+      );
       final pregunta = utf8.encode(jsonEncode({'t': 'buscar', 'evento': eventoId}));
       // Una ronda que falla (una conexión que desaparece en el medio) no corta la
       // búsqueda: la siguiente vuelve a preguntar. Antes, un error en la primera ronda
@@ -231,10 +331,22 @@ class BuscaCentral {
         }
       }
 
-      _timer = Timer.periodic(cada, (_) => unawaited(preguntar()));
+      final rondasPorSocket = (renovarCada.inMilliseconds / cada.inMilliseconds).ceil().clamp(1, 1 << 20);
+      var rondas = 0;
+      _timer = Timer.periodic(cada, (_) {
+        if (esta != _vuelta) return;
+        if (++rondas >= rondasPorSocket) {
+          // Un socket nuevo, por si el de antes quedó atado a la red de antes.
+          unawaited(buscar(encontrada));
+          return;
+        }
+        unawaited(preguntar());
+      });
       await preguntar();
     } catch (e) {
       debugPrint('Barra: no se pudo buscar la central: $e');
+      // Sin red en este momento (se está cambiando de wifi): se prueba de nuevo.
+      if (esta == _vuelta) empezarDeNuevo(const Duration(seconds: 2));
     }
   }
 
@@ -245,6 +357,10 @@ class BuscaCentral {
     _socket?.close();
     _socket = null;
   }
+
+  /// Lo que le hace al socket un cambio de red: se muere sin que nadie lo cierre.
+  @visibleForTesting
+  void matarElSocketParaPrueba() => _socket?.close();
 }
 
 /// Manda un datagrama y, si el equipo no lo pudo mandar en ese momento, lo reintenta.

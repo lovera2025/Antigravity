@@ -17,6 +17,7 @@ import 'buscar_central.dart';
 import 'central_barra.dart';
 import 'cliente_de_la_central.dart';
 import 'filas_de_la_red.dart';
+import 'vigia_de_la_red.dart';
 
 /// Si este equipo usa la red del salón (la central de la barra). En la web no; las
 /// pruebas de pantalla lo apagan (`BarraEnPrueba`), así no abren conexiones de verdad.
@@ -55,6 +56,10 @@ final destinosBusquedaBarraProvider =
 /// Las direcciones de esta PC que sirven para las tablets.
 final direccionesCentralBarraProvider =
     Provider<Future<List<String>> Function()>((ref) => direccionesDeEstaPc);
+
+/// Quién mira si este equipo cambió de red ([VigiaDeLaRed]); uno por central y por caja.
+/// Las pruebas lo reemplazan para cambiar la red a mano.
+final vigiaDeLaRedProvider = Provider<VigiaDeLaRed Function()>((ref) => VigiaDeLaRed.new);
 
 /// El id de este equipo, para que la central reconozca a la tablet cuando vuelve.
 final equipoDeLaBarraProvider = Provider<Future<String> Function()>((ref) => InstalacionId.inicializar);
@@ -206,6 +211,11 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   StreamSubscription<List<CajaConectada>>? _cajas;
   StreamSubscription<void>? _puente;
 
+  /// Si la notebook cambia de red, vuelve a abrir lo que contesta la búsqueda y relee
+  /// sus direcciones, sin apagar la central (26-nov-2026).
+  VigiaDeLaRed? _vigia;
+  StreamSubscription<void>? _cambiosDeRed;
+
   /// Se lee al armar: al cerrarse, Riverpod no deja leer otros providers.
   late AvisoALaRed _aviso;
 
@@ -296,6 +306,18 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     _puente = central.cambiosDelPuente.listen((_) {
       if (identical(_central, central) && state.prendida) state = state.con(otras: central.otras);
     });
+    // Si la notebook cambia de red: lo que contesta la búsqueda se vuelve a abrir, las
+    // direcciones que muestra CAJAS se releen y el enganche busca de nuevo (26-nov-2026:
+    // hasta ahí había que apagar y prender la central).
+    final vigia = ref.read(vigiaDeLaRedProvider)();
+    _vigia = vigia;
+    _cambiosDeRed = vigia.cambios.listen((_) async {
+      if (!identical(_central, central)) return;
+      await _busqueda?.reabrir();
+      final direcciones = await ref.read(direccionesCentralBarraProvider)();
+      if (identical(_central, central) && state.prendida) state = state.con(direcciones: direcciones);
+    });
+    vigia.arrancar();
     central.engancharConOtras(
       equipo: equipo,
       buscador: BuscaCentral(
@@ -303,6 +325,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
         puertos: ref.read(puertosQuePreguntaBarraProvider),
         destinos: ref.read(destinosBusquedaBarraProvider),
       ),
+      cambiosDeRed: vigia.cambios,
     );
     if (desdeElBoton) {
       unawaited(ref.read(guardadoDeLaCentralProvider).anotarPrendida(
@@ -376,6 +399,10 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     if (central != null && _aviso.salida == central.difundirDeEstaPc) _aviso.salida = null;
     _busqueda?.cerrar();
     _busqueda = null;
+    await _cambiosDeRed?.cancel();
+    _cambiosDeRed = null;
+    await _vigia?.cerrar();
+    _vigia = null;
     await _cajas?.cancel();
     _cajas = null;
     await _puente?.cancel();
@@ -416,11 +443,16 @@ final centralDeLaBarraProvider =
 class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
   ClienteDeLaCentral? _cliente;
 
+  /// Si la tablet cambia de red, la caja busca la central de nuevo (26-nov-2026).
+  VigiaDeLaRed? _vigia;
+
   @override
   ClienteDeLaCentral? build() {
     ref.onDispose(() {
       _cliente?.dispose();
       _cliente = null;
+      unawaited(_vigia?.cerrar());
+      _vigia = null;
     });
     return null;
   }
@@ -439,7 +471,10 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     final equipo = await ref.read(equipoDeLaBarraProvider)();
     final aMano = await ref.read(guardadoDeLaCentralProvider).aMano();
     if (_cliente != null) return;
+    final vigia = ref.read(vigiaDeLaRedProvider)();
+    _vigia = vigia;
     final cliente = ClienteDeLaCentral(
+      cambiosDeRed: vigia.cambios,
       eventoId: eventoId,
       equipo: equipo,
       nombreCaja: nombreCaja,
@@ -457,6 +492,7 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     _cliente = cliente;
     state = cliente;
     cliente.arrancar();
+    vigia.arrancar();
   }
 
   /// La encargada que entra **directo a LAS CAJAS**, sin pasar por VENDER: busca la
@@ -486,6 +522,8 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
   }
 
   void _soltar() {
+    unawaited(_vigia?.cerrar());
+    _vigia = null;
     final c = _cliente;
     if (c == null) return;
     final aviso = ref.read(avisoALaRedProvider);

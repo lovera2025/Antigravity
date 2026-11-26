@@ -1,0 +1,36 @@
+la notebook vuelve a abrir sola lo que contesta la búsqueda
+lib/features/barra/central/buscar_central.dart
+test/central_barra_cambio_de_red_test.dart
+    _reabrir = Timer(esperaParaReabrir, () async {
+    _reabrir = Timer(const Duration(days: 1), () async {
+---
+la tablet vuelve a preguntar sola si se le muere el socket
+lib/features/barra/central/buscar_central.dart
+test/central_barra_cambio_de_red_test.dart
+        empezarDeNuevo(const Duration(seconds: 1));
+        empezarDeNuevo(const Duration(days: 1));
+---
+mientras nadie contesta, la tablet renueva el socket
+lib/features/barra/central/buscar_central.dart
+test/central_barra_cambio_de_red_test.dart
+        if (++rondas >= rondasPorSocket) {
+        if (++rondas >= rondasPorSocket * 1000) {
+---
+la caja escucha el aviso de que cambió la red
+lib/features/barra/central/cliente_de_la_central.dart
+test/central_barra_cambio_de_red_test.dart
+    _escuchaDeRed ??= _cambiosDeRed?.listen((_) => _cambioLaRed());
+
+---
+el vigía no avisa la primera lectura, solo los cambios
+lib/features/barra/central/vigia_de_la_red.dart
+test/central_barra_cambio_de_red_test.dart
+      if (antes != null && !_iguales(antes, ahora) && !_cambios.isClosed) _cambios.add(null);
+      if (!_cambios.isClosed) _cambios.add(null);
+---
+la notebook relee sus direcciones al cambiar de red
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+      if (identical(_central, central) && state.prendida) state = state.con(direcciones: direcciones);
+
+---
