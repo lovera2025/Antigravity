@@ -162,6 +162,18 @@ void main() {
       expect(AdicionalesDeLaFamilia.mesas(q, pagos), {106});
     });
 
+    test('la columna MESA de la grilla dice primero la principal', () {
+      expect(SalonMesas.textoMesas(_alumno('107, 106', extras: 1)),
+          '107 y 106 (1 extra)');
+      expect(SalonMesas.textoMesas(_alumno('12, 67, 68', extras: 2)),
+          '12 + 67-68 (separada)');
+      // Lo sorteado, como siempre.
+      expect(SalonMesas.textoMesas(_alumno('12, 13, 14', extras: 2)),
+          '12-14 (2 extra)');
+      expect(SalonMesas.textoMesas(_alumno('12, 13, 40', extras: 2)),
+          '12-13 + 40 (separada)');
+    });
+
     test('las sillas extra van primero a la principal', () {
       final q = _alumno('107, 106', extras: 1, sillas: 3);
       expect(SalonMesas.repartoSillas(q), [(107, 2), (106, 1)]);

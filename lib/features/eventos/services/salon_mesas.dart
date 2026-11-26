@@ -222,12 +222,25 @@ class SalonMesas {
       t.length == 1 ? '${t.first}' : '${t.first}-${t.last}';
 
   /// Columna MESA: "12-14 (2 extra)", "12-13 + 40 (separada)", "-".
+  ///
+  /// **La principal se lee primero** (6.9.4): su tramo va adelante y, si no es
+  /// la primera de su tramo, se dice "107 y 106 (1 extra)". Para lo sorteado
+  /// (de menor a mayor) sale igual que siempre.
   static String textoMesas(ContratoAlumno a) {
     final texto = a.numeroMesa?.trim() ?? '';
     if (texto.isEmpty) return '-';
     final ts = tramos(a);
     if (ts.isEmpty) return texto;
-    final base = ts.map(_textoTramo).join(' + ');
+    final p = principal(a);
+    final i = p == null ? -1 : ts.indexWhere((t) => t.contains(p));
+    if (i > 0) ts.insert(0, ts.removeAt(i));
+    String delTramo(List<int> t) => p != null && t.contains(p) && t.first != p
+        ? '$p y ${_textoPuertaDeTramos(SorteoMesasMotor.tramosDe([
+              for (final n in t)
+                if (n != p) n,
+            ]))}'
+        : _textoTramo(t);
+    final base = ts.map(delTramo).join(' + ');
     if (ts.length > 1) {
       return '$base (${ts.length == 2 ? 'separada' : 'separadas'})';
     }

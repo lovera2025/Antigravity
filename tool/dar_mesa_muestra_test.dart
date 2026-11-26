@@ -17,7 +17,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/widgets/celda_mesa_alumno.dart';
+import 'package:arguello_events/features/eventos/widgets/chip_dar_mesa.dart';
 import 'package:arguello_events/features/eventos/widgets/dar_mesa_a_todos_dialog.dart';
 import 'package:arguello_events/features/eventos/widgets/opciones_planilla_sorteo_dialog.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
@@ -104,31 +106,56 @@ void main() {
     await guardar(tester, clave, archivo);
   }
 
-  for (final (archivo, jefe) in [
-    ('DarMesa_celdas_modo_jefe.png', true),
-    ('DarMesa_celdas_sin_modo_jefe.png', false),
+  // La grilla de la fiesta con las piezas de verdad (la columna MESA y el botón
+  // de la barra), antes y después de DAR MESA A TODOS, con modo jefe y sin él.
+  // La pantalla entera no se puede montar sin la base: el resto de las
+  // columnas va resumido.
+  final antes = [
+    (_alumno('a1', 'ACOSTA, LUCÍA', mesa: '41'), const PagoAlumno(base: 315000)),
+    (_alumno('a2', 'LUNA, JOSÉ'), PagoAlumno.nada),
+    (_alumno('a3', 'MORALES, FABIÁN'), PagoAlumno.nada),
+    (_alumno('a4', 'NAVARRO, MARIANO'), PagoAlumno.nada),
+    (_alumno('a5', 'OLIVERA, MARCOS'), PagoAlumno.nada),
+    (
+      _alumno('a6', 'RIVAS, TOMÁS', mesa: '107', extras: 1),
+      const PagoAlumno(base: 200000),
+    ),
+    (
+      _alumno('a7', 'ROMERO, ANA', mesa: '43, 44', extras: 1),
+      const PagoAlumno(base: 315000, mesas: 70000),
+    ),
+  ];
+  const dadas = {
+    'a2': '42',
+    'a3': '47',
+    'a4': '52',
+    'a5': '54',
+    'a6': '107, 106',
+  };
+  final despues = [
+    for (final (a, pago) in antes)
+      (
+        dadas.containsKey(a.id) ? a.copyWith(numeroMesa: dadas[a.id]) : a,
+        pago,
+      ),
+  ];
+
+  for (final (archivo, filas, jefe) in [
+    ('DarMesa_grilla_ANTES_modo_jefe.png', antes, true),
+    ('DarMesa_grilla_ANTES_sin_modo_jefe.png', antes, false),
+    ('DarMesa_grilla_DESPUES.png', despues, true),
   ]) {
-    testWidgets('las celdas de la grilla, ${jefe ? 'en' : 'sin'} modo jefe',
-        (tester) async {
-      await preparar(tester, const Size(520, 330));
+    testWidgets('la grilla: $archivo', (tester) async {
+      await preparar(tester, const Size(760, 560));
       final clave = GlobalKey();
-      final filas = [
-        (
-          _alumno('a', 'CABRERA, JOSÉ'),
-          PagoAlumno.nada,
-          true,
-        ),
-        (
-          _alumno('b', 'QUIROGA, MARCOS', mesa: '107', extras: 1),
-          const PagoAlumno(base: 200000),
-          true,
-        ),
-        (
-          _alumno('c', 'ROMERO, ANA', mesa: '43, 44', extras: 1),
-          const PagoAlumno(base: 315000, mesas: 70000),
-          false,
-        ),
+      final sinMesa = [
+        for (final (a, _) in filas)
+          if (a.numeroMesa == null || a.mesaExtraCantidad + 1 >
+              MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length)
+            a,
       ];
+      TextStyle titulo() =>
+          const TextStyle(fontWeight: FontWeight.w800, fontSize: 12);
       await tester.pumpWidget(
         RepaintBoundary(
           key: clave,
@@ -139,50 +166,75 @@ void main() {
               backgroundColor: Colors.white,
               body: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Table(
-                  columnWidths: const {
-                    0: FixedColumnWidth(240),
-                    1: FixedColumnWidth(200),
-                  },
-                  border: TableBorder.all(color: Colors.grey.shade300),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const TableRow(
+                    Row(
                       children: [
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text(
-                            'ALUMNO',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                        Text(
+                          jefe ? 'ALUMNOS · modo jefe' : 'ALUMNOS · sin modo jefe',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
                           ),
                         ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text(
-                            'MESA',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                        const Spacer(),
+                        if (sinMesa.isNotEmpty)
+                          ChipDarMesa(
+                            cantidad: sinMesa.length,
+                            onTap: jefe ? () {} : null,
                           ),
-                        ),
                       ],
                     ),
-                    for (final (a, pago, falta) in filas)
-                      TableRow(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(a.nombreAlumno),
+                    const SizedBox(height: 12),
+                    Table(
+                      columnWidths: const {
+                        0: FixedColumnWidth(40),
+                        1: FixedColumnWidth(240),
+                        2: FixedColumnWidth(70),
+                        3: FixedColumnWidth(220),
+                      },
+                      border: TableBorder.all(color: Colors.grey.shade300),
+                      children: [
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey.shade100),
+                          children: [
+                            for (final t in ['N°', 'ALUMNO', 'CURSO', 'MESA'])
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(t, style: titulo()),
+                              ),
+                          ],
+                        ),
+                        for (final (i, (a, pago)) in filas.indexed)
+                          TableRow(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text('${i + 1}'),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(a.nombreAlumno),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(a.cursoDivision ?? ''),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: CeldaMesaAlumno(
+                                  alumno: a,
+                                  extras: ExtrasSegunPago.de(a, pago),
+                                  sorteoHecho: true,
+                                  darMesa: sinMesa.contains(a),
+                                  onDarMesa: jefe ? () {} : null,
+                                ),
+                              ),
+                            ],
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: CeldaMesaAlumno(
-                              alumno: a,
-                              extras: ExtrasSegunPago.de(a, pago),
-                              sorteoHecho: true,
-                              darMesa: falta,
-                              onDarMesa: jefe ? () {} : null,
-                            ),
-                          ),
-                        ],
-                      ),
+                      ],
+                    ),
                   ],
                 ),
               ),
