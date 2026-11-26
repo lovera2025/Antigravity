@@ -60,8 +60,29 @@ sandbox** (no está en casa).
    escuela real queda marcado en esa fiesta: probar con una fiesta de prueba o deshacer los ingresos), y se le pidió la
    foto de "Cómo anda" y qué no anda. "Cómo anda" está solo en la app de prueba: en la de verdad no aparece.
 
-**Lo que falta (de este paso 0):** la prueba en la Quint de verdad (la hace el usuario cuando vuelva: no está en casa);
-lo que encuentre entra en el paso 2 del plan. Juntar esta rama con la feature lo hace la sesión que coordina.
+**Los commits de esta rama:** `0d45627` (la nube sin el stock y LA FIESTA), `f358b47` (el `cherry-pick` de `18b1b5d`:
+el mismo cambio que ya está en la feature), `e3dff33` (la Tele 1 al cambiar de wifi), `cda2fe6` y el de esta nota (el
+CONTEXTO). Las notas para la sesión que coordina, en su carpeta compartida (`apk-tele-app-de-verdad-26nov.md`).
+
+**Lo que no se probó:**
+- **La Quint de verdad.** El APK se probó solo en el emulador x86_64, con la parte de 64 bits (arm64) traducida; la de
+  **32 bits (armeabi-v7a) no corrió en ningún aparato**.
+- **Entrar con la cuenta del jefe y llegar al modo tele en la app de verdad:** en el emulador solo hasta el login (Claude
+  no escribe contraseñas). LA FIESTA con las fiestas reales tampoco: se vio en la app de prueba y en las pruebas.
+- **La Tele 1 cambiando de wifi de verdad:** solo en esta PC, con el socket cerrado a propósito. Que el vigía de la red
+  llame a `reabrir` en la central de la tele no tiene prueba propia.
+- **La suite entera no se corrió** (sí 63 archivos: tele, central, puerta, barra y lo tocado, 1230 en verde).
+- Lo de antes sigue sin probar: dos teles de verdad buscándose por UDP, el router sin internet, un iPhone.
+
+**Lo que falta, en orden:**
+1. **Que el usuario instale el APK en la Quint** cuando vuelva (no está en casa) y cuente: el menú (con "Lista para
+   trabajar sin internet"), LA FIESTA y qué no anda. Lo que encuentre entra en el paso 2 del plan.
+2. **La sesión que coordina junta esta rama con la feature** (con su OK) y corre la suite entera y las roturas sobre lo
+   junto (`tool/roturas_tele.txt`, ahora 56; `tool/roturas_nube_sin_stock.txt`, 3).
+3. **Antes de publicar, el SQL del stock con su OK** (`20261125120000_barra_stock.sql`, solo agrega tablas): con eso se
+   va el "No bajaron" del ícono de sincronización y la revisión de la mora vuelve a correr sola al abrir.
+4. Si se quiere cerrar del todo: una prueba de que el vigía de la central de la tele reabre la búsqueda; y la carpeta
+   `lib/x86_64` incompleta del APK (no importa en aparatos ARM, que son todas las teles y tablets).
 
 **26-nov: la revisión independiente de la Parte 1, arreglada con sus pruebas y sus roturas** (sin publicar, en la misma
 rama; el detalle de cada hallazgo, abajo en "La revisión del 26-nov"). Lo pidió la sesión que coordina (la
