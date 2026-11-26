@@ -799,9 +799,10 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
 - **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v84**: la v81 es de la entrega en dos partes,
   la v82 de las entradas para rendir y la v83 del stock por barra.
 
-**La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — programada y probada el 25-nov, SIN PUBLICAR; el
-usuario la quiere publicar el 26-nov, con él** (`docs/CONTEXTO_v6.9.4_2026-11-25.md`, que empieza con "Para retomar
-en otro chat"; los nombres del caso, en `build/nombres_6.9.4.md`, fuera de git). Sale de la rama **`release/6.9.x`**
+**La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
+foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta
+que la instale, primero la PC que sortea, y la foto "después de 6.9.4"**; `docs/CONTEXTO_v6.9.4_2026-11-25.md`, que
+empieza con "Para retomar en otro chat"; los nombres del caso, en `build/nombres_6.9.4.md`, fuera de git). Sale de la rama **`release/6.9.x`**
 (desde el tag `v6.9.3`, carpeta `..\arguello_events_6.9.x`): la feature tiene la v83 y lo del 4-dic a medio hacer y
 **no se publica de ahí**. Versión `6.9.4+79`, sin SQL ni migración. Lo de esa rama está también acá con `cherry-pick`.
 - **La planilla:** el cartel suma "Orden: Alfabético · Por número de mesa" (`OrdenPlanillaSorteo`,
