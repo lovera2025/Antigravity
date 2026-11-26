@@ -117,7 +117,9 @@ class TotemConfigRepository {
 
     final guardada = TotemConfig.fromJson(fila);
     await TotemConfigCache.save(guardada);
-    await _avisarALasTeles(cfg.eventoId);
+    // Sin esperarlo: Personalizar no queda trabado si el aviso tarda
+    // (revisión del 26-nov).
+    unawaited(_avisarALasTeles(cfg.eventoId));
     return guardada;
   }
 
@@ -176,7 +178,7 @@ class TotemConfigRepository {
         ),
       );
     } else {
-      await _avisarALasTeles(eventoId);
+      unawaited(_avisarALasTeles(eventoId));
     }
   }
 

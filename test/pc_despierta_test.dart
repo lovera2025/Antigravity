@@ -87,7 +87,11 @@ void main() {
     ]) {
       test('$nombre: prendida sí, apagada no', () {
         final f = leer(ruta);
-        final prender = f.substring(f.indexOf('Future<void> prender(String eventoId) async {'));
+        // Por el principio de la firma: la de la puerta lleva además
+        // `{bool comoTele = false}` (la tele es el tótem, 24-nov-2026).
+        final desde = f.indexOf('Future<void> prender(String eventoId');
+        expect(desde, greaterThan(0), reason: 'no está prender en $ruta');
+        final prender = f.substring(desde);
         expect(
           prender.substring(0, prender.indexOf('Future<void> reanudar(')),
           contains('_despierta?.mantener(true)'),

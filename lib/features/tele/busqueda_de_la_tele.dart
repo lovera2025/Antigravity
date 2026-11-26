@@ -11,19 +11,21 @@ import 'red_de_la_tele.dart';
 /// con la misma pregunta que las cajas de la barra (`BuscaCentral`, en el
 /// puerto [kPuertoBusquedaTele]). Hasta el 25-nov la Tele 1 contestaba solo
 /// por su escuela; ahora **atiende las dos escuelas de la noche**, así que
-/// contesta por cualquiera: con la escuela que le preguntaron (así la Tele 2
-/// la reconoce) y las que ya atiende ([atiende]). La Tele 1 empieza a atender
-/// la de la Tele 2 cuando se conecta.
+/// contesta por cualquiera de las suyas ([conoce]: la que muestra, las que
+/// atiende y las que vienen), con la escuela que le preguntaron (así la Tele
+/// 2 la reconoce). La Tele 1 empieza a atender la de la Tele 2 cuando se
+/// conecta. **No dice cuáles atiende** (revisión del 26-nov): el id del
+/// evento es lo que trae la Tele 2 para conectarse.
 ///
 /// Va aparte de `RespondeBusqueda` (la de la barra) a propósito: la barra
 /// contesta solo por su fiesta.
 class RespondeLaTele1 {
-  RespondeLaTele1({required this.puertoCentral, required this.atiende});
+  RespondeLaTele1({required this.puertoCentral, required this.conoce});
 
   final int puertoCentral;
 
-  /// Las escuelas que atiende ahora.
-  final List<String> Function() atiende;
+  /// Si la escuela es de esta tele.
+  final bool Function(String eventoId) conoce;
 
   RawDatagramSocket? _socket;
 
@@ -33,13 +35,12 @@ class RespondeLaTele1 {
   Map<String, Object?>? respuesta(Object? pregunta) {
     if (pregunta is! Map || pregunta['t'] != 'buscar') return null;
     final evento = pregunta['evento'];
-    if (evento is! String || evento.length != 36) return null;
+    if (evento is! String || evento.length != 36 || !conoce(evento)) return null;
     return {
       't': 'central',
       'evento': evento,
       'puerto': puertoCentral,
       'tele': true,
-      'atiende': atiende(),
     };
   }
 

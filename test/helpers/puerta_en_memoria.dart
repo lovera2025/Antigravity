@@ -57,10 +57,13 @@ ContratoAlumno alumnoDePrueba(
   List<String> acomp = const [],
   String? musica,
   String division = '5° B',
+  // La escuela: otra que la de siempre, para la tele con dos escuelas
+  // (25-nov-2026).
+  String evento = eventoMasivo,
 }) =>
     ContratoAlumno(
       id: id,
-      eventoId: eventoMasivo,
+      eventoId: evento,
       nombreAlumno: nombre,
       cantidadAcompanantes: acomp.length,
       nombresAcompanantes: acomp,
@@ -410,9 +413,14 @@ class InvitadosEnMemoria extends InvitadosRepository {
     return escritas;
   }
 
+  /// Lo mismo, por escuela.
+  final subidasPorEscuela = <String, Set<String>>{};
+
   @override
-  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async =>
-      subidasDeOtraTele.addAll(ids);
+  Future<void> subirLoDeOtraTele(String eventoId, Set<String> ids) async {
+    subidasDeOtraTele.addAll(ids);
+    (subidasPorEscuela[eventoId] ??= {}).addAll(ids);
+  }
 
   /// Armar la lista desde los alumnos es de la oficina (las pantallas del
   /// salón), no de Recepción.
@@ -433,7 +441,7 @@ class ContratosEnMemoria extends ContratosRepository {
 
   @override
   Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
-      eventoId == eventoMasivo ? alumnos : const [];
+      [for (final a in alumnos) if (a.eventoId == eventoId) a];
 
   /// Nunca va a la base de la PC: sin esto la puerta se quedaba esperando.
   @override
@@ -529,8 +537,11 @@ class SillasPuertaEnMemoria extends SillasPuertaRepository {
 
 /// El plano de la fiesta masiva en esta PC: su salón ([armado]), o ninguno.
 class PlanosEnMemoria implements PlanosEventoRepository {
-  PlanosEnMemoria([this.armado]);
+  PlanosEnMemoria([this.armado, this.porEvento = const {}]);
   ArmadoSalon? armado;
+
+  /// El salón de otras escuelas (la tele con dos escuelas, 25-nov-2026).
+  final Map<String, ArmadoSalon> porEvento;
 
   /// Lo configurado del plano: las mesas libres y las reservadas para quien no
   /// es alumno (los profes).
@@ -540,8 +551,8 @@ class PlanosEnMemoria implements PlanosEventoRepository {
   @override
   Future<PlanoEvento?> obtener(String eventoId) async {
     lecturas++;
-    final a = armado;
-    if (a == null || eventoId != eventoMasivo) return null;
+    final a = eventoId == eventoMasivo ? armado : porEvento[eventoId];
+    if (a == null) return null;
     return PlanoEvento.nuevo(
       eventoId: eventoId,
       armado: a,
@@ -589,12 +600,13 @@ class PuertaEnMemoria {
     Map<String, SillasReparto> repartos = const {},
     List<SillaPuerta> sillasDeLaNoche = const [],
     ArmadoSalon? plano,
+    Map<String, ArmadoSalon> planosDe = const {},
     Map<String, List<Map<String, dynamic>>>? pagos,
   })  : contratos = ContratosEnMemoria(supabase, alumnos, pagos: pagos),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
         sillas = SillasEnMemoria(repartos),
         sillasPuerta = SillasPuertaEnMemoria(sillasDeLaNoche),
-        planos = PlanosEnMemoria(plano);
+        planos = PlanosEnMemoria(plano, planosDe);
 
   final ContratosEnMemoria contratos;
   final InvitadosEnMemoria invitados;

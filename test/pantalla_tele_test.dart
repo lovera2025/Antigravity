@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -81,6 +82,7 @@ void main() {
     int cuartos = 0,
     List<Evento>? eventos,
     String? fiesta,
+    CentralDeLaPuerta Function() central = _CentralQuieta.new,
   }) async {
     SharedPreferences.setMockInitialValues(preferencias);
     tester.view.physicalSize = const Size(1920, 1080);
@@ -104,7 +106,7 @@ void main() {
         fiestaDeLaTeleProvider.overrideWith(() => fiestaFija),
         // La central de verdad no se prende acá (eso lo prueba
         // `tele_central_test`): solo se mira lo que la tele muestra.
-        centralDeLaPuertaProvider.overrideWith(_CentralQuieta.new),
+        centralDeLaPuertaProvider.overrideWith(central),
       ],
     ));
     await tester.pump(const Duration(milliseconds: 300));
@@ -429,6 +431,23 @@ void main() {
     expect(find.byKey(const ValueKey('tele_direccion')), findsOneWidget);
   });
 
+  testWidgets('pasó a principal con la Tele 1 apagada: un QR por escuela, el de la que '
+      'no tiene tele con &t=2 (revisión del 26-nov)', (tester) async {
+    await abrir(
+      tester,
+      central: _CentralConLaOtra.new,
+      eventos: [eventoDePrueba(eventoMasivo, 'masivo'), eventoDePrueba(eventoParticular, 'particular')],
+      fiesta: eventoMasivo,
+    );
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tester.tap(find.byKey(const ValueKey('tele_sumar_celular')));
+    await tester.pump(const Duration(milliseconds: 300));
+    final qrs = tester.widgetList<QrImageView>(find.byType(QrImageView)).toList();
+    expect(qrs, hasLength(2));
+    expect(find.byKey(const ValueKey('tele_qr_otra')), findsOneWidget);
+    expect(find.textContaining('SIN TELE'), findsOneWidget);
+  });
+
   testWidgets('sin fiesta que venga, lo dice', (tester) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(1920, 1080);
@@ -453,6 +472,21 @@ void main() {
 }
 
 /// La central, sin abrir puertos: anota que se pidió prenderla.
+/// La que quedó con la escuela de la Tele 1 apagada, sin Tele 2.
+class _CentralConLaOtra extends _CentralQuieta {
+  @override
+  Future<void> prender(String eventoId, {bool comoTele = false}) async {
+    state = EstadoCentral(
+      eventoId: eventoId,
+      codigo: '4821',
+      puerto: 8787,
+      direcciones: const ['192.168.0.10'],
+      esTele: comoTele,
+      atiende: [eventoId, eventoParticular],
+    );
+  }
+}
+
 class _CentralQuieta extends CentralDeLaPuerta {
   @override
   EstadoCentral build() => const EstadoCentral();

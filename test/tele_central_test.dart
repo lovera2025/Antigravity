@@ -211,6 +211,13 @@ void main() {
 
     test('una tele de otra escuela se conecta: la Tele 1 atiende las dos (25-nov)', () async {
       const otra = 'e0000000-0000-4000-8000-0000000000ff';
+      // Una escuela que no es de esta tele no entra (revisión del 26-nov):
+      // con el id de cualquier evento se llevaba el código y la lista.
+      final ajena = await tele2(evento: otra);
+      expect(await ajena.cerro(), 4001);
+      expect(central.atiende, [_evento]);
+      // Es de las que vienen (LA FIESTA de la tele): entra.
+      central.ponerEscuelasParaElegir([EscuelaParaElegir(otra, 'OTRA ESCUELA')]);
       final t = await tele2(evento: otra);
       final hola = await t.espera('central');
       expect(hola['escuelas'], [_evento, otra]);

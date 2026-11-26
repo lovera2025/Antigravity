@@ -146,6 +146,20 @@ void main() {
   group('cada tele con su escuela (25-nov-2026)', () {
     const otra = 'e0000000-0000-4000-8000-0000000000ff';
 
+    // Las que vienen, como las pone la tele (LA FIESTA).
+    setUp(() => central.ponerEscuelasParaElegir([EscuelaParaElegir(otra, 'OTRA ESCUELA')]));
+
+    test('con una escuela que no es de esta tele no entra: no se atiende ni se lleva la '
+        'lista (revisión del 26-nov)', () async {
+      const inventada = 'e0000000-0000-4000-8000-0000000000aa';
+      final t = laTele2(evento: inventada);
+      await hasta(() => t.cliente.estado == EstadoDeLaSegunda.otraFiesta);
+      expect(central.escuelaDeTele(2), isNull);
+      expect(central.atiende, [_evento]);
+      expect(t.copiadas, isEmpty);
+      expect(t.cliente.codigo, isNull, reason: 'no se lleva el código de los celulares');
+    });
+
     test('de otra escuela: se conecta y la Tele 1 la atiende', () async {
       final t = laTele2(evento: otra);
       await hasta(() => t.cliente.estado == EstadoDeLaSegunda.conectada);
@@ -193,7 +207,7 @@ void main() {
 
     test('la encuentra sola aunque la Tele 1 tenga otra escuela', () async {
       const puertoDeBusqueda = 28779;
-      final responde = RespondeLaTele1(puertoCentral: puerto, atiende: () => central.atiende);
+      final responde = RespondeLaTele1(puertoCentral: puerto, conoce: central.conoce);
       expect(
         await responde.escuchar(puerto: puertoDeBusqueda, en: InternetAddress.loopbackIPv4),
         isTrue,
@@ -229,6 +243,20 @@ void main() {
     await central.arrancar(desde: puerto, en: InternetAddress.loopbackIPv4);
     conLaBase();
     await hasta(() => t.cliente.estado == EstadoDeLaSegunda.conectada);
+  });
+
+  test('la Tele 1 apagada: cada reintento que no conecta queda atendido, sin errores '
+      'sueltos (lo mostró el emulador el 26-nov)', () async {
+    // Un puerto donde no escucha nadie.
+    final libre = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final cerrado = libre.port;
+    await libre.close();
+    final t = laTele2(direccion: '127.0.0.1:$cerrado');
+    // Dos intentos (el segundo, al segundo): un error sin atender haría
+    // fallar la prueba.
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+    expect(t.cliente.estado, isNot(EstadoDeLaSegunda.conectada));
+    expect(t.copiadas, isEmpty);
   });
 
   test('sin la dirección escrita, la encuentra sola: pregunta y la Tele 1 contesta',

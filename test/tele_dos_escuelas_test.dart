@@ -75,6 +75,14 @@ class _Base implements PuertaDeEstaPc {
   Future<void> ponerTiempos(String eventoId, TiemposAMano t, {int? tele}) async {}
 }
 
+Future<void> _hasta(bool Function() listo) async {
+  final limite = DateTime.now().add(const Duration(seconds: 5));
+  while (!listo()) {
+    if (DateTime.now().isAfter(limite)) throw StateError('no pasó');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+}
+
 void main() {
   late _Base base;
   late CentralPuerta central;
@@ -114,10 +122,10 @@ void main() {
 
   setUp(() async {
     base = _Base()
-      ..poner(_a, 'a1', 'PÉREZ, JUAN')
-      ..poner(_a, 'a2', 'ACOSTA, LUCÍA')
-      ..poner(_b, 'b1', 'GÓMEZ, ANA')
-      ..poner(_b, 'b2', 'SOSA, PABLO');
+      ..poner(_a, 'a1', 'CEIBO, JUAN')
+      ..poner(_a, 'a2', 'HORNERO, LUCÍA')
+      ..poner(_b, 'b1', 'ZORZAL, ANA')
+      ..poner(_b, 'b2', 'TALA, PABLO');
     pedidasParaLaTele1.clear();
     giros.clear();
     avisos.clear();
@@ -256,6 +264,9 @@ void main() {
       t.mandar({'t': 'escuela', 'evento': _b});
       await caro.espera('puerta', cumple: (m) => m['evento'] == _b);
       expect((await caro.espera('aviso'))['texto'], 'La Tele 2 pasó a ESCUELA B');
+      // Lo último que la Tele 1 le manda después de un cambio: si le hubiera
+      // pedido la escuela, ya habría llegado (van por el mismo cable, en orden).
+      await t.espera('escuelas', cumple: (m) => (m['escuelas'] as List).contains(_b));
       expect(t.cuantos('escuela'), 0);
     });
 
@@ -312,10 +323,116 @@ void main() {
     });
   });
 
+  group('lo que encontró la revisión del 26-nov', () {
+    const ajena = 'e0000000-0000-4000-8000-0000000000ee';
+
+    test('una escuela que no es de esta tele: no cambia, y el celular que la pidió se entera',
+        () async {
+      expect(central.cambiarEscuelaDeTele(1, ajena), isFalse);
+      expect(central.eventoId, _a);
+      expect(central.atiende, [_a]);
+      final juli = await celular('Juli', tele: 1);
+      await juli.espera('puerta');
+      juli.mandar({'t': 'escuela', 'tele': 1, 'evento': ajena});
+      expect((await juli.espera('aviso'))['texto'], 'Esa escuela no está en esta tele.');
+      expect(pedidasParaLaTele1, isEmpty);
+      expect(central.eventoId, _a);
+    });
+
+    test('la Tele 2 desconectada no cambia de escuela: no se enteraría, y al volver la '
+        'central la volvería atrás', () async {
+      final t = await tele2(_a);
+      await t.espera('central');
+      await t.ws.close();
+      await _hasta(() => !central.teles.single.conectada);
+      expect(central.cambiarEscuelaDeTele(2, _b), isFalse);
+      expect(central.escuelaDeTele(2), _a);
+      final caro = await celular('Caro', tele: 2);
+      await caro.espera('puerta');
+      caro.mandar({'t': 'escuela', 'tele': 2, 'evento': _b});
+      expect((await caro.espera('aviso'))['texto'], contains('no está conectada'));
+      // Ella misma sí: vuelve con la suya.
+      expect(central.cambiarEscuelaDeTele(2, _b, yaCambio: true), isTrue);
+    });
+
+    test('la escuela que ninguna tele muestra se suelta, y se vuelve a atender si hace falta',
+        () async {
+      final soltadas = <String>[];
+      central.alSoltar = soltadas.add;
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      expect(central.atiende, [_b]);
+      expect(soltadas, [_a]);
+      // Vuelve a la A: se atiende de nuevo, con su lista.
+      final juli = await celular('Juli', tele: 1);
+      await juli.espera('puerta', cumple: (m) => m['evento'] == _b);
+      central.cambiarEscuelaDeTele(1, _a, yaCambio: true);
+      expect(central.atiende, [_a]);
+      await juli.espera('puerta', cumple: (m) => m['evento'] == _a);
+    });
+
+    test('su tele pasa a una escuela todavía sin lista: al celular le llega "esperando" y '
+        'un salón vacío, los dos con la escuela', () async {
+      final juli = await celular('Juli', tele: 1);
+      await juli.espera('puerta');
+      central.alAtender = (_) {};
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      expect((await juli.espera('esperando'))['evento'], _b);
+      final salon = await juli.espera('salon', cumple: (m) => m['evento'] == _b);
+      expect(salon['armado'], isNull);
+    });
+
+    test('la Tele 2 desconectada se queda con su escuela: no se suelta', () async {
+      final t = await tele2(_b);
+      await t.espera('central');
+      await t.ws.close();
+      await _hasta(() => !central.teles.single.conectada);
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      central.cambiarEscuelaDeTele(1, _a, yaCambio: true);
+      expect(central.atiende, containsAll([_a, _b]));
+    });
+
+    test('la Tele 1 vuelve a cambiar: la pregunta de antes se cierra y su respuesta ya '
+        'no cambia nada', () async {
+      final t = await tele2(_a);
+      await t.espera('central');
+      final caro = await celular('Caro', tele: 2);
+      await caro.espera('puerta');
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      final p = await caro.espera('pregunta');
+      central.cambiarEscuelaDeTele(1, _a, yaCambio: true);
+      final cerrada = await caro.espera('pregunta_cerrada');
+      expect(cerrada['id'], p['id']);
+      expect(cerrada['texto'], contains('volvió a cambiar'));
+      caro.mandar({'t': 'contesta', 'id': p['id'], 'cambiar': true});
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(central.escuelaDeTele(2), _a);
+      expect(t.cuantos('escuela'), 0);
+    });
+
+    test('"Pasar a principal" con la Tele 1 apagada: esta tele atiende también la escuela '
+        'de aquella, y sus celulares (QR de "la otra escuela") marcan en ella', () async {
+      central.atenderSinTele(_b);
+      expect(central.atiende, [_a, _b]);
+      expect(central.escuelaDeTele(2), _b);
+      final caro = await celular('Caro', tele: 2);
+      final p = await caro.espera('puerta');
+      expect(p['evento'], _b);
+      await caro.pedirYEsperar('b', QuePide.ingresar, 'b1', evento: _b);
+      expect(base.ingresos.last, (_b, 'b1'));
+      final juli = await celular('Juli', tele: 1);
+      expect((await juli.espera('puerta'))['evento'], _a);
+      // Una escuela que no es suya, no.
+      central.atenderSinTele(ajena);
+      expect(central.atiende, [_a, _b]);
+    });
+  });
+
   group('la notebook, como siempre', () {
     test('sin tele no atiende otra escuela ni cambia de escuela', () async {
       await central.cerrar();
-      central = CentralPuerta(eventoId: _a, codigo: _codigo, pc: base);
+      // Aunque alguien le pase las escuelas que vienen.
+      central = CentralPuerta(eventoId: _a, codigo: _codigo, pc: base)
+        ..ponerEscuelasParaElegir(const [EscuelaParaElegir(_b, 'ESCUELA B')]);
       puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
       central.atender(_b);
       central.cambiarEscuelaDeTele(1, _b);
@@ -331,15 +448,17 @@ void main() {
   });
 
   group('la Tele 1 contesta a la Tele 2 de cualquier escuela', () {
-    test('con la escuela que le preguntaron y las que atiende', () {
-      final r = RespondeLaTele1(puertoCentral: 8787, atiende: () => [_a, _b]);
+    test('con la escuela que le preguntaron, solo si es suya, y sin decir cuáles atiende '
+        '(revisión del 26-nov)', () {
+      final r = RespondeLaTele1(puertoCentral: 8787, conoce: (id) => id == _a || id == _b);
       expect(r.respuesta({'t': 'buscar', 'evento': _b}), {
         't': 'central',
         'evento': _b,
         'puerto': 8787,
         'tele': true,
-        'atiende': [_a, _b],
       });
+      expect(r.respuesta({'t': 'buscar', 'evento': 'f9999999-0000-4000-8000-000000000009'}), isNull,
+          reason: 'una escuela que no es de esta tele: no contesta');
       expect(r.respuesta({'t': 'buscar', 'evento': 'raro'}), isNull);
       expect(r.respuesta({'t': 'otra'}), isNull);
     });

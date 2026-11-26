@@ -5,6 +5,83 @@ sandbox y darle la app de prueba para sus pruebas internas, sin publicar.
 
 ## Para retomar en otro chat
 
+**26-nov: la revisión independiente de la Parte 1, arreglada con sus pruebas y sus roturas** (sin publicar, en la misma
+rama; el detalle de cada hallazgo, abajo en "La revisión del 26-nov"). Lo pidió la sesión que coordina (la
+"Continuación post-6.9.4"): suite + `flutter analyze`, la ventana con dos escuelas, la prueba de punta a punta con la
+huella IGUAL, capturas, roturas y la revisión. **No se junta con la feature, no se sube y no se arma el APK de prueba:
+eso lo hace la sesión que coordina después de juntar.** Sigue sin tocarse `lib/features/barra/` ni la v83. Desde el
+26-nov el repositorio no nombra alumnos reales: los casos nuevos van con apellidos de árboles y pájaros.
+
+### La revisión del 26-nov
+
+Un subagente leyó el diff `2a0a0d2..HEAD` sin mis conclusiones. Encontró 11 cosas; todas arregladas:
+1. **`/tele` y la búsqueda por UDP abiertas a cualquier escuela** (la más grave): con el id de cualquier evento una
+   tele entraba y se llevaba el código de los celulares y la lista. Ahora `CentralPuerta.conoce(id)` (la que muestra,
+   las que atiende o las que vienen de LA FIESTA) decide `/tele` (si no, 4001), `atender`, `cambiarEscuelaDeTele` y
+   `RespondeLaTele1` (que ya no dice cuáles atiende).
+2. **El código "por noche" duraba lo que la central prendida** y la clave era siempre `tele`. Ahora
+   `CodigoCentral.claveDeLaNoche` (la noche va de mediodía a mediodía: a las 3 sigue la de la fiesta), la central se
+   vuelve a prender cuando empieza otra noche, y `_asegurar` de la tele lleva la noche en su clave. El reloj de la
+   central es `relojDeLaCentralProvider` (las pruebas lo mueven).
+3. **"Pasar a principal" dejaba sin camino a la escuela de la Tele 1 apagada:** `atenderSinTele` la pone en el lugar
+   de la Tele 2, y CELULARES muestra **dos QR** ("ESTA TELE" y "SIN TELE", el segundo con `&t=2`).
+4. **Pasar a una escuela sin lista dejaba la de antes en el celular** (y su salón): la central manda `esperando` y un
+   salón vacío **con la escuela**; el celular suelta la lista, y no muestra un salón de otra escuela (`_salonDe`).
+5. **La central podía quedar en una escuela que la tele no muestra:** si la Tele 1 no la tiene entre las que vienen
+   (`_laTeleLaMuestra`), la central vuelve a la de la tele y el cartel dice "Esta tele no tiene esa escuela"; la Tele 2
+   hace lo mismo con lo que le pide la Tele 1.
+6. **La Tele 2 desconectada "cambiaba" de escuela sin enterarse:** ahora no (el celular recibe "La Tele 2 no está
+   conectada"), y a una pregunta MANTENER · CAMBIAR solo se suman teles conectadas.
+7. **Las escuelas no se soltaban nunca:** la que ninguna tele muestra se suelta (`_soltarSinTele`, `alSoltar`: el
+   provider deja de escucharla y, si vuelve, la escucha de nuevo); la Tele 2 desconectada conserva la suya. Al pasar a
+   principal, la Tele 2 sube solo lo copiado de las escuelas que la Tele 1 atendía al final.
+8. **Guardar Personalizar esperaba el aviso a las teles:** va sin esperar (`unawaited`).
+9. **Preguntas viejas:** si la tele vuelve a cambiar, la pregunta de antes se cierra ("volvió a cambiar") y su
+   respuesta no hace nada; sin conexión, contestar no se manda y la pregunta queda (el celular lo dice); elegir la
+   propia tele saca la pregunta de la otra.
+10. **Apagar mientras se prende dejaba una central abierta:** `_vuelta` cuenta cada prender/apagar; la que terminó de
+    arrancar tarde se cierra. Los oyentes de una central vieja no hacen nada (`identical(_central, central)`).
+11. **El orden de `_asegurar`:** con la central ya prendida como tele, cambiar de escuela no vuelve a copiar la página
+    del celular. `cambiarCodigo` le avisa el código nuevo a la Tele 2.
+
+**Se descartó un hallazgo mío:** creí que el celular no mostraba los avisos de la central; los muestra `PanelPuerta`.
+
+**Lo que apareció en la prueba de punta a punta** (arreglado, con su prueba y su rotura):
+- **Con la Tele 1 apagada, cada reintento de la Tele 2 (y del celular) dejaba un error sin atender** (el `ready` de la
+  conexión; lo mostró el registro del emulador). Venía de antes de esta rama. Ahora `canal.ready.catchError`, en
+  `cliente_de_la_tele.dart` y `cliente_central.dart`.
+- El texto de LA FIESTA decía "Con dos teles, las dos van con la misma": ahora "cada una puede tener la suya".
+
+**Cómo quedó probado (26-nov):**
+- `flutter analyze`: sin errores ni avisos en lo tocado.
+- **La suite entera: 342 archivos, 6303 pruebas, 0 fallas** (la segunda vuelta, con todos los arreglos; la primera
+  dio 6301 de 6301).
+- **Las roturas, `tool/roturas_tele.txt`: 52 de 52** (R6 no la agarraba: su prueba miraba antes de que llegara el
+  mensaje; se arregló la prueba). Las pruebas nuevas: `tele_segunda_provider_test`, grupos nuevos en
+  `tele_dos_escuelas_test`, `tele_central_provider_test`, `celular_tu_tele_test`, `cliente_de_la_tele_test`,
+  `tele_central_test` y `pantalla_tele_test`.
+- **De punta a punta, en el sandbox** (huella de la base antes y después: **IGUAL**): la ventana `tool/tele_prueba.dart`
+  compilada (`--dart-define=escuelas=distintas`) con la Tele 1 y la Tele 2 en escuelas distintas; dos pestañas del
+  navegador como celulares (Juli en la Tele 1 por `127.0.0.1`, Caro en la Tele 2 por `localhost`: **dos pestañas del
+  mismo origen son el mismo celular**, comparten lo guardado); cada tele saludó a los suyos; TU TELE → CAMBIAR LA
+  ESCUELA con su cartel; "Las dos" se prende y se apaga según las escuelas; MANTENER · CAMBIAR le saltó a Caro y **se
+  cerró sola cuando la Tele 1 volvió a cambiar**; GIRAR desde el celular. Después **el emulador `Recepcion_Tablet`
+  como Tele 2 parada** (APK de `tool/tele_prueba.dart` solo para el emulador, `papel=segunda`, `giro=1`; no se entregó):
+  encontró sola a la Tele 1 de la PC, saludó, se apagó la Tele 1 (se cerró la ventana), "Pasar a principal" con las
+  flechas del control parado y el PIN en el teclado de la tele, **dos QR**, los dos celulares volvieron solos a la
+  nueva central (`adb forward tcp:8787`), Caro marcó en la escuela sin tele, Juli en la de la tele (saludó), y GIRAR →
+  Horizontal la acostó.
+- Capturas en `build/capturas_tele/` (no van a git): `Punta_1` a `Punta_4` (la ventana), `Emulador_0` a `Emulador_9`
+  (la tele parada, el menú, el PIN oculto, los dos QR, acostada, LA FIESTA), y las muestras `Tele_1` a `Tele_6`
+  (acostada y parada; `tool/tele_menu_muestra_test.dart`) y `TuTele_1` a `TuTele_6` (`tool/tele_tu_tele_muestra_test.dart`).
+
+**No probado:** aparatos de verdad (la Quint, dos Google TV por el router del salón, un iPhone), el UDP entre dos
+aparatos de verdad, el cambio de noche al mediodía con la tele prendida (está en las pruebas con el reloj de prueba,
+no en un aparato). En la app de prueba del emulador LA FIESTA no mostró la línea de cómo quedó cada escuela (en la
+muestra y en `pantalla_tele_test` sí): falta mirar por qué en la app de prueba.
+En la ventana de prueba hubo un momento con **dos Tele 2** (la de la ventana y la del emulador) que se pisaban la
+conexión: no es un caso real, pero si alguien pone dos teles como "Tele 2", pasa eso.
+
 **25-nov (tarde/noche): la Parte 1 del plan del 25-nov, programada (etapas 1 a 5), sin publicar.** Plan aprobado:
 `C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-inherited-sedgewick-of-b24f55ff-68c4-4d3e-875a-b0916b95685c.md`
 (solo la Parte 1 y "La red" son de la tele; la barra la hace otra sesión en `lib/features/barra/`: no tocar esos archivos).
@@ -60,7 +137,8 @@ correrla** (y la suite entera).
 se restauró en LF con `git -c core.autocrlf=false reset --hard`. Un mensaje de commit con comillas, por archivo (`-F`). En
 Dart, `..x = (a) => f(a)` seguido de `..y = …` se come la cascada: con llaves.
 
-**Lo que falta, en orden:**
+**Lo que falta, en orden (al 26-nov: los puntos 1 a 6 están hechos, ver "Cómo quedó probado" arriba; queda el 7, que
+hace la sesión que coordina):**
 1. La suite entera (`bash tool/suite_por_tandas.sh`) y `flutter analyze` de todo.
 2. `tool/tele_prueba.dart` con **dos escuelas** (hoy tiene una sola fiesta inventada; ya tiene el giro con
    `--dart-define=giro=1` y `GiroDeLaApp`): una segunda fiesta, `fiestaDeLaTeleProvider` en memoria por tele, y

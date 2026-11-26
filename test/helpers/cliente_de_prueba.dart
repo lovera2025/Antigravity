@@ -144,11 +144,16 @@ class ClienteDePrueba extends ClienteCentral {
     return true;
   }
 
+  /// Sin conexión: la respuesta no sale.
+  var contestarSale = true;
+
   @override
-  void contestar({required bool cambiar}) {
+  bool contestar({required bool cambiar}) {
+    if (!contestarSale) return false;
     respuestas.add(cambiar);
     preg = null;
     notifyListeners();
+    return true;
   }
 
   @override

@@ -12,6 +12,7 @@ import '../../models/evento.dart';
 import '../barra/services/pantalla_despierta.dart';
 import '../common/providers/admin_provider.dart';
 import '../recepcion/central/central_provider.dart';
+import '../recepcion/central/codigo_central.dart';
 import '../recepcion/central/pedidos_de_la_puerta.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../recepcion/providers/sin_internet_provider.dart';
@@ -224,17 +225,25 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
   /// Prende la central (Tele 1) o se engancha a la Tele 1 (Tele 2) para la
   /// fiesta de esta noche, una vez por fiesta y papel.
   void _asegurar(String eventoId, ModoTele modo) {
-    final clave = '$eventoId|${modo.papel.name}|${modo.direccionAMano}';
+    // Con la noche: pasado el mediodía, la central sale con el código nuevo.
+    final clave = '$eventoId|${modo.papel.name}|${modo.direccionAMano}|'
+        '${CodigoCentral.claveDeLaNoche(widget.ahora())}';
     if (_prendidaPara == clave) return;
     _prendidaPara = clave;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (modo.papel == PapelDeLaTele.principal) {
         ref.read(teleSegundaProvider.notifier).soltar();
-        await PaginaDelCelularEnAndroid.preparar();
-        if (!mounted) return;
-        ref.invalidate(paginaDelCelularProvider);
         final central = ref.read(centralDeLaPuertaProvider.notifier);
+        // Prendida como tele, cambiar de escuela no la reinicia: la página
+        // del celular ya está (revisión del 26-nov: se volvía a copiar en
+        // cada cambio de escuela, antes de pasar a la otra).
+        final yaPrendida = ref.read(centralDeLaPuertaProvider);
+        if (!(yaPrendida.prendida && yaPrendida.esTele)) {
+          await PaginaDelCelularEnAndroid.preparar();
+          if (!mounted) return;
+          ref.invalidate(paginaDelCelularProvider);
+        }
         await central.prender(eventoId, comoTele: true);
         // Pasó a principal: la escuela de la Tele 1 que se apagó, también.
         final otra = _atenderTambien;
@@ -703,6 +712,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     final direccion = principal ? central.direccion : segunda?.donde?.texto;
     final codigo = principal ? central.codigo : segunda?.codigo;
     final sinPagina = principal && ref.read(paginaDelCelularProvider) == null;
+    // Pasó a principal con la Tele 1 apagada: atiende también la escuela que
+    // mostraba aquella, sin tele que la salude. Sus celulares escanean este
+    // otro QR (revisión del 26-nov: no había cómo llegar a ella).
+    final otra = principal &&
+            central.enlace != null &&
+            central.atiende.length > 1 &&
+            !central.teles.any((t) => t.numero == 2 && t.conectada)
+        ? central.atiende[1]
+        : null;
+    String tituloDe(String id) {
+      final e = ref.read(eventosActivosProvider).value?.where((x) => x.id == id).firstOrNull;
+      return e == null ? 'La otra escuela' : etiquetaEventoRecepcion(e);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -729,22 +751,19 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
               style: _letra(18, color: _ambar),
             ),
           )
+        else if (otra == null)
+          Center(child: _qr(const ValueKey('tele_qr'), enlace, 260))
         else
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: QrImageView(
-                key: const ValueKey('tele_qr'),
-                data: enlace,
-                version: QrVersions.auto,
-                size: 260,
-                padding: EdgeInsets.zero,
-              ),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _qrConRotulo(const ValueKey('tele_qr'), enlace,
+                  'ESTA TELE · ${tituloDe(central.eventoId ?? '')}'),
+              const SizedBox(width: 24),
+              _qrConRotulo(const ValueKey('tele_qr_otra'), '${central.enlace}&t=2',
+                  'SIN TELE · ${tituloDe(otra)}'),
+            ],
           ),
         if (direccion != null && codigo != null) ...[
           const SizedBox(height: 14),
@@ -775,6 +794,38 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
     );
   }
 
+  Widget _qr(Key key, String enlace, double tam) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: QrImageView(
+          key: key,
+          data: enlace,
+          version: QrVersions.auto,
+          size: tam,
+          padding: EdgeInsets.zero,
+        ),
+      );
+
+  Widget _qrConRotulo(Key key, String enlace, String rotulo) => SizedBox(
+        width: 232,
+        child: Column(
+          children: [
+            _qr(key, enlace, 200),
+            const SizedBox(height: 8),
+            Text(
+              rotulo.toUpperCase(),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _letra(15, color: _oro, negrita: true),
+            ),
+          ],
+        ),
+      );
+
   Widget _fiestas(FiestaDeLaTele fiesta, Evento? evento) {
     final lista = fiesta.todas;
     final preparar = ref.watch(prepararLasFiestasProvider);
@@ -799,7 +850,7 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
         Text(
           lista.isEmpty
               ? 'No hay ninguna fiesta que venga en esta tele.'
-              : 'La que muestra esta tele. Con dos teles, las dos van con la misma.',
+              : 'La que muestra esta tele. Con dos teles, cada una puede tener la suya.',
           style: _letra(16, color: Colors.white70),
         ),
         const SizedBox(height: 14),

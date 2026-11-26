@@ -116,6 +116,8 @@ class ClienteCentral extends ChangeNotifier {
   Future<void> elegirTele(int n) async {
     if (!esTeleValida(n)) return;
     _tele = n;
+    // La pregunta era para la otra tele (revisión del 26-nov).
+    if (_pregunta != null && _pregunta!.tele != n) _pregunta = null;
     await _guardado.guardar(_kTele, '$n');
     _mandar({'t': 'tele', 'n': n});
     if (!_cerrado) notifyListeners();
@@ -188,21 +190,25 @@ class ClienteCentral extends ChangeNotifier {
   PreguntaDeLaTele? get pregunta => _pregunta;
 
   /// Contesta la pregunta: vale la primera respuesta de todos los celulares de
-  /// esta tele.
-  void contestar({required bool cambiar}) {
+  /// esta tele. Sin conexión no se manda y la pregunta queda (revisión del
+  /// 26-nov): devuelve si se mandó.
+  bool contestar({required bool cambiar}) {
     final p = _pregunta;
-    if (p == null) return;
+    if (p == null) return false;
+    if (_canal == null || _estado != EstadoDelPuesto.conectado) return false;
     _mandar({'t': 'contesta', 'id': p.id, 'cambiar': cambiar});
     _pregunta = null;
     if (!_cerrado) notifyListeners();
+    return true;
   }
 
   void _recibirPregunta(Map<String, dynamic> m) {
     final id = m['id'];
     final texto = m['texto'];
     final evento = m['evento'];
+    final tele = m['tele'];
     if (id is! String || texto is! String || evento is! String) return;
-    _pregunta = PreguntaDeLaTele(id: id, texto: texto, evento: evento);
+    _pregunta = PreguntaDeLaTele(id: id, texto: texto, evento: evento, tele: tele is int ? tele : null);
     if (!_cerrado) notifyListeners();
   }
 
@@ -359,7 +365,11 @@ class ClienteCentral extends ChangeNotifier {
   /// El salón para VER EN EL PLANO (6.5.0), como lo mandó la central. Null:
   /// sin salón, o una central de antes que no lo manda.
   SalonParaLaPuerta? _salon;
-  SalonParaLaPuerta? get salon => _salon;
+
+  /// De qué escuela es [_salon] (la central de una tele lo dice): el de otra
+  /// escuela no se muestra (revisión del 26-nov).
+  String? _salonDe;
+  SalonParaLaPuerta? get salon => _salonDe == null || _salonDe == _eventoId ? _salon : null;
 
   void _recibirSalon(Map<String, dynamic> m) {
     final armado = m['armado'];
@@ -377,6 +387,8 @@ class ClienteCentral extends ChangeNotifier {
       debugPrint('El salón que mandó la central no se entiende: $e');
     }
     _salon = nuevo;
+    final de = m['evento'];
+    _salonDe = de is String && de.length == 36 ? de : null;
     if (!_cerrado) notifyListeners();
   }
 
@@ -529,6 +541,10 @@ class ClienteCentral extends ChangeNotifier {
       return;
     }
     _canal = canal;
+    // Si no conecta, el error llega también por `ready`: sin esto quedaba sin
+    // atender en cada reintento (lo mostró el emulador el 26-nov). Lo atiende
+    // el `onError` de abajo.
+    unawaited(canal.ready.catchError((Object _) {}));
     _ultimaNoticia = _ahora();
     _escucha = canal.stream.listen(
       _mensaje,
@@ -598,6 +614,18 @@ class ClienteCentral extends ChangeNotifier {
       case 'puerta':
         _recibirLista(json);
       case 'esperando':
+        // Su tele pasó a una escuela que la central recién empieza a
+        // atender: la lista de antes ya no vale y no se marca en ella
+        // (revisión del 26-nov). La de esta llega enseguida.
+        final evento = json['evento'];
+        if (evento is String && evento.length == 36 && evento != _eventoId) {
+          _eventoId = evento;
+          _lista = null;
+          _titulo = null;
+          _version = 0;
+          _puertaArmada = null;
+          _sucia = true;
+        }
         _intentos = 0;
         _poner(EstadoDelPuesto.conectado);
       case 'respuesta':
@@ -645,9 +673,6 @@ class ClienteCentral extends ChangeNotifier {
     final volvio = _estado != EstadoDelPuesto.conectado;
     // Una central que se reinició vuelve a contar desde 1.
     if (v <= _version && !volvio && evento == _eventoId) return;
-    // Otra escuela (la tele cambió, 25-nov-2026): el salón de la anterior ya
-    // no sirve; el de esta llega aparte.
-    if (_eventoId != null && evento != _eventoId) _salon = null;
     _version = v;
     _lista = lista;
     _eventoId = evento;
@@ -903,7 +928,10 @@ class PreguntaDeLaTele {
 
   /// La escuela a la que se cambiaría.
   final String evento;
-  const PreguntaDeLaTele({required this.id, required this.texto, required this.evento});
+
+  /// La tele por la que se pregunta.
+  final int? tele;
+  const PreguntaDeLaTele({required this.id, required this.texto, required this.evento, this.tele});
 }
 
 const _kTele = 'puesto_tele';

@@ -313,7 +313,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   EstadoCentral build() {
     // Se arma acá: al cerrarse, Riverpod no deja leer otros providers.
     _despierta = PcDespierta(avisar: ref.read(avisarUsoAlSistemaProvider));
-    ref.onDispose(() => unawaited(_soltar()));
+    ref.onDispose(() {
+      _vuelta++;
+      unawaited(_soltar());
+    });
     return const EstadoCentral();
   }
 
@@ -322,12 +325,19 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   /// Para que la Tele 2 la encuentre por el wifi ([RespondeLaTele1]).
   RespondeLaTele1? _responde;
 
+  /// En la tele, la noche del código ([CodigoCentral.claveDeLaNoche]).
+  String? _noche;
+
+  /// Cuántas veces se prendió o se apagó: un [prender] que esperaba y ya no es
+  /// el último no deja nada abierto.
+  var _vuelta = 0;
+
   /// Lo de la escuela [eventoId] que va a la central: desde el contenedor y no
   /// con `ref.listen` (Riverpod pausa lo que escucha un provider cuando nadie
   /// lo mira, y la central tiene que seguir mandando la lista aunque Recepción
   /// esté cerrada).
   void _escucharEscuela(CentralPuerta central, String eventoId) {
-    if (_deCadaEscuela.containsKey(eventoId)) return;
+    if (!identical(_central, central) || _deCadaEscuela.containsKey(eventoId)) return;
     final de = central.esTele ? eventoId : null;
     _deCadaEscuela[eventoId] = [
       ref.container.listen<AsyncValue<PuertaDelEvento>>(
@@ -380,7 +390,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     }
     if (central.esTele) {
       central.ponerEscuelasParaElegir([
-        for (final e in FiestaDeLaTele.de(eventos, DateTime.now()).todas)
+        for (final e in FiestaDeLaTele.de(eventos, ref.read(relojDeLaCentralProvider)()).todas)
           EscuelaParaElegir(e.id, etiquetaEventoRecepcion(e)),
       ]);
     }
@@ -397,7 +407,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   /// código.
   Future<void> prender(String eventoId, {bool comoTele = false}) async {
     final prendida = _central;
-    if (prendida != null && prendida.esTele == comoTele) {
+    // En la tele, la noche que empieza a las 12 sale con otro código: la
+    // central se vuelve a prender (revisión del 26-nov).
+    final noche = comoTele ? CodigoCentral.claveDeLaNoche(ref.read(relojDeLaCentralProvider)()) : null;
+    if (prendida != null && prendida.esTele == comoTele && _noche == noche) {
       if (comoTele && prendida.eventoId != eventoId) {
         // Con el control: la Tele 1 ya la muestra.
         prendida.cambiarEscuelaDeTele(1, eventoId, yaCambio: true);
@@ -405,15 +418,16 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       }
       if (state.eventoId == eventoId) {
         final direcciones = await ref.read(direccionesDeEstaPcProvider)();
-        state = state._con(direcciones: direcciones);
+        if (identical(_central, prendida)) state = state._con(direcciones: direcciones);
         return;
       }
     }
+    final vuelta = ++_vuelta;
     await _soltar();
 
     // En la tele, un código por noche: cambiar de escuela no obliga a volver
     // a escanear.
-    final codigo = await ref.read(codigoCentralProvider)(comoTele ? CodigoCentral.deLaNoche : eventoId);
+    final codigo = await ref.read(codigoCentralProvider)(noche ?? eventoId);
     final central = CentralPuerta(
       eventoId: eventoId,
       codigo: codigo,
@@ -429,6 +443,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
         en: ref.read(escuchaCentralProvider),
       );
     } catch (_) {
+      if (vuelta != _vuelta) return;
       state = EstadoCentral(
         eventoId: eventoId,
         error: 'No se pudo abrir la central en esta PC. Cerrá el programa, '
@@ -436,7 +451,13 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       );
       return;
     }
+    // Se apagó (o se prendió otra) mientras arrancaba: esta no queda abierta.
+    if (vuelta != _vuelta) {
+      await central.cerrar();
+      return;
+    }
     _central = central;
+    _noche = noche;
     _despierta?.mantener(true);
     _eventos = ref.container.listen<AsyncValue<List<Evento>>>(
       eventosActivosProvider,
@@ -465,19 +486,45 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       central.alAtender = (id) {
         _escucharEscuela(central, id);
       };
+      // Ninguna tele la muestra: se deja de escuchar (revisión del 26-nov).
+      central.alSoltar = (id) {
+        if (!identical(_central, central)) return;
+        for (final s in _deCadaEscuela.remove(id) ?? const <ProviderSubscription<Object?>>[]) {
+          s.close();
+        }
+      };
       // Un celular pidió otra escuela para la Tele 1 (o contestó CAMBIAR).
+      String? rechazada;
       central.alCambiarTele1 = (id, por) {
+        if (!identical(_central, central)) return;
+        if (!_laTeleLaMuestra(id)) {
+          // La tele no la tiene entre las que vienen (pasó el mediodía, por
+          // ejemplo): la central vuelve a la que la tele muestra.
+          final antes = state.eventoId;
+          rechazada = id;
+          if (antes != null && antes != id) {
+            scheduleMicrotask(() {
+              if (identical(_central, central)) central.cambiarEscuelaDeTele(1, antes, yaCambio: true);
+            });
+          }
+          ref.read(avisoEnLaTeleProvider.notifier).decir('Esta tele no tiene esa escuela: sigue con la suya.');
+          return;
+        }
         unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(id));
       };
       central.alGirarTele1 = (como) {
+        if (!identical(_central, central)) return;
         final giro = ref.read(giroDeLaTeleProvider);
         final nuevo = Giro.segun(como, giro);
         if (nuevo != null) unawaited(ref.read(giroDeLaTeleProvider.notifier).poner(nuevo));
       };
       central.alCambiarLasEscuelas = (aviso) {
         if (!identical(_central, central)) return;
-        // El cartel de la tele: "Caro pasó la Tele 1 a ESCUELA B".
-        if (aviso != null) ref.read(avisoEnLaTeleProvider.notifier).decir(aviso);
+        // El cartel de la tele: "Caro pasó la Tele 1 a ESCUELA B". No el de
+        // una escuela que la tele no tiene: ya dijo que sigue con la suya.
+        final noVa = rechazada != null && central.eventoId == rechazada;
+        rechazada = null;
+        if (aviso != null && !noVa) ref.read(avisoEnLaTeleProvider.notifier).decir(aviso);
         state = state._con(
           eventoId: central.eventoId,
           atiende: central.atiende,
@@ -492,7 +539,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       });
       final responde = RespondeLaTele1(
         puertoCentral: central.puerto!,
-        atiende: () => central.atiende,
+        conoce: central.conoce,
       );
       _responde = responde;
       // Android oye la pregunta de la Tele 2 solo con el permiso del
@@ -502,6 +549,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
         puerto: kPuertoBusquedaTele,
         en: ref.read(escuchaCentralProvider),
       );
+      // Se apagó mientras empezaba a escuchar: `_soltar` ya no la ve.
+      if (!identical(_responde, responde)) responde.cerrar();
     }
     final direcciones = await ref.read(direccionesDeEstaPcProvider)();
     if (!identical(_central, central)) return;
@@ -527,8 +576,16 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   void atenderTambien(String eventoId) {
     final central = _central;
     if (central == null || !central.esTele) return;
-    central.atender(eventoId);
+    central.atenderSinTele(eventoId);
     state = state._con(atiende: central.atiende);
+  }
+
+  /// Si la tele muestra [eventoId] al elegirla (es de las que vienen).
+  bool _laTeleLaMuestra(String eventoId) {
+    final eventos = ref.read(eventosActivosProvider).value;
+    if (eventos == null) return true;
+    return FiestaDeLaTele.de(eventos, ref.read(relojDeLaCentralProvider)(), elegida: eventoId).fiesta?.id ==
+        eventoId;
   }
 
   /// Si la central de [eventoId] se usó esta noche y no está prendida (la
@@ -548,7 +605,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     final eventoId = state.eventoId;
     if (central == null || eventoId == null) return;
     final nuevo = await ref.read(cambiarCodigoCentralProvider)(
-      central.esTele ? CodigoCentral.deLaNoche : eventoId,
+      _noche ?? eventoId,
       central.codigo,
     );
     await central.cambiarCodigo(nuevo);
@@ -556,6 +613,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   }
 
   Future<void> apagar() async {
+    _vuelta++;
     await _soltar();
     state = const EstadoCentral();
   }
@@ -566,6 +624,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   Future<void> _soltar() async {
     final central = _central;
     _central = null;
+    _noche = null;
     _despierta?.mantener(false);
     for (final subs in _deCadaEscuela.values) {
       for (final s in subs) {
@@ -591,6 +650,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     await central?.cerrar();
   }
 }
+
+/// El reloj de la central (las pruebas lo cambian): la noche del código y las
+/// escuelas que vienen.
+final relojDeLaCentralProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 final centralDeLaPuertaProvider =
     NotifierProvider<CentralDeLaPuerta, EstadoCentral>(CentralDeLaPuerta.new);

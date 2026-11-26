@@ -2,15 +2,18 @@
 // la tele, sin PIN, y "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR".
 // La pantalla con el cliente de mentira; el cliente de verdad contra la
 // central de verdad de una tele, por la red de esta PC.
-import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/cliente_central.dart';
 import 'package:arguello_events/features/recepcion/central/pantalla_puesto.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
+import 'package:arguello_events/features/recepcion/services/plano_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/totem_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -67,7 +70,7 @@ void main() {
           Invitado(
             id: 'p1',
             eventoId: _a,
-            nombreCompleto: 'PÉREZ, JUAN',
+            nombreCompleto: 'CEIBO, JUAN',
             dni: '',
             estadoIngreso: EstadoIngreso.pendiente,
           ),
@@ -129,6 +132,18 @@ void main() {
       expect(find.byKey(const ValueKey('pregunta_de_la_tele')), findsNothing);
     });
 
+    testWidgets('sin conexión, la respuesta no se pierde: la pregunta queda y lo dice '
+        '(revisión del 26-nov)', (tester) async {
+      cliente
+        ..preg = const PreguntaDeLaTele(id: 'p1', texto: 'La Tele 1 cambió a ESCUELA B', evento: _b)
+        ..contestarSale = false;
+      await abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('pregunta_cambiar')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('pregunta_de_la_tele')), findsOneWidget);
+      expect(find.textContaining('Sin conexión con la tele'), findsOneWidget);
+    });
+
     testWidgets('"Las dos", apagada con escuelas distintas', (tester) async {
       cliente.lasDos = false;
       await abrir(tester);
@@ -142,6 +157,73 @@ void main() {
     });
   });
 
+  test('la tele apagada: el celular reintenta sin dejar errores sueltos (26-nov)', () async {
+    final libre = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final cerrado = libre.port;
+    await libre.close();
+    final c = ClienteCentral(
+      servidor: Uri.parse('http://127.0.0.1:$cerrado/'),
+      guardado: _Navegador(),
+      latido: const Duration(milliseconds: 40),
+      pausa: const Duration(milliseconds: 40),
+    );
+    addTearDown(c.dispose);
+    await c.iniciar(codigoDelEnlace: '4821', teleDelEnlace: '1');
+    await c.ponerDatos(nombre: 'Juli');
+    // Varios reintentos: un error sin atender haría fallar la prueba.
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    expect(c.puerta, isNull);
+  });
+
+  test('el salón de otra escuela no se muestra, aunque llegue tarde (revisión del 26-nov)',
+      () async {
+    // Una central inventada que manda lo que la prueba quiere.
+    final servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    WebSocket? ws;
+    servidor.listen((r) async {
+      if (r.uri.path == '/vivo') {
+        ws = await WebSocketTransformer.upgrade(r);
+      } else {
+        await r.response.close();
+      }
+    });
+    final c = ClienteCentral(
+      servidor: Uri.parse('http://127.0.0.1:${servidor.port}/'),
+      guardado: _Navegador(),
+    );
+    addTearDown(() async {
+      c.dispose();
+      await ws?.close();
+      await servidor.close(force: true);
+    });
+    await c.iniciar(codigoDelEnlace: '4821', teleDelEnlace: '1');
+    await c.ponerDatos(nombre: 'Juli');
+    await _hasta(() => ws != null, 'la conexión');
+    final salonDeLaA = jsonEncode({
+      't': 'salon',
+      'armado': ArmadosPredefinidos.normal2aPagina3().toJson(),
+      'cfg': SalonParaLaPuerta.cfgParaElCelular(const TotemConfig(eventoId: _a)),
+      'evento': _a,
+    });
+    ws!.add(jsonEncode({
+      't': 'puerta',
+      'v': 1,
+      'evento': _a,
+      'puerta': PuertaDelEvento.particular(const []).toJson(),
+    }));
+    ws!.add(salonDeLaA);
+    await _hasta(() => c.salon != null, 'el salón de la A');
+    // Su tele pasó a la B, todavía sin lista.
+    ws!.add(jsonEncode({'t': 'esperando', 'evento': _b}));
+    await _hasta(() => c.eventoId == _b, 'pasar a la B');
+    expect(c.puerta, isNull);
+    expect(c.salon, isNull);
+    // Uno de la A que llega tarde, tampoco.
+    ws!.add(salonDeLaA);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(c.salon, isNull);
+  });
+
   group('el celular de verdad, con la central de una tele', () {
     late PcEnMemoria pc;
     late CentralPuerta central;
@@ -151,7 +233,7 @@ void main() {
     final pedidasTele1 = <(String, String?)>[];
 
     setUp(() async {
-      pc = PcEnMemoria()..filas['p1'] = filaDePrueba('p1', 'PÉREZ, JUAN');
+      pc = PcEnMemoria()..filas['p1'] = filaDePrueba('p1', 'CEIBO, JUAN');
       pedidasTele1.clear();
       central = CentralPuerta(eventoId: _a, codigo: '4821', pc: pc, esTele: true)
         ..ponerEscuelasParaElegir(const [
@@ -209,13 +291,13 @@ void main() {
       await sub.cancel();
     });
 
-    test('lo que marca va con la escuela que miraba', () async {
+    test('lo que marca va con la escuela que miraba, aunque se mande después', () async {
       final juli = await celular('Juli');
+      // La central tarda: el pedido queda en el celular, guardado con su escuela.
+      pc.demora = const Duration(milliseconds: 300);
       await juli.ingresar(juli.puerta!.personas.first);
+      expect(juli.pendientes.single.pedido.evento, _a);
       await _hasta(() => pc.ingresos.isNotEmpty, 'el ingreso');
-      expect(juli.eventoId, _a);
-      // El pedido salió con su escuela (si quedaba sin mandar y la tele cambiaba,
-      // iba igual a la suya).
       expect(pc.ingresos.single.$1, 'p1');
     });
 
@@ -230,6 +312,53 @@ void main() {
       caro.contestar(cambiar: true);
       expect((await t.espera('escuela'))['evento'], _b);
       await _hasta(() => caro.eventoId == _b, 'Caro pasa a la B');
+      expect(caro.pregunta, isNull);
+    });
+
+    test('su tele pasa a una escuela que todavía no tiene lista: la de antes y su salón ya '
+        'no se ven, y no se marca en ellos (revisión del 26-nov)', () async {
+      central.ponerSalon(
+        ArmadosPredefinidos.normal2aPagina3().toJson(),
+        SalonParaLaPuerta.cfgParaElCelular(const TotemConfig(eventoId: _a)),
+      );
+      final juli = await celular('Juli');
+      await _hasta(() => juli.salon != null, 'el salón de la A');
+      // La B se atiende sin lista todavía (recién se empieza a leer).
+      central.alAtender = (_) {};
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      await _hasta(() => juli.eventoId == _b, 'pasar a la B');
+      expect(juli.puerta, isNull, reason: 'la lista de la A ya no vale');
+      expect(juli.salon, isNull, reason: 'el salón de la A tampoco');
+      // Llega la de la B.
+      central.ponerPuerta(PuertaDelEvento.particular(const []), de: _b);
+      await _hasta(() => juli.puerta != null, 'la lista de la B');
+      expect(juli.eventoId, _b);
+    });
+
+    test('sin conexión, contestar no se manda y la pregunta queda (revisión del 26-nov)',
+        () async {
+      final t = await CelularDePrueba.conectarTele(puerto, evento: _a);
+      abiertos.add(t);
+      await t.espera('central');
+      final caro = await celular('Caro', tele: '2');
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      await _hasta(() => caro.pregunta != null, 'la pregunta');
+      await central.cerrar();
+      await _hasta(() => caro.estado != EstadoDelPuesto.conectado, 'se corta');
+      expect(caro.contestar(cambiar: true), isFalse);
+      expect(caro.pregunta, isNotNull);
+    });
+
+    test('la pregunta de la otra tele se va al elegir la propia (revisión del 26-nov)',
+        () async {
+      final t = await CelularDePrueba.conectarTele(puerto, evento: _a);
+      abiertos.add(t);
+      await t.espera('central');
+      final caro = await celular('Caro', tele: '2');
+      central.cambiarEscuelaDeTele(1, _b, yaCambio: true);
+      await _hasta(() => caro.pregunta != null, 'la pregunta');
+      expect(caro.pregunta!.tele, 2);
+      await caro.elegirTele(1);
       expect(caro.pregunta, isNull);
     });
 

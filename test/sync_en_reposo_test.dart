@@ -20,6 +20,7 @@ import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/database/sync_queue.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/instalacion_id.dart';
+import 'package:arguello_events/core/services/pulso_entre_equipos.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
 import 'package:arguello_events/features/mi_empresa/repositories/finanzas_repository.dart';
 
@@ -541,6 +542,28 @@ void main() {
           'type': 'broadcast',
           'event': 'cambios',
         };
+
+    test('el aviso de la apariencia del tótem (25-nov): la tele la relee, sin bajar nada', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      final releer = <Set<String>>[];
+      final sub = m.aparienciasCambiadasStream.listen(releer.add);
+      const fiesta = 'e0000001-0000-4000-8000-000000000000';
+      m.recibirPulso(porElSocket(avisoDeLaApariencia(origen: 'pc-del-jefe', eventoId: fiesta)));
+      await reloj.avanzar(const Duration(milliseconds: 400));
+      await m.aquietar();
+      expect(releer, [
+        {fiesta},
+      ]);
+      expect(nube.desde(marca), isEmpty, reason: 'no es una tabla del motor: no baja nada');
+      // Por REST, envuelto en `payload`, igual.
+      m.recibirPulso({'payload': avisoDeLaApariencia(origen: 'pc-del-jefe', eventoId: fiesta)});
+      await Future<void>.delayed(Duration.zero);
+      expect(releer, hasLength(2));
+      await sub.cancel();
+    });
 
     test('un aviso por el socket baja solo lo avisado, enseguida', () async {
       final m = motor();

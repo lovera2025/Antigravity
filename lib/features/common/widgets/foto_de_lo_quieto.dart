@@ -338,11 +338,21 @@ class RenderFotoDeLoQuieto extends RenderProxyBox {
     // píxel a medio pintar del borde del lado contrario (la línea de arriba
     // del salón, con la tele girada).
     final unPixel = 1 / _escalaMenor(m);
-    final rect = (Offset.zero & size)
+    final alrededor = (Offset.zero & size)
         .inflate(_margen + unPixel)
         .shift(_corrimiento(escala, fase, m));
     // Que no pase de lo que aguanta una placa chica.
-    final porPunto = math.min(escala, 4096 / math.max(rect.width, rect.height));
+    final porPunto = math.min(escala, 4096 / math.max(alrededor.width, alrededor.height));
+    // El ancho y el alto, en píxeles enteros de la foto: la imagen sale con un
+    // número entero de píxeles, y si lo pedido tenía un pedazo de más, al
+    // pintarla se estiraba la última columna (con la tele girada un cuarto, el
+    // borde derecho del salón salía con la mitad de luz).
+    final rect = Rect.fromLTWH(
+      alrededor.left,
+      alrededor.top,
+      (alrededor.width * porPunto).ceilToDouble() / porPunto,
+      (alrededor.height * porPunto).ceilToDouble() / porPunto,
+    );
     final capa = OffsetLayer();
     final ctx = PaintingContext(capa, rect);
     super.paint(ctx, Offset.zero);

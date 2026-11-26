@@ -31,13 +31,22 @@ bool codigoVigente(DateTime creado, DateTime ahora) {
 ///
 /// **En la tele, uno por noche y no por escuela** (25-nov-2026): la Tele 1
 /// atiende las dos escuelas de la noche y cambia de escuela sin que los
-/// celulares vuelvan a escanear. Va guardado como el de un evento más,
-/// [deLaNoche].
+/// celulares vuelvan a escanear. Va guardado como el de un evento más, con la
+/// clave de la noche ([claveDeLaNoche]).
 class CodigoCentral {
   static const _prefijo = 'central_puerta_codigo_v1_';
 
-  /// En lugar del id de un evento: el código de la noche de la tele.
-  static const deLaNoche = 'tele';
+  /// En lugar del id de un evento: **el código de la noche de la tele**, con
+  /// la noche en la clave (revisión del 26-nov). La noche va del mediodía al
+  /// mediodía siguiente: a las 3 de la mañana sigue siendo la de la fiesta.
+  /// Con la noche en la clave, la noche siguiente sale otro código aunque la
+  /// tele no se haya apagado: un celular de la fiesta de ayer no entra.
+  static String claveDeLaNoche(DateTime ahora) {
+    final l = ahora.toLocal();
+    final dia = l.hour < 12 ? DateTime(l.year, l.month, l.day - 1) : DateTime(l.year, l.month, l.day);
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return 'tele-${dia.year}-${dos(dia.month)}-${dos(dia.day)}';
+  }
 
   static String _clave(String eventoId) => '$_prefijo$eventoId';
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -50,6 +52,32 @@ TextStyle _titulo({double size = 16, Color? color}) => TextStyle(
 
 class _PantallaPuestoState extends State<PantallaPuesto> {
   ClienteCentral get _c => widget.cliente;
+
+  @override
+  void dispose() {
+    _borrarAviso?.cancel();
+    super.dispose();
+  }
+
+  /// Lo que se dice un rato arriba: que la respuesta a la pregunta no salió
+  /// (los avisos de la central los muestra la lista, `PanelPuerta`).
+  String? _aviso;
+  Timer? _borrarAviso;
+
+  void _decir(String texto) {
+    if (!mounted) return;
+    setState(() => _aviso = texto);
+    _borrarAviso?.cancel();
+    _borrarAviso = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _aviso = null);
+    });
+  }
+
+  void _contestar(bool cambiar) {
+    if (!_c.contestar(cambiar: cambiar)) {
+      _decir('Sin conexión con la tele: contestá cuando vuelva.');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +160,18 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
             const SizedBox(height: 8),
             _tuTele(),
           ],
+          if (_aviso != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: const ValueKey('celular_aviso'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _ambar,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(_aviso!, style: _letra(size: 14, negrita: true, color: Colors.black)),
+            ),
+          ],
           // "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR".
           if (conLista && _c.pregunta != null) ...[
             const SizedBox(height: 8),
@@ -167,7 +207,7 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
                 Expanded(
                   child: OutlinedButton(
                     key: const ValueKey('pregunta_mantener'),
-                    onPressed: () => _c.contestar(cambiar: false),
+                    onPressed: () => _contestar(false),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _perla,
                       side: const BorderSide(color: Colors.white38),
@@ -179,7 +219,7 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
                 Expanded(
                   child: FilledButton(
                     key: const ValueKey('pregunta_cambiar'),
-                    onPressed: () => _c.contestar(cambiar: true),
+                    onPressed: () => _contestar(true),
                     style: FilledButton.styleFrom(
                       backgroundColor: _ambar,
                       foregroundColor: Colors.black,

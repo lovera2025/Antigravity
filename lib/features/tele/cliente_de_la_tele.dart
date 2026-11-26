@@ -208,6 +208,10 @@ class ClienteDeLaTele extends ChangeNotifier {
       return;
     }
     _canal = canal;
+    // Si no conecta, el error llega también por `ready`: sin esto quedaba sin
+    // atender en cada reintento (lo mostró el emulador el 26-nov). Lo atiende
+    // el `onError` de abajo.
+    unawaited(canal.ready.catchError((Object _) {}));
     _ultimaNoticia = _ahora();
     _escucha = canal.stream.listen(
       _mensaje,

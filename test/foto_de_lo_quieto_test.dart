@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/widgets/foto_de_lo_quieto.dart';
+import 'package:arguello_events/features/tele/giro_de_la_tele.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart' show letraPorLetra;
 
 /// Lo quieto, como foto (la tele es el tótem, 25-nov-2026): se dibuja una vez
@@ -193,5 +194,76 @@ void main() {
     expect(_diferencia(await _pixeles(tester, circulo(1)), entero), lessThan(0.01));
     final cuarto = await _pixeles(tester, circulo(0.25));
     expect(_diferencia(cuarto, entero), greaterThan(0.5));
+  });
+
+  // La tele girada (25-nov-2026): la foto se corre para caer en los píxeles de
+  // la pantalla, y con la pantalla girada ese corrimiento va en otro eje. Un
+  // recuadro con los bordes a medio píxel, girado y vuelto a poner derecho
+  // (sin reescalar: píxel por píxel), tiene que verse igual que en una pantalla
+  // parada sin girar nada: es lo que ve quien mira. Corrida para el lado
+  // equivocado, o sin el píxel de más alrededor, la fila del borde salía
+  // distinta.
+  //
+  // Ojo: no se compara con el dibujo en vivo girado. En las pruebas, en vivo y
+  // girado, un borde a medio píxel sale siempre al 50 % (el giro no es exacto:
+  // su coseno es 6e-17), y la foto lo da exacto.
+  group('con la tele girada', () {
+    Widget recuadro() => const SizedBox(
+          width: 100.3,
+          height: 40.7,
+          child: ColoredBox(color: Colors.white),
+        );
+
+    Future<Uint8List> dibujo(WidgetTester tester, Widget w) async {
+      final clave = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(key: clave, child: w));
+      late Uint8List bytes;
+      await tester.runAsync(() async {
+        final b = clave.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final img = await b.toImage(pixelRatio: tester.view.devicePixelRatio);
+        bytes = (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+      });
+      return bytes;
+    }
+
+    for (final cuartos in [1, 2, 3]) {
+      testWidgets('girada $cuartos cuartos, como en una pantalla parada, con los bordes', (tester) async {
+        const ancho = 600, alto = 400;
+        tester.view.devicePixelRatio = 2;
+        addTearDown(tester.view.reset);
+        // Lo que tiene que ver quien mira: sin girar, en la pantalla como la ve.
+        final parada = cuartos.isOdd;
+        final wc = parada ? alto : ancho, hc = parada ? ancho : alto;
+        tester.view.physicalSize = Size(wc.toDouble(), hc.toDouble());
+        final derecha = await dibujo(tester, _en(recuadro()));
+        // La tele: la pantalla acostada, todo girado, lo quieto en foto.
+        tester.view.physicalSize = const Size(600, 400);
+        final antes = FotoDeLoQuieto.fotosSacadas;
+        final girada = await dibujo(
+          tester,
+          TeleGirada(cuartos: cuartos, child: _en(FotoDeLoQuieto(child: recuadro()))),
+        );
+        expect(FotoDeLoQuieto.fotosSacadas, greaterThan(antes), reason: 'va en foto');
+        // Cada punto de lo que se ve, en su lugar de la pantalla acostada.
+        var distintos = 0;
+        for (var cy = 0; cy < hc; cy++) {
+          for (var cx = 0; cx < wc; cx++) {
+            final (gx, gy) = switch (cuartos) {
+              1 => (ancho - 1 - cy, cx),
+              2 => (ancho - 1 - cx, alto - 1 - cy),
+              _ => (cy, alto - 1 - cx),
+            };
+            final i = (cy * wc + cx) * 4, j = (gy * ancho + gx) * 4;
+            for (var k = 0; k < 3; k++) {
+              if ((derecha[i + k] - girada[j + k]).abs() > 24) {
+                distintos++;
+                break;
+              }
+            }
+          }
+        }
+        expect(distintos, 0, reason: 'girada $cuartos: ningún punto distinto a la vista');
+      });
+    }
   });
 }

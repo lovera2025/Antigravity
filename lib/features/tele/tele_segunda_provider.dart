@@ -105,6 +105,18 @@ class TeleSegunda extends Notifier<ClienteDeLaTele?> {
       // La Tele 1 le pide otra escuela (un celular, o CAMBIAR): la tele la
       // muestra.
       alPedirEscuela: (id, por) {
+        // Una escuela que esta tele no tiene entre las que vienen: sigue con
+        // la suya y se lo cuenta a la Tele 1 (revisión del 26-nov). Si no, la
+        // Tele 1 la daría por cambiada y esta tele mostraría otra.
+        final eventos = ref.read(eventosActivosProvider).value;
+        final mia = _eventoId;
+        if (eventos != null &&
+            mia != null &&
+            FiestaDeLaTele.de(eventos, DateTime.now(), elegida: id).fiesta?.id != id) {
+          _cliente?.cambiarEscuela(mia);
+          ref.read(avisoEnLaTeleProvider.notifier).decir('Esta tele no tiene esa escuela: sigue con la suya.');
+          return;
+        }
         _eventoId = id;
         unawaited(ref.read(fiestaDeLaTeleProvider.notifier).elegir(id));
         // El cartel: "Caro pasó la Tele 2 a ESCUELA B".
@@ -132,9 +144,13 @@ class TeleSegunda extends Notifier<ClienteDeLaTele?> {
     final eventoId = _eventoId;
     final cliente = _cliente;
     final copiadas = {...?cliente?.copiadas};
+    // Solo lo de las escuelas que la Tele 1 atendía al final (y la de esta):
+    // lo de una escuela que soltó puede haber cambiado después en la nube
+    // (revisión del 26-nov).
+    final vigentes = {...?cliente?.atiende, ?eventoId};
     final porEscuela = {
       for (final e in (cliente?.copiadasDe ?? const <String, Set<String>>{}).entries)
-        e.key: {...e.value},
+        if (vigentes.isEmpty || vigentes.contains(e.key)) e.key: {...e.value},
     };
     _escuelaDeLaTele1 = cliente?.escuelaDeLaTele1;
     soltar();

@@ -163,16 +163,43 @@ class CentralPuerta {
   /// La escuela de la tele [n], si se sabe.
   String? escuelaDeTele(int n) => _deLaTele[n];
 
-  /// Empieza a atender la escuela [id] (si no la atendía): se le avisa a quien
-  /// la arma ([alAtender]) para que le pase su lista, su salón y lo demás.
+  /// Si [id] es una escuela de esta tele: la que muestra, una que ya atiende
+  /// o una de las que vienen ([ponerEscuelasParaElegir]). **El id del evento es
+  /// lo que trae la Tele 2 para conectarse** (como antes del 25-nov, cuando
+  /// tenía que ser el de la Tele 1): con un id inventado no entra, no se
+  /// atiende nada y nadie se lleva el código ni la lista.
+  bool conoce(String id) =>
+      id.length == 36 &&
+      (id == eventoId || _escuelas.containsKey(id) || _paraElegir.any((e) => e.id == id));
+
+  /// Empieza a atender la escuela [id] (si no la atendía y es de esta tele,
+  /// [conoce]): se le avisa a quien la arma ([alAtender]) para que le pase su
+  /// lista, su salón y lo demás.
   void atender(String id) {
-    if (!esTele || id.length != 36 || _escuelas.containsKey(id)) return;
+    if (!esTele || _escuelas.containsKey(id) || !conoce(id)) return;
     _escuelas[id] = _Escuela(id, _nuevoResolvedor(id));
     alAtender?.call(id);
   }
 
   /// Hay que armarle lo suyo a una escuela nueva.
   void Function(String eventoId)? alAtender;
+
+  /// Ya no hace falta lo de esa escuela: ninguna tele la muestra.
+  void Function(String eventoId)? alSoltar;
+
+  /// Suelta las escuelas que ninguna tele muestra (la Tele 2 desconectada
+  /// sigue con la suya: vuelve). Sin esto, con la tele prendida varios días,
+  /// se juntaban escuelas, sus oyentes y las filas que copia la Tele 2. Un
+  /// pedido que quedó sin mandar de una escuela soltada la vuelve a atender
+  /// ([atender]); sus marcas siguen en su fila de pedidos.
+  void _soltarSinTele() {
+    final enUso = {..._deLaTele.values};
+    for (final id in _escuelas.keys.toList()) {
+      if (enUso.contains(id)) continue;
+      _escuelas.remove(id);
+      alSoltar?.call(id);
+    }
+  }
 
   /// La Tele 1 tiene que mostrar otra escuela: la pidió un celular, o la
   /// respuesta a "MANTENER · CAMBIAR". [por]: quién (null: con el control).
@@ -422,6 +449,12 @@ class CentralPuerta {
     for (final c in _conexiones) {
       c.mandar(texto);
     }
+    // La Tele 2 sabe qué escuelas se atienden: si pasa a principal, atiende la
+    // de la Tele 1 y sube solo lo copiado de esas.
+    final escuelas = jsonEncode({'t': 'escuelas', 'escuelas': atiende});
+    for (final t in _teles.values) {
+      t.mandar(escuelas);
+    }
     if (!_cambiosDeTeles.isClosed) _cambiosDeTeles.add(teles);
   }
 
@@ -496,6 +529,9 @@ class CentralPuerta {
       't': 'salon',
       'armado': armado,
       'cfg': armado == null ? null : cfg,
+      // De qué escuela es: el celular no lo confunde con el de otra
+      // (revisión del 26-nov).
+      if (esTele) 'evento': e.eventoId,
     });
     if (nuevo == e.salon) return;
     e.salon = nuevo;
@@ -536,12 +572,16 @@ class CentralPuerta {
     }
   }
 
-  /// A [c], lo de su escuela: la lista y el salón.
+  /// A [c], lo de su escuela: la lista y el salón. Si esa escuela todavía no
+  /// tiene lista (recién se empezó a atender), "esperando" con la escuela: el
+  /// celular deja la de antes y no marca en ella (revisión del 26-nov).
   void _mandarEscuelaA(_Conexion c) {
-    final e = _escuelas[_escuelaDe(c)];
-    c.mandar(e?.lista ?? jsonEncode({'t': 'esperando'}));
+    final id = _escuelaDe(c);
+    final e = _escuelas[id];
+    c.mandar(e?.lista ?? jsonEncode({'t': 'esperando', if (esTele) 'evento': id}));
     // Sin salón también: que no quede el de la escuela de antes.
-    c.mandar(e?.salon ?? jsonEncode({'t': 'salon', 'armado': null, 'cfg': null}));
+    c.mandar(e?.salon ??
+        jsonEncode({'t': 'salon', 'armado': null, 'cfg': null, if (esTele) 'evento': id}));
   }
 
   /// **La tele [n] pasa a mostrar la escuela [evento]** (25-nov-2026), sin
@@ -551,14 +591,29 @@ class CentralPuerta {
   /// MANTENER · CAMBIAR. [por]: quién la cambió (null: con el control de la
   /// tele). [yaCambio]: la tele ya la cambió (la Tele 2 con su control): no se
   /// le vuelve a pedir.
-  void cambiarEscuelaDeTele(int n, String evento, {String? por, bool yaCambio = false}) {
-    if (!esTele || n < 1 || n > kTelesDeLaNoche || evento.length != 36) return;
+  ///
+  /// Devuelve si cambió. No cambia (revisión del 26-nov):
+  /// - una escuela que esta tele no conoce ([conoce]): la tele no la podría
+  ///   mostrar y la central quedaría en otra;
+  /// - la Tele 2 desconectada, salvo que ella misma avise ([yaCambio]): no se
+  ///   enteraría, y al volver con la suya la central la volvería atrás.
+  bool cambiarEscuelaDeTele(int n, String evento, {String? por, bool yaCambio = false}) {
+    if (!esTele || n < 1 || n > kTelesDeLaNoche || !conoce(evento)) return false;
+    if (n >= 2 && !yaCambio && !_teles.containsKey(n)) return false;
     final antes = _deLaTele[n];
-    if (antes == evento) return;
+    if (antes == evento) return false;
     atender(evento);
+    // Las preguntas que hablaban de esta tele ya no valen: volvió a cambiar.
+    for (final e in _preguntas.entries.toList()) {
+      if (e.value.deTele == n || e.value.tele == n) {
+        _cerrarPregunta(e.key, 'La ${nombreDeLaTele(n)} volvió a cambiar: la pregunta ya no vale.');
+      }
+    }
+    // A quién preguntar: la otra tele con la misma escuela, si está conectada
+    // (desconectada, no se enteraría del CAMBIAR).
     final conLaMisma = [
       for (final e in _deLaTele.entries)
-        if (e.key != n && e.value == antes) e.key,
+        if (e.key != n && e.value == antes && (e.key == 1 || _teles.containsKey(e.key))) e.key,
     ];
     _deLaTele[n] = evento;
     if (n == 1) {
@@ -589,14 +644,31 @@ class CentralPuerta {
     }
     // La otra tele tenía la misma: que lo decidan sus celulares.
     for (final m in conLaMisma) {
-      _preguntar(m, evento, 'La $tele cambió a $titulo');
+      _preguntar(m, evento, 'La $tele cambió a $titulo', deTele: n);
     }
+    _soltarSinTele();
     _mandarManejan();
     for (final c in _conexiones) {
       _anotarPuesto(c, conectado: true, avisar: false);
     }
     _avisarPuestos();
     alCambiarLasEscuelas?.call(por == null ? null : aviso);
+    return true;
+  }
+
+  /// **"Pasar a principal" con la Tele 1 apagada** (25-nov-2026): esta tele
+  /// atiende también la escuela que mostraba la que se apagó, en el lugar de
+  /// la Tele 2 (que ya no está). Sus celulares escanean el QR de "la otra
+  /// escuela" (`&t=2`) y marcan en ella; ninguna tele la saluda.
+  void atenderSinTele(String evento) {
+    if (!esTele || evento == eventoId || !conoce(evento) || _teles.containsKey(2)) return;
+    atender(evento);
+    _deLaTele[2] = evento;
+    for (final c in _conexiones) {
+      if (c.tele == 2) _mandarEscuelaA(c);
+    }
+    _mandarManejan();
+    alCambiarLasEscuelas?.call(null);
   }
 
   // ── "La Tele 1 cambió a ESCUELA B · MANTENER · CAMBIAR" ───────────────────
@@ -604,9 +676,10 @@ class CentralPuerta {
   final _preguntas = <String, _Pregunta>{};
   var _numeroDePregunta = 0;
 
-  /// Les pregunta a los celulares de la tele [tele] si cambian a [evento]. Vale
-  /// la primera respuesta; sin respuesta, se mantiene.
-  void _preguntar(int tele, String evento, String texto) {
+  /// Les pregunta a los celulares de la tele [tele] si cambian a [evento] (la
+  /// tele [deTele] ya cambió). Vale la primera respuesta; sin respuesta, se
+  /// mantiene.
+  void _preguntar(int tele, String evento, String texto, {required int deTele}) {
     final id = 'p${++_numeroDePregunta}';
     final mensaje = jsonEncode({
       't': 'pregunta',
@@ -624,7 +697,7 @@ class CentralPuerta {
     }
     // Sin nadie que conteste, se mantiene: no hace falta esperar.
     if (!alguien) return;
-    final p = _Pregunta(tele, evento);
+    final p = _Pregunta(tele, evento, deTele);
     _preguntas[id] = p;
     p.vence = Timer(kEsperaDeLaPregunta, () => _cerrarPregunta(id, 'Nadie contestó: se mantiene.'));
   }
@@ -654,6 +727,10 @@ class CentralPuerta {
   /// escanear.
   Future<void> cambiarCodigo(String nuevo) async {
     _codigo = nuevo;
+    // La Tele 2 muestra el QR con el código: el nuevo (revisión del 26-nov).
+    for (final t in _teles.values) {
+      t.mandar(jsonEncode({'t': 'central', 'codigo': nuevo, 'evento': eventoId, 'escuelas': atiende}));
+    }
     final viejas = _conexiones.toList();
     _conexiones.clear();
     _puestos.clear();
@@ -778,7 +855,8 @@ class CentralPuerta {
     _conexiones.add(conexion);
     _anotarPuesto(conexion, conectado: true, salvo: conexion);
     final escuela = _escuelas[_escuelaDe(conexion)];
-    conexion.mandar(escuela?.lista ?? jsonEncode({'t': 'esperando'}));
+    conexion.mandar(escuela?.lista ??
+        jsonEncode({'t': 'esperando', if (esTele) 'evento': _escuelaDe(conexion)}));
     if (escuela?.salon != null) conexion.mandar(escuela!.salon!);
     // El chat: lo que ya hubo esta noche para ese celular, y con quién hablar.
     conexion.mandar(
@@ -899,7 +977,15 @@ class CentralPuerta {
         final n = json['tele'];
         final evento = json['evento'];
         if (!esTele || n is! int || evento is! String) return;
-        cambiarEscuelaDeTele(n, evento, por: conexion.nombre);
+        if (_deLaTele[n] == evento) return;
+        if (!cambiarEscuelaDeTele(n, evento, por: conexion.nombre)) {
+          conexion.mandar(jsonEncode({
+            't': 'aviso',
+            'texto': n >= 2 && !_teles.containsKey(n)
+                ? 'La ${nombreDeLaTele(n)} no está conectada: cambiale la escuela cuando vuelva.'
+                : 'Esa escuela no está en esta tele.',
+          }));
+        }
       case 'girar':
         // GIRAR desde el celular, sin PIN: Horizontal · Vertical · Dar vuelta.
         final n = json['tele'];
@@ -962,7 +1048,7 @@ class CentralPuerta {
     final numero = int.tryParse(datos['n'] ?? '');
     final evento = datos['evento'] ?? '';
     if (!esTele ||
-        evento.length != 36 ||
+        !conoce(evento) ||
         numero == null ||
         numero < 2 ||
         numero > kTelesDeLaNoche) {
@@ -989,11 +1075,17 @@ class CentralPuerta {
       t.mandar(jsonEncode({'t': 'tiempos', 'tiempos': tiempos.toJson()}));
     }
     _mandarFilas(t);
-    // Sus celulares, con lo de su escuela si volvió con otra.
+    // Sus celulares, con lo de su escuela si volvió con otra; y los de "Las
+    // dos", a la Tele 1 si ya no tienen la misma escuela.
     if (antes != evento) {
       for (final c in _conexiones) {
+        if (c.tele == kLasDosTeles && !_mismaEscuela) {
+          c.tele = 1;
+          c.mandar(jsonEncode({'t': 'tu_tele', 'n': 1}));
+        }
         if (c.tele == numero) _mandarEscuelaA(c);
       }
+      _soltarSinTele();
     }
     _mandarManejan();
     ws.listen(
@@ -1037,7 +1129,17 @@ class CentralPuerta {
         final evento = json['evento'];
         if (evento is! String) return;
         final por = json['por'];
-        cambiarEscuelaDeTele(t.numero, evento, por: por is String ? por : null, yaCambio: true);
+        final cambio = cambiarEscuelaDeTele(
+          t.numero,
+          evento,
+          por: por is String && por.isNotEmpty && por.length <= 40 ? por : null,
+          yaCambio: true,
+        );
+        // Una escuela que esta tele no conoce: la Tele 2 se queda donde estaba
+        // para la central (sus celulares, con lo de antes).
+        if (!cambio && _deLaTele[t.numero] != evento) {
+          t.mandar(jsonEncode({'t': 'aviso', 'texto': 'La Tele 1 no tiene esa escuela.'}));
+        }
         t.mandar(jsonEncode({'t': 'escuelas', 'escuelas': atiende}));
     }
   }
@@ -1137,9 +1239,12 @@ class _Escuela {
 
 /// "La Tele 1 cambió a ESCUELA B": a qué tele se le pregunta y a qué escuela.
 class _Pregunta {
-  _Pregunta(this.tele, this.evento);
+  _Pregunta(this.tele, this.evento, this.deTele);
   final int tele;
   final String evento;
+
+  /// La tele que cambió y por eso se pregunta.
+  final int deTele;
   Timer? vence;
 }
 
