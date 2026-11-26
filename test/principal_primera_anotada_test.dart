@@ -340,7 +340,7 @@ void main() {
     test('lo que llega ordenado se guarda con la principal primera, y sube así',
         () async {
       await sembrar(_rivas, 'RIVAS, TOMÁS', '107');
-      await sembrar(_perez, 'PEREZ, PABLO ALEJANDRO', '9');
+      await sembrar(_perez, 'ZAPATERO, FAUSTINO', '9');
       await repo.asignarNumerosMesa({
         _rivas: '106, 107',
         _perez: '9, 102',
