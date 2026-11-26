@@ -22,8 +22,13 @@ pasó). Lo hecho esta tarde, cada cosa con sus pruebas y sus roturas a propósit
 - **El stock por barra se cuenta por noche y cruza sin internet** (`0f7b740`, 5 de 5 roturas): `StockPorBarra.deLaNoche`
   (las pantallas usan esta), la barra de cada caja con `barraDe` (que ahora compara con `claveDeBarra`), y
   `barra_stock_barras` y `barra_stock_movimientos` en `tablasDeLaRed`.
-- **El PIN en la central y las reglas por rol** (commit de esta tarde, 19 de 19 roturas en `tool/roturas_permisos_barra.txt`):
+- **El PIN en la central y las reglas por rol** (`c4aacf4`, 19 de 19 roturas en `tool/roturas_permisos_barra.txt`):
   ver "La barra, quién puede qué (26-nov)" abajo.
+- **La suite entera sobre todo esto: 6.558 de 6.559.** La que falla no es de la barra:
+  `test/modal_cobro_masivos_medios_pago_test.dart` lee la base real de esta PC (solo lectura) y marca, en LA ALFONSINA
+  (26-dic), cobros de una silla extra por transferencia o mixto **sin el cargo por canal** ("falta cargo canal"). Es
+  del cobro de cuotas, no se tocó: **mirarlo aparte con el usuario** (puede ser cómo se cargó esa fiesta o un error de
+  verdad en el cobro). Las roturas de antes siguen atrapadas (barra por noche, reconexión, stock, repositor).
 
 **Sesión en paralelo:** "APK de prueba de la app de verdad para la Google TV" (`local_fb5b1a19-2401-455c-acd2-0da86e83153d`,
 en su worktree): comprueba que la v83 no corta la bajada sin las tablas del stock en la nube, arregla la línea de LA
