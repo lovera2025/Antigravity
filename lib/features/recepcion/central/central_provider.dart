@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pc_despierta.dart';
+import '../../barra/central/central_barra_provider.dart' show vigiaDeLaRedProvider;
+import '../../barra/central/vigia_de_la_red.dart';
 import '../../tele/busqueda_de_la_tele.dart';
 import '../../tele/giro_de_la_tele.dart';
 import '../../tele/modo_tele.dart';
@@ -325,6 +327,11 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   /// Para que la Tele 2 la encuentre por el wifi ([RespondeLaTele1]).
   RespondeLaTele1? _responde;
 
+  /// Si la Tele 1 cambia de wifi, lo que contesta la búsqueda se vuelve a abrir
+  /// (26-nov-2026, como la notebook de la barra).
+  VigiaDeLaRed? _vigia;
+  StreamSubscription<void>? _cambiosDeRed;
+
   /// En la tele, la noche del código ([CodigoCentral.claveDeLaNoche]).
   String? _noche;
 
@@ -550,7 +557,16 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
         en: ref.read(escuchaCentralProvider),
       );
       // Se apagó mientras empezaba a escuchar: `_soltar` ya no la ve.
-      if (!identical(_responde, responde)) responde.cerrar();
+      if (!identical(_responde, responde)) {
+        responde.cerrar();
+      } else {
+        final vigia = ref.read(vigiaDeLaRedProvider)();
+        _vigia = vigia;
+        _cambiosDeRed = vigia.cambios.listen((_) async {
+          if (identical(_responde, responde)) await responde.reabrir();
+        });
+        vigia.arrancar();
+      }
     }
     final direcciones = await ref.read(direccionesDeEstaPcProvider)();
     if (!identical(_central, central)) return;
@@ -636,6 +652,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _eventos = null;
     await _teles?.cancel();
     _teles = null;
+    await _cambiosDeRed?.cancel();
+    _cambiosDeRed = null;
+    await _vigia?.cerrar();
+    _vigia = null;
     final responde = _responde;
     _responde = null;
     if (responde != null) {
