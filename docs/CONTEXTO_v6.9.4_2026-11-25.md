@@ -1,8 +1,9 @@
 # CONTEXTO — la 6.9.4: la planilla del sorteo por número de mesa, y DAR MESA
 
-**Estado (25-nov-2026, noche, 95 %): programada, probada y mostrada, SIN PUBLICAR.** Falta solo que él la mire
-y publicar juntos. El usuario la quiere publicar el **26-nov**
-("esto lo saco para mañana"), con él. Sale de la rama **`release/6.9.x`** (desde el tag `v6.9.3`, en la carpeta
+**Estado (26-nov-2026, 6:55): PUBLICADA** (lo pidió él: "a las 6:50 am dentro de un rato publicá"). Tag `v6.9.4`,
+release "Junior Eventos 6.9.4" con el Setup y el APK, y la web. **Falta que la instale (primero la PC que sortea,
+después las otras dos y la notebook de la puerta) y avise, y la foto de la mora "después de 6.9.4".** El detalle,
+en "Cómo se publicó", abajo. Sale de la rama **`release/6.9.x`** (desde el tag `v6.9.3`, en la carpeta
 `..\arguello_events_6.9.x`), como la 6.3.x y la 6.8.x: la rama feature tiene la v83 y lo del 4-dic a medio hacer y
 **no se publica de ahí**. Cada commit va también a la feature con `cherry-pick`. Versión `6.9.4+79`. **Sin SQL ni
 migración** (la base sigue en la 82). Plan aprobado:
@@ -141,15 +142,35 @@ pegadas). "12, 13" reacomodado a "11, 12" se guarda "12, 11" (la principal de an
 - Muestras mandadas al usuario el 25-nov: `build/muestras_6.9.4/` de la carpeta principal (tres PDF por número de
   mesa y cuatro PNG), y después las hojas pasadas a imagen con `tool/pdf_a_png.ps1` (se ven bien).
 
+### Cómo se publicó (26-nov, de madrugada)
+
+- **El armado, el 26-nov entre las 4 y las 5**, desde `..\arguello_events_6.9.x` en el commit de la versión
+  (`4890b5c`): versión `6.9.4+79` en `pubspec.yaml` e `installer/junior_eventos_setup.iss`; el instalador **por
+  pasos** (Windows, la página del celular de cero con sus cinco archivos comprobados antes de `ISCC`, `ISCC`, el APK
+  y `apksigner` con "CN=Junior Eventos"). `ISCC` llevó dos archivos menos que en la 6.9.3: eran restos de una
+  compilación vieja (`AssetManifest.bin.json` y `NOTICES`), que la compilación de cero ya no arma. Registros en
+  `build\armado_694\` de la carpeta principal.
+- **Antes de publicar se buscaron nombres de alumnos en todo lo agregado desde `v6.9.3`** (contra una copia de la
+  base, sin abrir la del programa): una prueba nueva usaba uno real y se cambió por uno inventado (`6c286c8`, solo
+  ese test: lo armado no cambia). Queda uno real de antes, con montos, en `docs/CONTEXTO_COBRO_PARCIALES_SALDO.md`
+  (subido desde mucho antes): se le avisó al usuario.
+- **6:50, la foto de la mora "antes de 6.9.4"** (`2e126bfb…`, 643 alumnos, los mismos que hay). Comparada con la
+  de "antes de 6.9.3": nada sospechoso. Cinco renglones, todos explicados con `mora_cambios`: dos cobros que no
+  saldaron toda la mora (quedó lo que se debe), un perdón del jefe (25-nov), una ficha ya pagada cuya mora bajó a 0
+  y un alumno nuevo. Ninguna mora revivió.
+- **Tag `v6.9.4`** en `6c286c8`; **release "Junior Eventos 6.9.4"** (el último), con
+  `Setup.Junior.Eventos.v6.9.4.exe` (41.598.903 bytes) y `Junior.Eventos.v6.9.4.apk` (55.008.168, arm64), novedades
+  **"Nuevas capacidades en el modo jefe, y la planilla del sorteo por número de mesa"**.
+- **La web**: `build\web` de esta carpeta a `.vercel\output\static` de la principal (151 archivos, el
+  `config.json` de siempre) y `npx vercel deploy --prebuilt --prod`. `version.json` dice 6.9.4 / 79.
+
 ### Lo que falta, en orden
 
-1. Que diga si lo que vio está bien (se le mandó todo el 25-nov a la noche).
-2. Lo de esta rama ya está también en la feature (`cherry-pick`, sin conflictos); cada commit nuevo, igual.
-3. **Publicar con él (26-nov):** la foto de la mora "antes de 6.9.4"; versión `6.9.4+79` en `pubspec.yaml` e
-   `installer/junior_eventos_setup.iss`; el instalador **por pasos** desde `..\arguello_events_6.9.x` (con las tres
-   comprobaciones de la página del celular antes de `ISCC`), tag `v6.9.4`, release con el Setup y el APK, novedades
-   **"Nuevas capacidades en el modo jefe, y la planilla del sorteo por número de mesa"**, y la web.
-4. Después de instalar: la foto "después", CLAUDE.md y la memoria.
+1. **Que la instale**: primero la PC que sortea, después las otras dos y la notebook de la puerta (las tablets
+   con el APK). Que avise.
+2. Con las tres abiertas, **la foto de la mora "después de 6.9.4"** y compararla con la de "antes de 6.9.4".
+3. Recién con todo instalado, **DAR MESA** (ver "Cuidado").
+4. Después vuelve el plan del 4-dic (`docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`).
 
 ### Cuidado
 
