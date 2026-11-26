@@ -824,7 +824,9 @@ empieza con "Para retomar en otro chat"; los nombres del caso, en `build/nombres
 con "Para retomar en otro chat")**: la fiesta es **sin internet** y el usuario quiere todo **sin bugs**; no se publica
 hasta que él lo diga. Cuatro partes: **la tele** (girar, cada tele con su escuela desde el celular sin PIN, todo
 guardado sin internet) y **la barra por día de operación** (las cajas de cada noche aparte, y nada se rompe pasada la
-medianoche), las dos en **sesiones aparte con su propio worktree**; **la encargada en su iPhone** por una página que
+medianoche), las dos **programadas en sesiones aparte y juntas en esta rama el 26-nov**, cada una después de su
+revisión independiente, con la suite y las roturas sobre lo junto (el chat que retoma el plan coordina las sesiones:
+"actualizá" va para todas); **la encargada en su iPhone** por una página que
 sirve la notebook por el wifi (después de la barra por día); y **el repositor con el stock por barra**, cuya base
 (sin pantallas) está acá: **v83** (`barra_stock_barras`, `barra_stock_movimientos`; SQL
 `20261125120000_barra_stock.sql` **sin correr**) y **la única cuenta, `StockPorBarra`**
