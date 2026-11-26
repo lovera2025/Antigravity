@@ -232,7 +232,9 @@ void main() {
       expect(deLaPrueba[_fernet]!.vendido, 5);
     });
 
-    test('el vale de madrugada dice el día de la fiesta, no el del reloj', () {
+    // Regla del usuario (26-nov): la caja es de la noche en que se abrió, pero lo que se
+    // imprime dice la fecha y la hora reales. Antes el vale decía "Vie 04/12 - 02:30".
+    test('el vale de madrugada dice la fecha y la hora reales; la caja sigue siendo del 4', () {
       final v = ventasFiesta[1];
       final papel = ModeloTicket.deVale(
         const Vale(bebidas: [BebidaDelVale(1, 'Fernet')], porSeparado: false),
@@ -241,8 +243,9 @@ void main() {
         fiesta: 'TÉCNICA',
       );
       final textos = [for (final l in papel) if (l is TextoTicket) l.texto];
-      expect(textos, contains('Vie 04/12/2026 - 02:30'));
-      expect(textos.any((t) => t.contains('Sáb 05/12')), isFalse);
+      expect(textos, contains('Sáb 05/12/2026 - 02:30'));
+      expect(textos.any((t) => t.contains('Vie 04/12')), isFalse);
+      expect(DiaDeOperacion.deLaCaja(c1), const DiaDeOperacion(2026, 12, 4));
     });
   });
 

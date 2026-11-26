@@ -52,11 +52,11 @@ test/barra_por_noche_pantallas_test.dart
         cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
         cajas: CajasPorDia.de([for (final c in cajas) CajaBarra.fromMap(c.toMap()..['abierta_at'] = widget.caja.abiertaAt)]),
 ---
-el vale dice el día de la fiesta
+el vale dice la fecha y la hora reales (26-nov)
 lib/features/barra/impresion/modelo_ticket.dart
 test/dia_de_operacion_test.dart
-      TextoTicket(nocheYHora(venta.createdAt, caja)),
       TextoTicket(diaFechaYHora(venta.createdAt)),
+      TextoTicket(diaFechaYHora(caja.abiertaAt)),
 ---
 el papel dice de qué noche
 lib/features/barra/impresion/modelo_ticket.dart

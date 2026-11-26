@@ -23,23 +23,15 @@ abstract final class ModeloTicket {
   static const _dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
   /// "Vie 04/12/2026 - 23:41": con el día, para que un vale de otra noche se note.
+  ///
+  /// **Lo impreso dice la fecha y la hora reales** (regla del usuario, 26-nov-2026): el
+  /// vale de la 01:30 de la fiesta del viernes dice "Sáb 05/12/2026 - 01:30". La caja sigue
+  /// siendo de la noche en que se abrió (`DiaDeOperacion.deLaCaja`): LAS CAJAS, el cierre y
+  /// el stock la cuentan en el 04/12.
   static String diaFechaYHora(String iso) {
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '';
     return '${_dias[ArTime.toAr(dt).weekday - 1]} ${fechaYHora(iso)}';
-  }
-
-  /// "Vie 04/12/2026 - 01:30": **el día es el de la noche de la caja, no el del reloj**
-  /// (25-nov-2026): pasada la medianoche el vale de la fiesta del viernes decía "Sáb
-  /// 05/12" y parecía de otra noche. La hora sí es la del reloj.
-  static String nocheYHora(String iso, CajaBarra caja) {
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '';
-    final noche = DiaDeOperacion.deLaCaja(caja);
-    if (noche.esSinFecha) return diaFechaYHora(iso);
-    final ar = ArTime.toAr(dt);
-    String dos(int n) => n.toString().padLeft(2, '0');
-    return '${noche.conDiaDeLaSemana} - ${dos(ar.hour)}:${dos(ar.minute)}';
   }
 
   /// El papel de IMPRIMIR UNA PRUEBA (6.4.0): para ver que la impresora anda **sin
@@ -170,7 +162,7 @@ abstract final class ModeloTicket {
     return [
       if (copia != null) const GrandeTicket('*** COPIA ***'),
       ..._centrado(fiesta.toUpperCase(), negrita: true),
-      TextoTicket(nocheYHora(venta.createdAt, caja)),
+      TextoTicket(diaFechaYHora(venta.createdAt)),
       ..._centrado(numero),
       if (vale.porSeparado) ...[
         GrandeTicket('VALE POR ${vale.bebidas.single.cantidad}'),
