@@ -8,9 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// tele", con el PIN del jefe. Lee los archivos de `lib/features/tele/`.
 void main() {
   final carpeta = Directory('lib/features/tele');
+  // Sin los \r: en una carpeta con core.autocrlf, git deja los archivos con finales de
+  // línea de Windows y la búsqueda del fin de cada función ('\n  }\n') no los encontraba
+  // (26-nov-2026, al juntar la tele).
   final archivos = {
     for (final f in carpeta.listSync().whereType<File>())
-      if (f.path.endsWith('.dart')) f.path.replaceAll(r'\', '/'): f.readAsStringSync(),
+      if (f.path.endsWith('.dart'))
+        f.path.replaceAll(r'\', '/'): f.readAsStringSync().replaceAll('\r\n', '\n'),
   };
 
   test('hay archivos que leer', () {
