@@ -691,7 +691,9 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
   - Para mirarlo: `tool/plano_prueba.dart` (con "Familias con mesa", PEREZ y SOSA la tienen a confirmar; el ícono de
     la izquierda apaga el modo jefe) y las capturas de `tool/a_confirmar_muestra_test.dart`.
   - **Un equipo con la 6.9.1 o anterior no la conoce**: ve esa mesa como una más y el tótem la enciende.
-- **En esta PC no hay con qué pasar un PDF a imagen** (ni `pdftoppm` ni un paquete de Python), y un PDF armado con las
+- **Un PDF se pasa a imagen con `tool/pdf_a_png.ps1`** (25-nov, PowerShell con el lector de PDF de Windows:
+  `& tool/pdf_a_png.ps1 -Pdf <archivo> -Carpeta <carpeta>`); hasta ahí no había con qué (ni `pdftoppm` ni un paquete
+  de Python). Lo de abajo sigue valiendo para leer el texto. Y un PDF armado con las
   letras de la app no se lee con `palabrasDelPdf`: las muestras en PDF se le mandan para que las mire él, y lo que
   dicen se comprueba en los tests con la letra de fábrica.
 
@@ -809,7 +811,7 @@ en otro chat"; los nombres del caso, en `build/nombres_6.9.4.md`, fuera de git).
   conserva la principal primera** (`MesasExtraUtils.conLaPrincipalDeAntes`): todo lo que escriba `numero_mesa` pasa
   por ahí. El plano (`OcupantePlano.principalAnotada`) y la puerta (`GrupoPuerta.principal`) la respetan. Para lo
   sorteado (todo de menor a mayor) no cambia nada, y mover una sola mesa lo sigue dejando de menor a mayor
-  (`CambiosDeMesa.reemplazar`).
+  (`CambiosDeMesa.reemplazar`). La columna MESA de la grilla dice "107 y 106 (1 extra)" (`SalonMesas.textoMesas`).
 - **DAR MESA** (solo modo jefe, con internet; `MesaQueDaElJefe`, `_darMesa` en la pantalla de la fiesta, "SIN MESA ·
   DAR MESA A TODOS"): la fijada, después **una mesa del fondo que quedó vacía**
   (`MesasNuevasAlFondo.vaciasDelFondo`; primero a quien ya tiene mesa) y si no una nueva. **La mesa sola también usa

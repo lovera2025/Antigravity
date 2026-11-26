@@ -2,6 +2,10 @@
 
 ## Para retomar en otro chat
 
+**En pausa desde el 25-nov a la tarde por la 6.9.4** (la planilla por número de mesa y DAR MESA, urgente, a
+publicar el 26-nov: `docs/CONTEXTO_v6.9.4_2026-11-25.md`). Al volver a esto, lo de la 6.9.4 ya está en esta rama;
+la base del repositor sigue donde quedó abajo.
+
 **El plan aprobado** (25-nov, con el usuario):
 `C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-inherited-sedgewick-of-b24f55ff-68c4-4d3e-875a-b0916b95685c.md`.
 La fiesta es la **Técnica Pinaroli, el 4-dic**: la primera de verdad, **sin internet**, todo por el wifi. El usuario
