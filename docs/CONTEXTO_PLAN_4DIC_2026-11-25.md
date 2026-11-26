@@ -21,7 +21,7 @@ quiere **todo prolijo, punto por punto, y sin bugs** ("lo importante es que todo
 |---|---|---|
 | 0. Maquetas | acá | **Hechas y contestadas**: `docs/maqueta_encargada_iphone_y_repositor_2026-11-25.html` (`preview_start` con `maquetas`) |
 | 1. La tele | sesión aparte "La tele: girar, cada tele con su escuela, todo guardado" (`local_054d7dae…`, worktree `claude/peaceful-golick-fa7148`) | programada (etapas 1 a 5); el 26-nov se le mandó cerrar sus puntos 1 a 6 (suite, ventana con dos escuelas, sandbox, capturas, roturas, revisión independiente) y avisar; **no la junta ella** |
-| 2. La barra por día de operación y la madrugada | sesión aparte "La barra por día de operación y la madrugada" (`local_c225fee6…`, worktree `claude/sleepy-jepsen-bea21a`) | programada, suite 6.257 en verde, 27 roturas, sandbox hecho; el 26-nov se le mandó la revisión independiente y avisar; **no la junta ella** |
+| 2. La barra por día de operación y la madrugada | **junta en esta rama el 26-nov** (merge `53303ba`, desde `claude/sleepy-jepsen-bea21a`; su sesión ya no la toca) | revisión independiente con 9 arreglos (`eb07be5`); sobre lo junto: la suite entera **6.424 y 0 fallos**, las roturas **41 de 41** y la huella de la base IGUAL; **el recorrido con el mouse no se hizo** (el usuario no dio el permiso de la pantalla el 26-nov) |
 | 3. La encargada en el iPhone por el wifi | acá, **después de juntar la Parte 2** (toca los mismos archivos) | sin empezar |
 | 4. El repositor y el stock por barra | acá | **la base (sin pantallas) cerrada el 26-nov**: las pruebas de la segunda revisión, las roturas y el SPEC (ver abajo) |
 | 5. Publicar | con el usuario, cuando él diga | — |
@@ -92,7 +92,10 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
 1. ~~Las pruebas de la segunda revisión, las roturas otra vez y el SPEC~~ **hechos el 26-nov** (9 pruebas nuevas,
    ninguna encontró un error en el código; 31 de 31 roturas; la sección de conteos del SPEC al día). **La tercera
    revisión independiente va con el paso 3**, sobre el stock ya unido con la barra por noche.
-2. **Juntar las ramas** (aprobado el 26-nov): cada una apenas cierre su revisión, primero la barra y después la tele,
+2. **Juntar las ramas** (aprobado el 26-nov). **La barra, junta el 26-nov** (ver la tabla; las roturas no corrían en
+   esta carpeta: con `core.autocrlf` el archivo de casos sale con CRLF y el `\r` pegado al nombre del test hacía que
+   no corriera ninguno; `tool/romper_una_regla.sh` ahora lo limpia y avisa si un test no existe). **Falta la tele.**
+   Cada una apenas cierre su revisión, primero la barra y después la tele,
    con `git merge` acá. Sobre lo junto: conflictos, finales de línea LF, que nada nombre a un alumno real (contra
    `build/nombres_reemplazados_2026-11-26.md`), `flutter analyze`, la suite entera, las roturas de esa parte y la
    ventana de prueba con la huella IGUAL (`tool/dos_barras_prueba.dart`; `tool/tele_prueba.dart` con dos escuelas).
@@ -120,6 +123,10 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
    con el OK del usuario, y publicar cuando él diga.
 
 ### Pendientes del usuario
+
+- **Confirmar una regla de la barra** (hallazgo 8 de su revisión): una caja abierta antes del mediodía del día de la
+  fiesta (por ejemplo, para probar la impresora) cuenta para la noche anterior, como pide el corte al mediodía. VENDER
+  lo avisa; la regla no se cambió.
 
 - Probar los routers Mercusys en la oficina (guía en `docs/GUIA_ROUTERS_DE_LAS_BARRAS.md`) y avisar si llegan.
 - La foto de "Cómo anda" con la Quint (de antes, sigue pendiente: `docs/CONTEXTO_TELE_COMO_TOTEM_2026-11-24.md`).
