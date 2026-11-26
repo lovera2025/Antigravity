@@ -193,9 +193,11 @@ class CentralBarra {
     Duration latido = const Duration(seconds: 5),
     Duration silencioMaximo = const Duration(seconds: 12),
     Duration pausa = const Duration(seconds: 1),
+    Stream<void>? cambiosDeRed,
   }) {
     if (_puente != null) return;
     final puente = ClienteDeLaCentral(
+      cambiosDeRed: cambiosDeRed,
       eventoId: eventoId,
       // Su propio id, distinto del de esta notebook: si en esta notebook quedara también
       // una caja conectada a la otra central, la otra no los confunde ni los echa por turno

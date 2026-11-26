@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,6 +11,7 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/linea_de_la_caja.dart';
+import 'package:arguello_events/features/barra/central/vigia_de_la_red.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/services/barra_sin_internet.dart';
@@ -67,6 +69,8 @@ void main() {
     _GuardadoEnMemoria? guardadoDeAntes,
     DateTime Function()? reloj,
     Future<String> Function()? elEquipo,
+    Future<List<String>> Function()? direcciones,
+    List<Override> mas = const [],
   }) {
     final barra = deAntes ??
         (BarraEnMemoria()
@@ -83,13 +87,43 @@ void main() {
       puertoCentralBarraProvider.overrideWithValue(0),
       puertoBusquedaBarraProvider.overrideWithValue(puertoBusqueda),
       destinosBusquedaBarraProvider.overrideWithValue(() async => [InternetAddress.loopbackIPv4]),
-      direccionesCentralBarraProvider.overrideWithValue(() async => ['192.168.0.10']),
+      direccionesCentralBarraProvider.overrideWithValue(direcciones ?? () async => ['192.168.0.10']),
       equipoDeLaBarraProvider.overrideWithValue(elEquipo ?? () async => id),
       guardadoDeLaCentralProvider.overrideWithValue(guardado),
+      ...mas,
     ]);
     addTearDown(c.dispose);
     return (c: c, barra: barra, guardado: guardado);
   }
+
+  // 26-nov-2026: el usuario volvió al wifi de la barra y nada se actualizó hasta apagar y
+  // prender la central. Ahora la notebook se da cuenta sola de que cambió de red.
+  test('la notebook cambia de red: relee sus direcciones y sigue contestando, sin apagar la central', () async {
+    var dirsDelEquipo = {'Wi-Fi/10.0.0.7'};
+    var paraLasTablets = ['10.0.0.7'];
+    final vigia = VigiaDeLaRed(direcciones: () async => dirsDelEquipo, cada: const Duration(milliseconds: 30));
+    final notebook = equipo(
+      'notebook',
+      direcciones: () async => paraLasTablets,
+      mas: [vigiaDeLaRedProvider.overrideWithValue(() => vigia)],
+    );
+    await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+    expect(notebook.c.read(centralDeLaBarraProvider).direcciones, ['10.0.0.7']);
+    final puerto = notebook.c.read(centralDeLaBarraProvider).puerto;
+
+    // Se conecta al wifi de la barra.
+    dirsDelEquipo = {'Wi-Fi/192.168.0.10'};
+    paraLasTablets = ['192.168.0.10'];
+    await hasta(() => notebook.c.read(centralDeLaBarraProvider).direcciones.contains('192.168.0.10'),
+        que: 'CAJAS muestra la dirección nueva');
+    expect(notebook.c.read(centralDeLaBarraProvider).puerto, puerto, reason: 'la central sigue prendida, la misma');
+
+    // Y la tablet que llega la encuentra sola.
+    final tablet = equipo('tablet-a');
+    await tablet.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 1 · Marta');
+    final cliente = tablet.c.read(clienteDeLaBarraProvider)!;
+    await hasta(() => cliente.estado == EstadoDeLaCentral.conectada, que: 'la tablet conectada');
+  });
 
   test('la notebook prende la central, la tablet la encuentra sola, y lo que vende le llega', () async {
     final notebook = equipo('notebook');
