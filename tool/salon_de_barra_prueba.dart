@@ -13,6 +13,7 @@ import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
@@ -30,6 +31,12 @@ import '../test/helpers/barra_en_memoria.dart';
 import '../test/helpers/operadores_en_memoria.dart';
 
 final idPuertoViejo = BarraEnPrueba.id(1);
+
+/// **Quién es quién en todo el salón de la prueba** (26-nov-2026: la central no deja
+/// entrar sin PIN): las cajeras de todos los equipos, como si los operadores hubieran
+/// bajado de la nube a cada uno. El PIN maestro es el de fábrica de las preferencias de
+/// prueba.
+final personasDelSalon = QuienEsQuienEnMemoria();
 
 /// La fiesta de la prueba: PUERTO VIEJO, hoy.
 List<Evento> fiestasDePrueba() => [fiestaDePrueba(idPuertoViejo, 'PUERTO VIEJO', DateTime.now())];
@@ -187,6 +194,7 @@ EquipoDePrueba armarEquipo({
     final opId = 'a0000000-0000-4000-8000-${(cajera.hashCode & 0xffffff).toString().padLeft(12, '0')}';
     operadores.operadores.lista.add(operadorDePrueba(opId, cajera, pin!));
     operadores.permisos.poner(opId, PermisosEfectivos(barra: true, encargadaBarra: encargada));
+    personasDelSalon.persona(opId, cajera, pin: pin, rol: encargada ? RolEnLaBarra.encargada : RolEnLaBarra.cajera);
   }
   final aviso = AvisoALaRed();
   final conLaRed = BarraConLaRed(caja: barra, jefe: barra, red: barra, aviso: aviso);
@@ -215,6 +223,9 @@ EquipoDePrueba armarEquipo({
     ...red.reemplazos,
     equipoDeLaBarraProvider.overrideWithValue(() async => id),
     guardadoDeLaCentralProvider.overrideWithValue(guardado ?? GuardadoDePrueba()),
+    // Los operadores de todo el salón: la central reconoce el PIN de cada tablet.
+    quienEsQuienEnLaBarraProvider.overrideWithValue(personasDelSalon),
+    credencialDeLaCentralProvider.overrideWithValue(() async => personasDelSalon.credencialDelJefe),
     // La barra de cada equipo, en memoria: en la ventana todos comparten las preferencias.
     barraDelEquipoProvider.overrideWithValue(BarraDelEquipoEnMemoria(barraDelEquipo)),
     if (reloj != null) relojDeLaBarraProvider.overrideWithValue(reloj),

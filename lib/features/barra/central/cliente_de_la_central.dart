@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'buscar_central.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import 'filas_de_la_red.dart';
+import 'llave_de_la_barra.dart';
 
 /// Desde cuánta diferencia con la hora de la central VENDER avisa que el reloj de la tablet
 /// está corrido (26-nov-2026).
@@ -59,8 +61,10 @@ class ClienteDeLaCentral extends ChangeNotifier {
     this.silencioMaximo = const Duration(seconds: 12),
     this.pausa = const Duration(seconds: 1),
     Stream<void>? cambiosDeRed,
+    required Future<CredencialDeLaBarra?> Function() credencial,
   })  : _barra = barra,
         _cambiosDeRed = cambiosDeRed,
+        _credencial = credencial,
         eleccion = eleccion ?? EleccionDeCentral.deLaCaja(barra: barraDeLaCaja),
         _buscador = buscador ?? BuscaCentral(eventoId: eventoId),
         _aMano = aMano,
@@ -92,6 +96,28 @@ class ClienteDeLaCentral extends ChangeNotifier {
   /// nuevo desde cero, con un socket nuevo y sin la dirección de antes.
   final Stream<void>? _cambiosDeRed;
   StreamSubscription<void>? _escuchaDeRed;
+
+  /// **El PIN de quien está en este aparato** (26-nov-2026): la central no deja entrar
+  /// sin él. Se pide en cada conexión (la cajera pudo cambiar), y nunca viaja: viaja la
+  /// firma ([LlaveDeLaBarra]).
+  final Future<CredencialDeLaBarra?> Function() _credencial;
+
+  /// El número que esta caja le pregunta a la central en cada conexión: la central lo
+  /// firma, así se sabe que es la de verdad.
+  String _retoPropio = '';
+  CredencialDeLaBarra? _usada;
+  var _verificada = false;
+  RolEnLaBarra? _rol;
+  String? _problema;
+
+  /// Lo que la central no guardó de este aparato, con el motivo (los últimos 50).
+  final rechazadas = <({String tabla, String id, String motivo})>[];
+
+  /// Con qué rol la dejó entrar la central. Null: todavía no.
+  RolEnLaBarra? get rol => _rol;
+
+  /// Por qué la central no la deja entrar ("Tu PIN no tiene permiso de barra"), o null.
+  String? get problema => _problema;
   final WebSocketChannel Function(Uri) _abrir;
   final DateTime Function() _ahora;
   final Duration latido;
@@ -262,6 +288,9 @@ class ClienteDeLaCentral extends ChangeNotifier {
     if (_cerrado) return;
     _cortar();
     _donde = donde;
+    _retoPropio = LlaveDeLaBarra.reto();
+    _verificada = false;
+    _usada = null;
     final uri = Uri(
       scheme: 'ws',
       host: donde.direccion,
@@ -271,6 +300,7 @@ class ClienteDeLaCentral extends ChangeNotifier {
         'evento': eventoId,
         'equipo': equipo,
         'caja': nombreCaja,
+        'r': _retoPropio,
         // La central lo muestra; y si es otra central, la pone aparte de las cajas.
         'barra': ?barraDeLaCaja,
         if (eleccion.esDeCentral) 'central': '1',
@@ -331,6 +361,16 @@ class ClienteDeLaCentral extends ChangeNotifier {
       // Es la central de otra fiesta: se busca de nuevo.
       _donde = null;
     }
+    final problema = switch (codigo) {
+      4005 => 'Falta el PIN: volvé a entrar con el tuyo',
+      4006 => 'La central no reconoce tu PIN: la notebook tiene que bajar los operadores con internet',
+      4007 => 'Tu PIN no tiene permiso de barra',
+      _ => null,
+    };
+    if (problema != null && problema != _problema) {
+      _problema = problema;
+      _avisar();
+    }
     _intentos++;
     final espera = pausa * (_intentos < 5 ? _intentos : 5);
     _reintento = Timer(espera, () {
@@ -363,7 +403,18 @@ class ClienteDeLaCentral extends ChangeNotifier {
     }
     if (json is! Map<String, dynamic>) return;
     switch (json['t']) {
-      case 'filas':
+      case 'reto':
+        await _contestarElReto(json['n']);
+      case 'adelante':
+        _comprobarLaCentral(json);
+      case 'rechazada':
+        final tabla = json['tabla'], id = json['id'], motivo = json['motivo'];
+        if (tabla is String && id is String && motivo is String) {
+          rechazadas.add((tabla: tabla, id: id, motivo: motivo));
+          if (rechazadas.length > 50) rechazadas.removeAt(0);
+          _avisar();
+        }
+      case 'filas' when _verificada:
         final volvio = _estado != EstadoDeLaCentral.conectada;
         if (volvio) {
           _intentos = 0;
@@ -395,6 +446,53 @@ class ClienteDeLaCentral extends ChangeNotifier {
           if (relojCorrido != antes) cambio = true;
         }
         if (cambio) _avisar();
+    }
+  }
+
+  /// La central pregunta: se contesta con quién es y la firma del PIN de este aparato.
+  Future<void> _contestarElReto(Object? reto) async {
+    final canal = _canal;
+    if (reto is! String || reto.isEmpty || reto.length > 64 || canal == null) return;
+    final c = await _credencial();
+    if (!identical(_canal, canal)) return;
+    if (c == null) {
+      _problema = 'Falta el PIN: volvé a entrar con el tuyo';
+      _avisar();
+      unawaited(canal.sink.close());
+      return;
+    }
+    _usada = c;
+    _enviar({
+      't': 'soy',
+      'quien': c.quien,
+      'id': ?c.operadorId,
+      'prueba': LlaveDeLaBarra.firma(c.llave, lado: 'caja', reto: reto, evento: eventoId, equipo: equipo),
+    });
+  }
+
+  /// La central firmó el reto de esta caja con la misma llave: es la de verdad. Si no,
+  /// se corta (una notebook de afuera no puede hacerse pasar por la central).
+  void _comprobarLaCentral(Map<String, dynamic> json) {
+    final c = _usada;
+    final prueba = json['prueba'];
+    final esperada = c == null
+        ? null
+        : LlaveDeLaBarra.firma(c.llave, lado: 'central', reto: _retoPropio, evento: eventoId, equipo: equipo);
+    if (esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+      _problema = 'Esa no es la central de la barra';
+      _avisar();
+      final canal = _canal;
+      if (canal != null) {
+        unawaited(canal.sink.close());
+        _seCorto(null);
+      }
+      return;
+    }
+    _verificada = true;
+    _rol = RolEnLaBarra.values.where((r) => r.name == json['rol']).firstOrNull;
+    if (_problema != null) {
+      _problema = null;
+      _avisar();
     }
   }
 

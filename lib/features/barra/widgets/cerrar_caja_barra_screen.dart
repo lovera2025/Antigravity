@@ -7,12 +7,15 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
 import '../impresion/papel_en_pantalla.dart';
 import '../impresion/ticket_esc_pos.dart';
+import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import 'ok_del_cierre.dart';
+import 'pin_de_la_encargada.dart';
 import 'pesos_enteros_formatter.dart';
 import 'vales_de_la_venta_screen.dart' show quienEnLaBarra;
 import 'ventas_de_la_caja_screen.dart' show pedirMotivo;
@@ -133,9 +136,9 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
   Future<void> _cerrar() async {
     final contado = _contadoEscrito;
     if (contado == null || _ocupado) return;
-    // Quien manda en la barra (la encargada con su propia caja, o el jefe) cierra sin
-    // pedirle el OK a nadie.
-    final cierraSola = ref.read(mandaEnLaBarraProvider);
+    // Solo el jefe cierra sin pedirle el OK a nadie. **La encargada con su propia caja
+    // pide el OK como cualquiera** (26-nov-2026): su caja no se la aprueba ella.
+    final cierraSola = ref.read(rolEnLaBarraProvider) == RolEnLaBarra.jefe;
     final seguro = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -417,20 +420,18 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
   Future<void> _laEncargadaEstaAca() async {
     final pedido = _pedido;
     if (pedido == null || _ocupado) return;
-    final pin = await _pedirElPin();
-    if (pin == null || !mounted) return;
+    // Su PIN, de una encargada que no sea la dueña de esta caja (26-nov-2026).
+    final quien = await laEncargadaAutoriza(
+      context,
+      ref,
+      caja: widget.caja,
+      titulo: 'El PIN de la encargada',
+      explicacion: 'Pone su PIN, ve los totales y acepta el cierre.',
+      decir: (m) => _decir(m, error: true),
+    );
+    if (quien == null || !mounted) return;
     setState(() => _ocupado = true);
     try {
-      final encontrado = await ref.read(appRoleProvider.notifier).buscarOperador(pin);
-      if (!mounted) return;
-      if (encontrado == null) {
-        _decir('Ese PIN no es de nadie.', error: true);
-        return;
-      }
-      if (!encontrado.permisos.encargadaBarra) {
-        _decir('Ese PIN no es de una encargada de barra.', error: true);
-        return;
-      }
       await _leerVentas(widget.caja);
       if (!mounted) return;
       final respuesta = await mostrarOkDelCierre(
@@ -440,7 +441,6 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
         cuentas: _cuentas,
       );
       if (respuesta == null || !mounted) return;
-      final quien = encontrado.operador.nombre;
       if (respuesta == RespuestaAlCierre.recontar) {
         await _responder(pedido, TipoPasoDelCierre.recontar, quien: quien);
         _volverAContar('La encargada pide que cuentes de nuevo.');
@@ -456,33 +456,6 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     } finally {
       if (mounted && _cerrada == null && _pedido != null) setState(() => _ocupado = false);
     }
-  }
-
-  Future<String?> _pedirElPin() {
-    final pin = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('El PIN de la encargada'),
-        content: TextField(
-          key: const Key('pin_encargada'),
-          controller: pin,
-          autofocus: true,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'PIN'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCELAR')),
-          FilledButton(
-            key: const Key('pin_seguir'),
-            onPressed: () => Navigator.pop(ctx, pin.text.trim()),
-            child: const Text('SEGUIR'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ── 2. El cierre ──────────────────────────────────────────────────────────

@@ -8,6 +8,8 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
+import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
@@ -20,12 +22,21 @@ import 'helpers/barra_en_memoria.dart';
 const _fiesta = 'e0000000-0000-4000-8000-000000000001';
 const _otraFiesta = 'e0000000-0000-4000-8000-000000000002';
 
+/// Quién es quién para la central de cada prueba (la central no deja entrar sin PIN).
+late QuienEsQuienEnMemoria _personas;
+
 /// Una tablet: su barra en memoria, la barra con la red (lo que usa VENDER) y su cliente.
+/// Entra con el PIN de su persona: la de la caja, con el [rol] que se le pida.
 class _Tablet {
-  _Tablet(String equipo, String nombre, DondeEstaLaCentral? donde, {String fiesta = _fiesta, BuscaCentral? buscador})
-      : barra = BarraEnMemoria()..equipo = equipo {
+  _Tablet(String equipo, String nombre, DondeEstaLaCentral? donde,
+      {String fiesta = _fiesta, BuscaCentral? buscador, RolEnLaBarra? rol = RolEnLaBarra.cajera, CredencialDeLaBarra? credencial})
+      : barra = BarraEnMemoria()..equipo = equipo,
+        operadorId = 'op-$equipo',
+        persona = nombre.split('·').last.trim() {
+    final cred = credencial ?? _personas.persona(operadorId, persona, rol: rol);
     barra.reloj = () => DateTime.now().toUtc();
     cliente = ClienteDeLaCentral(
+      credencial: () async => cred,
       eventoId: fiesta,
       equipo: equipo,
       nombreCaja: nombre,
@@ -42,6 +53,8 @@ class _Tablet {
   }
 
   final BarraEnMemoria barra;
+  final String operadorId;
+  final String persona;
   final aviso = AvisoALaRed();
   late final ClienteDeLaCentral cliente;
   late final BarraConLaRed caja;
@@ -49,8 +62,8 @@ class _Tablet {
 
   Future<CajaBarra> abrir(int numero) => caja.abrirCaja(
         eventoId: _fiesta,
-        operadorId: UuidUtils.generate(),
-        operadorNombre: 'Cajera $numero',
+        operadorId: operadorId,
+        operadorNombre: persona,
         numeroCaja: numero,
       );
 
@@ -81,9 +94,10 @@ void main() {
 
   setUp(() async {
     guardadas = 0;
+    _personas = QuienEsQuienEnMemoria();
     notebook = BarraEnMemoria()..equipo = 'notebook';
     notebook.reloj = () => DateTime.now().toUtc();
-    central = CentralBarra(eventoId: _fiesta, barra: notebook, alGuardar: () => guardadas++);
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas, alGuardar: () => guardadas++);
     final puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     donde = DondeEstaLaCentral('127.0.0.1', puerto);
   });
@@ -96,8 +110,10 @@ void main() {
     await central.cerrar();
   });
 
-  _Tablet tablet(String equipo, String nombre, {String fiesta = _fiesta, DondeEstaLaCentral? en, BuscaCentral? buscador}) {
-    final t = _Tablet(equipo, nombre, buscador == null ? (en ?? donde) : null, fiesta: fiesta, buscador: buscador);
+  _Tablet tablet(String equipo, String nombre,
+      {String fiesta = _fiesta, DondeEstaLaCentral? en, BuscaCentral? buscador, RolEnLaBarra? rol = RolEnLaBarra.cajera, CredencialDeLaBarra? credencial}) {
+    final t = _Tablet(equipo, nombre, buscador == null ? (en ?? donde) : null,
+        fiesta: fiesta, buscador: buscador, rol: rol, credencial: credencial);
     aCerrar.add(t);
     t.cliente.arrancar();
     return t;
@@ -153,7 +169,7 @@ void main() {
     expect(a.barra.ventasGuardadas, hasLength(3), reason: 'vender no espera a la central');
 
     // Vuelve, en otro puerto (el de antes quedó tomado).
-    central = CentralBarra(eventoId: _fiesta, barra: notebook, alGuardar: () => guardadas++);
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas, alGuardar: () => guardadas++);
     final puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     final nueva = DondeEstaLaCentral('127.0.0.1', puerto);
     a.cliente.ponerAMano(nueva);
@@ -174,9 +190,14 @@ void main() {
     final caja = await a.abrir(1);
     await a.vender(caja);
     await hasta(() => notebook.cajasGuardadas.any((c) => c.id == caja.id));
+    // Cierra sin esperar el OK, con su motivo (si no, la central no acepta el cierre).
+    final pedido = await a.caja.anotarPasoDelCierre(
+        PasoDelCierre.pedir(caja: caja, efectivoContado: 3000, hechoPor: 'Marta', ahora: DateTime.now()));
+    await a.caja.anotarPasoDelCierre(PasoDelCierre.responder(
+        pedido: pedido, tipo: TipoPasoDelCierre.sinOk, hechoPor: 'Marta', ahora: DateTime.now()));
     // Que pase el tiempo: la caja cerrada es más nueva que la abierta.
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    await a.caja.cerrarCaja(caja, efectivoContado: 3000, diferencia: -500, quien: 'Cajera 1');
+    await a.caja.cerrarCaja(caja, efectivoContado: 3000, diferencia: -500, quien: 'Marta');
     await hasta(() => notebook.cajasGuardadas.single.abierta == false, que: 'la caja cerrada en la notebook');
     expect(notebook.cajasGuardadas.single.diferencia, -500);
   });
@@ -185,7 +206,7 @@ void main() {
   // el pedido y el OK cruzan por la central de verdad, y la caja la cierra su tablet.
   test('el pedido de cierre le llega a la encargada y su OK vuelve, por la red del salón', () async {
     final cajera = tablet('tablet-a', 'Caja 1 · Marta');
-    final encargada = tablet('tablet-b', 'Caja 2 · Romi');
+    final encargada = tablet('tablet-b', 'Caja 2 · Romi', rol: RolEnLaBarra.encargada);
     await hasta(() => cajera.cliente.conectada && encargada.cliente.conectada);
     final caja = await cajera.abrir(1);
     await cajera.vender(caja, cantidad: 2);
@@ -252,7 +273,7 @@ void main() {
 
   test('si la red se cae mientras la cajera espera, el OK le llega cuando vuelve', () async {
     final cajera = tablet('tablet-a', 'Caja 1 · Marta');
-    final encargada = tablet('tablet-b', 'Caja 2 · Romi');
+    final encargada = tablet('tablet-b', 'Caja 2 · Romi', rol: RolEnLaBarra.encargada);
     await hasta(() => cajera.cliente.conectada && encargada.cliente.conectada);
     final caja = await cajera.abrir(1);
     final pedido = await cajera.caja.anotarPasoDelCierre(PasoDelCierre.pedir(
@@ -276,7 +297,7 @@ void main() {
     expect(PedidoDeCierre.de(caja.id, cajera.barra.pasosGuardados).esperando, isTrue);
 
     // Vuelve la notebook: el OK cruza solo, sin que nadie toque nada.
-    central = CentralBarra(eventoId: _fiesta, barra: notebook, alGuardar: () => guardadas++);
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas, alGuardar: () => guardadas++);
     final puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     final nueva = DondeEstaLaCentral('127.0.0.1', puerto);
     cajera.cliente.ponerAMano(nueva);
@@ -335,7 +356,7 @@ void main() {
         eventoId: _fiesta, productoId: 'p', barra: 'Barra 1', arranque: 60, aviso: 10, ahora: ahora);
     notebook.repartosGuardados.add(reparto);
     final a = tablet('tablet-a', 'Caja 1 · Marta');
-    final b = tablet('tablet-b', 'Repositor · Nico');
+    final b = tablet('tablet-b', 'Repositor · Nico', rol: RolEnLaBarra.repositor);
     await hasta(() => a.cliente.conectada && b.cliente.conectada);
     await hasta(() => a.barra.repartosGuardados.any((r) => r.id == reparto.id), que: 'el reparto llegó a la caja');
 

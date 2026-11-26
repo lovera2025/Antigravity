@@ -2,6 +2,34 @@
 
 ## Para retomar en otro chat
 
+**26-nov (tarde): la barra sólida y segura — hecho hasta el PIN en la central y las reglas por rol** (sin publicar,
+en esta rama). Plan de esta vuelta, aprobado por el usuario el 26-nov a la tarde:
+`C:\Users\lover\.claude\plans\c-users-lover-desktop-plan-sp-fancy-wall-of-db314a36-8fe0-4cf2-ad8e-bd040753c86b.md`.
+**Su orden: primero la barra sólida y segura ("los permisos totalmente") y las pantallas en la app de verdad (barra,
+repositor, encargada, la tele); después publicar; al final el plano impreso** (los planos ya se entregaron y el sorteo
+pasó). Lo hecho esta tarde, cada cosa con sus pruebas y sus roturas a propósito:
+- **El vale impreso dice la fecha y la hora reales** (`173037f`): el de la 01:30 dice "Sáb 05/12/2026 - 01:30"; la
+  caja sigue siendo de la noche en que se abrió (regla del usuario: "la caja se toma de cuando se abrió; lo que se
+  imprime, con la hora real"). Cambia lo que decía el plan del 25-nov.
+- **La barra se reconecta sola al volver al wifi** (`18b1b5d`, 6 de 6 roturas): lo vio el usuario (otro wifi, volvió y
+  no se actualizó hasta apagar y prender la central). Reproducido en el sandbox: el cambio de red mataba los sockets de
+  la búsqueda y ninguno se volvía a abrir. Ahora `RespondeBusqueda` y `BuscaCentral` se reabren solos (y la búsqueda
+  renueva el socket cada 30 s sin respuesta), y `VigiaDeLaRed` (las direcciones del equipo cada 5 s) hace que la
+  notebook reabra lo que contesta y relea sus direcciones, y que la caja sin central busque de nuevo. **El botón
+  PRENDER / APAGAR LA CENTRAL queda igual** (lo pidió él). **No probado con un cambio de wifi de verdad.** La Tele 1
+  (`RespondeLaTele1`, `lib/features/tele/busqueda_de_la_tele.dart`) tiene la misma falla: se le pidió a la sesión del
+  APK que la arregle igual.
+- **El stock por barra se cuenta por noche y cruza sin internet** (`0f7b740`, 5 de 5 roturas): `StockPorBarra.deLaNoche`
+  (las pantallas usan esta), la barra de cada caja con `barraDe` (que ahora compara con `claveDeBarra`), y
+  `barra_stock_barras` y `barra_stock_movimientos` en `tablasDeLaRed`.
+- **El PIN en la central y las reglas por rol** (commit de esta tarde, 19 de 19 roturas en `tool/roturas_permisos_barra.txt`):
+  ver "La barra, quién puede qué (26-nov)" abajo.
+
+**Sesión en paralelo:** "APK de prueba de la app de verdad para la Google TV" (`local_fb5b1a19-2401-455c-acd2-0da86e83153d`,
+en su worktree): comprueba que la v83 no corta la bajada sin las tablas del stock en la nube, arregla la línea de LA
+FIESTA, arma el APK de la app de verdad (32 y 64 bits) y se lo manda. Se le pidió traer `18b1b5d` y arreglar la Tele 1.
+Cuando termine, mirar su rama y juntarla (preguntándole al usuario).
+
 **26-nov: retomado después de la 6.9.4** (ya publicada; está en esta rama). Este chat coordina las sesiones en
 paralelo: **cuando el usuario dice "actualizá", se actualiza acá y se les manda lo mismo a todas** (memoria
 `actualiza-va-para-todas-las-sesiones`). El plan de esta vuelta, aprobado el 26-nov:
@@ -24,7 +52,9 @@ quiere **todo prolijo, punto por punto, y sin bugs** ("lo importante es que todo
 | 2. La barra por día de operación y la madrugada | **junta en esta rama el 26-nov** (merge `53303ba`, desde `claude/sleepy-jepsen-bea21a`; su sesión ya no la toca) | revisión independiente con 9 arreglos (`eb07be5`); sobre lo junto: la suite entera **6.424 y 0 fallos**, las roturas **41 de 41** y la huella de la base IGUAL; **el recorrido con el mouse no se hizo** (el usuario no dio el permiso de la pantalla el 26-nov) |
 | 3. La encargada en el iPhone por el wifi | acá, **después de juntar la Parte 2** (toca los mismos archivos) | sin empezar |
 | 4. El repositor y el stock por barra | acá | **la base (sin pantallas) cerrada el 26-nov**: las pruebas de la segunda revisión, las roturas y el SPEC (ver abajo) |
+| 2b. La barra sólida y segura (26-nov, tarde) | acá | **hecho hasta el PIN en la central y las reglas por rol**: el vale con la hora real, la reconexión al volver al wifi, el stock por noche que cruza sin internet, el PIN y quién puede qué (arriba). Falta: repositor, retiros y cambio de la encargada (v84), transferencia con el posnet, la noche simulada y la tercera revisión |
 | 5. Publicar | con el usuario, cuando él diga | — |
+| 6. El plano impreso entero | después de publicar la barra | spec aprobada (en `Desktop\PLAN`), con lo que agregó él el 26-nov; sin empezar |
 
 Las dos sesiones salieron de la rama feature (comprobado: su base es `2a0a0d2`). A las dos se les mandó el 25-nov
 que el usuario pide **sin bugs**: tests, suite entera, roturas, sandbox con la huella IGUAL **y una revisión
@@ -87,8 +117,86 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
 - un producto ya contado **no cambia el reparto ni el stock general** (`errorDelReparto` lo frena): lo que se mueve
   lo anota el repositor.
 
-### Lo que falta, en orden
+### La barra, quién puede qué (26-nov, decidido por el usuario; programado hasta el PIN y las reglas)
 
+**La regla, en un solo lugar: `ReglasDeLaBarra`** (`lib/features/barra/cuentas/reglas_de_la_barra.dart`), con
+`RolEnLaBarra` (cajera, encargada, repositor, jefe, central). La usan las pantallas, el guardado y la central. El rol
+de este aparato: `rolEnLaBarraProvider` (`providers/barra_del_jefe_provider.dart`: modo jefe, o el PIN y los permisos).
+
+| | Cajera | Encargada | Repositor | Jefe |
+|---|---|---|---|---|
+| Abrir caja con el cambio (opcional) | sí | habilitada, en una tablet | no | — |
+| Cambiar el cambio después | **una sola vez, si abrió sin cambio y no vendió** (hecho); después no | **sí, con el porqué y el historial** (falta: v84) | no | sí |
+| Vender | sí (sin stock, no) | habilitada, en una tablet con su caja | no | — |
+| Transferencia | **primero el posnet de MP en verde, después confirma** (falta) | — | no | — |
+| Sus ventas | **sin plata** (hecho) | — | no | — |
+| Anular, con motivo | **no** (hecho) | **sí**: desde su aparato, o **con su PIN en la tablet de la cajera** (hecho) | no | sí |
+| Retirar efectivo, con el porqué | no | **sí** (falta: v84) | no | sí |
+| LAS CAJAS con la plata, imprimir | no (hecho: CAJAS no muestra nada sin encargada o jefe) | sí | no | sí |
+| Contar al cerrar | a ciegas, pide el OK | da el OK; **su propia caja no** (hecho) | — | da el OK y cierra sin pedir |
+| Ver el stock | — | lo ve, no lo cambia | **solo el stock** | todo |
+| Mover el stock, con nota | no | no | sí | sí |
+| Repartir el stock, catálogo, precios | no | no | no | sí |
+
+**El PIN en la central** (`lib/features/barra/central/llave_de_la_barra.dart`): la central manda un número (`reto`);
+el aparato contesta quién es (`operador` + id, o `maestro`) y la firma con una llave sacada de su PIN (**el PIN no
+viaja**). La central saca la misma llave de su base (`QuienEsQuienEnLaBarra`: los operadores con sus permisos y su PIN
+maestro; en la app, `QuienEsQuienDeLaApp`) y compara; si da, firma el número de la tablet para que la tablet sepa que
+es la central de verdad. Sin PIN: 4005 a los 10 s; PIN que no conoce: 4006; sin permiso de barra: 4007. **Hasta probar
+el PIN no recibe ni guarda nada, ni echa a la tablet de verdad que tenga el mismo equipo.** El jefe y el enganche entre
+las dos centrales entran con el **PIN maestro de la notebook: las dos notebooks tienen que tener el mismo** (si no, no
+se enganchan y cada barra sigue sola). La tablet guarda el PIN de quien entró (`credencialDeLaBarraProvider`) y se
+reconecta sola sin pedirlo de nuevo.
+
+**Lo que la central acepta de cada uno** (`ReglasDeLaBarra.porQueNoSeGuarda`; lo que no, va a `CentralBarra.rechazos`
+y se le avisa al aparato, `ClienteDeLaCentral.rechazadas`): lo de su caja (`device_id` = el aparato); anular, la
+encargada (o firmado por una encargada en la tablet de esa caja); el OK, la encargada a una caja que no es suya (o
+LA ENCARGADA ESTÁ ACÁ en la tablet de la cajera); cerrar, con el OK o sin esperar con motivo; una venta no se cambia;
+el stock, el repositor; el reparto, el jefe. Lo de otro aparato que la central no tiene se repone; lo que ya tiene no
+se pisa.
+
+**La segunda llave**: `BarraConLaRed(rolDeQuienUsa:)` no anula, no cierra sin el OK, no cambia el cambio ni el
+catálogo si no le toca (`NoLeTocaEnLaBarra`). La encargada anula en la tablet de la cajera con
+`anularConLaEncargada` (la pantalla comprobó su PIN con `laEncargadaAutoriza`, `widgets/pin_de_la_encargada.dart`).
+
+**Límites que quedan:** la nube deja escribir a cualquiera con la cuenta (una sola para todos); el PIN maestro de
+fábrica (2026) está en el repositorio público: **recomendarle cambiarlo en las dos notebooks** antes del 4-dic; una
+fila firmada con el nombre de una encargada desde la tablet de la cajera se cree (haría falta modificar la app).
+
+### Lo que falta, en orden (26-nov, tarde)
+
+1. ~~El vale con la hora real, la reconexión al volver al wifi, el stock por noche, el PIN en la central y las reglas
+   por rol~~ **hechos el 26-nov** (arriba).
+2. **Repositor, retiros y el cambio de la encargada:**
+   - el permiso repositor (Barra con un 3): `PermisoOperador.repositorBarra`, `PermisosOperador.fromMap` lee el 3,
+     `ReglasDeLaBarra.dePermisos` da `repositor`, la tercera opción en OPERADORES que **no borra el 3** al guardar
+     otra cosa, y la entrada a su pantalla (no abre caja ni ve LAS CAJAS). **No tildar repositor hasta que todos los
+     equipos tengan la versión;**
+   - **RETIRO** y **el cambio de la encargada** (dar, agregar, ajustar, con el porqué y el historial): una tabla nueva
+     donde solo se agregan filas (`barra_caja_movimientos`, tipo `retiro`, `cambio` o `ajuste_cambio`), su SQL y la
+     migración **v84** (el locutor pasa a la v85), probada sobre una copia y desde un equipo que ya está en la v83 (el
+     APK de prueba); viaja por la central; el esperado del cierre la cuenta;
+   - **transferencia con el posnet**: "Cobrá en el posnet" y **APROBADO EN EL POSNET** (recién ahí se guarda y sale el
+     vale), y en el cierre la cantidad y el total de transferencias;
+   - "¿Volvió el vale?" al anular (en el motivo);
+   - el jefe con LA ENCARGADA ESTÁ ACÁ; el aviso del PIN maestro de fábrica en CAJAS;
+   - **sin stock no se vende** adentro de `vender()` (y en VENDER) con `StockPorBarra.deLaNoche`.
+3. **La noche simulada y la tercera revisión independiente** sobre todo lo de la barra: dos barras, cientos de ventas
+   (efectivo, transferencia, mixto), anulaciones, retiros, cambio, el stock que se acaba y vuelve, pasada la
+   medianoche, **una tablet 4 horas sin señal** que vuelve (que llegue en segundos), la notebook que se apaga y prende
+   en medio de un pedido de cierre, las barras separadas y juntas; cada cierre al centavo igual en la cajera, la
+   notebook, la encargada y el jefe; y que las pantallas de la cajera y del repositor no muestren "$" ni "vendido".
+4. **Las pantallas en la app de verdad, cómodas de usar:** el repositor (app en Android, página de la notebook en
+   iPhone), VENDER con el stock, la página de la encargada en el iPhone (Parte 3: igual que LAS CAJAS, con su PIN,
+   retoma sola), y la tele con lo que diga su prueba del APK. Capturas para él; el recorrido con el mouse si da el
+   permiso.
+5. La v83 y la v84 sobre una copia de la base real, los SQL con su OK, la foto de la mora, y publicar cuando él diga.
+6. **Después:** el plano impreso entero (Parte 6; la spec está en
+   `C:\Users\lover\Desktop\PLAN\SPEC_plano_impreso_entero_con_medidas_2026-11-26.md`, con lo que agregó él en el
+   plan del 26-nov: el cuadro al costado/arriba/abajo/no, horizontal o vertical, "Detalle de las mesas aparte", una
+   medida nunca pisa un sector, y pruebas sobre los 10 planos que existen).
+
+**De antes, sigue valiendo** (lo que hizo falta para juntar las ramas):
 1. ~~Las pruebas de la segunda revisión, las roturas otra vez y el SPEC~~ **hechos el 26-nov** (9 pruebas nuevas,
    ninguna encontró un error en el código; 31 de 31 roturas; la sección de conteos del SPEC al día). **La tercera
    revisión independiente va con el paso 3**, sobre el stock ya unido con la barra por noche.
@@ -127,9 +235,8 @@ más nueva que conocía de cada equipo. Después, lo de ese lugar = lo contado +
 
 ### Pendientes del usuario
 
-- **Confirmar una regla de la barra** (hallazgo 8 de su revisión): una caja abierta antes del mediodía del día de la
-  fiesta (por ejemplo, para probar la impresora) cuenta para la noche anterior, como pide el corte al mediodía. VENDER
-  lo avisa; la regla no se cambió.
-
-- Probar los routers Mercusys en la oficina (guía en `docs/GUIA_ROUTERS_DE_LAS_BARRAS.md`) y avisar si llegan.
+- ~~Confirmar la regla del corte al mediodía~~: **confirmada el 26-nov** ("la caja se toma de cuando se abrió").
+- ~~Probar los routers Mercusys~~: **los unió por wifi y anda** (26-nov).
+- Probar el APK de la app de verdad en su Google TV (se lo manda la sesión en paralelo) y contar qué no anda.
+- Cambiar el PIN maestro de fábrica en las dos notebooks de la barra (el mismo en las dos).
 - La foto de "Cómo anda" con la Quint (de antes, sigue pendiente: `docs/CONTEXTO_TELE_COMO_TOTEM_2026-11-24.md`).

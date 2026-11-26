@@ -6,6 +6,8 @@ import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
+import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
 import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
@@ -558,4 +560,32 @@ class BarraEnPrueba {
   static String id(int n) => 'e0000000-0000-4000-8000-${n.toString().padLeft(12, '0')}';
 
   static String nuevoId() => UuidUtils.generate();
+}
+
+/// **Quién es quién en memoria**, para la central de las pruebas (26-nov-2026: la central
+/// no deja entrar sin PIN). Cada aparato se suma con [persona] y se conecta con la
+/// [credencial] de esa persona.
+class QuienEsQuienEnMemoria implements QuienEsQuienEnLaBarra {
+  QuienEsQuienEnMemoria({this.maestro = '2026'});
+
+  final personas = <String, PersonaDeLaBarra>{};
+  String? maestro;
+
+  /// Suma una persona (o la reemplaza) y devuelve su credencial.
+  CredencialDeLaBarra persona(String id, String nombre, {String pin = '1234', RolEnLaBarra? rol = RolEnLaBarra.cajera}) {
+    personas[id] = PersonaDeLaBarra(id: id, nombre: nombre, pin: pin, rol: rol);
+    return CredencialDeLaBarra.operador(id, pin);
+  }
+
+  CredencialDeLaBarra get credencialDelJefe => CredencialDeLaBarra.maestro(maestro ?? '');
+
+  @override
+  Future<PersonaDeLaBarra?> operador(String id) async => personas[id];
+
+  @override
+  Future<String?> pinMaestro() async => maestro;
+
+  @override
+  Future<bool> esEncargada(String nombre) async => personas.values
+      .any((p) => p.rol == RolEnLaBarra.encargada && p.nombre.trim().toLowerCase() == nombre.trim().toLowerCase());
 }

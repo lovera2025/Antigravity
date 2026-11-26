@@ -1,0 +1,114 @@
+sin PIN la central no deja hacer nada
+lib/features/barra/central/central_barra.dart
+test/central_barra_permisos_test.dart
+          if (conexion.rol == null) {
+          if (false) {
+---
+la central compara la firma del PIN
+lib/features/barra/central/central_barra.dart
+test/central_barra_permisos_test.dart
+      if (esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+      if (esperada == null || prueba is! String) {
+---
+sin permiso de barra no entra
+lib/features/barra/central/central_barra.dart
+test/central_barra_permisos_test.dart
+      if (rol == null) {
+      if (false) {
+---
+la tablet comprueba que la central sea la de verdad
+lib/features/barra/central/cliente_de_la_central.dart
+test/central_barra_permisos_test.dart
+    if (esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+    if (false) {
+---
+la tablet no acepta filas antes de comprobar la central
+lib/features/barra/central/cliente_de_la_central.dart
+test/central_barra_permisos_test.dart
+      case 'filas' when _verificada:
+      case 'filas':
+---
+la cajera no anula
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/reglas_de_la_barra_test.dart test/central_barra_permisos_test.dart
+      r == RolEnLaBarra.encargada || r == RolEnLaBarra.jefe || r == RolEnLaBarra.central;
+      r == RolEnLaBarra.cajera || r == RolEnLaBarra.encargada || r == RolEnLaBarra.jefe || r == RolEnLaBarra.central;
+---
+cerrar pide el OK o haber cerrado sin esperar
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/reglas_de_la_barra_test.dart test/central_barra_permisos_test.dart
+    return e.aceptado || e.sinOk;
+    return true;
+---
+no se pisa lo que hizo otro aparato
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+      return yaEsta == null ? null : 'No se pisa lo que hizo otro aparato';
+      return null;
+---
+la encargada no se da el OK a su propia caja
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+          if (daElOk(rol) && caja != null && caja.operadorId != operadorId) return null;
+          if (daElOk(rol)) return null;
+---
+una venta no se cambia
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+        if (yaEsta != null) return 'Una venta no se cambia';
+
+---
+la cajera cambia el cambio una sola vez
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+            !manejaLaPlataDeLasCajas(rol) &&
+            false &&
+---
+el guardado: la cajera no anula
+lib/features/barra/central/barra_con_la_red.dart
+test/reglas_de_la_barra_test.dart
+    _tieneQue(ReglasDeLaBarra.anula, 'Anula solo la encargada');
+
+---
+el guardado: no cierra sin el OK
+lib/features/barra/central/barra_con_la_red.dart
+test/reglas_de_la_barra_test.dart
+      if (!ReglasDeLaBarra.puedeCerrar(rol(), caja.id, pasos)) {
+      if (false) {
+---
+la app pone la segunda llave
+lib/features/barra/providers/barra_del_jefe_provider.dart
+test/reglas_de_la_barra_test.dart
+    rolDeQuienUsa: () => ref.read(rolEnLaBarraProvider),
+
+---
+VENTAS de la cajera sin plata
+lib/features/barra/widgets/ventas_de_la_caja_screen.dart
+test/barra_ventas_test.dart
+                Text(conPlata ? '${pesos(v.cobrado)} · $medio' : medio, key: Key('cobro_$id'), style: tachado),
+                Text('${pesos(v.cobrado)} · $medio', key: Key('cobro_$id'), style: tachado),
+---
+en la tablet de la cajera, anular pide el PIN de la encargada
+lib/features/barra/widgets/ventas_de_la_caja_screen.dart
+test/barra_ventas_test.dart
+        if (!ReglasDeLaBarra.anula(rol)) {
+        if (false) {
+---
+LAS CAJAS no muestra la plata sin encargada o jefe
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+    if (!esJefe) {
+    if (false) {
+---
+su propia caja no se la aprueba la encargada con su PIN
+lib/features/barra/widgets/pin_de_la_encargada.dart
+test/barra_cerrar_test.dart
+    if (encontrado.operador.id == caja.operadorId) {
+    if (false) {
+---
+la encargada con su caja pide el OK: solo el jefe cierra sin pedir
+lib/features/barra/widgets/cerrar_caja_barra_screen.dart
+test/barra_cerrar_test.dart
+    final cierraSola = ref.read(rolEnLaBarraProvider) == RolEnLaBarra.jefe;
+    final cierraSola = ref.read(mandaEnLaBarraProvider);
+---

@@ -31,7 +31,7 @@ test/stock_por_barra_test.dart
 6. la barra de la caja se compara sin la clave (mayúsculas y espacios)
 lib/features/barra/cuentas/stock_por_barra.dart
 test/stock_por_barra_test.dart
-        if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: claveDeBarra(c.sede!),
+        if (barraDe(c.sede) case final b?) c.id: claveDeBarra(b),
         if (c.sede != null && c.sede!.trim().isNotEmpty) c.id: c.sede!,
 ---
 7. el conteo no se usa: vale solo la cuenta

@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../main.dart' show supabaseProvider;
+import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../central/barra_con_la_red.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_local.dart';
 import '../datos/barra_nube.dart';
 import '../datos/barra_repositorio.dart';
@@ -27,7 +29,24 @@ final avisoALaRedProvider = Provider<AvisoALaRed>((ref) => AvisoALaRed());
 /// La usan la cajera y, en la PC, el jefe.
 final barraDeEsteEquipoProvider = Provider<BarraConLaRed>((ref) {
   final base = BarraLocal();
-  return BarraConLaRed(caja: base, jefe: base, red: base, aviso: ref.watch(avisoALaRedProvider));
+  return BarraConLaRed(
+    caja: base,
+    jefe: base,
+    red: base,
+    aviso: ref.watch(avisoALaRedProvider),
+    // La segunda llave: lo que no le toca a quien usa este aparato no se guarda.
+    rolDeQuienUsa: () => ref.read(rolEnLaBarraProvider),
+  );
+});
+
+/// **Quién usa la barra en este aparato** (26-nov-2026): el jefe en modo jefe, o la
+/// cajera, la encargada o el repositor según su PIN y sus permisos. Null: nadie de la
+/// barra. Las pantallas y el guardado preguntan por acá ([ReglasDeLaBarra]).
+final rolEnLaBarraProvider = Provider<RolEnLaBarra?>((ref) {
+  if (ref.watch(esRolJefeProvider)) return RolEnLaBarra.jefe;
+  final estado = ref.watch(appRoleProvider);
+  if (!estado.esBarra) return null;
+  return ReglasDeLaBarra.dePermisos(estado.permisos);
 });
 
 /// La barra de la fiesta como la ve este equipo: en la PC y la tablet, la base y la

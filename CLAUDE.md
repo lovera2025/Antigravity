@@ -856,9 +856,33 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   ESTA NOCHE) y VENDER avisa si la caja es de otra noche o la hora de la tablet está corrida (`AvisoDeLaNoche`); el
   enganche tiene su propio id y la notebook que prende su central suelta su conexión de caja; prender, volver y
   apagar la central van de a uno; **`FiestasDelJefe.laQueAbre` es la de antes (ENTRADAS del cierre) y la barra usa
-  `laQueAbreEnLaBarra`**. Para confirmar con el usuario: la caja abierta antes del mediodía del día de la fiesta es
-  de la noche anterior.
+  `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
+
+**26-nov (tarde): la barra sólida y segura — el PIN en la central y quién puede qué, SIN PUBLICAR** (plan del 26-nov;
+el detalle y lo que falta en "Para retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). Su orden: la barra y sus
+permisos, las pantallas en la app de verdad, publicar; el plano impreso entero, después.
+- **Lo impreso dice la fecha y la hora reales** (el vale de la 01:30, "Sáb 05/12"); la caja sigue siendo de su noche.
+- **Quién puede qué en la barra: una sola regla, `ReglasDeLaBarra`** (`barra/cuentas/reglas_de_la_barra.dart`), con
+  el rol del aparato en **`rolEnLaBarraProvider`**. **La cajera no anula** (la encargada, desde su aparato o con su
+  PIN en la tablet: `laEncargadaAutoriza`, `anularConLaEncargada`), **no ve plata en VENTAS**, pone el cambio una sola
+  vez (si abrió sin cambio y no vendió); **la encargada no se aprueba su propia caja** (pide el OK; el jefe cierra sin
+  pedir); **LAS CAJAS no muestra nada sin encargada o jefe**. Una pantalla o un guardado nuevo de la barra pregunta
+  por `ReglasDeLaBarra`, nunca por el rol a mano.
+- **La segunda llave:** `BarraConLaRed(rolDeQuienUsa:)` tira `NoLeTocaEnLaBarra` si no le toca (anular, cerrar sin el
+  OK, el cambio, el catálogo); `barraDeEsteEquipoProvider` la pone siempre.
+- **La central de la barra pide el PIN** (`central/llave_de_la_barra.dart`): reto y firma, **el PIN no viaja**; la
+  central reconoce con `QuienEsQuienEnLaBarra` (los operadores y el PIN maestro de esa notebook) y firma de vuelta
+  (una notebook de afuera no se hace pasar por la central). Sin PIN no recibe ni guarda nada. **El jefe y el enganche
+  entre centrales entran con el PIN maestro: el mismo en las dos notebooks.** De cada aparato acepta solo lo que le
+  toca (`ReglasDeLaBarra.porQueNoSeGuarda`); lo demás va a `CentralBarra.rechazos`. **Toda prueba o ventana que arme
+  la central le pasa `quienEsQuien`, y cada cliente su `credencial`** (`QuienEsQuienEnMemoria`, en
+  `test/helpers/barra_en_memoria.dart`; las ventanas, `personasDelSalon` de `tool/salon_de_barra_prueba.dart`).
+- **Se reconecta sola al volver al wifi** (`VigiaDeLaRed`; los sockets de la búsqueda se reabren solos). El botón
+  PRENDER / APAGAR LA CENTRAL queda como está.
+- **El stock cruza sin internet** (`barra_stock_*` en `tablasDeLaRed`) y **se cuenta por noche:
+  `StockPorBarra.deLaNoche`**.
+- Roturas: `tool/roturas_permisos_barra.txt` (19), `tool/roturas_reconexion.txt` (6), `tool/roturas_stock_por_noche.txt` (5).
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

@@ -595,11 +595,13 @@ void main() {
       expect(apagado(tester, 'jefe_lista_pdf'), isFalse, reason: 'mirar y sacar la lista sí');
     });
 
-    testWidgets('en CAJAS se ven las ventas, pero anular y reimprimir quedan apagados', (tester) async {
+    // 26-nov-2026: la plata de las cajas la ven solo la encargada y el jefe (antes, sin
+    // modo jefe, CAJAS mostraba las ventas con anular y reimprimir apagados).
+    testWidgets('CAJAS no muestra la plata: lo dice', (tester) async {
       hoy = DateTime(2026, 12, 4, 23); // la noche de las ventas
       final b = prueba.barra;
       final caja = await b.abrirCaja(eventoId: pinaroli.id, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
-      final v = await b.vender(
+      await b.vender(
         caja: caja,
         renglones: [RenglonVenta(productoId: fernet.id, nombre: fernet.nombre, precio: 6000, cantidad: 1)],
         medio: MedioBarra.efectivo,
@@ -607,9 +609,9 @@ void main() {
         quien: 'Marta',
       );
       await abrir(tester, esJefe: false, pestana: PestanaBarraJefe.cajas);
-      await tocar(tester, find.byKey(Key('jefe_caja_${caja.id}')));
-      expect(apagado(tester, 'jefe_anular_${v.id}'), isTrue);
-      expect(apagado(tester, 'jefe_reimprimir_${v.id}'), isTrue);
+      expect(find.byKey(const Key('cajas_sin_permiso')), findsOneWidget);
+      expect(find.byKey(Key('jefe_caja_${caja.id}')), findsNothing);
+      expect(find.textContaining(r'$'), findsNothing);
     });
   });
 

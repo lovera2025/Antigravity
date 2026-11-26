@@ -478,20 +478,20 @@ void main() {
 
       // Un PIN que no es de nadie, y el de un cajero común: ninguno sirve.
       await tocar(tester, porClave('cierre_encargada_aca'));
-      await tester.enterText(porClave('pin_encargada'), '0000');
-      await tocar(tester, porClave('pin_seguir'));
+      await tester.enterText(porClave('pin_de_la_encargada'), '0000');
+      await tocar(tester, porClave('pin_de_la_encargada_listo'));
       expect(texto(tester, 'cierre_aviso'), 'Ese PIN no es de nadie.');
       await tocar(tester, porClave('cierre_encargada_aca'));
-      await tester.enterText(porClave('pin_encargada'), '4444');
-      await tocar(tester, porClave('pin_seguir'));
+      await tester.enterText(porClave('pin_de_la_encargada'), '4444');
+      await tocar(tester, porClave('pin_de_la_encargada_listo'));
       expect(texto(tester, 'cierre_aviso'), 'Ese PIN no es de una encargada de barra.');
       expect(find.byType(OkDelCierreDialog), findsNothing);
       expect(guardada().abierta, isTrue);
 
       // El de la encargada: ahí sí se ven los totales.
       await tocar(tester, porClave('cierre_encargada_aca'));
-      await tester.enterText(porClave('pin_encargada'), '7777');
-      await tocar(tester, porClave('pin_seguir'));
+      await tester.enterText(porClave('pin_de_la_encargada'), '7777');
+      await tocar(tester, porClave('pin_de_la_encargada_listo'));
       expect(texto(tester, 'ok_cierre_titulo'), 'La Caja 2 (Marta) pide cerrar');
       expect(texto(tester, 'ok_cierre_ventas'), '2 ventas');
       expect(texto(tester, 'ok_cierre_esperado'), r'$ 27.000');
@@ -513,8 +513,8 @@ void main() {
       await irACerrar(tester);
       await contarYPedir(tester, '20000');
       await tocar(tester, porClave('cierre_encargada_aca'));
-      await tester.enterText(porClave('pin_encargada'), '7777');
-      await tocar(tester, porClave('pin_seguir'));
+      await tester.enterText(porClave('pin_de_la_encargada'), '7777');
+      await tocar(tester, porClave('pin_de_la_encargada_listo'));
       await tocar(tester, porClave('ok_cierre_recontar'));
       expect(guardada().abierta, isTrue);
       expect(pasos().last.tipo, TipoPasoDelCierre.recontar);
@@ -610,18 +610,26 @@ void main() {
       expect(prueba.barra.cajasGuardadas.firstWhere((c) => c.id == caja.id).abierta, isTrue);
     });
 
-    testWidgets('la encargada con su propia caja cierra sin pedirle el OK a nadie', (tester) async {
+    // 26-nov-2026: su propia caja no se la aprueba ella (antes cerraba sin pedir nada).
+    testWidgets('la encargada con su propia caja pide el OK como cualquiera, y con su PIN no se lo aprueba', (tester) async {
+      operadores.permisos.poner(_marta, const PermisosEfectivos(barra: true, encargadaBarra: true));
       await abrir(tester, encargada: true);
       await irACerrar(tester);
       await tester.enterText(porClave('cierre_contado'), '27000');
       await tester.pumpAndSettle();
       await tocar(tester, porClave('cierre_cerrar'));
-      expect(texto(tester, 'cierre_que_pasa'), contains('La caja se cierra con ese número'));
+      expect(texto(tester, 'cierre_que_pasa'), contains('se le pide el cierre a la encargada'));
       await tocar(tester, porClave('cierre_confirmar'));
-      expect(guardada().abierta, isFalse);
-      expect(pasos(), isEmpty, reason: 'sin pedido');
-      expect(guardada().notaCierre, isNull);
-      expect(texto(tester, 'cierre_diferencia'), 'Justo, sin diferencia');
+      expect(guardada().abierta, isTrue, reason: 'espera el OK');
+      expect(pasos().single.tipo, TipoPasoDelCierre.pedido);
+
+      // Con su propio PIN, en su tablet: no.
+      await tocar(tester, porClave('cierre_encargada_aca'));
+      await tester.enterText(porClave('pin_de_la_encargada'), '5555');
+      await tocar(tester, porClave('pin_de_la_encargada_listo'));
+      expect(texto(tester, 'cierre_aviso'), 'Tu propia caja la aprueba el jefe.');
+      expect(find.byType(OkDelCierreDialog), findsNothing);
+      expect(guardada().abierta, isTrue);
     });
 
     for (final (nombre, tamano) in [
@@ -634,8 +642,8 @@ void main() {
         await contarYPedir(tester, '26500');
         expect(tester.takeException(), isNull);
         await tocar(tester, porClave('cierre_encargada_aca'));
-        await tester.enterText(porClave('pin_encargada'), '7777');
-        await tocar(tester, porClave('pin_seguir'));
+        await tester.enterText(porClave('pin_de_la_encargada'), '7777');
+        await tocar(tester, porClave('pin_de_la_encargada_listo'));
         expect(find.byType(OkDelCierreDialog), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tocar(tester, porClave('ok_cierre_despues'));

@@ -5,9 +5,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../cuentas/reglas_de_la_barra.dart';
+import '../datos/barra_repositorio.dart';
 import 'buscar_central.dart';
 import 'cliente_de_la_central.dart';
 import 'filas_de_la_red.dart';
+import 'llave_de_la_barra.dart';
 
 /// El puerto de la central de la barra. Si está ocupado se prueban los siguientes nueve.
 /// La de la puerta usa 8787 a 8796: no se pisan, y las dos pueden ir en la misma PC.
@@ -119,11 +122,28 @@ class CentralBarra {
   CentralBarra({
     required this.eventoId,
     required BarraDeLaRed barra,
+    required QuienEsQuienEnLaBarra quienEsQuien,
     this.alGuardar,
     this.barraDelSalon,
     DateTime Function()? ahora,
+    this.esperaDelPin = const Duration(seconds: 10),
   })  : _barra = barra,
+        _quienEsQuien = quienEsQuien,
         _ahora = ahora ?? DateTime.now;
+
+  /// Quién es quién: los operadores y el PIN maestro de esta notebook (26-nov-2026).
+  final QuienEsQuienEnLaBarra _quienEsQuien;
+
+  /// Cuánto espera que un aparato que se conecta pruebe su PIN.
+  final Duration esperaDelPin;
+
+  /// Lo que llegó por el wifi y no se guardó, con el motivo (los últimos 200): para que el
+  /// jefe lo vea y para las pruebas.
+  final rechazos = <RechazoDeLaCentral>[];
+  final _cambiosDeRechazos = StreamController<void>.broadcast();
+
+  /// Avisa cuando la central no guardó algo que le mandaron.
+  Stream<void> get cambiosDeRechazos => _cambiosDeRechazos.stream;
 
   final String eventoId;
 
@@ -189,6 +209,7 @@ class CentralBarra {
   void engancharConOtras({
     required String equipo,
     required BuscaCentral buscador,
+    required Future<CredencialDeLaBarra?> Function() credencial,
     WebSocketChannel Function(Uri)? abrir,
     Duration latido = const Duration(seconds: 5),
     Duration silencioMaximo = const Duration(seconds: 12),
@@ -198,6 +219,7 @@ class CentralBarra {
     if (_puente != null) return;
     final puente = ClienteDeLaCentral(
       cambiosDeRed: cambiosDeRed,
+      credencial: credencial,
       eventoId: eventoId,
       // Su propio id, distinto del de esta notebook: si en esta notebook quedara también
       // una caja conectada a la otra central, la otra no los confunde ni los echa por turno
@@ -276,6 +298,7 @@ class CentralBarra {
     await _servidor?.close(force: true);
     _servidor = null;
     await _cambiosDeCajas.close();
+    await _cambiosDeRechazos.close();
   }
 
   // ── Lo que llega por la red ───────────────────────────────────────────────
@@ -296,16 +319,16 @@ class CentralBarra {
       }
       final equipo = datos['equipo']?.trim() ?? '';
       final nombre = datos['caja']?.trim() ?? '';
-      if (equipo.isEmpty || equipo.length > 64 || nombre.isEmpty || nombre.length > 60) {
+      final retoDeLaCaja = datos['r']?.trim() ?? '';
+      if (equipo.isEmpty ||
+          equipo.length > 64 ||
+          nombre.isEmpty ||
+          nombre.length > 60 ||
+          retoDeLaCaja.length < 16 ||
+          retoDeLaCaja.length > 64) {
         ws.add(jsonEncode({'t': 'faltanDatos'}));
         await ws.close(4002, 'faltan datos');
         return;
-      }
-      // Si la misma tablet vuelve (se cortó el wifi), la conexión vieja puede seguir
-      // colgada un rato: se cierra.
-      for (final vieja in _conexiones.where((c) => c.equipo == equipo).toList()) {
-        _conexiones.remove(vieja);
-        unawaited(vieja.cerrar(4003, 'reemplazada'));
       }
       ws.pingInterval = const Duration(seconds: 5);
       final barra = datos['barra']?.trim();
@@ -316,23 +339,102 @@ class CentralBarra {
         barra: barra == null || barra.isEmpty || barra.length > 40 ? null : barra,
         esCentral: datos['central'] == '1',
       );
-      _conexiones.add(conexion);
-      _anotar(conexion, conectada: true);
+      // **Primero el PIN** (26-nov-2026): hasta probarlo no recibe nada ni se guarda nada
+      // de lo que mande. Tampoco echa a la tablet de verdad que tenga ese mismo equipo.
+      final reto = LlaveDeLaBarra.reto();
       ws.listen(
-        (mensaje) => _mensaje(conexion, mensaje),
+        (mensaje) {
+          if (conexion.rol == null) {
+            unawaited(_probarElPin(conexion, mensaje, reto: reto, retoDeLaCaja: retoDeLaCaja));
+          } else {
+            _mensaje(conexion, mensaje);
+          }
+        },
         onDone: () => _seFue(conexion),
         onError: (Object _) => _seFue(conexion),
         cancelOnError: true,
       );
-      // Todo lo de la fiesta, de todas las cajas: la que vuelve de un corte se pone al día.
-      final todo = await _encolar(() => _barra.filasDeLaFiesta(eventoId));
-      conexion.mandar(jsonEncode({'t': 'filas', 'filas': todo}));
+      ws.add(jsonEncode({'t': 'reto', 'n': reto}));
+      Timer(esperaDelPin, () {
+        if (conexion.rol == null) unawaited(conexion.cerrar(4005, 'sin PIN'));
+      });
     } catch (e) {
       debugPrint('Central de la barra, pedido ${pedido.uri.path}: $e');
       try {
         pedido.response.statusCode = HttpStatus.internalServerError;
         await pedido.response.close();
       } catch (_) {}
+    }
+  }
+
+  /// La respuesta al reto: quién es y su firma. Si da, entra con su rol, recibe todo lo
+  /// de la fiesta y la central le firma su reto. Si no, se cierra (4006 o 4007).
+  Future<void> _probarElPin(
+    _Conexion conexion,
+    dynamic mensaje, {
+    required String reto,
+    required String retoDeLaCaja,
+  }) async {
+    if (conexion.probando || conexion.rol != null) return;
+    conexion.probando = true;
+    try {
+      final Object? json = mensaje is String && mensaje.length < 4096 ? jsonDecode(mensaje) : null;
+      if (json is! Map || json['t'] != 'soy') {
+        await conexion.cerrar(4005, 'sin PIN');
+        return;
+      }
+      final quien = json['quien'], prueba = json['prueba'];
+      List<int>? llave;
+      RolEnLaBarra? rol;
+      String? operadorId;
+      if (quien == 'operador' && json['id'] is String) {
+        final persona = await _quienEsQuien.operador(json['id'] as String);
+        if (persona != null) {
+          llave = LlaveDeLaBarra.deOperador(persona.pin);
+          rol = persona.rol;
+          operadorId = persona.id;
+        }
+      } else if (quien == 'maestro') {
+        final pin = await _quienEsQuien.pinMaestro();
+        if (pin != null && pin.isNotEmpty) {
+          llave = LlaveDeLaBarra.deMaestro(pin);
+          rol = conexion.esCentral ? RolEnLaBarra.central : RolEnLaBarra.jefe;
+        }
+      }
+      final esperada = llave == null
+          ? null
+          : LlaveDeLaBarra.firma(llave, lado: 'caja', reto: reto, evento: eventoId, equipo: conexion.equipo);
+      if (esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+        await conexion.cerrar(4006, 'PIN no reconocido');
+        return;
+      }
+      if (rol == null) {
+        await conexion.cerrar(4007, 'sin permiso de barra');
+        return;
+      }
+      conexion.rol = rol;
+      conexion.operadorId = operadorId;
+      // Si la misma tablet vuelve (se cortó el wifi), la conexión vieja puede seguir
+      // colgada un rato: se cierra. Recién ahora, con el PIN probado.
+      for (final vieja in _conexiones.where((c) => c.equipo == conexion.equipo).toList()) {
+        _conexiones.remove(vieja);
+        unawaited(vieja.cerrar(4003, 'reemplazada'));
+      }
+      _conexiones.add(conexion);
+      _anotar(conexion, conectada: true);
+      conexion.mandar(jsonEncode({
+        't': 'adelante',
+        'rol': rol.name,
+        'prueba': LlaveDeLaBarra.firma(llave!, lado: 'central', reto: retoDeLaCaja, evento: eventoId, equipo: conexion.equipo),
+      }));
+      // Todo lo de la fiesta, de todas las cajas: la que vuelve de un corte se pone al día.
+      final todo = await _encolar(() => _barra.filasDeLaFiesta(eventoId));
+      conexion.mandar(jsonEncode({'t': 'filas', 'filas': todo}));
+    } catch (e) {
+      debugPrint('Central de la barra: no se pudo probar el PIN: $e');
+      await conexion.cerrar(4006, 'PIN no reconocido');
+    } finally {
+      conexion.probando = false;
     }
   }
 
@@ -402,17 +504,56 @@ class CentralBarra {
     }
   }
 
-  /// Guarda lo que mandó una caja y les pasa a las demás solo lo que era nuevo.
+  /// En qué orden se revisa lo que llega junto: los pasos del cierre antes que las cajas
+  /// (una caja se cierra con su OK), y las cajas antes que sus ventas.
+  static const _enOrden = [
+    'barra_cierres',
+    'barra_cajas',
+    'barra_ventas',
+    'barra_vales',
+    'barra_anulaciones',
+    'barra_stock_barras',
+    'barra_stock_movimientos',
+  ];
+
+  /// Guarda lo que mandó una caja **si le toca a quien la manda** ([ReglasDeLaBarra]) y
+  /// les pasa a las demás solo lo que era nuevo. Lo que no le toca no se guarda ni se
+  /// reparte: queda en [rechazos] y se le avisa a ese aparato.
   Future<void> _recibir(_Conexion de, Map<dynamic, dynamic> filas) async {
+    final rol = de.rol;
+    if (rol == null) return;
     final nuevas = await _encolar(() async {
       final nuevas = <String, List<Map<String, Object?>>>{};
-      for (final tabla in tablasDeLaRed) {
+      // Las cajas que vienen en el mismo envío, para saber de quién es cada venta o paso.
+      final cajasDelEnvio = <String, CajaBarra>{};
+      final listaDeCajas = filas['barra_cajas'];
+      if (listaDeCajas is List) {
+        for (final f in listaDeCajas) {
+          if (!filaDeLaFiesta('barra_cajas', f, eventoId)) continue;
+          try {
+            final c = CajaBarra.fromMap(Map<String, dynamic>.from(f as Map));
+            cajasDelEnvio[c.id] = c;
+          } catch (_) {}
+        }
+      }
+      final orden = [..._enOrden, for (final t in tablasDeLaRed) if (!_enOrden.contains(t)) t];
+      for (final tabla in orden) {
+        if (!tablasDeLaRed.contains(tabla)) continue;
         final lista = filas[tabla];
         if (lista is! List) continue;
         for (final f in lista) {
           if (!filaDeLaFiesta(tabla, f, eventoId)) continue;
           final fila = Map<String, Object?>.from(f as Map);
           try {
+            final id = fila['id'] as String;
+            final yaEsta = await _barra.filaDeLaRed(tabla, id);
+            // Lo que no cambia nada no se revisa ni se rechaza: es lo que ya estaba.
+            if (yaEsta != null && !cambiaLaFila(nueva: fila, vieja: yaEsta)) continue;
+            final motivo = await _porQueNo(de, rol, tabla, fila, yaEsta, cajasDelEnvio);
+            if (motivo != null) {
+              _rechazar(de, tabla, id, motivo);
+              continue;
+            }
             if (await _barra.guardarDeOtroEquipo(tabla, fila)) {
               (nuevas[tabla] ??= []).add(fila);
             }
@@ -430,12 +571,92 @@ class CentralBarra {
     _puente?.enviarFilas(nuevas);
   }
 
+  Future<String?> _porQueNo(
+    _Conexion de,
+    RolEnLaBarra rol,
+    String tabla,
+    Map<String, Object?> fila,
+    Map<String, Object?>? yaEsta,
+    Map<String, CajaBarra> cajasDelEnvio,
+  ) async {
+    if (rol == RolEnLaBarra.jefe || rol == RolEnLaBarra.central) return null;
+    final cajaId = tabla == 'barra_cajas' ? fila['id'] : fila['caja_barra_id'];
+    CajaBarra? caja;
+    if (cajaId is String) {
+      final enLaBase = await _barra.filaDeLaRed('barra_cajas', cajaId);
+      caja = enLaBase != null ? CajaBarra.fromMap(Map<String, dynamic>.from(enLaBase)) : cajasDelEnvio[cajaId];
+    }
+    var pasos = const <PasoDelCierre>[];
+    if (tabla == 'barra_cajas' && yaEsta != null && yaEsta['cerrada_at'] == null && fila['cerrada_at'] != null) {
+      final todo = await _barra.filasDeLaFiesta(eventoId);
+      pasos = [
+        for (final p in todo['barra_cierres'] ?? const <Map<String, Object?>>[])
+          if (p['caja_barra_id'] == cajaId) PasoDelCierre.fromMap(Map<String, dynamic>.from(p)),
+      ];
+    }
+    var deUnaEncargada = false;
+    if ((tabla == 'barra_cierres' || tabla == 'barra_anulaciones') && caja != null) {
+      final firma = (fila['hecho_por'] as String?)?.trim() ?? '';
+      deUnaEncargada = firma.isNotEmpty &&
+          firma != (caja.operadorNombre ?? '').trim() &&
+          await _quienEsQuien.esEncargada(firma);
+    }
+    return ReglasDeLaBarra.porQueNoSeGuarda(
+      tabla: tabla,
+      fila: fila,
+      rol: rol,
+      equipo: de.equipo,
+      operadorId: de.operadorId,
+      yaEsta: yaEsta,
+      caja: caja,
+      pasos: pasos,
+      hechoPorUnaEncargada: deUnaEncargada,
+    );
+  }
+
+  void _rechazar(_Conexion de, String tabla, String id, String motivo) {
+    debugPrint('Central de la barra: no se guardó $tabla $id de ${de.nombre}: $motivo');
+    rechazos.add(RechazoDeLaCentral(
+      cuando: _ahora(),
+      equipo: de.equipo,
+      nombre: de.nombre,
+      tabla: tabla,
+      id: id,
+      motivo: motivo,
+    ));
+    if (rechazos.length > 200) rechazos.removeAt(0);
+    if (!_cambiosDeRechazos.isClosed) _cambiosDeRechazos.add(null);
+    de.mandar(jsonEncode({'t': 'rechazada', 'tabla': tabla, 'id': id, 'motivo': motivo}));
+  }
+
   void _mandarATodas(Map<String, List<Map<String, Object?>>> filas, {_Conexion? menos}) {
     final texto = jsonEncode({'t': 'filas', 'filas': filas});
     for (final c in _conexiones) {
       if (!identical(c, menos)) c.mandar(texto);
     }
   }
+}
+
+/// Algo que llegó por el wifi y la central no guardó, con el motivo.
+@immutable
+class RechazoDeLaCentral {
+  final DateTime cuando;
+  final String equipo;
+
+  /// "Caja 2 · Sofía": lo que dijo el aparato.
+  final String nombre;
+  final String tabla;
+  final String id;
+  final String motivo;
+
+  const RechazoDeLaCentral({
+    required this.cuando,
+    required this.equipo,
+    required this.nombre,
+    required this.tabla,
+    required this.id,
+    required this.motivo,
+  });
 }
 
 class _Conexion {
@@ -446,6 +667,11 @@ class _Conexion {
   final String nombre;
   final String? barra;
   final bool esCentral;
+
+  /// Quién puso su PIN en ese aparato. Null: todavía no lo probó (no recibe ni manda).
+  RolEnLaBarra? rol;
+  String? operadorId;
+  bool probando = false;
 
   void mandar(String mensaje) {
     try {

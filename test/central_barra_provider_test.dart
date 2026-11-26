@@ -11,6 +11,8 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/linea_de_la_caja.dart';
+import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/central/vigia_de_la_red.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
@@ -53,10 +55,22 @@ Future<void> hasta(bool Function() listo, {String? que}) async {
   }
 }
 
+/// Quién es quién: el mismo en todos los equipos de la prueba (los operadores bajaron
+/// con internet). Cada equipo entra con la persona `op-<equipo>`; la del nombre con
+/// "encargada" es encargada.
+late QuienEsQuienEnMemoria _personas;
+
+CredencialDeLaBarra _credencialDe(String equipo) => _personas.persona(
+      'op-$equipo',
+      equipo,
+      rol: equipo.contains('encargada') ? RolEnLaBarra.encargada : RolEnLaBarra.cajera,
+    );
+
 void main() {
   late int puertoBusqueda;
 
   setUp(() async {
+    _personas = QuienEsQuienEnMemoria();
     SharedPreferences.setMockInitialValues({});
     final s = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
     puertoBusqueda = s.port;
@@ -90,6 +104,9 @@ void main() {
       direccionesCentralBarraProvider.overrideWithValue(direcciones ?? () async => ['192.168.0.10']),
       equipoDeLaBarraProvider.overrideWithValue(elEquipo ?? () async => id),
       guardadoDeLaCentralProvider.overrideWithValue(guardado),
+      quienEsQuienEnLaBarraProvider.overrideWithValue(_personas),
+      credencialDeLaBarraProvider.overrideWithValue(() async => _credencialDe(id)),
+      credencialDeLaCentralProvider.overrideWithValue(() async => _personas.credencialDelJefe),
       ...mas,
     ]);
     addTearDown(c.dispose);
@@ -147,7 +164,7 @@ void main() {
     final barra = tablet.c.read(barraDeEsteEquipoProvider);
     final caja = await barra.abrirCaja(
       eventoId: _fiesta,
-      operadorId: UuidUtils.generate(),
+      operadorId: 'op-tablet-a',
       operadorNombre: 'Marta',
       numeroCaja: 1,
     );
@@ -284,7 +301,7 @@ void main() {
       final barraCajera = cajera.c.read(barraDeEsteEquipoProvider);
       final caja = await barraCajera.abrirCaja(
         eventoId: _fiesta,
-        operadorId: UuidUtils.generate(),
+        operadorId: 'op-tablet-cajera',
         operadorNombre: 'Marta',
         numeroCaja: 1,
       );

@@ -243,12 +243,16 @@ class _AvisoDePedidosDeCierreState extends ConsumerState<AvisoDePedidosDeCierre>
     try {
       final barra = ref.read(barraDelJefeProvider);
       final pasos = await barra.pasosDelCierre(widget.eventoId);
+      // **Su propia caja no se la aprueba ella** (26-nov-2026): a la encargada no le salta
+      // el pedido de la caja que abrió ella; ese OK lo da el jefe.
+      final esJefe = ref.read(esRolJefeProvider);
+      final yo = ref.read(appRoleProvider).operador?.id;
       // Sin ningún pedido no hace falta leer las cajas: lo de casi toda la noche.
       final enPie = pasos.isEmpty
           ? const <PedidoEnPie>[]
           : [
               for (final x in PedidoDeCierre.enPie(await barra.cajas(widget.eventoId), pasos))
-                if (x.caja.id != widget.exceptoCajaId) x,
+                if (x.caja.id != widget.exceptoCajaId && (esJefe || yo == null || x.caja.operadorId != yo)) x,
             ];
       if (!mounted) return;
       final nuevos = [for (final x in enPie) if (_yaSonaron.add(x.pedido.id)) x];

@@ -18,6 +18,7 @@ import 'helpers/operadores_en_memoria.dart';
 /// VENTAS reimprime con freno (la última venta, una vez, con motivo y COPIA), imprime lo
 /// que no salió, saca el ticket con precios (sin logo) y anula con motivo.
 const _marta = 'a0000000-0000-4000-8000-000000000001';
+const _romi = 'a0000000-0000-4000-8000-000000000002';
 
 void main() {
   late OperadoresEnPrueba operadores;
@@ -30,6 +31,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     operadores = OperadoresEnPrueba();
     operadores.operadores.lista.add(operadorDePrueba(_marta, 'Marta', '5555'));
+    // La encargada: anula con su PIN en la tablet de la cajera (26-nov-2026).
+    operadores.operadores.lista.add(operadorDePrueba(_romi, 'Romi', '7777'));
+    operadores.permisos.poner(_romi, const PermisosEfectivos(barra: true, encargadaBarra: true));
     prueba = BarraEnPrueba();
     fiesta = fiestaDePrueba(BarraEnPrueba.id(1), 'PUERTO VIEJO', DateTime.now().add(const Duration(days: 5)));
     prueba.eventos.add(fiesta);
@@ -53,7 +57,7 @@ void main() {
     ));
     final c = ProviderScope.containerOf(tester.element(find.byType(VenderScreen)));
     await c.read(appRoleProvider.notifier).entrarComoBarra(
-          operadores.operadores.lista.single,
+          operadores.operadores.lista.first,
           const PermisosEfectivos(barra: true),
         );
     await tester.pumpAndSettle();
@@ -99,6 +103,13 @@ void main() {
   Future<void> escribirMotivo(WidgetTester tester, String motivo) async {
     await tester.enterText(porClave('motivo_texto'), motivo);
     await tester.pumpAndSettle();
+  }
+
+  /// La encargada pone su PIN en la tablet de la cajera.
+  Future<void> pinDeLaEncargada(WidgetTester tester, String pin) async {
+    await tester.enterText(porClave('pin_de_la_encargada'), pin);
+    await tester.pumpAndSettle();
+    await tocar(tester, porClave('pin_de_la_encargada_listo'));
   }
 
   bool prendido(WidgetTester tester, String clave) =>
@@ -217,12 +228,15 @@ void main() {
       expect(prueba.barra.valesGuardados.where((v) => v.esCopia), hasLength(1));
     });
 
-    testWidgets('ANULAR con motivo: queda anotada, sube, y el stock vuelve', (tester) async {
+    // 26-nov-2026: anula la encargada, con su PIN en la tablet de la cajera (antes
+    // anulaba la cajera sola).
+    testWidgets('ANULAR con el PIN de la encargada y motivo: queda anotada, sube, y el stock vuelve', (tester) async {
       await abrir(tester);
       final venta = await venderConTodoJunto(tester);
       expect(find.text('Quedan 2'), findsOneWidget);
       await tocar(tester, porClave('vender_ventas'));
       await tocar(tester, porClave('anular_${venta.id}'));
+      await pinDeLaEncargada(tester, '7777');
       expect(prendido(tester, 'motivo_anular'), isFalse, reason: 'sin motivo no anula');
       await escribirMotivo(tester, 'se cobró dos veces');
       await tocar(tester, porClave('motivo_anular'));
@@ -230,7 +244,7 @@ void main() {
       final a = prueba.barra.anulacionesGuardadas.single;
       expect(a.ventaId, venta.id);
       expect(a.motivo, 'se cobró dos veces');
-      expect(a.hechoPor, 'Marta');
+      expect(a.hechoPor, 'Romi', reason: 'a nombre de la encargada que puso su PIN');
       expect(prueba.subidasDeLaBarra, contains('barra_anulaciones ${a.id}'));
       expect(texto(tester, 'anulada_${venta.id}'), 'ANULADA · se cobró dos veces');
       // Tachada, y la raya se ve: del color de la letra, no la casi negra del tema claro.
@@ -257,10 +271,33 @@ void main() {
       final venta = await venderConTodoJunto(tester);
       await tocar(tester, porClave('vender_ventas'));
       await tocar(tester, porClave('anular_${venta.id}'));
+      await pinDeLaEncargada(tester, '7777');
       await escribirMotivo(tester, 'no sé');
       await tocar(tester, find.text('CANCELAR'));
       expect(prueba.barra.anulacionesGuardadas, isEmpty);
       expect(porClave('anular_${venta.id}'), findsOneWidget);
+    });
+
+    testWidgets('la cajera sola no anula: su PIN no sirve, y sin PIN no pasa nada', (tester) async {
+      await abrir(tester);
+      final venta = await venderConTodoJunto(tester);
+      await tocar(tester, porClave('vender_ventas'));
+      await tocar(tester, porClave('anular_${venta.id}'));
+      await pinDeLaEncargada(tester, '5555');
+      expect(texto(tester, 'aviso_${venta.id}'), 'Ese PIN no es de una encargada de barra.');
+      expect(porClave('motivo_anular'), findsNothing);
+      expect(prueba.barra.anulacionesGuardadas, isEmpty);
+    });
+
+    testWidgets('la cajera no ve plata en VENTAS: el número, la hora, lo que llevó y cómo pagó', (tester) async {
+      await abrir(tester);
+      final venta = await venderConTodoJunto(tester);
+      await tocar(tester, porClave('vender_ventas'));
+      expect(texto(tester, 'cobro_${venta.id}'), 'Efectivo');
+      expect(
+        find.descendant(of: porClave('venta_${venta.id}'), matching: find.textContaining(r'$')),
+        findsNothing,
+      );
     });
 
     testWidgets('IMPRIMIR LO QUE FALTA: los vales que nunca salieron, como originales', (tester) async {

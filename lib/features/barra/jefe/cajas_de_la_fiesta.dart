@@ -456,8 +456,22 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
 
   @override
   Widget build(BuildContext context) {
-    final cajas = ref.watch(cajasDelJefeProvider(widget.fiesta.id));
     final esJefe = ref.watch(mandaEnLaBarraProvider);
+    // **LAS CAJAS, con la plata de todas, solo la encargada o el jefe** (26-nov-2026), se
+    // llegue por donde se llegue: no alcanza con esconder el botón.
+    if (!esJefe) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Las cajas, con la plata, las ve la encargada o el jefe en modo jefe.',
+            key: Key('cajas_sin_permiso'),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    final cajas = ref.watch(cajasDelJefeProvider(widget.fiesta.id));
     final enLaWeb = ref.watch(enLaWebProvider);
     final ahora = ref.watch(relojDelJefeProvider)();
     final estaNoche = DiaDeOperacion.de(ahora);

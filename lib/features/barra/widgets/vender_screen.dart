@@ -14,10 +14,12 @@ import '../cuentas/cobro_barra.dart';
 import '../cuentas/cuenta_barra.dart';
 import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
 import '../impresion/impresora_bluetooth.dart';
+import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/imagen_de_producto.dart';
 import '../services/pantalla_despierta.dart';
@@ -78,6 +80,9 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   List<ProductoEnVenta> _productos = const [];
   Map<String, StockDeProducto> _stock = const {};
   bool _cargando = true;
+
+  /// Si esta caja ya vendió algo: con eso la cajera ya no pone el cambio.
+  bool _vendioAlgo = false;
   CuentaBarra _cuenta = CuentaBarra.vacia;
   late CajaBarra _caja = widget.caja;
   final _buscador = TextEditingController();
@@ -141,6 +146,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() {
       _productos = productosParaVender(productos, precios, eventoId: widget.fiesta.id);
+      _vendioAlgo = ventas.any((v) => v.cajaBarraId == widget.caja.id);
       _stock = StockDeLaBarra.deLaNoche(
         eventoId: widget.fiesta.id,
         precios: precios,
@@ -255,6 +261,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     }
     unawaited(ref.read(subirVentaProvider)(venta));
     if (!mounted) return;
+    _vendioAlgo = true;
     _vaciar();
     // La pantalla de los vales es otra ruta: lleva el tema de VENDER a mano.
     final tema = Theme.of(context);
@@ -291,6 +298,14 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
       ),
     ));
     if (mounted) unawaited(_cargar());
+  }
+
+  /// **El cambio: la cajera una sola vez** (26-nov-2026), si abrió sin cambio y todavía
+  /// no vendió; después lo maneja la encargada. La encargada y el jefe, siempre.
+  bool get _poneElCambio {
+    final rol = ref.watch(rolEnLaBarraProvider);
+    if (ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol)) return true;
+    return ReglasDeLaBarra.cajeraPoneElCambio(_caja, yaVendio: _vendioAlgo);
   }
 
   Future<void> _ponerCambio() async {
@@ -363,10 +378,10 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
           ),
           IconButton(
             key: const Key('vender_cambio'),
-            tooltip: _caja.cambioInicial > 0
-                ? 'Cambio inicial: ${pesos(_caja.cambioInicial)}'
-                : 'Poner el cambio inicial',
-            onPressed: _ponerCambio,
+            tooltip: _poneElCambio
+                ? (_caja.cambioInicial > 0 ? 'Cambio inicial: ${pesos(_caja.cambioInicial)}' : 'Poner el cambio inicial')
+                : 'El cambio lo maneja la encargada',
+            onPressed: _poneElCambio ? _ponerCambio : null,
             icon: Badge(
               isLabelVisible: _caja.cambioInicial > 0,
               smallSize: 8,

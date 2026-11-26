@@ -12,11 +12,16 @@ import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 
 import 'helpers/barra_en_memoria.dart';
 
 const _fiesta = 'e0000000-0000-4000-8000-000000000001';
+
+/// Quién es quién: lo mismo en las dos notebooks (los operadores bajaron con internet), y
+/// el mismo PIN maestro, que es con lo que se enganchan las dos centrales.
+final _personas = QuienEsQuienEnMemoria();
 
 Future<void> hasta(bool Function() listo, {String? que, int segundos = 8}) async {
   final limite = DateTime.now().add(Duration(seconds: segundos));
@@ -68,12 +73,14 @@ class _Notebook {
     preguntaA
       ..clear()
       ..add(puertoBusqueda);
-    final c = CentralBarra(eventoId: _fiesta, barra: barra, barraDelSalon: barraDelSalon, ahora: ahora);
+    final c = CentralBarra(
+        eventoId: _fiesta, barra: barra, quienEsQuien: _personas, barraDelSalon: barraDelSalon, ahora: ahora);
     final puerto = await c.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     final r = RespondeBusqueda(eventoId: _fiesta, puertoCentral: puerto, barra: barraDelSalon, equipo: equipo);
     await r.escuchar(puerto: puertoBusqueda, en: InternetAddress.loopbackIPv4);
     c.engancharConOtras(
       equipo: equipo,
+      credencial: () async => _personas.credencialDelJefe,
       buscador: BuscaCentral(
         eventoId: _fiesta,
         cada: const Duration(milliseconds: 100),
@@ -104,7 +111,10 @@ class _Tablet {
   _Tablet(this.equipo, String nombre, {required String barraDeLaCaja, required List<int> pregunta, Duration espera = const Duration(seconds: 10)})
       : barra = BarraEnMemoria()..equipo = equipo {
     barra.reloj = () => DateTime.now().toUtc();
+    final cred = _personas.persona('op-$equipo', nombre.split('·').last.trim(),
+        rol: nombre.startsWith('Encargada') ? RolEnLaBarra.encargada : RolEnLaBarra.cajera);
     cliente = ClienteDeLaCentral(
+      credencial: () async => cred,
       eventoId: _fiesta,
       equipo: equipo,
       nombreCaja: nombre,
@@ -133,7 +143,7 @@ class _Tablet {
 
   Future<CajaBarra> abrir(int numero, String sede) => caja.abrirCaja(
         eventoId: _fiesta,
-        operadorId: UuidUtils.generate(),
+        operadorId: 'op-$equipo',
         operadorNombre: 'Cajera $numero',
         numeroCaja: numero,
         sede: sede,

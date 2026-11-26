@@ -10,6 +10,8 @@ import 'package:arguello_events/features/barra/central/vigia_de_la_red.dart';
 
 import 'helpers/barra_en_memoria.dart';
 
+late QuienEsQuienEnMemoria _personas;
+
 /// **La falla del 26-nov-2026**: el usuario probaba la barra con un aparato en otro wifi
 /// (no se actualizaba, bien). Al volver al wifi de la barra **siguió sin actualizarse
 /// hasta que apagó y prendió la central** en la notebook. Tiene que volver sola.
@@ -45,7 +47,8 @@ void main() {
   setUp(() async {
     notebook = BarraEnMemoria()..equipo = 'notebook';
     notebook.reloj = () => DateTime.now().toUtc();
-    central = CentralBarra(eventoId: _fiesta, barra: notebook);
+    _personas = QuienEsQuienEnMemoria();
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas);
     await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
     puertoBusqueda = await puertoLibre();
   });
@@ -74,7 +77,9 @@ void main() {
   ClienteDeLaCentral tablet(String equipo, BuscaCentral busca) {
     final barra = BarraEnMemoria()..equipo = equipo;
     barra.reloj = () => DateTime.now().toUtc();
+    final cred = _personas.persona('op-$equipo', equipo);
     final c = ClienteDeLaCentral(
+      credencial: () async => cred,
       eventoId: _fiesta,
       equipo: equipo,
       nombreCaja: 'Caja · $equipo',
@@ -185,7 +190,9 @@ void main() {
       addTearDown(cambios.close);
       final barra = BarraEnMemoria()..equipo = 'tablet-a';
       barra.reloj = () => DateTime.now().toUtc();
+      final cred = _personas.persona('op-a', 'Marta');
       final a = ClienteDeLaCentral(
+        credencial: () async => cred,
         eventoId: _fiesta,
         equipo: 'tablet-a',
         nombreCaja: 'Caja 1',
@@ -204,7 +211,7 @@ void main() {
       responde.cerrar();
       await central.cerrar();
       await hasta(() => a.estado == EstadoDeLaCentral.sinCentral, que: 'se dio cuenta');
-      central = CentralBarra(eventoId: _fiesta, barra: notebook);
+      central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas);
       await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
       final otra = contestar();
       expect(await otra.escuchar(puerto: puertoBusqueda, en: InternetAddress.loopbackIPv4), isTrue);

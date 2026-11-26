@@ -67,6 +67,10 @@ class AdminAuthNotifier extends Notifier<AdminAuthState> {
   /// ¿Es el PIN maestro de esta PC? Un operador no puede tener el mismo.
   Future<bool> esPinMaestro(String pin) async => pin == await _getPin();
 
+  /// El PIN maestro de esta PC: la central de la barra lo usa para reconocer al jefe y a
+  /// la central de la otra barra (sin mandarlo por la red: `LlaveDeLaBarra`).
+  Future<String> pinMaestroDeEstaPc() => _getPin();
+
   Future<bool> verifyAndLogin(String pin) async {
     final storedPin = await _getPin();
     if (pin == storedPin) {

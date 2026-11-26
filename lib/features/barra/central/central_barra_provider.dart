@@ -7,8 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/instalacion_id.dart';
 import '../../../core/services/pc_despierta.dart';
+import '../../caja_sesiones/models/modo_jefe_caja.dart';
+import '../../caja_sesiones/providers/app_role_provider.dart';
+import '../../caja_sesiones/repositories/operadores_caja_repository.dart';
+import '../../caja_sesiones/repositories/permisos_operador_repository.dart';
+import '../../common/providers/admin_provider.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../recepcion/central/direcciones_red.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../services/barras_del_salon.dart';
@@ -17,6 +23,7 @@ import 'buscar_central.dart';
 import 'central_barra.dart';
 import 'cliente_de_la_central.dart';
 import 'filas_de_la_red.dart';
+import 'llave_de_la_barra.dart';
 import 'vigia_de_la_red.dart';
 
 /// Si este equipo usa la red del salón (la central de la barra). En la web no; las
@@ -60,6 +67,57 @@ final direccionesCentralBarraProvider =
 /// Quién mira si este equipo cambió de red ([VigiaDeLaRed]); uno por central y por caja.
 /// Las pruebas lo reemplazan para cambiar la red a mano.
 final vigiaDeLaRedProvider = Provider<VigiaDeLaRed Function()>((ref) => VigiaDeLaRed.new);
+
+/// **Quién es quién para la central de esta notebook** (26-nov-2026): sus operadores con
+/// sus permisos y su PIN maestro. Con eso la central reconoce el PIN de cada aparato sin
+/// que el PIN viaje. Los tests lo reemplazan.
+final quienEsQuienEnLaBarraProvider = Provider<QuienEsQuienEnLaBarra>((ref) => QuienEsQuienDeLaApp(ref));
+
+class QuienEsQuienDeLaApp implements QuienEsQuienEnLaBarra {
+  QuienEsQuienDeLaApp(this._ref);
+  final Ref _ref;
+
+  @override
+  Future<PersonaDeLaBarra?> operador(String id) async {
+    final op = await _ref.read(operadoresCajaRepositoryProvider).getById(id);
+    if (op == null || !op.activo || esOperadorModoJefeId(op.id) || op.pin.trim().isEmpty) return null;
+    final permisos = await _ref.read(permisosOperadorRepositoryProvider).de(op.id);
+    return PersonaDeLaBarra(id: op.id, nombre: op.nombre, pin: op.pin, rol: ReglasDeLaBarra.dePermisos(permisos));
+  }
+
+  @override
+  Future<String?> pinMaestro() => _ref.read(adminAuthProvider.notifier).pinMaestroDeEstaPc();
+
+  @override
+  Future<bool> esEncargada(String nombre) async {
+    final buscado = nombre.trim().toLowerCase();
+    for (final op in await _ref.read(operadoresCajaRepositoryProvider).listar(soloActivos: true)) {
+      if (op.nombre.trim().toLowerCase() != buscado) continue;
+      if ((await _ref.read(permisosOperadorRepositoryProvider).de(op.id)).encargadaBarra) return true;
+    }
+    return false;
+  }
+}
+
+/// **Con qué PIN se conecta a la central la caja de este aparato**: el de quien entró a la
+/// barra (cajera o encargada) o, en modo jefe, el PIN maestro. Null: nadie puso su PIN, y
+/// la central no la deja entrar. Los tests lo reemplazan.
+final credencialDeLaBarraProvider = Provider<Future<CredencialDeLaBarra?> Function()>((ref) => () async {
+      final estado = ref.read(appRoleProvider);
+      final op = estado.operador;
+      if (estado.esBarra && op != null && op.pin.trim().isNotEmpty) {
+        return CredencialDeLaBarra.operador(op.id, op.pin);
+      }
+      if (ref.read(esRolJefeProvider)) {
+        return CredencialDeLaBarra.maestro(await ref.read(adminAuthProvider.notifier).pinMaestroDeEstaPc());
+      }
+      return null;
+    });
+
+/// Con qué se engancha esta central a la de la otra barra: el PIN maestro de esta
+/// notebook (las dos notebooks tienen que tener el mismo). Los tests lo reemplazan.
+final credencialDeLaCentralProvider = Provider<Future<CredencialDeLaBarra?> Function()>(
+    (ref) => () async => CredencialDeLaBarra.maestro(await ref.read(adminAuthProvider.notifier).pinMaestroDeEstaPc()));
 
 /// El id de este equipo, para que la central reconozca a la tablet cuando vuelve.
 final equipoDeLaBarraProvider = Provider<Future<String> Function()>((ref) => InstalacionId.inicializar);
@@ -263,6 +321,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     final central = CentralBarra(
       eventoId: eventoId,
       barra: ref.read(barraDeLaRedProvider),
+      quienEsQuien: ref.read(quienEsQuienEnLaBarraProvider),
       barraDelSalon: deLaBarra,
       alGuardar: () => ref.read(operationalSyncRevisionProvider.notifier).bump(),
     );
@@ -326,6 +385,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
         destinos: ref.read(destinosBusquedaBarraProvider),
       ),
       cambiosDeRed: vigia.cambios,
+      credencial: ref.read(credencialDeLaCentralProvider),
     );
     if (desdeElBoton) {
       unawaited(ref.read(guardadoDeLaCentralProvider).anotarPrendida(
@@ -475,6 +535,7 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     _vigia = vigia;
     final cliente = ClienteDeLaCentral(
       cambiosDeRed: vigia.cambios,
+      credencial: ref.read(credencialDeLaBarraProvider),
       eventoId: eventoId,
       equipo: equipo,
       nombreCaja: nombreCaja,

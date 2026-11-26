@@ -114,12 +114,16 @@ void main() {
     // El aparato de la encargada solo agrega su respuesta: nunca cierra la caja de otra.
     expect(ok, isNot(contains('cerrarCaja(')));
     expect(ok, isNot(contains("'barra_cajas'")));
-    // En la tablet de la cajera, el PIN tiene que ser de una encargada.
+    // En la tablet de la cajera, el PIN tiene que ser de una encargada, y no la dueña de
+    // esa caja (26-nov-2026): lo decide `laEncargadaAutoriza`, antes de mostrar los totales.
     final c = leer('lib/features/barra/widgets/cerrar_caja_barra_screen.dart');
     final i = c.indexOf('Future<void> _laEncargadaEstaAca() async {');
     final cuerpo = c.substring(i, c.indexOf('\n  }\n', i));
-    expect(cuerpo.indexOf('permisos.encargadaBarra'), greaterThan(0));
-    expect(cuerpo.indexOf('permisos.encargadaBarra'), lessThan(cuerpo.indexOf('mostrarOkDelCierre(')));
+    expect(cuerpo.indexOf('laEncargadaAutoriza('), greaterThan(0));
+    expect(cuerpo.indexOf('laEncargadaAutoriza('), lessThan(cuerpo.indexOf('mostrarOkDelCierre(')));
+    final pin = leer('lib/features/barra/widgets/pin_de_la_encargada.dart');
+    expect(pin, contains('permisos.encargadaBarra'));
+    expect(pin, contains('encontrado.operador.id == caja.operadorId'), reason: 'su propia caja la aprueba el jefe');
   });
 
   test('VENTAS ve solo las ventas de su caja, y anula desde la caja (no con lo del jefe)', () {

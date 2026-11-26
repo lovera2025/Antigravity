@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import 'filas_de_la_red.dart';
 
@@ -39,6 +40,7 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     required BarraDelJefe jefe,
     required BarraDeLaRed red,
     required this.aviso,
+    this.rolDeQuienUsa,
   })  : _caja = caja,
         _jefe = jefe,
         _red = red;
@@ -47,6 +49,18 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   final BarraDelJefe _jefe;
   final BarraDeLaRed _red;
   final AvisoALaRed aviso;
+
+  /// **La segunda llave** (26-nov-2026): quién está usando este aparato en la barra. Con
+  /// ella, lo que no le toca no se guarda aunque una pantalla lo deje ([ReglasDeLaBarra]).
+  /// La app la pone siempre (`barraDeEsteEquipoProvider`); null solo en las pruebas que
+  /// no miran permisos.
+  final RolEnLaBarra? Function()? rolDeQuienUsa;
+
+  void _tieneQue(bool Function(RolEnLaBarra? rol) puede, String siNo) {
+    final quien = rolDeQuienUsa;
+    if (quien == null) return;
+    if (!puede(quien())) throw NoLeTocaEnLaBarra(siNo);
+  }
 
   T _avisar<T>(String tabla, String id, T hecho) {
     aviso.avisar(tabla, id);
@@ -64,6 +78,7 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     String? sede,
     double cambioInicial = 0,
   }) async {
+    _tieneQue(ReglasDeLaBarra.abreCajaYVende, 'Abren caja la cajera y la encargada');
     final caja = await _caja.abrirCaja(
       eventoId: eventoId,
       operadorId: operadorId,
@@ -77,6 +92,13 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   @override
   Future<CajaBarra> ponerCambio(CajaBarra caja, double cambio, {required String quien}) async {
+    final rol = rolDeQuienUsa;
+    if (rol != null && !ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol())) {
+      final yaVendio = (await _caja.ventasDeLaCaja(caja.id)).isNotEmpty;
+      if (!ReglasDeLaBarra.abreCajaYVende(rol()) || !ReglasDeLaBarra.cajeraPoneElCambio(caja, yaVendio: yaVendio)) {
+        throw const NoLeTocaEnLaBarra('El cambio lo maneja la encargada');
+      }
+    }
     final hecho = await _caja.ponerCambio(caja, cambio, quien: quien);
     return _avisar('barra_cajas', hecho.id, hecho);
   }
@@ -93,6 +115,7 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     double? recargoPct,
     required String quien,
   }) async {
+    _tieneQue(ReglasDeLaBarra.abreCajaYVende, 'Venden la cajera y la encargada');
     final venta = await _caja.vender(
       caja: caja,
       renglones: renglones,
@@ -109,7 +132,16 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   @override
   Future<AnulacionBarra> anular(VentaBarra venta, {required String motivo, required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.anula, 'Anula solo la encargada');
     final hecho = await _caja.anular(venta, motivo: motivo, quien: quien);
+    return _avisar('barra_anulaciones', hecho.id, hecho);
+  }
+
+  /// **La encargada anula en la tablet de la cajera, con su PIN** (26-nov-2026). La
+  /// pantalla ya comprobó el PIN (`laEncargadaAutoriza`); queda a nombre de [encargada].
+  /// La central lo acepta de la tablet de esa caja solo si la firma es de una encargada.
+  Future<AnulacionBarra> anularConLaEncargada(VentaBarra venta, {required String motivo, required String encargada}) async {
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: encargada);
     return _avisar('barra_anulaciones', hecho.id, hecho);
   }
 
@@ -141,6 +173,14 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     String? nota,
     required String quien,
   }) async {
+    final rol = rolDeQuienUsa;
+    if (rol != null) {
+      // Cerrar exige el OK de la encargada (o haber cerrado sin esperar, con motivo).
+      final pasos = await _caja.pasosDelCierre(caja.eventoId);
+      if (!ReglasDeLaBarra.puedeCerrar(rol(), caja.id, pasos)) {
+        throw const NoLeTocaEnLaBarra('Falta el OK de la encargada');
+      }
+    }
     final hecho = await _caja.cerrarCaja(
       caja,
       efectivoContado: efectivoContado,
@@ -159,16 +199,22 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   }
 
   @override
-  Future<ProductoBarra> guardarProducto(ProductoBarra producto, {required String quien}) async =>
-      _escribio(await _jefe.guardarProducto(producto, quien: quien));
+  Future<ProductoBarra> guardarProducto(ProductoBarra producto, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.cambiaCatalogoYPrecios, 'El catálogo lo cambia el jefe');
+    return _escribio(await _jefe.guardarProducto(producto, quien: quien));
+  }
 
   @override
-  Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async =>
-      _escribio(await _jefe.guardarPrecio(precio, quien: quien));
+  Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.cambiaCatalogoYPrecios, 'Los precios los cambia el jefe');
+    return _escribio(await _jefe.guardarPrecio(precio, quien: quien));
+  }
 
   @override
-  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async =>
-      _escribio(await _jefe.guardarRecargo(recargo, quien: quien));
+  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.cambiaCatalogoYPrecios, 'El recargo lo cambia el jefe');
+    return _escribio(await _jefe.guardarRecargo(recargo, quien: quien));
+  }
 
   @override
   Future<List<CajaBarra>> cajas(String eventoId) => _jefe.cajas(eventoId);

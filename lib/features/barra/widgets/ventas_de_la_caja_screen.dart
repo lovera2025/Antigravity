@@ -4,13 +4,17 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../central/barra_con_la_red.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../cuentas/reimpresion_de_barra.dart';
 import '../cuentas/silla_de_la_puerta.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
+import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/papel_de_la_barra.dart';
+import 'pin_de_la_encargada.dart';
 import 'vales_de_la_venta_screen.dart';
 
 /// VENTAS: las ventas de la caja de la cajera, la última arriba. Con cada una:
@@ -165,11 +169,27 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
 
   // ── Anular ────────────────────────────────────────────────────────────────
 
+  /// **Anula la encargada** (26-nov-2026): en la tablet de la cajera, con su PIN; la
+  /// cajera sola no anula. La encargada (o el jefe) con su propia caja, directo.
   Future<void> _anular(VentaDeLaCaja x) => _conFreno(() async {
+        final rol = ref.read(rolEnLaBarraProvider);
+        String? encargada;
+        if (!ReglasDeLaBarra.anula(rol)) {
+          encargada = await laEncargadaAutoriza(
+            context,
+            ref,
+            caja: widget.caja,
+            titulo: 'Anula la encargada',
+            explicacion: 'Que la encargada ponga su PIN para anular la N° ${_numero(x.venta)}.',
+            decir: (m) => _decir(x.venta, m, error: true),
+          );
+          if (encargada == null || !mounted) return;
+        }
         final conSilla = x.venta.renglones.any((r) => esSillaDeLaPuerta(r.nombre));
+        final conPlata = ReglasDeLaBarra.veLaPlataDeTodas(rol) || encargada != null;
         final motivo = await pedirMotivo(
           context,
-          titulo: 'Anular la N° ${_numero(x.venta)} · ${pesos(x.venta.cobrado)}',
+          titulo: 'Anular la N° ${_numero(x.venta)}${conPlata ? ' · ${pesos(x.venta.cobrado)}' : ''}',
           explicacion: 'Deja de contar en la caja y en el stock. No se puede deshacer, y queda '
               'anotado con tu nombre y el motivo.'
               '${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
@@ -181,9 +201,12 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
         if (motivo == null || !mounted) return;
         final AnulacionBarra anulacion;
         try {
-          anulacion = await ref
-              .read(barraDeLaCajaProvider)
-              .anular(x.venta, motivo: motivo, quien: quienEnLaBarra(ref, widget.caja));
+          final barra = ref.read(barraDeLaCajaProvider);
+          anulacion = encargada == null
+              ? await barra.anular(x.venta, motivo: motivo, quien: quienEnLaBarra(ref, widget.caja))
+              : barra is BarraConLaRed
+                  ? await barra.anularConLaEncargada(x.venta, motivo: motivo, encargada: encargada)
+                  : await barra.anular(x.venta, motivo: motivo, quien: encargada);
         } catch (_) {
           _decir(x.venta, 'No se pudo anular. Probá de nuevo.', error: true);
           return;
@@ -221,6 +244,9 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
 
   Widget _tarjeta(VentaDeLaCaja x) {
     final tema = Theme.of(context);
+    // **La cajera no ve plata** (26-nov-2026), como al contar a ciegas: la lista con la
+    // plata es de la encargada y del jefe (LAS CAJAS).
+    final conPlata = ReglasDeLaBarra.veLaPlataDeTodas(ref.watch(rolEnLaBarraProvider));
     final v = x.venta;
     final id = v.id;
     final hora = _hora(v.createdAt);
@@ -250,7 +276,7 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
                   'N° ${_numero(v)}${hora == null ? '' : ' · $hora'}',
                   style: tema.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                Text('${pesos(v.cobrado)} · $medio', style: tachado),
+                Text(conPlata ? '${pesos(v.cobrado)} · $medio' : medio, key: Key('cobro_$id'), style: tachado),
               ],
             ),
             const SizedBox(height: 4),
