@@ -7,7 +7,8 @@ sandbox y darle la app de prueba para sus pruebas internas, sin publicar.
 
 **26-nov (noche): el APK de la app de verdad para la Google TV — el paso 0 del plan del 26-nov** (plan:
 `C:\Users\lover\.claude\plans\c-users-lover-desktop-plan-sp-fancy-wall-of-db314a36-8fe0-4cf2-ad8e-bd040753c86b.md`).
-Sesión aparte en la rama `claude/priceless-borg-e85cd6` (sobre la feature en `173037f`); **sin juntar con la feature, sin
+Sesión aparte en la rama `claude/priceless-borg-e85cd6` (sobre la feature en `173037f`, más `18b1b5d` de la barra traído
+con `cherry-pick`); **sin juntar con la feature, sin
 tag, sin release y sin web**: lo junta la sesión que coordina. El usuario pidió que **las pruebas las haga Claude en el
 sandbox** (no está en casa).
 1. **La nube sin las tablas del stock** (el SQL `20261125120000_barra_stock.sql` sigue **sin correr**): la app con la v83
@@ -32,7 +33,7 @@ sandbox** (no está en casa).
    **Confirmado en el emulador `Recepcion_Tablet`** (sin ventana, `-gpu host`, la app de prueba x86_64): las dos
    escuelas con "Lista sin internet · al día hoy 18:42" (`build/capturas_tele/Emulador_LaFiesta_26nov.png`).
 3. **El APK: `installer\dist\prueba\Junior Eventos app de verdad tele.apk`** (del checkout principal; fuera de git;
-   SHA-256 que empieza con `cc98bc1bba955054`, 116 MB). `lib/main.dart`, `ar.com.junioreventos.app`, **6.9.4 (79)** (el
+   SHA-256 que empieza con `a1fd7c0a8e7d04d5`, 116 MB; reemplaza al primero, `cc98bc1b…`, que no llegó a instalarse). `lib/main.dart`, `ar.com.junioreventos.app`, **6.9.4 (79)** (el
    número del `pubspec.yaml`, que no se tocó), armado con `flutter build apk --release --target-platform
    android-arm,android-arm64` (**32 y 64 bits**), firmado con la clave de siempre (`apksigner`: CN=Junior Eventos;
    `android/key.properties` copiado del checkout principal, fuera de git) y con la página del celular entera (145
@@ -44,6 +45,17 @@ sandbox** (no está en casa).
    barra_stock_movimientos". Sin usuario no subió nada. Huella de la base de esta PC antes y después: **IGUAL**.
    - Ojo: es 6.9.4 (79) con la base v83. Si en esa tele se instalara después la 6.9.4 publicada (la de la v82), la base
      quedaría más nueva que la app: no hacerlo; la próxima versión publicada (mayor) la reemplaza bien.
+3b. **La Tele 1 sigue contestando a la Tele 2 después de un cambio de wifi** (lo pidió la sesión que coordina, antes de
+   armar el APK). Se trajo `18b1b5d` de la feature (la barra se reconecta sola al volver al wifi: `BuscaCentral`, que usa
+   la Tele 2, renueva su socket, y `VigiaDeLaRed`). **La Tele 1 tenía la misma falla:** `RespondeLaTele1.escuchar`
+   (`busqueda_de_la_tele.dart`) no miraba si su socket se moría, y dejaba de contestar hasta reiniciarla. Ahora, como
+   `RespondeBusqueda`, lo vuelve a abrir solo (`_seMurio`, `esperaParaReabrir`) y `reabrir()` lo cambia por otro; la
+   central de la tele (`central_provider.dart`) prende el vigía de la red (`vigiaDeLaRedProvider`) y al cambiar de red
+   reabre. Pruebas en `cliente_de_la_tele_test` (se muere y la Tele 2 la encuentra igual; reabrir; apagada no se reabre);
+   roturas R55 y R56 en `tool/roturas_tele.txt` (atrapadas). **No probado aparte:** que el vigía llame a `reabrir` (está
+   igual que en la barra; ninguna prueba lo mira en la central de la tele). 63 archivos de pruebas (tele, central, puerta,
+   barra y lo tocado): **1230 en verde**; `flutter analyze` sin nada en lo tocado. El APK nuevo abrió hasta el login en el
+   emulador (hubo que desinstalar las dos apps del emulador: no tenía lugar). Huella IGUAL.
 4. **Al usuario se le avisó** que es la app de verdad contra la nube de verdad (lo que marque como ingresado en una
    escuela real queda marcado en esa fiesta: probar con una fiesta de prueba o deshacer los ingresos), y se le pidió la
    foto de "Cómo anda" y qué no anda. "Cómo anda" está solo en la app de prueba: en la de verdad no aparece.
