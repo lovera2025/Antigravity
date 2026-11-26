@@ -21,6 +21,15 @@ TMP="$(mktemp -d)"
 
 romper() {
   local nombre="$1" archivo="$2" prueba="$3"
+  local p
+  # Un test que no existe hace que `flutter test` no corra nada y termine bien:
+  # parecería que la regla rota no la vigila nadie.
+  for p in $prueba; do
+    if [ ! -e "$p" ]; then
+      echo "[$nombre] NO EXISTE el test $p"
+      return
+    fi
+  done
   local antes
   antes=$(sha256sum "$archivo" | cut -d' ' -f1)
   cp "$archivo" "$TMP/respaldo.dart"
@@ -44,7 +53,10 @@ romper() {
   [ "$antes" = "$despues" ] || echo "[$nombre] ATENCION: el archivo no quedo como estaba"
 }
 
-mapfile -t L < "$1"
+# Sin los \r: en una carpeta con core.autocrlf el archivo de casos sale con finales de
+# línea de Windows, y el \r pegado al nombre del test hacía que no corriera ninguno
+# (26-nov: las 41 de la barra daban "sigue pasando").
+mapfile -t L < <(tr -d '\r' < "$1")
 i=0
 while [ $i -lt ${#L[@]} ]; do
   romper "${L[$i]}" "${L[$((i+1))]}" "${L[$((i+2))]}" "${L[$((i+3))]}" "${L[$((i+4))]}"

@@ -109,20 +109,20 @@ test/android_listo_test.dart
 BARRA abre en la fiesta de esta noche
 lib/features/barra/services/fiestas_del_jefe.dart
 test/dia_de_operacion_test.dart
-  Evento? get laQueAbre => laDeEstaNoche ?? lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
-  Evento? get laQueAbre => lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+  Evento? get laQueAbreEnLaBarra => laDeEstaNoche ?? laQueAbre;
+  Evento? get laQueAbreEnLaBarra => laQueAbre;
 ---
 la central vuelve con cajas de esa noche
 lib/features/barra/central/central_barra_provider.dart
 test/dia_de_operacion_test.dart test/central_barra_provider_test.dart
-  return cajas.any((c) => c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(noche));
+  return cajas.any((c) => c.abierta && DiaDeOperacion.deLaCaja(c) == anoche);
   return false;
 ---
 volver sola no cambia desde cuándo
 lib/features/barra/central/central_barra_provider.dart
 test/central_barra_provider_test.dart
-    await prender(eventoId, barra: guardada.barra, desdeElBoton: false);
-    await prender(eventoId, barra: guardada.barra);
+    await _prender(eventoId, barra: guardada.barra, desdeElBoton: false);
+    await _prender(eventoId, barra: guardada.barra, desdeElBoton: true);
 ---
 lo de las cajas va a la otra central
 lib/features/barra/central/central_barra.dart
