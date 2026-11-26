@@ -1,0 +1,246 @@
+el corte al mediodía
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart
+    final t = ArTime.toAr(momento).subtract(kLaFiestaSigueHasta);
+    final t = ArTime.toAr(momento);
+---
+la hora de Argentina
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart
+    final t = ArTime.toAr(momento).subtract(kLaFiestaSigueHasta);
+    final t = momento.toUtc().subtract(kLaFiestaSigueHasta);
+---
+la venta va con su caja
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart
+      _diaDeCaja[v.cajaBarraId] ?? DiaDeOperacion.deIso(v.createdAt) ?? DiaDeOperacion.sinFecha;
+      DiaDeOperacion.deIso(v.createdAt) ?? DiaDeOperacion.sinFecha;
+---
+la noche de la fiesta vacía, sin las de prueba
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+    if (fechaDeLaFiesta != null && DiaDeOperacion.delCalendario(fechaDeLaFiesta) == hoy) return hoy;
+
+---
+abrir avisa solo por las de esta noche
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+  return [for (final c in abiertas) if (c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(hoy)) c];
+  return [for (final c in abiertas) if (c.abierta) c];
+---
+la fiesta sigue solo por cajas de su noche
+lib/features/barra/cuentas/dia_de_operacion.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+  return cajas.any((c) => c.abierta && DiaDeOperacion.deLaCaja(c) == noche);
+  return cajas.any((c) => c.abierta);
+---
+los totales de una sola noche
+lib/features/barra/jefe/barra_jefe_providers.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+        cajas: porDia.delDia(dia),
+        cajas: [for (final d in porDia.dias) ...porDia.delDia(d)],
+---
+el stock de una sola noche
+lib/features/barra/cuentas/stock_de_la_barra.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+        ventas: cajas.ventasDelDia(ventas, dia),
+        ventas: ventas,
+---
+el Quedan de VENDER, solo esta noche
+lib/features/barra/widgets/vender_screen.dart
+test/barra_por_noche_pantallas_test.dart
+        cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
+        cajas: CajasPorDia.de([for (final c in cajas) CajaBarra.fromMap(c.toMap()..['abierta_at'] = widget.caja.abiertaAt)]),
+---
+el vale dice el día de la fiesta
+lib/features/barra/impresion/modelo_ticket.dart
+test/dia_de_operacion_test.dart
+      TextoTicket(nocheYHora(venta.createdAt, caja)),
+      TextoTicket(diaFechaYHora(venta.createdAt)),
+---
+el papel dice de qué noche
+lib/features/barra/impresion/modelo_ticket.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+            : (cajas == 1 ? 'La caja del ${dia.diaYMes}' : 'Las $cajas cajas del ${dia.diaYMes}')),
+            : (cajas == 1 ? 'La caja de la fiesta' : 'Las $cajas cajas juntas')),
+---
+los vales anulados, solo de esa noche
+lib/features/recepcion/services/vales_anulados.dart
+test/dia_de_operacion_test.dart
+      deLaNoche = porDia.delDia(porDia.inicial(ahora: ahora));
+      deLaNoche = cajas;
+---
+no retoma la caja de prueba vieja
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+        desdeLaNoche: yaPaso ? null : DiaDeOperacion.de(ahora),
+        desdeLaNoche: null,
+---
+en una fiesta que pasó no se abren cajas
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+        if (yaPaso) {
+        if (false) {
+---
+la fiesta sigue por cajas de cualquiera
+lib/features/barra/providers/barra_providers.dart
+test/barra_por_noche_pantallas_test.dart
+      if (quedanCajasDeSuNoche(await barra.cajasAbiertas(e.id), e.fechaEvento)) {
+      if (false) {
+---
+BARRA del cierre: la noche del cierre
+lib/features/cierre_caja/widgets/sector_barra.dart
+test/barra_por_noche_pantallas_test.dart
+                    : d.porDia.inicial(ahora: ahora, fechaDeLaFiesta: fiesta.fechaEvento, preferido: preferido);
+                    : d.porDia.inicial(ahora: ahora, fechaDeLaFiesta: fiesta.fechaEvento);
+---
+LAS CAJAS no deja apagar la pantalla
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_por_noche_pantallas_test.dart
+    unawaited(PantallaDespierta.mantener(true));
+
+---
+la pantalla se apaga con la última
+lib/features/barra/services/pantalla_despierta.dart
+test/android_listo_test.dart
+    if (antes == ahora) return;
+
+---
+BARRA abre en la fiesta de esta noche
+lib/features/barra/services/fiestas_del_jefe.dart
+test/dia_de_operacion_test.dart
+  Evento? get laQueAbre => laDeEstaNoche ?? lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+  Evento? get laQueAbre => lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+---
+la central vuelve con cajas de esa noche
+lib/features/barra/central/central_barra_provider.dart
+test/dia_de_operacion_test.dart test/central_barra_provider_test.dart
+  return cajas.any((c) => c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(noche));
+  return false;
+---
+volver sola no cambia desde cuándo
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    await prender(eventoId, barra: guardada.barra, desdeElBoton: false);
+    await prender(eventoId, barra: guardada.barra);
+---
+lo de las cajas va a la otra central
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+    _puente?.enviarFilas(nuevas);
+
+---
+lo de la otra central va a las cajas
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+      alRecibir: (nuevas) => _mandarATodas(nuevas),
+      alRecibir: null,
+---
+un solo enganche entre dos centrales
+lib/features/barra/central/buscar_central.dart
+test/dia_de_operacion_test.dart test/dos_barras_con_su_central_test.dart
+      return otra != null && otra != esta && esta.compareTo(otra) < 0;
+      return otra != null && otra != esta;
+---
+la tablet prefiere la central de su barra
+lib/features/barra/central/buscar_central.dart
+test/dia_de_operacion_test.dart test/dos_barras_con_su_central_test.dart
+    return buscando >= esperaPorSuBarra;
+    return true;
+---
+preguntar a todas las direcciones
+lib/features/barra/central/buscar_central.dart
+test/dos_barras_con_su_central_test.dart
+      if (socket.send(datos, a, puerto) > 0) return;
+      socket.send(datos, a, puerto); return;
+---
+cortar a mano vuelve a mandar todo
+lib/features/barra/central/cliente_de_la_central.dart
+test/dos_barras_con_su_central_test.dart
+    if (_estado == EstadoDeLaCentral.conectada) {
+    if (false) {
+---
+la notebook que prende su central suelta su conexión de caja (revisión 26-nov, 1)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    ref.read(clienteDeLaBarraProvider.notifier).soltarSiEsDe(eventoId);
+
+---
+el enganche con otro id que la caja de la notebook (revisión 26-nov, 1)
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+      equipo: '$equipo$kSufijoDelEnganche',
+      equipo: equipo,
+---
+cada barra con sus números de caja (revisión 26-nov, 2)
+lib/features/barra/services/barras_del_salon.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+  final desde = i * kCajasPorBarra + 1;
+  final desde = 1;
+---
+la central no vuelve para siempre por una caja de prueba (revisión 26-nov, 3)
+lib/features/barra/central/central_barra_provider.dart
+test/dia_de_operacion_test.dart
+  return cajas.any((c) => c.abierta && DiaDeOperacion.deLaCaja(c) == anoche);
+  return cajas.any((c) => c.abierta && !DiaDeOperacion.deLaCaja(c).isBefore(noche));
+---
+se pregunta por la caja vieja de otra noche (revisión 26-nov, 3 y 8)
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+      if (caja == null && !yaPaso) {
+      if (false) {
+---
+ENTRADAS del cierre abre como antes (revisión 26-nov, 4)
+lib/features/barra/services/fiestas_del_jefe.dart
+test/dia_de_operacion_test.dart
+  Evento? get laQueAbre => lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+  Evento? get laQueAbre => laDeEstaNoche ?? lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+---
+BARRA del cierre de otro día muestra la fiesta de ese día (revisión 26-nov, 4)
+lib/features/cierre_caja/widgets/sector_barra.dart
+test/barra_por_noche_pantallas_test.dart
+            : (datos.deLaNoche(preferido) ?? datos.laQueAbreEnLaBarra);
+            : datos.laQueAbreEnLaBarra;
+---
+el día del cierre sin correrlo por la zona (revisión 26-nov, 5)
+lib/features/cierre_caja/widgets/sector_barra.dart
+test/barra_por_noche_pantallas_test.dart
+    final delCierre = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(diaDelCierre);
+    final delCierre = diaDelCierre == null ? null : DiaDeOperacion.delCalendario(ArTime.toAr(diaDelCierre));
+---
+prender, volver a prender y apagar de a uno (revisión 26-nov, 6)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    final hecho = _enCurso.then((_) => hacer());
+    final hecho = hacer();
+---
+la central manda su hora en el latido (revisión 26-nov, 7)
+lib/features/barra/central/central_barra.dart
+test/dos_barras_con_su_central_test.dart
+          'hora': _ahora().toUtc().toIso8601String(),
+
+---
+la tablet compara su hora con la de la central (revisión 26-nov, 7)
+lib/features/barra/central/cliente_de_la_central.dart
+test/dos_barras_con_su_central_test.dart
+          _desfase = hora.difference(_ahora());
+          _desfase = Duration.zero;
+---
+VENDER avisa que la caja es de otra noche (revisión 26-nov, 8)
+lib/features/barra/widgets/aviso_de_la_noche.dart
+test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
+    if (!noche.esSinFecha && noche.isBefore(DiaDeOperacion.de(ahora)))
+    if (false)
+---
+la lista de la barra en hora de Argentina (revisión 26-nov, 9)
+lib/features/barra/providers/barra_providers.dart
+test/barra_por_noche_pantallas_test.dart
+    ArTime.toAr(ref.read(relojDeLaBarraProvider)()),
+    ref.read(relojDeLaBarraProvider)(),
+---
+abrir la caja en hora de Argentina (revisión 26-nov, 9)
+lib/features/barra/widgets/barra_home_screen.dart
+test/barra_por_noche_pantallas_test.dart
+      final yaPaso = laFiestaYaPaso(fiesta, ArTime.toAr(ahora));
+      final yaPaso = laFiestaYaPaso(fiesta, ahora);
+---

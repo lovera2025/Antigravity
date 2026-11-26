@@ -834,6 +834,30 @@ después se suma una sola vez aunque llegue tarde o del otro router. Las barras 
 Cada barra tiene su router Mercusys MW305R y su notebook: el programa tiene que andar con las barras unidas por wifi o
 cada una sola (`docs/GUIA_ROUTERS_DE_LAS_BARRAS.md`).
 
+**25-nov, para la Técnica del 4-dic (Parte 2 del plan): la barra por noche, la madrugada y una central por barra —
+programado y probado en el sandbox, SIN PUBLICAR, en la rama `claude/sleepy-jepsen-bea21a`** (falta juntarla con la
+feature; `docs/CONTEXTO_BARRA_POR_NOCHE_2026-11-25.md`, que empieza con "Para retomar en otro chat"). Sin SQL.
+- **La noche de una caja es el día en que se abrió, en hora de Argentina, con el corte al mediodía**
+  (`barra/cuentas/dia_de_operacion.dart`, `DiaDeOperacion`, `CajasPorDia`: **la única cuenta del día de la barra**);
+  las ventas van con su caja aunque sean de madrugada. Una pantalla o cuenta nueva de la barra que sume cajas **pasa
+  por `CajasPorDia`**: LAS CAJAS, BARRA del cierre, el stock, el "Quedan" de VENDER y los vales anulados de la puerta
+  ya son de una noche (las cajas de prueba de otros días no se suman). Nada se borra.
+- La hora de la barra en un lugar: **`relojDeLaBarraProvider`** (`relojDelJefeProvider` la sigue).
+- **La barra de cada caja va en `sede`** ("Barra 1" · "Barra 2", `services/barras_del_salon.dart`); la central dice
+  la suya, la tablet se engancha a la de su barra, y **dos centrales de la fiesta que se ven se enganchan solas**
+  (`CentralBarra.engancharConOtras`, una sola punta). **Para mandar por UDP, `mandarDatagrama`**: el `send` seguido
+  de otro se perdía en Windows.
+- `PantallaDespierta` cuenta cuántas pantallas la piden (VENDER, LAS CAJAS, la tele).
+- **26-nov: revisión independiente, 9 arreglos** (el detalle en "Lo que encontró la revisión del 26-nov" del CONTEXTO):
+  **cada barra tiene sus números de caja** (`numerosDeCaja`: la 1, del 1 al 6; la 2, del 7 al 12; el vale no dice la
+  barra); el diálogo pide primero la barra; la caja vieja de otra noche se pregunta (CERRARLA PRIMERO · ABRIR LA DE
+  ESTA NOCHE) y VENDER avisa si la caja es de otra noche o la hora de la tablet está corrida (`AvisoDeLaNoche`); el
+  enganche tiene su propio id y la notebook que prende su central suelta su conexión de caja; prender, volver y
+  apagar la central van de a uno; **`FiestasDelJefe.laQueAbre` es la de antes (ENTRADAS del cierre) y la barra usa
+  `laQueAbreEnLaBarra`**. Para confirmar con el usuario: la caja abierta antes del mediodía del día de la fiesta es
+  de la noche anterior.
+- Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y

@@ -1,5 +1,6 @@
 import '../datos/barra_repositorio.dart';
 import 'cierre_de_barra.dart';
+import 'dia_de_operacion.dart';
 
 /// Cuánto queda de un producto en una fiesta.
 class StockDeProducto {
@@ -62,6 +63,25 @@ abstract final class StockDeLaBarra {
           ),
     };
   }
+
+  /// **El stock de una noche** (25-nov-2026): lo que cargó el jefe menos lo vendido por
+  /// las cajas de [dia] ([CajasPorDia.diaDeLaVenta]: cada venta con su caja, aunque sea de
+  /// madrugada). Lo vendido en cajas de prueba de otro día no descuenta. Es el de LAS
+  /// CAJAS y el "Quedan" de VENDER.
+  static Map<String, StockDeProducto> deLaNoche({
+    required String eventoId,
+    required Iterable<PrecioBarra> precios,
+    required Iterable<VentaBarra> ventas,
+    required Iterable<AnulacionBarra> anulaciones,
+    required CajasPorDia cajas,
+    required DiaDeOperacion dia,
+  }) =>
+      de(
+        eventoId: eventoId,
+        precios: precios,
+        ventas: cajas.ventasDelDia(ventas, dia),
+        anulaciones: anulaciones,
+      );
 
   /// Para CAJAS del jefe: solo los que se controlan, **los que están en aviso arriba**,
   /// y entre ellos los que tienen menos.

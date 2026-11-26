@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../cuentas/cierre_de_barra.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
@@ -11,8 +12,9 @@ import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/fiestas_del_jefe.dart';
 
-/// La hora de esta PC, para saber cuál es la próxima fiesta. Los tests la fijan.
-final relojDelJefeProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+/// La hora de esta PC, para saber cuál es la próxima fiesta y la noche que se mira en
+/// CAJAS. Es la de la barra ([relojDeLaBarraProvider]); los tests la fijan.
+final relojDelJefeProvider = Provider<DateTime Function()>((ref) => ref.watch(relojDeLaBarraProvider));
 
 /// Cada cuánto CAJAS vuelve a leer la nube **en la web** (etapa 8): en la PC la rehace el
 /// sync cuando bajan ventas, pero en la web nada avisa y las tablas de la barra no están
@@ -94,26 +96,80 @@ final preciosDelJefeProvider =
 /// Un producto en el stock de CAJAS, con su nombre.
 typedef StockConNombre = ({StockDeProducto stock, String nombre});
 
-/// Lo de CAJAS de una fiesta: cada caja con sus cuentas, los totales, el stock y todo lo
-/// que hace falta para ver las ventas de una caja.
+/// Lo de CAJAS de una fiesta: **todas sus cajas, separadas por noche** ([porDia],
+/// 25-nov-2026), y lo que hace falta para armar cada noche ([delDia]) y ver las ventas de
+/// una caja. Las cajas de prueba de otro día no se suman con las de la fiesta: cada noche
+/// tiene sus totales, su diferencia, su LO VENDIDO y su stock, como un cierre de caja en
+/// su fecha. Nada se borra.
 class CajasDeLaFiesta {
-  final ResumenDeCajas resumen;
-  final List<StockConNombre> stock;
+  final String eventoId;
+  final CajasPorDia porDia;
   final List<VentaBarra> ventas;
   final List<AnulacionBarra> anulaciones;
   final List<ValeBarra> vales;
+  final List<PrecioBarra> precios;
+
+  /// El nombre y la categoría de cada producto del catálogo.
+  final Map<String, String> nombres;
+  final Map<String, String> categorias;
 
   /// Las cajas que cerraron sin esperar el OK de la encargada (`barra_cierres`, v79).
   final Set<String> sinOk;
 
-  const CajasDeLaFiesta({
-    required this.resumen,
-    required this.stock,
+  CajasDeLaFiesta({
+    required this.eventoId,
+    required this.porDia,
     required this.ventas,
     required this.anulaciones,
     required this.vales,
+    this.precios = const [],
+    this.nombres = const {},
+    this.categorias = const {},
     this.sinOk = const {},
   });
+
+  final _noches = <DiaDeOperacion, NocheDeLaBarra>{};
+
+  /// Ninguna caja en ninguna noche.
+  bool get sinCajas => porDia.vacio;
+
+  /// Las cuentas de la noche [dia]: sus cajas, los totales, LO VENDIDO y el stock.
+  NocheDeLaBarra delDia(DiaDeOperacion dia) => _noches[dia] ??= _armar(dia);
+
+  NocheDeLaBarra _armar(DiaDeOperacion dia) {
+    final stock = StockDeLaBarra.deLaNoche(
+      eventoId: eventoId,
+      precios: precios,
+      ventas: ventas,
+      anulaciones: anulaciones,
+      cajas: porDia,
+      dia: dia,
+    );
+    return NocheDeLaBarra(
+      dia: dia,
+      resumen: ResumenDeCajas.de(
+        cajas: porDia.delDia(dia),
+        ventas: ventas,
+        anulaciones: anulaciones,
+        // La categoría de cada bebida, para el papel corto y LO VENDIDO.
+        categorias: categorias,
+        dia: dia,
+      ),
+      stock: [
+        for (final s in StockDeLaBarra.paraElJefe(stock))
+          (stock: s, nombre: nombres[s.productoId] ?? 'Producto'),
+      ],
+    );
+  }
+}
+
+/// Una noche de la barra en CAJAS: sus cajas con las cuentas y su stock.
+class NocheDeLaBarra {
+  final DiaDeOperacion dia;
+  final ResumenDeCajas resumen;
+  final List<StockConNombre> stock;
+
+  const NocheDeLaBarra({required this.dia, required this.resumen, required this.stock});
 
   bool get sinCajas => resumen.cajas.isEmpty;
 }
@@ -128,33 +184,20 @@ final cajasDelJefeProvider =
   final vales = await barra.vales(eventoId);
   final precios = await barra.precios(eventoId);
   final productos = await barra.productos(conBajas: true);
-  final nombres = {for (final p in productos) p.id: p.nombre};
   // Sin la tabla en la nube o en la base (una versión anterior), CAJAS se ve igual.
   var sinOk = const <String>{};
   try {
     sinOk = PedidoDeCierre.cerraronSinOk(await barra.pasosDelCierre(eventoId));
   } catch (_) {}
-  final stock = StockDeLaBarra.de(
-    eventoId: eventoId,
-    precios: precios,
-    ventas: ventas,
-    anulaciones: anulaciones,
-  );
   return CajasDeLaFiesta(
-    resumen: ResumenDeCajas.de(
-      cajas: cajas,
-      ventas: ventas,
-      anulaciones: anulaciones,
-      // La categoría de cada bebida, para el papel corto y LO VENDIDO.
-      categorias: {for (final p in productos) p.id: p.categoria},
-    ),
-    stock: [
-      for (final s in StockDeLaBarra.paraElJefe(stock))
-        (stock: s, nombre: nombres[s.productoId] ?? 'Producto'),
-    ],
+    eventoId: eventoId,
+    porDia: CajasPorDia.de(cajas),
     ventas: ventas,
     anulaciones: anulaciones,
     vales: vales,
+    precios: precios,
+    nombres: {for (final p in productos) p.id: p.nombre},
+    categorias: {for (final p in productos) p.id: p.categoria},
     sinOk: sinOk,
   );
 });

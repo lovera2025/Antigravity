@@ -12,6 +12,12 @@ import '../datos/barra_repositorio.dart';
 /// (`kIsWeb` no se puede), y el arnés `tool/barra_web_prueba.dart` también.
 final enLaWebProvider = Provider<bool>((ref) => kIsWeb);
 
+/// La hora de este equipo para la barra: con ella se sabe **la noche de hoy** (el día de
+/// operación, `cuentas/dia_de_operacion.dart`), qué fiestas siguen a la vista y si la
+/// central vuelve sola. Las ventanas de prueba la adelantan para vender pasada la
+/// medianoche; los tests la fijan.
+final relojDeLaBarraProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
 /// Por dónde sale a la red del salón lo que escribe este equipo (la central de la barra).
 /// Sin central prendida ni cliente arrancado, no sale nada.
 final avisoALaRedProvider = Provider<AvisoALaRed>((ref) => AvisoALaRed());

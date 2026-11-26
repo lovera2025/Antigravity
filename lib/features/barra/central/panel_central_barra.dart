@@ -8,16 +8,25 @@ import '../../common/widgets/operational_sync_coordinator.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../services/barra_sin_internet.dart';
+import '../services/barras_del_salon.dart';
 import 'central_barra.dart';
 import 'central_barra_provider.dart';
 
 /// La central de la barra en la notebook, arriba de CAJAS: prenderla, a qué dirección se
 /// conectan las tablets, qué cajas están conectadas y **lo que cada una tiene sin subir**
 /// ("al día" o "2 ventas por subir"), y lo de esta notebook ("Todo subido").
+///
+/// **De qué barra es esta notebook** (25-nov-2026: una notebook y una central por barra):
+/// se elige antes de prenderla (Barra 1 · Barra 2, la última queda elegida) y la central
+/// lo dice. Si ve a la central de la otra barra, **se enganchan solas** y el panel lo
+/// dice; si no, "esta barra trabaja sola".
 class PanelCentralDeLaBarra extends ConsumerStatefulWidget {
   final String eventoId;
 
-  const PanelCentralDeLaBarra({super.key, required this.eventoId});
+  /// La fecha de la fiesta: esa noche la central vuelve sola después de un reinicio.
+  final DateTime? fechaDeLaFiesta;
+
+  const PanelCentralDeLaBarra({super.key, required this.eventoId, this.fechaDeLaFiesta});
 
   @override
   ConsumerState<PanelCentralDeLaBarra> createState() => _PanelCentralDeLaBarraState();
@@ -26,16 +35,27 @@ class PanelCentralDeLaBarra extends ConsumerStatefulWidget {
 class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
   bool _prendiendo = false;
 
+  /// La barra elegida para prenderla. Null hasta leer la recordada.
+  String? _barra;
+
   @override
   void initState() {
     super.initState();
-    // Si estaba prendida esta noche (se reinició la notebook), se vuelve a prender sola.
-    Future.microtask(() => ref.read(centralDeLaBarraProvider.notifier).reanudar(widget.eventoId));
+    // Si estaba prendida (se reinició la notebook), se vuelve a prender sola, con su barra.
+    Future.microtask(() => ref
+        .read(centralDeLaBarraProvider.notifier)
+        .reanudar(widget.eventoId, fechaDeLaFiesta: widget.fechaDeLaFiesta));
+    Future.microtask(() async {
+      final recordada = await ref.read(barraDelEquipoProvider).leer();
+      if (mounted && _barra == null) setState(() => _barra = recordada ?? kBarrasDelSalon.first);
+    });
   }
 
   Future<void> _prender() async {
     setState(() => _prendiendo = true);
-    await ref.read(centralDeLaBarraProvider.notifier).prender(widget.eventoId);
+    await ref
+        .read(centralDeLaBarraProvider.notifier)
+        .prender(widget.eventoId, barra: _barra ?? kBarrasDelSalon.first);
     if (mounted) setState(() => _prendiendo = false);
   }
 
@@ -44,6 +64,7 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
     final estado = ref.watch(centralDeLaBarraProvider);
     final deEstaFiesta = estado.prendida && estado.eventoId == widget.eventoId;
     const borde = Color(0xFF2A2830);
+    final elegida = _barra ?? kBarrasDelSalon.first;
     return DecoratedBox(
       key: const Key('central_barra_panel'),
       decoration: BoxDecoration(
@@ -72,7 +93,9 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      deEstaFiesta ? 'CENTRAL PRENDIDA' : 'CENTRAL DE LA BARRA',
+                      deEstaFiesta
+                          ? 'CENTRAL PRENDIDA${estado.barra == null ? '' : ' · ${estado.barra!.toUpperCase()}'}'
+                          : 'CENTRAL DE LA BARRA',
                       key: const Key('central_barra_titulo'),
                       style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
                     ),
@@ -101,13 +124,30 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
             const SizedBox(height: 6),
             if (estado.error != null && estado.eventoId == widget.eventoId)
               Text(estado.error!, style: const TextStyle(color: Color(0xFFFF8F82)))
-            else if (!deEstaFiesta)
+            else if (!deEstaFiesta) ...[
               const Text(
-                'Prendela en la notebook de la barra la noche de la fiesta: las tablets la encuentran '
-                'solas por el wifi del salón y se ven entre ellas, también sin internet.',
+                'Prendela en la notebook de cada barra la noche de la fiesta: las tablets de esa barra '
+                'la encuentran solas por el wifi y se ven entre ellas, también sin internet. Si las dos '
+                'notebooks se ven, se pasan todo solas.',
                 style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
-              )
-            else ...[
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Text('Esta notebook es de la', style: TextStyle(fontSize: 13)),
+                  for (final b in kBarrasDelSalon)
+                    ChoiceChip(
+                      key: Key('central_barra_de_${kBarrasDelSalon.indexOf(b) + 1}'),
+                      label: Text(b),
+                      selected: elegida == b,
+                      onSelected: _prendiendo ? null : (_) => setState(() => _barra = b),
+                    ),
+                ],
+              ),
+            ] else ...[
               Text(
                 estado.direccion == null
                     ? 'Esta notebook no está conectada a ningún wifi: conectala al router del salón.'
@@ -124,21 +164,70 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
                     style: TextStyle(fontSize: 13, color: Color(0xFFF2B84B)),
                   ),
                 ),
+              const SizedBox(height: 6),
+              _OtraBarra(estado),
               const SizedBox(height: 10),
-              if (estado.cajas.isEmpty)
+              if (estado.soloCajas.isEmpty)
                 const Text(
                   'Todavía no se conectó ninguna caja.',
                   key: Key('central_barra_sin_cajas'),
                   style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
                 )
               else
-                for (final c in estado.cajas) _Caja(c),
+                for (final c in estado.soloCajas) _Caja(c),
               const SizedBox(height: 6),
               const _EstaNotebook(),
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// El enganche con la central de la otra barra: "Enganchada con la Barra 2: se pasan
+/// todo", o "Esta barra trabaja sola" si no la ve (cada router por su lado).
+class _OtraBarra extends StatelessWidget {
+  final EstadoCentralBarra estado;
+
+  const _OtraBarra(this.estado);
+
+  @override
+  Widget build(BuildContext context) {
+    final conectadas = [for (final o in estado.otras) if (o.conectada) o];
+    final String texto;
+    final Color color;
+    if (conectadas.isNotEmpty) {
+      final nombres = {for (final o in conectadas) o.barra ?? 'la otra barra'}.join(' y ');
+      texto = 'Enganchada con la central de $nombres: se pasan todo, y la encargada ve las dos barras '
+          'desde cualquier punta.';
+      color = const Color(0xFF59D38A);
+    } else if (estado.otras.isNotEmpty) {
+      texto = 'Se cortó el enganche con la otra barra: cada una sigue sola y se juntan cuando se '
+          'vuelvan a ver (o con internet).';
+      color = const Color(0xFFF2B84B);
+    } else {
+      texto = 'No ve la central de otra barra: esta barra trabaja sola. Si las dos notebooks quedan en '
+          'la misma red, se enganchan solas.';
+      color = const Color(0xFFA7A29A);
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          conectadas.isNotEmpty ? Icons.link : Icons.link_off,
+          size: 16,
+          color: color,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            texto,
+            key: const Key('central_barra_otra'),
+            style: TextStyle(fontSize: 13, color: color),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -164,7 +253,12 @@ class _Caja extends StatelessWidget {
         children: [
           Icon(Icons.circle, size: 9, color: caja.conectada ? const Color(0xFF59D38A) : const Color(0xFF6B675F)),
           const SizedBox(width: 8),
-          Expanded(child: Text(caja.nombre, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Text(
+              caja.barra == null ? caja.nombre : '${caja.nombre} · ${caja.barra}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           const SizedBox(width: 8),
           Text(texto, key: Key('central_barra_caja_estado_${caja.equipo}'), style: TextStyle(color: color, fontSize: 13)),
         ],

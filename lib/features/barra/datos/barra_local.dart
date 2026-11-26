@@ -209,6 +209,7 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
   Future<CajaBarra?> cajaAbierta({
     required String eventoId,
     required String operadorId,
+    DiaDeOperacion? desdeLaNoche,
   }) async {
     final equipo = await _equipo();
     final filas = await _leer(
@@ -217,7 +218,11 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
       whereArgs: [eventoId, operadorId, equipo],
       orderBy: 'abierta_at DESC',
     );
-    return filas.isEmpty ? null : CajaBarra.fromMap(filas.first);
+    for (final f in filas) {
+      final caja = CajaBarra.fromMap(f);
+      if (desdeLaNoche == null || !DiaDeOperacion.deLaCaja(caja).isBefore(desdeLaNoche)) return caja;
+    }
+    return null;
   }
 
   @override
@@ -232,16 +237,20 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
     final db = await _abrir();
     final equipo = await _equipo();
     return db.transaction((txn) async {
-      // Adentro de la transacción: dos toques seguidos no abren dos cajas.
+      final ahora = _reloj();
+      // Adentro de la transacción: dos toques seguidos no abren dos cajas. Solo cuenta
+      // una de esta noche: la de prueba de otro día que quedó abierta sigue aparte.
+      final noche = DiaDeOperacion.de(ahora);
       final ya = await txn.query(
         'barra_cajas',
         where: 'evento_id = ? AND operador_id = ? AND device_id = ? AND cerrada_at IS NULL',
         whereArgs: [eventoId, operadorId, equipo],
         orderBy: 'abierta_at DESC',
-        limit: 1,
       );
-      if (ya.isNotEmpty) return CajaBarra.fromMap(ya.first);
-      final ahora = _reloj();
+      for (final f in ya) {
+        final caja = CajaBarra.fromMap(f);
+        if (!DiaDeOperacion.deLaCaja(caja).isBefore(noche)) return caja;
+      }
       final caja = CajaBarra.abrir(
         eventoId: eventoId,
         operadorId: operadorId,

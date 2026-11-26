@@ -1,4 +1,5 @@
 import '../../../models/evento.dart';
+import '../cuentas/dia_de_operacion.dart';
 
 /// Las fiestas que el jefe ve en BARRA: **la pantalla abre en la próxima** (elegido el
 /// 7-nov), y CAMBIAR DE FIESTA muestra las que vienen y las últimas. A diferencia de la
@@ -14,13 +15,34 @@ class FiestasDelJefe {
   /// que ya pasó.
   final List<Evento> lasUltimas;
 
-  const FiestasDelJefe({this.lasQueVienen = const [], this.lasUltimas = const []});
+  /// La fiesta de esta noche (su fecha es el día de operación de ahora), si hay una.
+  final Evento? laDeEstaNoche;
+
+  const FiestasDelJefe({
+    this.lasQueVienen = const [],
+    this.lasUltimas = const [],
+    this.laDeEstaNoche,
+  });
 
   /// Cuántas de las que ya pasaron se ofrecen.
   static const ultimasQueSeMuestran = 8;
 
-  /// Con la que abre la pantalla: la próxima; si no hay ninguna, la última que pasó.
+  /// Con la que abre la pantalla: la próxima (la de anoche cuenta hasta el día
+  /// siguiente); si no hay ninguna, la última que pasó. Es la de ENTRADAS del cierre de
+  /// caja; la barra usa [laQueAbreEnLaBarra].
   Evento? get laQueAbre => lasQueVienen.firstOrNull ?? lasUltimas.firstOrNull;
+
+  /// **Con la que abre la barra: la de esta noche**; si no hay, [laQueAbre].
+  ///
+  /// Con dos fiestas en noches seguidas, la segunda noche BARRA abría en la de anoche (era
+  /// "la próxima" desde ayer): la central de la notebook se volvía a prender para esa
+  /// fiesta y las tablets de la noche no la encontraban (25-nov-2026). Solo la barra: el
+  /// 26-nov la revisión vio que cambiarlo para todos movía también ENTRADAS del cierre.
+  Evento? get laQueAbreEnLaBarra => laDeEstaNoche ?? laQueAbre;
+
+  /// La fiesta de la noche [dia] (su fecha), si se muestra alguna.
+  Evento? deLaNoche(DiaDeOperacion dia) =>
+      todas.where((e) => DiaDeOperacion.delCalendario(e.fechaEvento) == dia).firstOrNull;
 
   bool get vacia => lasQueVienen.isEmpty && lasUltimas.isEmpty;
 
@@ -37,20 +59,23 @@ class FiestasDelJefe {
       ..sort((a, b) => a.fechaEvento.compareTo(b.fechaEvento));
     final pasaron = validas.where((e) => dia(e).isBefore(ayer)).toList()
       ..sort((a, b) => b.fechaEvento.compareTo(a.fechaEvento));
+    final noche = DiaDeOperacion.de(hoy);
     return FiestasDelJefe(
       lasQueVienen: List.unmodifiable(vienen),
       lasUltimas: List.unmodifiable(pasaron.take(ultimasQueSeMuestran)),
+      laDeEstaNoche: vienen.where((e) => DiaDeOperacion.delCalendario(e.fechaEvento) == noche).firstOrNull,
     );
   }
 
-  /// La fiesta de [id] si está entre las que se muestran; si no, [laQueAbre].
-  Evento? elegida(String? id) {
+  /// La fiesta de [id] si está entre las que se muestran; si no, [laQueAbre] (con
+  /// [enLaBarra], [laQueAbreEnLaBarra]).
+  Evento? elegida(String? id, {bool enLaBarra = false}) {
     if (id != null) {
       for (final e in todas) {
         if (e.id == id) return e;
       }
     }
-    return laQueAbre;
+    return enLaBarra ? laQueAbreEnLaBarra : laQueAbre;
   }
 }
 

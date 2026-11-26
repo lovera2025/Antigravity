@@ -95,7 +95,7 @@ class _FiestasDeLaEncargada extends ConsumerWidget {
             alTocar: () => _releer(ref),
           );
         }
-        final abre = f.laQueAbre?.id;
+        final abre = f.laQueAbreEnLaBarra?.id;
         Widget tarjeta(Evento e) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Card(

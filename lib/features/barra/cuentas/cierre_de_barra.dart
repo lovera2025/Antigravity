@@ -1,4 +1,5 @@
 import '../datos/barra_repositorio.dart';
+import 'dia_de_operacion.dart';
 import 'pesos.dart';
 import 'silla_de_la_puerta.dart';
 
@@ -281,8 +282,16 @@ class ResumenDeCaja {
 }
 
 /// CAJAS del jefe: cada caja de la fiesta y los totales.
+///
+/// **Se arma con las cajas de una sola noche** ([CajasPorDia.delDia], 25-nov-2026): los
+/// totales, la diferencia y LO VENDIDO DE LA FIESTA son de las cajas que recibe, y una
+/// venta de una caja que no está en la lista no entra. Así las cajas de prueba de otro
+/// día no se suman con las de la noche de la fiesta.
 class ResumenDeCajas {
   final List<ResumenDeCaja> cajas;
+
+  /// La noche de estas cajas. Null: no se dijo (las cuentas sueltas de los tests viejos).
+  final DiaDeOperacion? dia;
   final int ventas;
   final int anuladas;
   final int mixtos;
@@ -308,6 +317,7 @@ class ResumenDeCajas {
 
   const ResumenDeCajas({
     required this.cajas,
+    this.dia,
     required this.ventas,
     required this.anuladas,
     required this.mixtos,
@@ -327,6 +337,7 @@ class ResumenDeCajas {
     required Iterable<VentaBarra> ventas,
     required Iterable<AnulacionBarra> anulaciones,
     Map<String, String> categorias = const {},
+    DiaDeOperacion? dia,
   }) {
     final listaVentas = ventas.toList();
     final listaAnulaciones = anulaciones.toList();
@@ -363,6 +374,7 @@ class ResumenDeCajas {
     }
     return ResumenDeCajas(
       cajas: resumenes,
+      dia: dia,
       ventas: v,
       anuladas: an,
       mixtos: mx,

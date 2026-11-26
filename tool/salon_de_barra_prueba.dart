@@ -17,7 +17,9 @@ import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 import 'package:arguello_events/features/barra/services/barra_sin_internet.dart';
+import 'package:arguello_events/features/barra/services/barras_del_salon.dart';
 import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
+import 'package:arguello_events/features/caja_sesiones/models/operador_caja.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
@@ -52,16 +54,20 @@ BarraEnMemoria catalogoDePrueba() {
   return catalogo;
 }
 
-/// Lo guardado en el equipo, en memoria: cada lado tiene el suyo.
+/// Lo guardado en el equipo, en memoria: cada lado tiene el suyo (y sobrevive a
+/// "reiniciar la notebook" en la ventana de prueba).
 class GuardadoDePrueba extends GuardadoDeLaCentral {
-  String? fiesta;
+  CentralGuardada? central;
   DondeEstaLaCentral? donde;
 
-  @override
-  Future<String?> prendida({DateTime? ahora}) async => fiesta;
+  String? get fiesta => central?.eventoId;
 
   @override
-  Future<void> anotarPrendida(String? eventoId, {DateTime? ahora}) async => fiesta = eventoId;
+  Future<CentralGuardada?> prendida() async => central;
+
+  @override
+  Future<void> anotarPrendida(String? eventoId, {String? barra, DateTime? ahora}) async => central =
+      eventoId == null ? null : CentralGuardada(eventoId: eventoId, desde: ahora ?? DateTime.now(), barra: barra);
 
   @override
   Future<DondeEstaLaCentral?> aMano() async => donde;
@@ -70,11 +76,33 @@ class GuardadoDePrueba extends GuardadoDeLaCentral {
   Future<void> anotarAMano(DondeEstaLaCentral? d) async => donde = d;
 }
 
+/// La barra recordada de un equipo de la prueba (Barra 1 · Barra 2), en memoria.
+class BarraDelEquipoEnMemoria extends BarraDelEquipo {
+  BarraDelEquipoEnMemoria([this.barra]);
+
+  String? barra;
+
+  @override
+  Future<String?> leer() async => barraDe(barra);
+
+  @override
+  Future<void> guardar(String? b) async {
+    if (barraDe(b) != null) barra = barraDe(b);
+  }
+}
+
 /// Por dónde habla un equipo de la prueba con los demás. Lo que queda en null es lo de
 /// la app: escuchar en todas las direcciones, los puertos de siempre (8797 y 8777) y
 /// buscar por toda la red.
 class RedDePrueba {
-  const RedDePrueba({this.escucha, this.puertoCentral, this.puertoBusqueda, this.destinos, this.direcciones});
+  const RedDePrueba({
+    this.escucha,
+    this.puertoCentral,
+    this.puertoBusqueda,
+    this.destinos,
+    this.direcciones,
+    this.puertosQuePregunta,
+  });
 
   /// Todo dentro de esta PC: sin cartel del cortafuegos y sin salir a la red.
   RedDePrueba.enEstaPc({required int puertoBusqueda})
@@ -98,23 +126,32 @@ class RedDePrueba {
   final Future<List<InternetAddress>> Function()? destinos;
   final Future<List<String>> Function()? direcciones;
 
+  /// A qué puertos pregunta por las centrales (25-nov-2026: con las dos barras en esta PC,
+  /// cada central contesta en el suyo). La lista se puede cambiar con la ventana abierta:
+  /// así se "juntan" y se "separan" las redes de las dos barras.
+  final List<int>? puertosQuePregunta;
+
   List<Override> get reemplazos => [
         if (escucha != null) escuchaCentralBarraProvider.overrideWithValue(escucha!),
         if (puertoCentral != null) puertoCentralBarraProvider.overrideWithValue(puertoCentral!),
         if (puertoBusqueda != null) puertoBusquedaBarraProvider.overrideWithValue(puertoBusqueda!),
         if (destinos != null) destinosBusquedaBarraProvider.overrideWithValue(destinos!),
         if (direcciones != null) direccionesCentralBarraProvider.overrideWithValue(direcciones!),
+        if (puertosQuePregunta != null) puertosQuePreguntaBarraProvider.overrideWithValue(puertosQuePregunta!),
       ];
 }
 
 /// Un equipo de la prueba: sus providers y su barra.
 class EquipoDePrueba {
-  EquipoDePrueba(this.nombre, this.container, this.barra, this.conexion);
+  EquipoDePrueba(this.nombre, this.container, this.barra, this.conexion, {this.operador});
 
   final String nombre;
   final ProviderContainer container;
   final BarraEnMemoria barra;
   final ConexionFija conexion;
+
+  /// La cajera (o la encargada) de este equipo, si tiene.
+  final OperadorCaja? operador;
 }
 
 /// Un equipo con su barra en memoria (con el [catalogo]), su cajera si la tiene, y la
@@ -129,18 +166,27 @@ EquipoDePrueba armarEquipo({
   String? cajera,
   String? pin,
   bool jefe = false,
+  bool encargada = false,
+  String? barraDelEquipo,
   PapelEnMemoria? papel,
+  DateTime Function()? reloj,
+  BarraEnMemoria? deAntes,
+  GuardadoDePrueba? guardado,
 }) {
-  final barra = BarraEnMemoria()
-    ..equipo = id
-    ..reloj = (() => DateTime.now().toUtc());
-  barra.productosGuardados.addAll(catalogo.productosGuardados);
-  barra.preciosGuardados.addAll(catalogo.preciosGuardados);
+  // [deAntes]: la misma barra de un equipo que se "reinicia" (la base queda).
+  final barra = deAntes ??
+      (BarraEnMemoria()
+        ..equipo = id
+        ..reloj = (() => (reloj ?? DateTime.now)().toUtc()));
+  if (deAntes == null) {
+    barra.productosGuardados.addAll(catalogo.productosGuardados);
+    barra.preciosGuardados.addAll(catalogo.preciosGuardados);
+  }
   final operadores = OperadoresEnPrueba();
   if (cajera != null) {
     final opId = 'a0000000-0000-4000-8000-${(cajera.hashCode & 0xffffff).toString().padLeft(12, '0')}';
     operadores.operadores.lista.add(operadorDePrueba(opId, cajera, pin!));
-    operadores.permisos.poner(opId, const PermisosEfectivos(barra: true));
+    operadores.permisos.poner(opId, PermisosEfectivos(barra: true, encargadaBarra: encargada));
   }
   final aviso = AvisoALaRed();
   final conLaRed = BarraConLaRed(caja: barra, jefe: barra, red: barra, aviso: aviso);
@@ -168,13 +214,22 @@ EquipoDePrueba armarEquipo({
     )),
     ...red.reemplazos,
     equipoDeLaBarraProvider.overrideWithValue(() async => id),
-    guardadoDeLaCentralProvider.overrideWithValue(GuardadoDePrueba()),
+    guardadoDeLaCentralProvider.overrideWithValue(guardado ?? GuardadoDePrueba()),
+    // La barra de cada equipo, en memoria: en la ventana todos comparten las preferencias.
+    barraDelEquipoProvider.overrideWithValue(BarraDelEquipoEnMemoria(barraDelEquipo)),
+    if (reloj != null) relojDeLaBarraProvider.overrideWithValue(reloj),
     if (jefe) esRolJefeProvider.overrideWithValue(true),
-    if (jefe) relojDelJefeProvider.overrideWithValue(DateTime.now),
+    if (jefe) relojDelJefeProvider.overrideWithValue(reloj ?? DateTime.now),
     // Nada de salir a GitHub a buscar versiones desde una prueba.
     versionNuevaEnLaTabletProvider.overrideWith((ref) async => null),
   ];
-  return EquipoDePrueba(nombre, ProviderContainer(overrides: overrides), barra, operadores.conexion);
+  return EquipoDePrueba(
+    nombre,
+    ProviderContainer(overrides: overrides),
+    barra,
+    operadores.conexion,
+    operador: operadores.operadores.lista.firstOrNull,
+  );
 }
 
 /// La cajera: el PIN y, adentro, la barra.

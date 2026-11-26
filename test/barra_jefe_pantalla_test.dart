@@ -40,7 +40,7 @@ class _CentralPrendida extends CentralDeLaBarra {
       );
 
   @override
-  Future<void> reanudar(String eventoId) async {}
+  Future<void> reanudar(String eventoId, {DateTime? fechaDeLaFiesta}) async {}
 }
 
 /// BARRA del jefe de verdad (etapa 7), con la barra y la impresora en memoria: la
@@ -364,6 +364,9 @@ void main() {
         RenglonVenta(productoId: p.id, nombre: p.nombre, precio: precio, cantidad: cantidad);
 
     Future<void> armarLaNoche() async {
+      // CAJAS se mira la noche de la fiesta (25-nov-2026: una noche por vez): la hora de
+      // la PC es la de las ventas, las 23 del 4-dic.
+      hoy = DateTime(2026, 12, 4, 23);
       final b = prueba.barra;
       b.precio(pinaroli.id, fernet, 6000, stock: 10, aviso: 4);
       b.precio(pinaroli.id, cerveza, 4000, stock: 100, aviso: 10);
@@ -556,7 +559,8 @@ void main() {
       await tocar(tester, find.byKey(const Key('jefe_vendido_fiesta')));
       final papel = find.byKey(const Key('jefe_vendido_fiesta_papel'));
       expect(find.descendant(of: papel, matching: find.text('LO VENDIDO - BARRA')), findsOneWidget);
-      expect(find.descendant(of: papel, matching: find.text('Las 2 cajas juntas')), findsOneWidget);
+      // De qué noche son (25-nov-2026): las cajas de prueba de otro día no entran.
+      expect(find.descendant(of: papel, matching: find.text('Las 2 cajas del 4/12')), findsOneWidget);
       // Fernet: 3 de Marta y 4 de Lucas.
       expect(find.descendant(of: papel, matching: find.text('7 x Fernet con Coca')), findsOneWidget);
       await tocar(tester, find.byKey(const Key('jefe_vendido_fiesta_pdf')));
@@ -592,6 +596,7 @@ void main() {
     });
 
     testWidgets('en CAJAS se ven las ventas, pero anular y reimprimir quedan apagados', (tester) async {
+      hoy = DateTime(2026, 12, 4, 23); // la noche de las ventas
       final b = prueba.barra;
       final caja = await b.abrirCaja(eventoId: pinaroli.id, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
       final v = await b.vender(
@@ -726,6 +731,7 @@ void main() {
       ('la PC', const Size(1280, 860)),
     ]) {
       testWidgets('en $nombre las tres pestañas no se desbordan', (tester) async {
+        hoy = DateTime(2026, 12, 4, 23); // la noche de las ventas
         prueba.barra.precio(pinaroli.id, fernet, 6000, stock: 10, aviso: 4);
         final caja = await prueba.barra.abrirCaja(
           eventoId: pinaroli.id,

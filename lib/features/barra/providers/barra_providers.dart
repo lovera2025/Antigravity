@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../models/evento.dart';
 import '../../common/services/pdf_service.dart';
 import '../../common/utils/subir_ya.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/repositories/eventos_repository.dart';
+import '../cuentas/dia_de_operacion.dart';
 import '../datos/barra_nube.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/canal_universal_ble.dart';
@@ -23,7 +25,7 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../services/papel_de_la_barra.dart';
 import 'barra_del_jefe_provider.dart';
 
-export 'barra_del_jefe_provider.dart' show enLaWebProvider;
+export 'barra_del_jefe_provider.dart' show enLaWebProvider, relojDeLaBarraProvider;
 
 /// La barra de este equipo: la base y la cola de subida, y la red del salón
 /// (`barraDeEsteEquipoProvider`). Los tests la reemplazan.
@@ -43,30 +45,71 @@ final eventosDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
 /// precios llegan después de abrir esto.
 ///
 /// Más las que ya pasaron donde la cajera tiene su caja abierta en este equipo
-/// (revisión final de la 6.9.0): así la puede cerrar.
+/// (revisión final de la 6.9.0): así la puede cerrar. **Y las que ya pasaron con cajas
+/// abiertas de su noche, de cualquiera** ([FiestasQueSiguen], 25-nov-2026): la fiesta
+/// sigue a la vista de la cajera y de la encargada hasta que se cierra la última caja de
+/// esa noche, aunque pase el mediodía.
 final fiestasDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
   ref.watch(operationalSyncRevisionProvider);
+  final eventos = await ref.watch(eventosDeLaBarraProvider.future);
+  final conPrecio = await ref.read(barraDeLaCajaProvider).fiestasConPrecio();
+  // Se cuenta acá, no se toma de [fiestasQueSiguenProvider]: volver a leer la lista
+  // tiene que ver la caja recién cerrada.
+  final siguen = await _queSiguen(ref);
+  return fiestasParaLaBarra(
+    eventos,
+    conPrecio,
+    // En hora de Argentina: la noche de una caja se cuenta así (26-nov-2026).
+    ArTime.toAr(ref.read(relojDeLaBarraProvider)()),
+    conCajaAbierta: {...siguen.conSuCaja, ...siguen.conCajasDeSuNoche},
+  );
+});
+
+/// Por qué una fiesta que ya pasó sigue en la lista de la barra de este equipo.
+class FiestasQueSiguen {
+  /// Donde quien entró tiene su caja abierta en este equipo (de la noche que sea).
+  final Set<String> conSuCaja;
+
+  /// Donde quedan cajas abiertas **de su noche**, de cualquiera (`quedanCajasDeSuNoche`):
+  /// una caja de prueba de otro día que quedó abierta no cuenta.
+  final Set<String> conCajasDeSuNoche;
+
+  const FiestasQueSiguen({this.conSuCaja = const {}, this.conCajasDeSuNoche = const {}});
+}
+
+/// Las fiestas que ya pasaron y siguen a la vista en la barra de este equipo, con el
+/// porqué (la pantalla lo dice en cada una). Solo mira las que tienen precios y ya no
+/// están "por delante".
+final fiestasQueSiguenProvider = FutureProvider<FiestasQueSiguen>((ref) async {
+  ref.watch(operationalSyncRevisionProvider);
+  return _queSiguen(ref);
+});
+
+Future<FiestasQueSiguen> _queSiguen(Ref ref) async {
   final operador = ref.watch(appRoleProvider).operador;
   final eventos = await ref.watch(eventosDeLaBarraProvider.future);
   final barra = ref.read(barraDeLaCajaProvider);
   final conPrecio = await barra.fiestasConPrecio();
-  final ahora = DateTime.now();
-  final conCaja = <String>{};
-  if (operador != null) {
-    final porDelante = {for (final e in fiestasParaLaBarra(eventos, conPrecio, ahora)) e.id};
-    for (final e in eventos) {
-      if (porDelante.contains(e.id) || !conPrecio.contains(e.id)) continue;
-      try {
-        if (await barra.cajaAbierta(eventoId: e.id, operadorId: operador.id) != null) {
-          conCaja.add(e.id);
-        }
-      } catch (_) {
-        // Si no se puede leer, la lista sale como siempre.
+  final ahora = ArTime.toAr(ref.read(relojDeLaBarraProvider)());
+  final porDelante = {for (final e in fiestasParaLaBarra(eventos, conPrecio, ahora)) e.id};
+  final conSuCaja = <String>{};
+  final deSuNoche = <String>{};
+  for (final e in eventos) {
+    if (porDelante.contains(e.id) || !conPrecio.contains(e.id)) continue;
+    try {
+      if (operador != null &&
+          await barra.cajaAbierta(eventoId: e.id, operadorId: operador.id) != null) {
+        conSuCaja.add(e.id);
       }
+      if (quedanCajasDeSuNoche(await barra.cajasAbiertas(e.id), e.fechaEvento)) {
+        deSuNoche.add(e.id);
+      }
+    } catch (_) {
+      // Si no se puede leer, la lista sale como siempre.
     }
   }
-  return fiestasParaLaBarra(eventos, conPrecio, ahora, conCajaAbierta: conCaja);
-});
+  return FiestasQueSiguen(conSuCaja: conSuCaja, conCajasDeSuNoche: deSuNoche);
+}
 
 /// La impresora de este equipo, una sola mientras dure la app: se conecta sola a la
 /// recordada.
