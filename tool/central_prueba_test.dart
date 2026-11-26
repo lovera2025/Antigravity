@@ -44,7 +44,7 @@ final _nombres = [
   ('FERNÁNDEZ, MÍA', ['FERNÁNDEZ, JUAN'], 'Ella · Callejero Fino'),
   ('GARCÍA, BRUNO', <String>[], null),
   ('LÓPEZ, VALENTINA', ['LÓPEZ, CARLA'], null),
-  ('MARTÍNEZ, LAUTARO', <String>[], 'Quevedo · Bizarrap'),
+  ('TAMARINDO, TEO', <String>[], 'Quevedo · Bizarrap'),
   ('RODRÍGUEZ, CAMILA', ['RODRÍGUEZ, ANDREA', 'SOSA, PABLO'], null),
   ('SÁNCHEZ, THIAGO', <String>[], null),
   ('TORRES, MARTINA', ['TORRES, JULIO'], null),

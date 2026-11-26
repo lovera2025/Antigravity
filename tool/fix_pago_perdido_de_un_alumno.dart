@@ -1,4 +1,4 @@
-// Repone el pago del 07/07/2026 de OSORIO, URIEL (NORMAL MARIANO ILOZA) que
+// Repone el pago del 07/07/2026 de BENTEVEO, JORGE (NORMAL MARIANO ILOZA) que
 // nunca llegó a la nube desde la PC de Recepción, y recalcula saldo y cuotas.
 //
 // El pago existe en papel: recibo N° 007BED9E, 07/07/2026 12:08 hs, Efectivo,
@@ -6,8 +6,8 @@
 // persistida (mora_pendiente_tracked = 0), así que se corrige sola al volver
 // la cuota 4 a su lugar: vencía el 31/07 y se pagó el 07/07.
 //
-// Uso: dart run tool/fix_osorio_uriel_pago_perdido.dart
-//      dart run tool/fix_osorio_uriel_pago_perdido.dart --apply
+// Uso: dart run tool/fix_pago_perdido_de_un_alumno.dart
+//      dart run tool/fix_pago_perdido_de_un_alumno.dart --apply
 
 import 'dart:convert';
 import 'dart:io';
@@ -187,12 +187,12 @@ void main(List<String> args) {
 
   if (!apply) {
     print('\n(dry-run) para aplicar:');
-    print('dart run tool/fix_osorio_uriel_pago_perdido.dart --apply');
+    print('dart run tool/fix_pago_perdido_de_un_alumno.dart --apply');
     db.dispose();
     return;
   }
 
-  final backupPath = '$_dbPath.bak.osorio.'
+  final backupPath = '$_dbPath.bak.benteveo.'
       '${DateTime.now().toIso8601String().replaceAll(':', '-')}';
   File(_dbPath).copySync(backupPath);
   print('\nBackup: $backupPath');

@@ -1,4 +1,4 @@
-// Corrige las mesas y sillas extra de 6 alumnos puntuales (CACERES no se toca).
+// Corrige las mesas y sillas extra de 6 alumnos puntuales (CEDRO no se toca).
 // Plan: docs/CONTEXTO_v4.9.9-wip_2026-09-23.md, "PENDIENTE 1".
 //
 // Uso:
@@ -77,11 +77,11 @@ class _Correccion {
   });
 }
 
-// Orden acordado: primero los 3 de mesas, después Quiroz, Baldi y Esmay.
+// Orden acordado: primero los 3 de mesas, después Tucan, Jacaranda y Urunday.
 const _correcciones = <_Correccion>[
   _Correccion(
     id: '9544c706-81a2-4e85-89af-281f6322a1af',
-    nombre: 'PONCE, AYELEN MILAGROS',
+    nombre: 'TERO, NELIDA',
     grupo: 'mesas',
     cambio: 'mesas extra 1 → 2 (el precio total sigue en \$140.000)',
     esperado: {
@@ -99,7 +99,7 @@ const _correcciones = <_Correccion>[
   ),
   _Correccion(
     id: 'fbbd5418-7c44-4099-be9c-78b07af6baec',
-    nombre: 'SILVERO, MAXIMILIANO NAHUEL',
+    nombre: 'MARTINETA, DIEGO',
     grupo: 'mesas',
     cambio: 'mesas extra 1 → 2 (el precio total sigue en \$140.000)',
     esperado: {
@@ -117,7 +117,7 @@ const _correcciones = <_Correccion>[
   ),
   _Correccion(
     id: '424c1630-73dd-4839-95e5-3b358e46b0f1',
-    nombre: 'GONZALES, ALINA JAZMIN',
+    nombre: 'COIHUE, IRENE',
     grupo: 'mesas',
     cambio: 'mesas extra 1 → 2 (sus 2 sillas a \$8.000 ya están bien)',
     esperado: {
@@ -135,7 +135,7 @@ const _correcciones = <_Correccion>[
   ),
   _Correccion(
     id: '3199a441-cc45-41d0-af94-13b820b75ce9',
-    nombre: 'QUIROZ MEZA, MATIAS NAHUEL',
+    nombre: 'COLIBRI, OSVALDO',
     grupo: 'sillas',
     cambio: 'sillas 2 → 4 a \$8.000 (el total de sillas sigue en \$32.000)',
     esperado: {
@@ -153,7 +153,7 @@ const _correcciones = <_Correccion>[
   ),
   _Correccion(
     id: 'd5f01890-84f6-4d6e-be33-670e6e6aa348',
-    nombre: 'BALDI, JUAN MARTIN',
+    nombre: 'JACARANDA, FEDERICO',
     grupo: 'sillas',
     cambio: '1 silla de \$6.000 → \$8.000 (debe \$2.000 más)',
     esperado: {
@@ -174,7 +174,7 @@ const _correcciones = <_Correccion>[
   ),
   _Correccion(
     id: 'dd8af936-8880-4a50-8ee0-4de0086ce0e5',
-    nombre: 'ESMAY, THIAGO',
+    nombre: 'URUNDAY, HECTOR',
     grupo: 'sillas',
     cambio: 'sillas 2 → 4 a \$8.000 (\$36.000 → \$32.000); los \$4.000 de más '
         'pasan a la cuota base partiendo el pago del 25-jun',
@@ -204,7 +204,7 @@ const _correcciones = <_Correccion>[
   ),
 ];
 
-/// CACERES, ANAEL (b9fe4391-053a-4582-9758-5da1a7512150): NO SE TOCA. Su "2" de
+/// CEDRO, OSCAR (b9fe4391-053a-4582-9758-5da1a7512150): NO SE TOCA. Su "2" de
 /// sillas no tiene precio, no figura en su cuenta y la app ya no lo muestra.
 
 class _Freno implements Exception {
@@ -306,7 +306,7 @@ Future<_Plan> _planificar(DatabaseExecutor db, _Correccion c) async {
         'coincide con sus pagos (${recAntes.saldoDeudor}). No se toca.');
   }
 
-  // Pago que se parte (solo ESMAY).
+  // Pago que se parte (solo URUNDAY).
   Map<String, dynamic>? pagoPartido;
   Map<String, dynamic>? pagoNuevo;
   final pagosDespues = [for (final p in pagos) Map<String, dynamic>.from(p)];
@@ -627,7 +627,7 @@ void main() {
       print(apply
           ? '\nAplicado. Abrí la app y tocá "Subir pendientes": el contador '
               'tiene que quedar en 0.'
-          : '\nDRY-RUN OK: no se escribió nada. CACERES no se toca.');
+          : '\nDRY-RUN OK: no se escribió nada. CEDRO no se toca.');
     } on _Freno catch (e) {
       fail('FRENO, no se escribió nada: $e');
     } finally {

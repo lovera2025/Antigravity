@@ -3,7 +3,7 @@
 // o cae en el texto genérico (historial que no se puede reconstruir).
 //
 // Uso: flutter test tool/verificar_origen_mora_recibo_test.dart
-//      flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=bernel
+//      flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=araza
 //
 // Solo lectura: no escribe nada en la base.
 

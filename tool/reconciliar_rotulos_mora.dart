@@ -64,7 +64,7 @@ String? _reconstruirOpcionB({
   final antesDe = _antesDeLote(fechaPago);
   final fechaAr = ArTime.toAr(fechaPago);
 
-  // Fixture Alderete / Brisa $13.800
+  // Fixture Ceibo / Brisa $13.800
   if ((monto - 13800).abs() < 0.02 &&
       (cl.contains('cuota 3') ||
           cl.contains('remanente') ||

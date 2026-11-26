@@ -18,7 +18,7 @@
 | Las sillas de la noche (la puerta anota cada silla con el vale de la barra; la traba en la oficina por fiesta sorteada) | Abajo, en este archivo |
 | La barra entera: VENDER, vales, VENTAS, cerrar la caja, el jefe en la PC y en el iPhone, la central, Android firmado, el aviso de papel | `docs/CONTEXTO_BARRA_2026-11-02.md` |
 | Entradas 4 y 5: la entrega según los permisos, "En caja" y "pagó: ya podés entregar", anular solo el jefe | `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
-| Cambiar la fecha de un cobro lo saca de su caja abierta (ENRIQUE, MAXIMO) | `docs/CONTEXTO_v6.3.4_2026-11-07.md` |
+| Cambiar la fecha de un cobro lo saca de su caja abierta (TIPA, GASTON) | `docs/CONTEXTO_v6.3.4_2026-11-07.md` |
 | El aviso entre PCs que llegaba por el socket ya no se tira: la otra PC se pone al día sola, también minimizada; el tótem de la web saluda al instante | `docs/SPEC_pulso_por_el_socket_2026-11-07.md` |
 | **La Encargada de barra** (8-nov): una casilla en OPERADORES; vende con su caja y además ve LAS CAJAS y anula o reimprime cualquier venta | `docs/CONTEXTO_BARRA_2026-11-02.md`, "La Encargada de barra" |
 | **El cierre de caja por sector** (8-nov): COBROS · BARRA · ENTRADAS arriba del cierre de hoy, en modo jefe | `docs/CONTEXTO_BARRA_2026-11-02.md`, "El cierre por sector" |

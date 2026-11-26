@@ -282,7 +282,7 @@ void main() {
     ];
 
     test('cuota sin mora con remanente previo → tracked acumula el carry-over', () {
-      // Forma Bernel: el remanente es de una cuota YA pagada (la 2, $6.900) y
+      // Forma Araza: el remanente es de una cuota YA pagada (la 2, $6.900) y
       // ahora se liquida la cuota 3 ($8.100) sin cobrar mora. Conjuntos
       // disjuntos → 15.000. Pisar el tracked daría 8.100 (el bug v53).
       final desgloseNetoCuota3 = [
@@ -313,7 +313,7 @@ void main() {
     });
 
     test('cobrar solo una cuota del arrastre deja la otra pendiente', () {
-      // Bernel con 15.000 en ficha (C2 6.900 + C3 8.100). El operador tilda
+      // Araza con 15.000 en ficha (C2 6.900 + C3 8.100). El operador tilda
       // solo la C2 y paga 6.900: tiene que quedar la C3 viva.
       final r = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: 15000,
@@ -544,10 +544,10 @@ void main() {
       expect(r.reinicia, isFalse);
     });
 
-    // Historial REAL de BORDA (contrato 4fa099cb…, verificado en Supabase).
+    // Historial REAL de NOGAL (contrato 4fa099cb…, verificado en Supabase).
     // Reg 30-mar-2026 (el fixture viejo usaba 25-mar, que no existe en la base).
     // Cuota base $30.000 → $300/día. C1 vence 30-abr, C2 31-may, C3 30-jun.
-    List<Map<String, dynamic>> pagosBordaReales() => [
+    List<Map<String, dynamic>> pagosNogalReales() => [
           {
             'fecha_pago': '2026-05-20T21:15:11.215229+00:00',
             'concepto': 'Cuota Base (1/9)',
@@ -588,11 +588,11 @@ void main() {
           },
         ];
 
-    ContratoAlumno contratoBordaReal({required double saldoDeudor}) =>
+    ContratoAlumno contratoNogalReal({required double saldoDeudor}) =>
         ContratoAlumno(
-          id: 'borda',
+          id: 'nogal',
           eventoId: 'evt',
-          nombreAlumno: 'BORDA, LUDMILA AILEN',
+          nombreAlumno: 'NOGAL, PAULA',
           cantidadAcompanantes: 0,
           montoTotalPactado: 270000,
           saldoDeudor: saldoDeudor,
@@ -601,30 +601,30 @@ void main() {
           createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
         );
 
-    test('Borda: cuota 2 sin mora arrastra el remanente de la cuota 1', () {
+    test('Nogal: cuota 2 sin mora arrastra el remanente de la cuota 1', () {
       // Al 20-may la cuota 1 llevaba 20 días vencida ($6.000 devengados) y solo
       // se cobraron $300 → quedan $5.700 de carry-over. Al 30-jun se liquida la
       // cuota 2 ($9.000 de mora) sin cobrar interés → 5.700 + 9.000 = 14.700.
       // Conjuntos disjuntos (cuota 1 vs cuota 2): no hay doble conteo. La
       // expectativa vieja (8.700) codificaba la pérdida del remanente.
       final resultado = MoraTrackedRecovery.recomputarDesdeHistorial(
-        contratoBase: contratoBordaReal(saldoDeudor: 240000),
-        pagos: pagosBordaReales().take(4).toList(),
+        contratoBase: contratoNogalReal(saldoDeudor: 240000),
+        pagos: pagosNogalReales().take(4).toList(),
       );
       expect(resultado.tracked, closeTo(14700, 0.01));
       expect(resultado.offset, closeTo(300, 0.01));
     });
 
-    test('Borda: el pago de mora remanente descuenta, no borra el carry-over', () {
+    test('Nogal: el pago de mora remanente descuenta, no borra el carry-over', () {
       // El 1-jul se cobraron $9.000 de "mora pendiente cuota 2" — lo que la UI
       // mostraba entonces con el tracked pisado. Devengado real 15.000, cobrado
       // 9.300 → quedan 5.700 de la cuota 1. Ese remanente no viene del bug del
       // carry-over sino de que el cobro del 20-may se hizo con otro criterio de
       // mora; el replay le aplica la regla de hoy.
-      final contratoBase = contratoBordaReal(saldoDeudor: 210000);
+      final contratoBase = contratoNogalReal(saldoDeudor: 210000);
       final resultado = MoraTrackedRecovery.recomputarDesdeHistorial(
         contratoBase: contratoBase,
-        pagos: pagosBordaReales(),
+        pagos: pagosNogalReales(),
       );
       expect(resultado.tracked, closeTo(5700, 0.01));
       expect(resultado.offset, closeTo(9300, 0.01));
@@ -643,7 +643,7 @@ void main() {
       expect(operativa, closeTo(6300, 50));
     });
 
-    test('Bernel: tres cuotas sin mora acumulan 0 → 6.900 → 15.000', () {
+    test('Araza: tres cuotas sin mora acumulan 0 → 6.900 → 15.000', () {
       // Historial REAL (contrato 9a41293d…, verificado en Supabase): tres
       // "Cuota Base (n/9)" de $30.000, ninguna línea de mora en toda su historia.
       // Reg 30-mar-2026 → C1 vence 30-abr, C2 31-may, C3 30-jun.
@@ -671,9 +671,9 @@ void main() {
         },
       ];
       final contratoBase = ContratoAlumno(
-        id: 'bernel',
+        id: 'araza',
         eventoId: 'evt',
-        nombreAlumno: 'BERNEL, LUCILA FATIMA',
+        nombreAlumno: 'ARAZA, NORA',
         cantidadAcompanantes: 0,
         montoTotalPactado: 270000,
         saldoDeudor: 180000,
@@ -708,16 +708,16 @@ void main() {
   });
 
   group('Exención mora (pago total salda mora → limpio hasta fin de mes)', () {
-    test('Lezcano: pagó cuota 1 + mora 3 cuotas → 0 hasta 31-jul', () {
+    test('Radal: pagó cuota 1 + mora 3 cuotas → 0 hasta 31-jul', () {
       // Inscripción 30-mar-2026 (UTC) → AR idem.
       // Cuota 1 vence 30-abr, cuota 2 vence 31-may, cuota 3 vence 30-jun.
       // Pagó el 6-jul: cuota 1 ($30k) + mora ($32.700).
       // Post-cobro: tracked=0, offset=$32.700, exención=31-jul-2026.
       // moraExencionReinicia=true (default): tras vencer, reinicia desde exención.
       final contrato = ContratoAlumno(
-        id: 'lezcano',
+        id: 'radal',
         eventoId: 'evt',
-        nombreAlumno: 'LEZCANO, BLAS',
+        nombreAlumno: 'RADAL, RAUL',
         cantidadAcompanantes: 0,
         montoTotalPactado: 270000,
         saldoDeudor: 240000,
@@ -756,14 +756,14 @@ void main() {
       expect(moraAgo1, closeTo(900, 0.01));
     });
 
-    test('Espíndola: abono+mora Abr/May → permanente; al 9-jul solo C3', () {
+    test('Viraro: abono+mora Abr/May → permanente; al 9-jul solo C3', () {
       // Inscripción 31-mar → C1 Abr, C2 May, C3 Jun.
       // 27-jun: abono + mora Abr+May → exención 30-jun, reinicia=false.
       // Al 9-jul: Abr/May omitidos; C3 = 9 días × $350 = $3.150.
       final contrato = ContratoAlumno(
-        id: 'espindola',
+        id: 'viraro',
         eventoId: 'evt',
-        nombreAlumno: 'ESPINDOLA, BENJAMIN TOMAS',
+        nombreAlumno: 'VIRARO, IGNACIO',
         cantidadAcompanantes: 0,
         montoTotalPactado: 315000,
         saldoDeudor: 284750,
@@ -993,7 +993,7 @@ void main() {
     final contratoDeCarlo = ContratoAlumno(
       id: 'de-carlo',
       eventoId: 'evt',
-      nombreAlumno: 'DE CARLO',
+      nombreAlumno: 'ARAUCARIA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       saldoDeudor: 210000,
@@ -1369,10 +1369,10 @@ void main() {
   });
 
   group('mora_tracked_ajuste (perdón durable)', () {
-    final contratoBernel = ContratoAlumno(
-      id: 'bernel-ajuste',
+    final contratoAraza = ContratoAlumno(
+      id: 'araza-ajuste',
       eventoId: 'evt',
-      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      nombreAlumno: 'ARAZA, NORA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       saldoDeudor: 180000,
@@ -1380,7 +1380,7 @@ void main() {
       totalCuotas: 9,
       createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
     );
-    final pagosBernel = <Map<String, dynamic>>[
+    final pagosAraza = <Map<String, dynamic>>[
       {
         'fecha_pago': '2026-04-28T21:28:04.595192+00:00',
         'concepto': 'Cuota Base (1/9)',
@@ -1406,8 +1406,8 @@ void main() {
 
     test('perdonar solo ficha: reconcile no resucita tracked', () {
       final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
-        contrato: contratoBernel,
-        pagos: pagosBernel,
+        contrato: contratoAraza,
+        pagos: pagosAraza,
       );
       expect(objetivo.tracked, closeTo(15000, 0.01));
       final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
@@ -1425,7 +1425,7 @@ void main() {
 
     test('cuotas + ficha: exención intacta y tracked sigue 0 post-replay', () {
       final hoy = DateTime(2026, 8, 10);
-      final c = contratoBernel.copyWith(moraPendienteTracked: 15000);
+      final c = contratoAraza.copyWith(moraPendienteTracked: 15000);
       final bruto = MoraCuotaCalculator.calcularDesglose(c, hoy);
       final sim = MoraCuotaCalculator.simularPerdonMora(
         contrato: c,
@@ -1442,7 +1442,7 @@ void main() {
       );
       final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
         contrato: c,
-        pagos: pagosBernel,
+        pagos: pagosAraza,
       );
       final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
         objetivo: objetivo.tracked,
@@ -1459,8 +1459,8 @@ void main() {
 
     test('perdón de ficha y cobro nuevo: solo aparece remanente nuevo', () {
       final tras2 = MoraTrackedRecovery.objetivoDesdeHistorial(
-        contrato: contratoBernel,
-        pagos: pagosBernel.take(2).toList(),
+        contrato: contratoAraza,
+        pagos: pagosAraza.take(2).toList(),
       );
       expect(tras2.tracked, closeTo(6900, 0.01));
       final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
@@ -1468,8 +1468,8 @@ void main() {
         deseado: 0,
       );
       final tras3 = MoraTrackedRecovery.objetivoDesdeHistorial(
-        contrato: contratoBernel,
-        pagos: pagosBernel,
+        contrato: contratoAraza,
+        pagos: pagosAraza,
       );
       expect(tras3.tracked, closeTo(15000, 0.01));
       expect(
@@ -1483,8 +1483,8 @@ void main() {
 
     test('poner tracked a mano: recovery no lo baja al historial', () {
       final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
-        contrato: contratoBernel,
-        pagos: pagosBernel,
+        contrato: contratoAraza,
+        pagos: pagosAraza,
       );
       final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
         objetivo: objetivo.tracked,
@@ -1501,8 +1501,8 @@ void main() {
 
     test('ajuste 0 y tracked inflado: recovery sí lo corrige', () {
       final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
-        contrato: contratoBernel,
-        pagos: pagosBernel,
+        contrato: contratoAraza,
+        pagos: pagosAraza,
       );
       expect(
         MoraTrackedRecovery.trackedEfectivo(

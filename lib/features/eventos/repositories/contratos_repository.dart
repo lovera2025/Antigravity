@@ -679,7 +679,7 @@ class ContratosRepository {
   ///
   /// Con [revisarNube] (lo normal), antes de la cuenta saca los pagos del
   /// alumno que se borraron en otra PC: la cuenta sube a la nube, y con un pago
-  /// borrado adentro le pisaba el saldo (DE CARLO, MICAELA ESTEFANIA, 19-oct-2026:
+  /// borrado adentro le pisaba el saldo (ARAUCARIA, VALERIA, 19-oct-2026:
   /// $176.100 en vez de $236.100). Sin internet se hace igual, con lo de la PC.
   /// En false lo usan quien recorre muchos alumnos, para no consultar la nube
   /// por cada uno, y el motor, que ya la consultó.

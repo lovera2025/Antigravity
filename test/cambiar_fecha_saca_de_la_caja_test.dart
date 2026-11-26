@@ -1,5 +1,5 @@
 // Cambiar la fecha de un cobro a otro día lo saca de la caja abierta en la que se cargó
-// (regla del usuario, 7-nov-2026): esa plata no entró ese día. Pasó con ENRIQUE, MAXIMO:
+// (regla del usuario, 7-nov-2026): esa plata no entró ese día. Pasó con TIPA, GASTON:
 // lo pagó el 23-oct, se cargó el 7-nov en la caja del modo jefe, se le puso el 23 en
 // Mi Empresa y seguía en el cierre del 7.
 //

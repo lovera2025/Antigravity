@@ -1,4 +1,4 @@
-// Realinea ROMERO, VALENTINA (SAGRADO CORAZON) con los recibos físicos.
+// Realinea CHINGOLO, RITA (SAGRADO CORAZON) con los recibos físicos.
 //
 // Qué pasó: el cobro del 18/04 se perdió de la base. Desde ahí la app numeró
 // una cuota menos, así que los recibos del 12/05, 13/06 y 13/07 salieron
@@ -14,8 +14,8 @@
 //
 // No se tocan montos: saldo y cuotas pagadas no cambian.
 //
-// Uso: dart run tool/fix_romero_valentina_fechas.dart
-//      dart run tool/fix_romero_valentina_fechas.dart --apply
+// Uso: dart run tool/fix_fechas_de_una_alumna.dart
+//      dart run tool/fix_fechas_de_una_alumna.dart --apply
 
 import 'dart:convert';
 import 'dart:io';
@@ -257,7 +257,7 @@ void main(List<String> args) {
 
   if (!apply) {
     print('\n(dry-run) para aplicar:');
-    print('dart run tool/fix_romero_valentina_fechas.dart --apply');
+    print('dart run tool/fix_fechas_de_una_alumna.dart --apply');
     db.dispose();
     return;
   }

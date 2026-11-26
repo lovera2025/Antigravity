@@ -1,7 +1,7 @@
 // Arnés manual: emite el recibo Nº 0661293D con el código de producción, para
 // mirar el papel sin levantar la app ni tocar la base ni la red.
 //
-//   flutter test tool/recibo_muestra_bernel_test.dart
+//   flutter test tool/recibo_muestra_caso_a_test.dart
 //
 // No vive en test/ a propósito: guarda un PDF y lo abre, y eso no tiene que
 // pasar en cada corrida de la suite.
@@ -39,15 +39,15 @@ void main() {
         );
   });
 
-  test('recibo BERNEL 07/08/2026 — cobro de toda la mora', () async {
+  test('recibo ARAZA 07/08/2026 — cobro de toda la mora', () async {
     final fechaCobro = DateTime(2026, 8, 7, 17, 30);
     final diaAr = DateTime(2026, 8, 7);
 
     // Contrato tal como estaba antes del cobro.
     final pre = ContratoAlumno(
-      id: 'bernel-muestra',
+      id: 'araza-muestra',
       eventoId: 'ev-muestra',
-      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      nombreAlumno: 'ARAZA, NORA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       saldoDeudor: 180000,

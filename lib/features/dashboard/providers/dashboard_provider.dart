@@ -313,7 +313,7 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       // ("Bonificación global (X% sobre presupuesto total)") que entra en
       // `recaudado`. Restarle además el porcentaje al presupuesto descontaba el
       // descuento dos veces y dejaba en deuda negativa a quien había pagado
-      // justo: RAMON CACERES, con $7.200.000 de presupuesto, $6.480.000
+      // justo: RAMON CEDRO, con $7.200.000 de presupuesto, $6.480.000
       // cobrados y $720.000 de bonificación, daba −$720.000 estando saldado.
       //
       // La transacción es la fuente de verdad, no el porcentaje —

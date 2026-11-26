@@ -1002,7 +1002,7 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
           pagos: pagos,
         );
         // Si el cobro anulado era el que había dado la eximición, se va con él
-        // (un perdón no se toca). Antes quedaba: MONTENEGRO, FRANCISCO NAHUEL
+        // (un perdón no se toca). Antes quedaba: ACEBO, CESAR
         // siguió eximido hasta el 30/09 con su único cobro de mora anulado.
         final exencion = MoraTrackedRecovery.exencionDeCobroAnulado(
           contrato: contrato,

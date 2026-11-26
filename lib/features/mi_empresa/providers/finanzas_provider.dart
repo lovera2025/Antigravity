@@ -839,7 +839,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
         // El cobro entero, sin anuladas, con la misma regla que el Estado de
         // cuenta y la grilla (`ReciboDeUnCobro`). Este camino tenía su propia
         // ventana de ±10 s que sumaba renglones anulados y de otra caja, y antes
-        // su propia tabla de rótulos (el recibo Nº 11408158 de VIZGARRA llamó
+        // su propia tabla de rótulos (el recibo Nº 11408158 de CARDO llamó
         // "Interés mora (cuota base — este cobro)" a un arrastre de la cuota 3).
         final listOtrosRaw = ReciboDeUnCobro.lineasDelCobro(
           todosPagosRows,

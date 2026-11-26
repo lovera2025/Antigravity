@@ -47,7 +47,7 @@ class ResolucionMoraCobro {
 ///
 /// Vive acá afuera y no dentro del `onPressed` del modal por un motivo concreto.
 /// Mientras fue un tramo suelto de un closure de cientos de líneas, ningún test
-/// lo alcanzaba, y así se emitió el recibo Nº 0661293D (BERNEL, 07/08/2026): el
+/// lo alcanzaba, y así se emitió el recibo Nº 0661293D (ARAZA, 07/08/2026): el
 /// contrato simulado para el papel llevaba el tracked y el offset nuevos pero no
 /// la exención que ese mismo cobro otorgaba, y el aviso rojo reclamó $2.100 de
 /// la cuota 4 — la misma mora que el recibo estaba cobrando dos renglones

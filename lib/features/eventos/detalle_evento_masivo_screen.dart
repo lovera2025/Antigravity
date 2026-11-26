@@ -8231,7 +8231,7 @@ class _DetalleEventoMasivoScreenState
                           // de abrir caja y de dos await más, y en esa ventana
                           // el botón seguía vivo: un doble clic arrancaba un
                           // cobro paralelo y la familia terminaba pagando dos
-                          // veces (MONTIEL, 03/08 23:23, cobro completo
+                          // veces (ENEBRO, 03/08 23:23, cobro completo
                           // duplicado medio segundo después).
                           setModalState(() => confirmandoCobro = true);
 
@@ -9561,7 +9561,7 @@ class _DetalleEventoMasivoScreenState
       final bool reimpresion = esReimpresion ?? (fechaManual != null);
       // Una reimpresión muestra las cuotas y el saldo de aquel día, contados
       // desde los pagos hasta esa fecha. El contrato ya avanzó, y deducirlos
-      // del saldo mezclaba la cuota base con mesas y sillas: GAUNA, GERALDINE
+      // del saldo mezclaba la cuota base con mesas y sillas: CANELO, EMMA
       // tenía 6 cuotas pagadas y el recibo reimpreso decía 4/9.
       int? cuotasAlDia;
       final fechaRecibo = fechaManual;

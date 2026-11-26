@@ -7,7 +7,7 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 /// El recibo reimpreso cuenta las cuotas de aquel día desde los pagos.
 ///
 /// Antes las deducía del saldo dividiendo por el total del contrato, que
-/// incluye mesas y sillas: GAUNA, GERALDINE (Puerto Viejo) tenía 6 cuotas
+/// incluye mesas y sillas: CANELO, EMMA (Puerto Viejo) tenía 6 cuotas
 /// pagadas y 4 mesas extra, y su recibo reimpreso decía 4/9.
 void main() {
   Map<String, dynamic> pago(
@@ -27,12 +27,12 @@ void main() {
         'anulado': anulado,
       };
 
-  // GAUNA, GERALDINE: plan de $495.000 en 9 cuotas de $55.000, más 4 mesas
+  // CANELO, EMMA: plan de $495.000 en 9 cuotas de $55.000, más 4 mesas
   // extra de $70.000.
   final geraldine = ContratoAlumno(
     id: '626ec708-19d0-4c68-83b7-dda451608f55',
     eventoId: '3ee876b0-e8d6-4560-9161-bea9c542ee53',
-    nombreAlumno: 'GAUNA, GERALDINE',
+    nombreAlumno: 'CANELO, EMMA',
     cantidadAcompanantes: 0,
     montoTotalPactado: 775000,
     saldoDeudor: 430000,
@@ -56,11 +56,11 @@ void main() {
     pago('2026-09-25T17:28:33.015141+00:00', 55000, 'Cuota Base (6/9)'),
   ];
 
-  // SEGOVIA, PABLO: el mismo plan, con 1 mesa extra.
+  // CHIMANGO, BRUNO: el mismo plan, con 1 mesa extra.
   final pablo = ContratoAlumno(
     id: '2646f9b8-db60-42a0-9cf1-5b307d0db589',
     eventoId: '3ee876b0-e8d6-4560-9161-bea9c542ee53',
-    nombreAlumno: 'SEGOVIA, PABLO',
+    nombreAlumno: 'CHIMANGO, BRUNO',
     cantidadAcompanantes: 0,
     montoTotalPactado: 565000,
     saldoDeudor: 209000,

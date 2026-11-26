@@ -19,7 +19,7 @@ Fecha: 18-oct-2026. Rama: `feature/v4.6-cierre-por-sesiones`. Sale de la especif
   (`mora_pendiente_tracked`), y de qué cuota es cada parte se reconstruye repasando los pagos
   (`MoraTrackedOrigen.inferir`).
 - **Medido en su base (18-oct):** de los 51 alumnos con mora en la ficha, **50 se explican cuota por cuota**
-  ($1.592.537). El único que no, ESPINOZA, DENIS AIMARA, son los $87.600 inventados que la fase 1 deja en $0. Los 40
+  ($1.592.537). El único que no, GUATAMBU, DENIS AIMARA, son los $87.600 inventados que la fase 1 deja en $0. Los 40
   ajustes de su PC son todos perdones.
 
 **Entonces, lo que la fase 2 agrega a la vista es una sola cosa:** cada cuota suelta. Cobrar o perdonar la mora de la

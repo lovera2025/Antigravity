@@ -98,7 +98,7 @@ void main() {
 
     test('revisar la ficha: solo los que tienen algo sin explicar, bajas '
         'incluidas (6.1.0)', () {
-      // ESPINOZA, DENIS AIMARA estaba de baja cuando apareció.
+      // GUATAMBU, DENIS AIMARA estaba de baja cuando apareció.
       final sinExplicar = {'FICHA': 0.0, 'AMBAS': 300.0, 'SUSPENDIDO': 87600.0};
       bool revisa(ContratoAlumno a) => cumpleFiltroMora(
             a,

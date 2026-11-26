@@ -37,7 +37,7 @@ bool diaEsDeLaCaja({
 
 /// Regla del usuario (7-nov-2026): **si el jefe cambia la fecha de un cobro a otro día,
 /// esa plata no entró a la caja en la que se cargó**, así que sale de ella sola. Pasó con
-/// ENRIQUE, MAXIMO: lo pagó el 23-oct, se cargó el 7-nov en la caja del modo jefe, se le
+/// TIPA, GASTON: lo pagó el 23-oct, se cargó el 7-nov en la caja del modo jefe, se le
 /// puso el 23 y seguía en el cierre del 7.
 ///
 /// [caja] es la caja del cobro, o null si no tiene (un cobro de una versión vieja, o uno

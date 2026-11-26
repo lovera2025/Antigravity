@@ -79,7 +79,7 @@ bool cumpleCursoYBusqueda(
 /// [sinExplicar]: lo que la ficha de cada alumno no explica cuota por cuota
 /// (`MoraTrackedOrigen.sinExplicar`). Solo lo usa [FiltroMora.revisarFicha],
 /// que **sí incluye a las bajas**: no es para llamar a nadie sino para revisar
-/// datos, y ESPINOZA, DENIS AIMARA estaba de baja cuando apareció.
+/// datos, y GUATAMBU, DENIS AIMARA estaba de baja cuando apareció.
 bool cumpleFiltroMora(
   ContratoAlumno a,
   Map<String, MoraDeAlumno> mora,

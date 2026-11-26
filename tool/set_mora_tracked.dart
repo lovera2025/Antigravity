@@ -1,6 +1,6 @@
 // Setea mora_pendiente_tracked en un contrato.
 //
-//   dart run tool/set_mora_tracked.dart --nombre "BORDA" --evento "COLEGIO NACIONAL" --monto 8700
+//   dart run tool/set_mora_tracked.dart --nombre "NOGAL" --evento "COLEGIO NACIONAL" --monto 8700
 
 import 'dart:io';
 
@@ -32,7 +32,7 @@ void main(List<String> args) {
       eventoIdx + 1 >= args.length ||
       montoIdx + 1 >= args.length) {
     stderr.writeln(
-      'Uso: dart run tool/set_mora_tracked.dart --nombre "BORDA" '
+      'Uso: dart run tool/set_mora_tracked.dart --nombre "NOGAL" '
       '--evento "COLEGIO NACIONAL" --monto 8700',
     );
     exit(1);

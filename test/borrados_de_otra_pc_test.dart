@@ -1,7 +1,7 @@
 // Lo que se borra en una PC tiene que desaparecer también en la otra (6.1.1).
 //
 // El 19-oct-2026 el jefe, desde su PC, borró con la escobita un pago de $60.000
-// del 28/05 de DE CARLO, MICAELA ESTEFANIA (pactado $296.100). La PC del
+// del 28/05 de ARAUCARIA, VALERIA (pactado $296.100). La PC del
 // operario, prendida y cobrando, nunca se enteró: el borrado viajaba solo por
 // el aviso al instante (el pulso), que con la PC ocupada se tiraba, y la
 // revisión de cada 10 minutos no miraba los pagos. Al cobrarle la entrega de
@@ -55,7 +55,7 @@ class _Conexion extends ConnectivityService {
 Map<String, Object?> _contrato({double saldo = 176100}) => {
       'id': _alumno,
       'evento_id': _evento,
-      'nombre_alumno': 'DE CARLO, MICAELA ESTEFANIA',
+      'nombre_alumno': 'ARAUCARIA, VALERIA',
       'monto_total_pactado': 296100,
       'saldo_deudor': saldo,
       'cuotas_pagadas': 0,
@@ -234,7 +234,7 @@ void main() {
         faltan,
         isEmpty,
         reason: 'si se borra a mano y no se revisa, en la otra PC queda para '
-            'siempre (así le quedó a DE CARLO el pago que se borró)',
+            'siempre (así le quedó a ARAUCARIA el pago que se borró)',
       );
     });
   });
@@ -268,10 +268,10 @@ void main() {
       final r = renglonDeLoBorrado(
         'pagos_contrato_alumno',
         _pagoBorrado,
-        alumno: 'DE CARLO, MICAELA ESTEFANIA',
+        alumno: 'ARAUCARIA, VALERIA',
       );
       expect(r, contains('PAGO'));
-      expect(r, contains('DE CARLO, MICAELA ESTEFANIA'));
+      expect(r, contains('ARAUCARIA, VALERIA'));
       expect(r, contains('60.000'));
       expect(r, contains('28/05/2026'));
       expect(r, contains('"2 Cuotas (Cuota Base)"'));
@@ -357,7 +357,7 @@ void main() {
       );
       final constancia = await _constancia();
       expect(constancia, contains('al abrir el alumno'));
-      expect(constancia, contains('DE CARLO, MICAELA ESTEFANIA'));
+      expect(constancia, contains('ARAUCARIA, VALERIA'));
     });
 
     test('el historial de pagos ya viene sin el pago borrado', () async {

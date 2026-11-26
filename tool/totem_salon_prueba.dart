@@ -38,7 +38,7 @@ final _familias = [
   ('FERNÁNDEZ, MÍA', ['FERNÁNDEZ, JUAN'], 'Ella · Callejero Fino', 47),
   ('GARCÍA, BRUNO', <String>[], null, 53),
   ('LÓPEZ, VALENTINA', ['LÓPEZ, CARLA'], null, 74),
-  ('MARTÍNEZ, LAUTARO', <String>[], 'Quevedo · Bizarrap', 31),
+  ('TAMARINDO, TEO', <String>[], 'Quevedo · Bizarrap', 31),
   ('RODRÍGUEZ, CAMILA', ['RODRÍGUEZ, ANDREA', 'SOSA, PABLO'], null, 60),
 ];
 

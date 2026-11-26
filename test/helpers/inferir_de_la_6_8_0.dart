@@ -48,7 +48,7 @@ class InferirDeLa680 {
   /// La ventana de cobro y el perdón muestran la ficha cuota por cuota con esa
   /// reconstrucción; lo que no se explica sale como un renglón genérico ("sin
   /// origen identificado"). El 18-oct eran 50 de 51 fichas explicadas: la otra,
-  /// ESPINOZA, DENIS AIMARA, tenía $87.600 que la 6.0.0 había inventado (ver
+  /// GUATAMBU, DENIS AIMARA, tenía $87.600 que la 6.0.0 había inventado (ver
   /// `MoraTrackedRecovery.reconciliarTodos`). Esto avisa si vuelve a pasar.
   static double sinExplicar({
     required double tracked,

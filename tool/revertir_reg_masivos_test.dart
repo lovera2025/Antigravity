@@ -12,7 +12,7 @@
 // Restaura el created_at exacto que cada contrato tenía, leyéndolo de la copia
 // `data.db.bak.regabril.*`, y rehace tracked/offset/exención desde el historial
 // de pagos sobre esa fecha. No toca `mora_fecha_referencia`, así que las bajas
-// congeladas siguen congeladas, ni el saldo de MONTIEL, ni los offsets sueltos.
+// congeladas siguen congeladas, ni el saldo de ENEBRO, ni los offsets sueltos.
 
 import 'dart:io';
 

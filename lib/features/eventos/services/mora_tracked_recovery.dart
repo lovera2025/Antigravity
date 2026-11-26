@@ -426,7 +426,7 @@ class MoraTrackedRecovery {
   /// corresponde sin él.
   ///
   /// Anular un cobro rehacía tracked y offset desde los pagos que quedan, pero
-  /// la exención que ese cobro había dado quedaba: MONTENEGRO, FRANCISCO NAHUEL
+  /// la exención que ese cobro había dado quedaba: ACEBO, CESAR
   /// siguió eximido hasta el 30/09 aunque el cobro del 19/09, el que la dio, se
   /// anuló entero.
   ///
@@ -516,7 +516,7 @@ class MoraTrackedRecovery {
   ///
   /// - la de un cobro anulado se deshace ([exencionDeCobroAnulado]);
   /// - la que vino de cobros la reemplaza la del último cobro que dio una: una
-  ///   eximición vieja no le pasa su "permanente" a una nueva. MONTENEGRO,
+  ///   eximición vieja no le pasa su "permanente" a una nueva. ACEBO,
   ///   GISEL tenía la del 24/07, permanente (ese cobro no completó cuota), y el
   ///   21/08 saldó la mora completando la cuota 3 (esa vuelve a contar). Con
   ///   "la permanente gana", su cuota 4 dejaba de sumar mora para siempre;
@@ -683,7 +683,7 @@ class MoraTrackedRecovery {
   /// PC, y la próxima bajada del evento (donde la nube manda) lo volvía a
   /// pisar. Así 13 alumnos con cobros de agosto quedaron con el offset en 0 en
   /// todas las PCs y la mora que ya habían pagado se les descontaba de nuevo de
-  /// la de los meses siguientes (VERON, DALMA: $1.100 en vez de $33.000).
+  /// la de los meses siguientes (VIZCACHA, CAROLA: $1.100 en vez de $33.000).
   ///
   /// [soloEventosMasivosActivos]: limita a eventos masivos Confirmado/Planificacion.
   ///
@@ -692,7 +692,7 @@ class MoraTrackedRecovery {
   ///
   /// [soloContratos]: revisa solo esos. Lo usa reincorporar una baja temporal
   /// (6.1.0): la 6.0.0 rehacía la ficha de una baja contando la mora hasta el
-  /// día de la baja también para los pagos viejos, y ESPINOZA, DENIS AIMARA
+  /// día de la baja también para los pagos viejos, y GUATAMBU, DENIS AIMARA
   /// quedó con $87.600 de ficha por tres cuotas que había pagado antes de que
   /// vencieran. Al volver se rehace en el momento, sin esperar a la próxima vez
   /// que se abra el programa.
@@ -721,7 +721,7 @@ class MoraTrackedRecovery {
       // Quien ya terminó de pagar no se revisa, como en
       // [repararExencionDesdeHistorial]. Sin saldo no corre mora: queda solo la
       // ficha, y la dejó el cobro o el perdón del jefe. Rehecha desde los pagos
-      // da siempre $0, porque el repaso usa el saldo de hoy. ALTAMIRANO,
+      // da siempre $0, porque el repaso usa el saldo de hoy. ESPINILLO,
       // CELESTE ABIGAIL pagó el 15/10 los $407.000 acordados sin la mora; el
       // cobro dejó $683.760 en la ficha para que el jefe los perdone como
       // liquidación, y la revisión se los borraba sola.
@@ -872,7 +872,7 @@ class MoraTrackedRecovery {
   ///
   /// La cuenta es la misma de la ventana de cobro: lo que reconstruye
   /// [MoraTrackedOrigen.inferir] desde los pagos (ver
-  /// [MoraTrackedOrigen.sinExplicar]). Incluye a las bajas: ESPINOZA, DENIS
+  /// [MoraTrackedOrigen.sinExplicar]). Incluye a las bajas: GUATAMBU, DENIS
   /// AIMARA estaba de baja cuando apareció.
   static Future<List<String>> fichasSinExplicar(DatabaseExecutor db) async {
     final contratos = await db.query(

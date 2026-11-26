@@ -666,7 +666,7 @@ RecalculoContratoDesdePagos recalcularSaldoDesdePagos({
 /// imprime un recibo reimpreso, que no puede mostrar las cuotas de hoy.
 ///
 /// Sale de los pagos y no del saldo: el saldo mezcla la cuota base con las mesas
-/// y las sillas, y dividirlo por el total del contrato contaba mal. GAUNA,
+/// y las sillas, y dividirlo por el total del contrato contaba mal. CANELO,
 /// GERALDINE tenía 6 cuotas pagadas y 4 mesas extra; su recibo reimpreso decía
 /// 4 de 9.
 ///

@@ -13,8 +13,8 @@ void main() {
     String? fechaRef,
   }) =>
       {
-        'id': 'tonanez',
-        'nombre_alumno': 'TOÑANEZ, AGUSTINA',
+        'id': 'yacare',
+        'nombre_alumno': 'YACARE, ZULMA',
         'mora_tracked_ajuste': ajuste,
         'mora_exenta_hasta': exenta,
         'mora_exencion_reinicia': 1,
@@ -22,7 +22,7 @@ void main() {
       };
 
   group('el ajuste de la mora lo manda la nube', () {
-    // TOÑANEZ, 16-oct: la PC del jefe tenía $166.200 cargados a mano; en la
+    // YACARE, 16-oct: la PC del jefe tenía $166.200 cargados a mano; en la
     // nube se pusieron en 0. Antes la PC se quedaba con los suyos.
     const pcDelJefe = MoraLocalDelContrato(ajuste: 166200);
 
@@ -75,7 +75,7 @@ void main() {
 
     test('el renglón y el encabezado de revision_mora.txt', () {
       final t = RevisionMoraConstancia.textoDe(
-        [renglonAjusteQueSeVa('TOÑANEZ, AGUSTINA', 166200)],
+        [renglonAjusteQueSeVa('YACARE, ZULMA', 166200)],
         DateTime(2026, 10, 20, 8, 30),
         queHizo: queHizoAjustesQueSeFueron,
       );
@@ -86,7 +86,7 @@ void main() {
       );
       expect(
         t,
-        contains('  TOÑANEZ, AGUSTINA: ajuste de la mora en esta PC \$166200 '
+        contains('  YACARE, ZULMA: ajuste de la mora en esta PC \$166200 '
             '-> \$0, como en la nube'),
       );
     });

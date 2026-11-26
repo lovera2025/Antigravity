@@ -116,12 +116,12 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
-    'el caso VAREIRO entra y conserva el detalle de las dos moras',
+    'el caso TATU entra y conserva el detalle de las dos moras',
     () async {
       final contrato = ContratoAlumno(
-        id: 'vareiro-alto',
+        id: 'tatu-alto',
         eventoId: 'ev-alto',
-        nombreAlumno: 'VAREIRO, YOSELIE ANAHI',
+        nombreAlumno: 'TATU, HUGO',
         cantidadAcompanantes: 0,
         montoTotalPactado: 360000,
         saldoDeudor: 200000,

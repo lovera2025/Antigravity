@@ -22,7 +22,7 @@ v78 de la base y dos SQL sin correr.
 
 ## Qué pasaba
 
-**LOPEZ, MORENA AILEN** (GREGORIA MORALES, contrato `31f442c5…`) pagó el 6/11 la cuota 2 completa, la 3, $9.100 a cuenta de la 4 y
+**ULMO, CELIA** (GREGORIA MORALES, contrato `31f442c5…`) pagó el 6/11 la cuota 2 completa, la 3, $9.100 a cuenta de la 4 y
 $130.900 de mora de las cuotas 2, 3 y 4. Se cerraron la 2 y la 3 ($98.000 de mora); los $32.900 de la 4 eran un adelanto.
 
 El "ya usado" (`mora_cobrada_offset`) se quedaba con los $130.900 enteros. El crédito de la 4 desaparecía y la app le volvía a pedir
@@ -79,10 +79,10 @@ exactamente la de la regla vieja.
 
 | Alumno | Institución | Mora de hoy | Por qué |
 |---|---|---|---|
-| LOPEZ, MORENA AILEN | GREGORIA MORALES | $67.200 → $34.300 | El caso: el "ya usado" queda en $98.000 y no en $130.900 (la app muestra $235.200, no $268.100) |
-| MELGAREJO, MAIARA | ROTONDA | $40.400 → $14.800 | Lo mismo: el 3/11 pagó $63.600 de mora cerrando solo la 4 ($38.000); los $25.600 de la 5 se le volvían a pedir |
-| PAEZ, MARCELO ARIEL | TECNICA PINAROLI | $22.050 → $16.450 | Los dos errores: el 28/09 pagó $7.700 de más que se perdían, y los $7.000 del 20/10 se descontaban de la 3 y otra vez de la 7 |
-| ROMERO, THIAGO | GUEMEZ DE TEJADA | $26.950 → $25.200 | El 5/10 pagó $1.750 de más sobre la 2; ahora se descuentan de la 3 |
+| ULMO, CELIA | GREGORIA MORALES | $67.200 → $34.300 | El caso: el "ya usado" queda en $98.000 y no en $130.900 (la app muestra $235.200, no $268.100) |
+| CAOBA, HILDA | ROTONDA | $40.400 → $14.800 | Lo mismo: el 3/11 pagó $63.600 de mora cerrando solo la 4 ($38.000); los $25.600 de la 5 se le volvían a pedir |
+| ZORZAL, MANUEL | TECNICA PINAROLI | $22.050 → $16.450 | Los dos errores: el 28/09 pagó $7.700 de más que se perdían, y los $7.000 del 20/10 se descontaban de la 3 y otra vez de la 7 |
+| CHINGOLO, SAUL | GUEMEZ DE TEJADA | $26.950 → $25.200 | El 5/10 pagó $1.750 de más sobre la 2; ahora se descuentan de la 3 |
 
 Cada uno revisado cobro por cobro con `detalle=cambios`: en los cuatro la regla nueva da lo correcto. Una primera mirada a las
 15:42, sin el cobro de Morena, había dado los otros tres iguales.

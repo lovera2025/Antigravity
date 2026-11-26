@@ -10,7 +10,7 @@ final _t0 = DateTime.utc(2026, 8, 5, 17, 54, 30);
 IngresoDetallado ing({
   required double monto,
   required String concepto,
-  String alumno = 'DESCALZO, JONATHAN GABRIEL',
+  String alumno = 'MIRTO, ELIAS',
   String? contratoId = 'c-1',
   String medio = 'Efectivo',
   Duration desde = Duration.zero,
@@ -62,7 +62,7 @@ void main() {
         ing(
           monto: 30000,
           concepto: 'Cuota Base (5/9)',
-          alumno: 'GONZALEZ VALLEJOS, JORGE ANDRES',
+          alumno: 'ARRAYAN, MARIO',
           contratoId: 'c-2',
           desde: const Duration(minutes: -92),
         ),
@@ -70,7 +70,7 @@ void main() {
           monto: 12500.55,
           concepto: 'Cuota Base (2/9)',
           contratoId: 'c-3',
-          alumno: 'ALMIRON, DANA',
+          alumno: 'TALA, ELENA',
           medio: 'Transferencia',
           desde: const Duration(minutes: -5),
         ),
@@ -78,7 +78,7 @@ void main() {
           monto: 900.45,
           concepto: 'Costo por transferencia',
           contratoId: 'c-3',
-          alumno: 'ALMIRON, DANA',
+          alumno: 'TALA, ELENA',
           medio: 'Transferencia',
           desde: const Duration(minutes: -5, milliseconds: 20),
           lineKind: kLineKindCargoCanal,
@@ -116,7 +116,7 @@ void main() {
 
       expect(grupos.length, 1);
       expect(grupos.first.monto, 37100);
-      expect(grupos.first.alumno, 'DESCALZO, JONATHAN GABRIEL');
+      expect(grupos.first.alumno, 'MIRTO, ELIAS');
       expect(grupos.first.resumenConceptos, contains('cuota base 4/9'));
       expect(grupos.first.resumenConceptos, contains('int. mora Jul'));
     });

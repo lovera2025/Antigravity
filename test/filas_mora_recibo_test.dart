@@ -14,7 +14,7 @@ double _suma(List<FilaMoraPdf> filas) =>
 
 /// Las líneas del recibo Nº FF677977: $5.600 de la cuota 1 vencida y $19.400 de
 /// arrastre sin cuota reconstruible.
-List<Map<String, dynamic>> _lineasVareiro() => [
+List<Map<String, dynamic>> _lineasTatu() => [
   {
     'concepto': 'Cuotas base (2-3-4/9)',
     'monto': 120000.0,
@@ -39,7 +39,7 @@ List<Map<String, dynamic>> _lineasVareiro() => [
 void main() {
   group('filasMoraCobradaPdf', () {
     test('las filas suman exactamente la mora seleccionada', () {
-      final lineas = _lineasVareiro();
+      final lineas = _lineasTatu();
       final filas = filasMoraCobradaPdf(lineas);
 
       expect(_suma(filas), closeTo(moraSeleccionadaPdf(lineas), 0.01));
@@ -47,7 +47,7 @@ void main() {
     });
 
     test('la línea sin cuota reconstruible no se pierde: va a la bolsa', () {
-      final filas = filasMoraCobradaPdf(_lineasVareiro());
+      final filas = filasMoraCobradaPdf(_lineasTatu());
 
       final bolsa = filas.where(
         (f) => f.rotulo == rotuloMoraOtrasCuotasPdf,
@@ -61,7 +61,7 @@ void main() {
     });
 
     test('a la cuota 1 se le atribuye lo suyo, no el total del recuadro', () {
-      final filas = filasMoraCobradaPdf(_lineasVareiro());
+      final filas = filasMoraCobradaPdf(_lineasTatu());
 
       final cuota1 = filas.firstWhere((f) => f.rotulo.startsWith('Cuota 1'));
       expect(cuota1.rotulo, 'Cuota 1 (Abr, 14 d)');

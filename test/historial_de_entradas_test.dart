@@ -576,13 +576,13 @@ void main() {
 
       // El comprador más largo que va entero arriba, en negrita: un nombre con
       // muchas M, las letras más anchas.
-      final nombre = 'MONTENEGRO DOMINGUEZ, MARIA MERCEDES'
+      final nombre = 'ACEBO DOMINGUEZ, MARIA MERCEDES'
           .substring(0, HistorialEntradasPdf.letrasComprador);
       expect(ancho(negrita, nombre, v),
           lessThanOrEqualTo(HistorialEntradasPdf.anchoComprador - relleno), reason: nombre);
       // Y el comprador con su familia, lo más largo que va arriba.
       const comprador = 'MENDOZA, MARIA';
-      final familia = 'MONTENEGRO, EMMA m.12-13'
+      final familia = 'ACEBO, EMMA m.12-13'
           .substring(0, HistorialEntradasPdf.letrasArriba - 8 - comprador.length);
       expect(
         ancho(negrita, comprador, v) + ancho(regular, ' · fam. $familia', v),
@@ -592,8 +592,8 @@ void main() {
 
       // Lo más largo que va en un solo renglón de abajo (letra de 7), con
       // mayúsculas, que son las más anchas.
-      const abajo = 'MONTENEGRO DOMINGUEZ DE LA FUENTE, MARIA MERCEDES · fam. MAMANI '
-          'MONTENEGRO, MAXIMO MARTIN m.12-13 · talonario 3001-3004, 9001-9004 · efectivo';
+      const abajo = 'ACEBO DOMINGUEZ DE LA FUENTE, MARIA MERCEDES · fam. MAMANI '
+          'ACEBO, MAXIMO MARTIN m.12-13 · talonario 3001-3004, 9001-9004 · efectivo';
       expect(
         ancho(regular, abajo.substring(0, HistorialEntradasPdf.letrasAbajo), 7.0),
         lessThanOrEqualTo(HistorialEntradasPdf.anchoAbajo),

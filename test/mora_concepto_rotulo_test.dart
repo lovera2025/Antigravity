@@ -217,7 +217,7 @@ void main() {
       expect(pdf.first['subtexto'], isNull);
     });
 
-    test('mixto Alderete Opción B: 6900+6900 cuota 2', () {
+    test('mixto Ceibo Opción B: 6900+6900 cuota 2', () {
       final c = MoraConceptoRotulo.conceptoPersistido(
         detallesCalendario: [c3],
         montoPendientePrevias: 6900,
@@ -258,12 +258,12 @@ void main() {
     });
   });
 
-  group('MoraTrackedOrigen — Alderete Brisa', () {
+  group('MoraTrackedOrigen — Ceibo Brisa', () {
     test('cuota1 full + cuota2 parcial → origen cuota 2 / 6900', () {
       final contrato = ContratoAlumno(
         id: 'brisa-test',
         eventoId: 'ev',
-        nombreAlumno: 'ALDERETE, BRISA GUADALUPE',
+        nombreAlumno: 'CEIBO, CLARA',
         cantidadAcompanantes: 0,
         montoTotalPactado: 270000,
         totalCuotas: 9,
@@ -321,13 +321,13 @@ void main() {
     });
   });
 
-  group('MoraTrackedOrigen — arrastre de varias cuotas (Bernel)', () {
+  group('MoraTrackedOrigen — arrastre de varias cuotas (Araza)', () {
     // Historial real: tres "Cuota Base (n/9)" de $30.000 sin una sola línea de
     // mora. Reg 30-mar-2026 → C1 vence 30/04, C2 31/05, C3 30/06.
     final contrato = ContratoAlumno(
-      id: 'bernel',
+      id: 'araza',
       eventoId: 'ev',
-      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      nombreAlumno: 'ARAZA, NORA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       totalCuotas: 9,
@@ -470,14 +470,14 @@ void main() {
     });
   });
 
-  group('MoraOrigenRecorte — el perdón suelta la cuota más vieja (VAREIRO)', () {
-    // Mismo historial que Bernel: tres cuotas base sin una sola línea de mora,
+  group('MoraOrigenRecorte — el perdón suelta la cuota más vieja (TATU)', () {
+    // Mismo historial que Araza: tres cuotas base sin una sola línea de mora,
     // así que el arrastre son $15.000 abiertos en C2 (May) $6.900 y C3 (Jun)
     // $8.100. Lo que cambia acá es qué se pregunta sobre ese arrastre.
     final contrato = ContratoAlumno(
       id: 'perdon-remanente',
       eventoId: 'ev',
-      nombreAlumno: 'VAREIRO, YOSELIE ANAHI',
+      nombreAlumno: 'TATU, HUGO',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       totalCuotas: 9,
@@ -727,7 +727,7 @@ void main() {
   // El concepto persistido está escrito en idioma de origen: "(no cobrada al
   // pagar)" habla de cuando se pagó la cuota, no de este movimiento. En la ficha
   // queda arriba de plata que sí entró y se lee como que el cobro no se hizo
-  // (recibo Nº 11408158, VIZGARRA 08/07/2026).
+  // (recibo Nº 11408158, CARDO 08/07/2026).
   group('rotuloFichaMora', () {
     test('una cuota: dice de cuál es y que se cobró en este pago', () {
       final r = MoraConceptoRotulo.rotuloFichaMora(

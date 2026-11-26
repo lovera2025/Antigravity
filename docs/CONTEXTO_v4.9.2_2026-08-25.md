@@ -61,7 +61,7 @@ Costo en consultas: **cero**. Es una columna más en un join que ya se hacía.
 ## EL CHIP
 
 ```
- 💵  BREST, MARCOS  ⟨ SAGRADO CORAZON ⟩              $ 28.700,00
+ 💵  ROBLE, MATEO  ⟨ SAGRADO CORAZON ⟩              $ 28.700,00
      19:20 hs · Efectivo · cuota base 5/9
 ```
 

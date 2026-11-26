@@ -36,7 +36,7 @@ import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
 const _apellidos = [
-  'ACOSTA', 'BENÍTEZ', 'CASTRO', 'DOMÍNGUEZ', 'ESPÍNDOLA', 'FERREYRA', 'GÓMEZ',
+  'ACOSTA', 'BENÍTEZ', 'CASTRO', 'DOMÍNGUEZ', 'VIRARO', 'FERREYRA', 'GÓMEZ',
   'HERRERA', 'IBARRA', 'JUÁREZ', 'LEDESMA', 'MOLINA', 'NÚÑEZ', 'ORTIZ',
   'PAREDES', 'QUIROGA', 'RAMÍREZ', 'SOSA', 'TORRES', 'VEGA',
 ];

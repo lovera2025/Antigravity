@@ -48,7 +48,7 @@ List<Map<String, dynamic>> _finales(
     );
 
 void main() {
-  // Bernel: cuota 3 de 9, Reg 30-mar-2026 → vence 30-jun; al 27-jul son 27 días.
+  // Araza: cuota 3 de 9, Reg 30-mar-2026 → vence 30-jun; al 27-jul son 27 días.
   final regAr = DateTime(2026, 3, 30);
   final hoyAr = DateTime(2026, 7, 27);
 
@@ -69,7 +69,7 @@ void main() {
     });
 
     test('cobro de sola mora: la línea nombra su cuota, no queda huérfana', () {
-      // Recibo Nº 0661293D (BERNEL, 07/08/2026): se cobró únicamente mora, así
+      // Recibo Nº 0661293D (ARAZA, 07/08/2026): se cobró únicamente mora, así
       // que no hay renglón de cuota del que colgarla. Sin nombrar la cuota, la
       // línea salía "Mora · 7 d" y no había forma de saber a cuál correspondía
       // — justo cuando el aviso de abajo hablaba de "cuota 4 (Jul, 7 d)".
@@ -255,7 +255,7 @@ void main() {
 
   // Finanzas al reimprimir y el REIMPRIMIR por fila del estado de cuenta armaban
   // los mapas a mano, sin `esMora`. Con la bandera ausente la mora se colaba en
-  // "Cuotas del plan": el recibo Nº 11408158 (VIZGARRA 08/07/2026) mostró
+  // "Cuotas del plan": el recibo Nº 11408158 (CARDO 08/07/2026) mostró
   // $38.150 de plan cuando el plan eran $35.000 y la mora $3.150.
   group('normalizarBanderasLineasPdf — mapas armados a mano', () {
     List<Map<String, dynamic>> peladas() => [

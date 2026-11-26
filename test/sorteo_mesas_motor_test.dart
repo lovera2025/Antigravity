@@ -478,11 +478,11 @@ void main() {
     test('sillas: solo las que figuran en la cuenta', () {
       expect(SalonMesas.sillasExtra(alumno('a', sillas: 2)), 2);
       expect(
-        SalonMesas.sillasExtra(alumno('caceres', sillas: 2, precioSillas: 0)),
+        SalonMesas.sillasExtra(alumno('cedro', sillas: 2, precioSillas: 0)),
         0,
         reason: 'con precio 0 no están en su cuenta',
       );
-      expect(SalonMesas.textoSillas(alumno('caceres', sillas: 2, precioSillas: 0)),
+      expect(SalonMesas.textoSillas(alumno('cedro', sillas: 2, precioSillas: 0)),
           '-');
     });
 
@@ -493,8 +493,8 @@ void main() {
     });
 
     test('reparto de sillas: de a 2 por mesa, primero el bloque', () {
-      final quiroz = alumno('q', extras: 1, mesa: '12, 13', sillas: 4);
-      expect(SalonMesas.textoRepartoSillas(quiroz), '12 (+2) · 13 (+2)');
+      final tucan = alumno('q', extras: 1, mesa: '12, 13', sillas: 4);
+      expect(SalonMesas.textoRepartoSillas(tucan), '12 (+2) · 13 (+2)');
       final nicolini = alumno('n', extras: 1, mesa: '30, 31', sillas: 3);
       expect(SalonMesas.textoRepartoSillas(nicolini), '30 (+2) · 31 (+1)');
       final separada = alumno('s', extras: 2, mesa: '12, 13, 40', sillas: 3);
@@ -549,22 +549,22 @@ void main() {
         alumno('ok2', extras: 1, sillas: 2),
         alumno('ok3', extras: 1),
         alumno('ponce', extras: 1, precioMesa: 140000),
-        alumno('esmay', extras: 1, sillas: 2, precioSillas: 36000),
+        alumno('urunday', extras: 1, sillas: 2, precioSillas: 36000),
         alumno('demas', sillas: 3),
         alumno('falta', extras: 1, mesa: '9'),
         alumno('raro', mesa: 'A'),
-        alumno('caceres', extras: 1, sillas: 2, precioSillas: 0),
+        alumno('cedro', extras: 1, sillas: 2, precioSillas: 0),
         alumno('baja', extras: 1, precioMesa: 140000, baja: true),
       ];
       final tipos = {
         for (final a in SalonMesas.avisos(evento)) a.alumnoId: a.tipo,
       };
       expect(tipos['ponce'], TipoAvisoSalon.precioMesa);
-      expect(tipos['esmay'], TipoAvisoSalon.precioSillas);
+      expect(tipos['urunday'], TipoAvisoSalon.precioSillas);
       expect(tipos['demas'], TipoAvisoSalon.sillasDeMas);
       expect(tipos['falta'], TipoAvisoSalon.mesasNoCoinciden);
       expect(tipos['raro'], TipoAvisoSalon.numeroIlegible);
-      expect(tipos.containsKey('caceres'), isFalse,
+      expect(tipos.containsKey('cedro'), isFalse,
           reason: 'sus sillas sin precio no están en la cuenta');
       expect(tipos.containsKey('baja'), isFalse);
       expect(tipos.containsKey('ok1'), isFalse);

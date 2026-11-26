@@ -6,7 +6,7 @@ ContratoAlumno _contratoAvilaLike() {
   return ContratoAlumno(
     id: 'c1',
     eventoId: 'e1',
-    nombreAlumno: 'AVILA, BLAS ADRIEL',
+    nombreAlumno: 'TIMBO, DIEGO',
     cantidadAcompanantes: 0,
     montoTotalPactado: 315000,
     saldoDeudor: 175000,
@@ -207,12 +207,12 @@ void main() {
     });
   });
 
-  group('conceptosPdfDesdePagosLote — Alderete/Brisa Opción B', () {
+  group('conceptosPdfDesdePagosLote — Ceibo/Brisa Opción B', () {
     test('reimpresión: cuota 3/9 + mora partida con subtexto 300/7200', () {
       final c = ContratoAlumno(
         id: 'brisa',
         eventoId: 'e1',
-        nombreAlumno: 'ALDERETE, BRISA GUADALUPE',
+        nombreAlumno: 'CEIBO, CLARA',
         cantidadAcompanantes: 0,
         montoTotalPactado: 270000,
         saldoDeudor: 180000,
@@ -298,11 +298,11 @@ void main() {
     });
   });
 
-  // VIZGARRA, recibo Nº 11408158: el 08/07 se cobró la cuota 4 ($35.000) más
+  // CARDO, recibo Nº 11408158: el 08/07 se cobró la cuota 4 ($35.000) más
   // $3.150 de arrastre de la cuota 3. El estado de cuenta rotulaba esa plata
   // cobrada como "Mora pendiente cuota 3 (no cobrada al pagar)".
   group('Estado de cuenta — la mora cobrada no dice "no cobrada"', () {
-    List<Map<String, dynamic>> historialVizgarra() => [
+    List<Map<String, dynamic>> historialCardo() => [
           _pago(
             id: 'p1',
             fecha: '2026-05-11T21:32:00.000Z',
@@ -345,7 +345,7 @@ void main() {
     Map<String, dynamic> filaMoraDel0807() {
       final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
         _contratoAvilaLike(),
-        historialVizgarra(),
+        historialCardo(),
       );
       return filas.firstWhere((f) => f['id'] == 'p5');
     }
@@ -373,7 +373,7 @@ void main() {
     test('las filas del plan no llevan rótulo de ficha', () {
       final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
         _contratoAvilaLike(),
-        historialVizgarra(),
+        historialCardo(),
       );
       final base = filas.firstWhere((f) => f['id'] == 'p4');
 
@@ -385,7 +385,7 @@ void main() {
     test('la mora del calendario ya se entendía: rótulo intacto', () {
       final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
         _contratoAvilaLike(),
-        historialVizgarra(),
+        historialCardo(),
       );
       final fila = filas.firstWhere((f) => f['id'] == 'p2');
 
@@ -394,7 +394,7 @@ void main() {
     });
 
     test('el recibo del 08/07 nombra la misma cuota 3 que la ficha', () {
-      final hist = historialVizgarra();
+      final hist = historialCardo();
       final lote = hist.where((p) => p['id'] == 'p4' || p['id'] == 'p5').toList();
 
       final pdf = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(

@@ -110,7 +110,7 @@ RevisionEnMemoria _fiestaDeMuestra() => RevisionEnMemoria(
         // Adicional sin número, con el primer pago después del sorteo.
         _alumno('d', 'DOMÍNGUEZ, BRUNO', extras: 1, mesa: '20'),
         // "Los que faltaban" le dio la 80.
-        _alumno('e', 'ESPÍNDOLA, CAMILA', extras: 1, mesa: '22, 80'),
+        _alumno('e', 'VIRARO, CAMILA', extras: 1, mesa: '22, 80'),
         // Ya la tenía en el sorteo: no figura.
         _alumno('f', 'FERREYRA, LUCAS', extras: 1, mesa: '30, 31'),
         _alumno('g', 'GÓMEZ, SOFÍA', mesa: '32'),

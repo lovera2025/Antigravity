@@ -398,7 +398,7 @@ void main() {
         nombres: const ['CABRAL, ANA']);
     alumnoDeMuestra(e, id: _conMora, nombre: 'DÍAZ, NICOLÁS', mesas: const [20], mora: 12500);
     alumnoDeMuestra(e,
-        id: _conFicha, nombre: 'ESPÍNDOLA, ROCÍO', mesas: const [21], pagado: 0, saldoFicha: 0);
+        id: _conFicha, nombre: 'VIRARO, ROCÍO', mesas: const [21], pagado: 0, saldoFicha: 0);
   }
 
   /// Al sorteo CABRAL tenía la mesa y 2 sillas (la tercera la agregó después), y
@@ -752,7 +752,7 @@ void main() {
       'ACOSTA', 'BENITEZ', 'CABRERA', 'DOMINGUEZ', 'ESCOBAR', 'FERREYRA', 'GIMENEZ',
       'HERRERA', 'IBARRA', 'JUAREZ', 'LEDESMA', 'NIEVA', 'NAVARRO', 'OJEDA', 'PAEZ',
       'QUIROGA', 'RAMIREZ', 'SOSA', 'TOLEDO', 'VERA', 'ZARATE', 'AGUIRRE', 'BRITEZ',
-      'CACERES', 'DIAZ', 'FRANCO', 'GODOY', 'LUNA', 'MEDINA', 'ORTIZ', 'PERALTA', 'ROMERO',
+      'CEDRO', 'DIAZ', 'FRANCO', 'GODOY', 'LUNA', 'MEDINA', 'ORTIZ', 'PERALTA', 'ROMERO',
     ];
     const nombres = [
       'ANA', 'LUIS', 'MARTA', 'JUAN', 'SOFIA', 'DIEGO', 'LAURA', 'PABLO', 'CARLA',

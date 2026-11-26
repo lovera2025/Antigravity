@@ -60,7 +60,7 @@ intermedias: por eso salta de la 5.0.0 a la 6.0.0 y junta más de 80 commits.
 | **Lo que cambia el salón, solo en modo jefe**; lo demás se ve, se imprime y se entrega | Toda la fiesta |
 | **La nota de un alumno dice cuándo se escribió** y cuándo se tocó por última vez | El ícono de la nota en la grilla (al pasar el mouse) y la hoja de la nota |
 | **La lista de la puerta sigue al sorteo:** se arma al sortear y se vacía al deshacer (13-oct) | Sola; a mano, en MÁS |
-| El recibo reimpreso cuenta bien las cuotas (lo de GAUNA) | Recibos |
+| El recibo reimpreso cuenta bien las cuotas (lo de CANELO) | Recibos |
 | Mi Empresa: lo disponible en efectivo y en transferencia, las extracciones aparte y el bolsillo arreglado | Mi Empresa |
 | La cola de subida no pierde un cambio hecho mientras subía el anterior, y lo trabado se reintenta todo junto | Sincronización |
 | Editar o borrar una nota de mora condonada ahora llega a la nube y a las otras PCs | Sincronización |
@@ -113,7 +113,7 @@ El detalle está en "Qué pasó el 11-oct" y "Qué pasó el 11-oct, a la tarde" 
    - el bloque de cada división guarda sus mesas una por una, y el pasto ya no se cuenta como propio (`2761762`);
    - el control de mesas y sillas, con los nombres de los que no pagaron la base (`8a1146e`).
 3. **Los seis alumnos corregidos el 24-sep, mirados de nuevo:** están bien, en la PC y en la nube. El usuario
-   confirmó que sigue de acuerdo con haber deshecho lo de ESMAY.
+   confirmó que sigue de acuerdo con haber deshecho lo de URUNDAY.
 4. **La etapa 12, adelantada:** la versión `6.0.0+57` (`8ca3598`) y un primer instalador. El usuario preguntó si se
    podía publicar ese día, después frenó ("¿no te estoy apurando?") y eligió mirar primero las pantallas.
 5. **La etapa 11, la documentación:** este archivo y `CLAUDE.md` (`efeafe5`).
@@ -1347,11 +1347,11 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
     pagos idénticos; los 643 contratos idénticos en plata, cuotas, mesa, sillas y mora de ficha**. Lo que la nube
     tiene distinto quedó en `Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32.nube.txt`.
   - **Apareció: 12 contratos con la eximición de mora distinta.** En su PC, `mora_exenta_hasta` = 31/08/2026; en la
-    nube, sin fecha (VEGA, FLAVIA CLARISA y VERON, DALMA además con "vuelve a contar" = no en la PC). **Causa:** las
+    nube, sin fecha (COATI, ADELA y VIZCACHA, CAROLA además con "vuelve a contar" = no en la PC). **Causa:** las
     columnas de la eximición se agregaron a la nube el 28-ago (migración `add_mora_exencion_columns_contratos_alumnos`);
     lo cobrado antes no pudo subir la fecha. Es un resto de agosto, no una falla de ahora (las fechas de septiembre y
-    octubre coinciden). **A dos les cambia la mora de hoy:** BLANCO DI SI, JUAN FRANCISCO ($12.900 en su PC, $40.800
-    con lo de la nube) y VERON, DALMA ($1.100 / $42.900); los dos pagaron mora en agosto (el 5 y el 24), así que lo
+    octubre coinciden). **A dos les cambia la mora de hoy:** GUAYABO, JULIAN ($12.900 en su PC, $40.800
+    con lo de la nube) y VIZCACHA, CAROLA ($1.100 / $42.900); los dos pagaron mora en agosto (el 5 y el 24), así que lo
     correcto parece lo de su PC: en otra PC se les cobraría de nuevo mora ya pagada. **No se corrigió:** va con su
     OK, por el camino de siempre (los nombrados, simulacro, copia y comparación).
   - **Los tres SQL que solo agregan, corridos con `apply_migration`** (quedan en la lista de migraciones):
@@ -1368,10 +1368,10 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
 ### La mora: la revisión automática arreglada (15-oct, a la tarde; programada, sin publicar)
 
 **Cómo apareció.** Comparando su PC con la nube aparecieron 12 contratos con una eximición de mora que la nube no
-tenía. Mirando VERON, DALMA con él, se vio el problema de fondo: **la mora que un alumno ya pagó se le volvía a
-descontar de la de los meses siguientes, y la app cobraba de menos.** VERON pagó el 24/08 la mora de julio
+tenía. Mirando VIZCACHA, CAROLA con él, se vio el problema de fondo: **la mora que un alumno ya pagó se le volvía a
+descontar de la de los meses siguientes, y la app cobraba de menos.** VIZCACHA pagó el 24/08 la mora de julio
 ($31.900); su PC le mostraba $1.100 en vez de $33.000 (agosto y septiembre: 45 y 15 días × $550). La prueba que
-le sirvió a él: en su ventana de cobro de BLANCO DI SI, la cuota 5 con 45 días decía $8.400 y la 6 con 15 días
+le sirvió a él: en su ventana de cobro de GUAYABO, la cuota 5 con 45 días decía $8.400 y la 6 con 15 días
 $4.500 (45 días tienen que ser el triple: $13.500).
 
 **Su regla, confirmada por él** (es la de la app): "cuando un alumno pagó la mora de un mes, esa mora ya no se
@@ -1384,11 +1384,11 @@ cobra más; se cobra la siguiente si no se abonó". Los perdones están bien y n
    la mora llegaron a la nube vacías (migración `add_mora_exencion_columns_contratos_alumnos`, la 4.9.3 de ese
    día) y a los cobros de agosto anteriores se les perdió el "ya usado" (y a algunos la fecha).
 2. **Mora pagada en dos veces** (pasa también hoy): una parte un día sin completar cuota, el resto otro día con la
-   cuota. `postCobroTrackedOffset` sumaba al "ya usado" solo lo del segundo cobro (MOLINA, CARLOS LAUTARO:
+   cuota. `postCobroTrackedOffset` sumaba al "ya usado" solo lo del segundo cobro (ABEDUL, ALBERTO:
    $29.400 del 22/09 fuera).
-3. **Anular un cobro dejaba su eximición** (MONTENEGRO, FRANCISCO NAHUEL, cobro del 19/09 anulado entero).
+3. **Anular un cobro dejaba su eximición** (ACEBO, CESAR, cobro del 19/09 anulado entero).
    Y al revisar apareció un cuarto: la regla "la permanente gana" del merge, pensada para los perdones, le pasaba
-   la permanencia de una eximición vieja de un cobro a una nueva (MONTENEGRO, GISEL).
+   la permanencia de una eximición vieja de un cobro a una nueva (ACEBO, EMILIO).
 
 **Qué se programó** (sin commit de publicación todavía; ver el commit de la mora):
 - `postCobroTrackedOffset(moraCobradaHistorialPreCobro:)`: cuando un cobro salda toda la mora y da la eximición,
@@ -1403,14 +1403,14 @@ cobra más; se cobra la siguiente si no se abonó". Los perdones están bien y n
 - `SyncEngine.revisarMora()`: corre **sola una vez por sesión**, después de la primera bajada que sale bien, y con
   "Bajar". Así la 6.0.0 corrige sola al abrirse por primera vez.
 - Anular un cobro (`anularPagosConMotivo`) deshace la eximición que ese cobro había dado.
-- Tests: `test/revision_mora_test.dart` (15, con los datos de VERON, MOLINA, MONTENEGRO y GISEL, un perdón con
+- Tests: `test/revision_mora_test.dart` (15, con los datos de VIZCACHA, MOLINA, ACEBO y GISEL, un perdón con
   ajuste y uno sin ajuste); 17 roturas a propósito, todas vistas. Suite: 2.467 tests; `flutter analyze` en 312.
 
 **Simulacro sobre una copia de su base** (`tool/simulacro_revision_mora_test.dart`; página
 `build/muestras_6.0.0/mora/Mora_corregida.html`, abierta en Edge): **33 alumnos corregidos**, la mora sube a 22,
 baja a 2 y queda igual a 9 (se corrigen por dentro); ningún perdón tocado; la revisión tarda 1,6 s. Entre los
-que suben: VERON $1.100 → $33.000, BLANCO DI SI $12.900 → $45.000, LEISTEIMI $0 → $24.000, DIAZ BORNIA $0 →
-$18.000. Bajan: MONTENEGRO, GISEL $40.250 → $36.750 (su cuota 4 vuelve a contar desde septiembre) y ARGUELLO,
+que suben: VIZCACHA $1.100 → $33.000, GUAYABO $12.900 → $45.000, LEISTEIMI $0 → $24.000, DIAZ BORNIA $0 →
+$18.000. Bajan: ACEBO, EMILIO $40.250 → $36.750 (su cuota 4 vuelve a contar desde septiembre) y ARGUELLO,
 TOMAS (la ficha de abajo).
 
 **ARGUELLO, TOMAS es el hijo del cliente** (el que pidió la app) y el alumno con el que se prueba a propósito:
@@ -1432,7 +1432,7 @@ de ese momento, por seguridad.
   operaciones y los 14 papeles.
 - **La migración** (`tool/verificar_migracion_v73_test.dart` con `--dart-define=base=` la copia): perfecta, y la
   vuelta a la 5.0.0 con los mismos datos.
-- **Apareció un error de la revisión de la 6.0.0, y se arregló.** ALTAMIRANO, CELESTE ABIGAIL (Colegio Nacional,
+- **Apareció un error de la revisión de la 6.0.0, y se arregló.** ESPINILLO, BRUNO (Colegio Nacional,
   cuota única) acordó con un compañero un precio de $407.000 y lo pagó el 15-oct a las 18:47, sin la mora; el cobro
   dejó $683.760 en la ficha (168 días al 1 %) para que **el jefe la perdone en modo jefe, como liquidación, y quede
   en verde** (así se trabaja, lo explicó él). La revisión se la borraba sola: repasa los cobros con el saldo de hoy
@@ -1445,7 +1445,7 @@ de ese momento, por seguridad.
 - **El simulacro otra vez, con el arreglo:** los mismos 33 con los mismos números ($696.408 → $800.300; suben 22,
   bajan 2, igual 9), ningún perdón tocado. ARGUELLO queda en **$164.400**, lo mismo que los otros 15 de la Normal sin
   ningún pago: la cuota base de $30.000 al 1 % por día desde el fin de abril, mayo, junio, julio, agosto y septiembre
-  (168, 137, 107, 76, 45 y 15 días). La mesa no genera mora (nunca generó). GONZALES DURAN, BRIANT ELIAS pagó a las
+  (168, 137, 107, 76, 45 y 15 días). La mesa no genera mora (nunca generó). LENGA, LEON pagó a las
   17:19 la cuota 5 sin mora porque la 5.0.0 le mostraba $0; con la 6.0.0 queda en $9.000, como antes del cobro.
   Página: `build/muestras_6.0.0/mora_al_dia/Mora_corregida.html` (la abierta en Edge es la de las 21:29; los 33 son
   los mismos).
@@ -1458,12 +1458,12 @@ de ese momento, por seguridad.
 **Lo que queda de esto, en orden:**
 1. Al instalar: la revisión corre sola en la primera apertura; mirar `revision_mora.txt` en cada PC y la nube.
    La mora de esos alumnos va a subir: avisar a quien cobra.
-2. ALTAMIRANO: el jefe le perdona la mora en modo jefe cuando quiera (en la 5.0.0 o en la 6.0.0); la revisión lo
+2. ESPINILLO: el jefe le perdona la mora en modo jefe cuando quiera (en la 5.0.0 o en la 6.0.0); la revisión lo
    respeta.
 3. Cuando haya un rato: de dónde salió el lote del 10/10 a las 12:00 que tocó a varios en la nube (CHAMORRO,
    SOSA, FERNANDEZ MALENA, ARGUELLO).
-4. Aparte, sin tocar: en un plan de cuota única, la mora es el 1 % por día del total, sin tope (CHAS, ARON y
-   ESPINDOLA, BENJAMIN TOMAS tienen planes así). Es la cuenta de siempre, igual en la 5.0.0.
+4. Aparte, sin tocar: en un plan de cuota única, la mora es el 1 % por día del total, sin tope (OLMO, RAMIRO y
+   VIRARO, IGNACIO tienen planes así). Es la cuenta de siempre, igual en la 5.0.0.
 
 ## Lo que falta para publicar
 
@@ -1536,12 +1536,12 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    - **Instalada en su PC de la casa el 15-oct a las 22:31** ("todo ok"). Comprobado: la app en `6.0.0+57`, la base
      en la v73 con las cinco tablas nuevas, la copia `Documents\Junior Eventos\backups\antes_de_v73.db` (22:31:49),
      la cola vacía. `revision_mora.txt` (22:31) corrigió a **los mismos 33** del simulacro, renglón por renglón, y
-     los subió: en la nube, 33 contratos cambiados desde las 22:30 (VERON con el "ya usado" en $31.900, las 12
-     eximiciones del 31-ago ya están, ARGUELLO con la ficha en 0, ALTAMIRANO sin tocar). Conteos de la nube iguales:
+     los subió: en la nube, 33 contratos cambiados desde las 22:30 (VIZCACHA con el "ya usado" en $31.900, las 12
+     eximiciones del 31-ago ya están, ARGUELLO con la ficha en 0, ESPINILLO sin tocar). Conteos de la nube iguales:
      643 contratos, 4.104 pagos, 27 notas.
    - Las PCs de la oficina con la 5.0.0 bajan esas correcciones solas, así que muestran la mora corregida desde
      antes de instalar. Hasta instalar, mejor no tocar "Bajar" del menú en ellas: corre la revisión vieja (a
-     ALTAMIRANO le borraría la ficha y lo subiría).
+     ESPINILLO le borraría la ficha y lo subiría).
 4. **Instalar las tres a la vez, con él presente** (punto B), el 16-oct en el trabajo: su PC, la del operario y la
    de la oficina, con una copia de la base de cada una antes. Así ninguna PC con la 5.0.0 cobra una mora en dos
    veces que quede mal otra vez.
@@ -1652,7 +1652,7 @@ programa. Leé "La mora: la revisión automática arreglada" en el CONTEXTO. El
 15-oct a la noche se rehicieron los chequeos con mis datos al día (el cobro
 igual que la 5.0.0, la migración perfecta, la mora: los mismos 33), apareció y
 se arregló que la revisión le borraba la mora a quien ya terminó de pagar
-(ALTAMIRANO: esa mora la perdona el jefe en modo jefe), y se armó el
+(ESPINILLO: esa mora la perdona el jefe en modo jefe), y se armó el
 instalador de nuevo. ARGUELLO, TOMAS es el hijo del cliente y el alumno de
 prueba: nunca pagó nada de verdad. El release de la 6.0.0 quedó publicado el
 15-oct a las 22:28 (lo pedí yo) y la instalé en mi PC de la casa a las 22:31:

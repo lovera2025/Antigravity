@@ -20,7 +20,7 @@ con el saldo del plan y la mora **proyectados a después del pago**.
 El caso que lo destapó, generado el 2 de septiembre a las 05:47:
 
 ```
-ACOSTA, NATALIA ALDANA — COLEGIO NACIONAL A
+ALAMO, ANA — COLEGIO NACIONAL A
 LO QUE SE PAGA HOY
   · Cuota 6 de 9 — vence 30/09/2026            $ 30.000,00
 TOTAL A PAGAR AHORA                            $ 30.000,00

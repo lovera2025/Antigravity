@@ -16,7 +16,7 @@ mesas adicionales (8 lugares cada una). Aclaró la regla:
 
 Los $10.000 de la entrada que usó fueron un ejemplo: **el precio de la entrada todavía no se sabe**.
 
-**Hasta la 6.3.0 el retiro daba sin cargo las entradas de todos los lugares**: GAUNA, GERALDINE, con 4 mesas adicionales, se habría
+**Hasta la 6.3.0 el retiro daba sin cargo las entradas de todos los lugares**: CANELO, EMMA, con 4 mesas adicionales, se habría
 llevado 40. **No se había entregado ninguna** (`entradas_retiro` vacía en la nube el 4-nov), así que no hay nada que corregir en los
 datos.
 

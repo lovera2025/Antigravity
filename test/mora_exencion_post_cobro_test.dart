@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
-/// Regresión del recibo Nº 0661293D — BERNEL, LUCILA FATIMA, 07/08/2026 17:30.
+/// Regresión del recibo Nº 0661293D — ARAZA, NORA, 07/08/2026 17:30.
 ///
 /// El papel cobró $17.100 de mora (C2 $6.900 + C3 $8.100 de arrastre + C4
 /// $2.100 del calendario, toda la que había) y en el mismo recibo imprimió
@@ -20,7 +20,7 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 void main() {
   // Reg 15/03/2026 → C1 vence 30/04, C2 31/05, C3 30/06, C4 31/07.
   // Plan $270.000 en 9 cuotas → cuota pura $30.000 → mora $300/día (1 %).
-  ContratoAlumno bernel({
+  ContratoAlumno araza({
     double saldoDeudor = 180000,
     int cuotasPagadas = 3,
     double moraPendienteTracked = 15000,
@@ -29,9 +29,9 @@ void main() {
     bool moraExencionReinicia = false,
   }) {
     return ContratoAlumno(
-      id: 'bernel-test',
+      id: 'araza-test',
       eventoId: 'ev-test',
-      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      nombreAlumno: 'ARAZA, NORA',
       cantidadAcompanantes: 0,
       montoTotalPactado: 270000,
       saldoDeudor: saldoDeudor,
@@ -47,9 +47,9 @@ void main() {
 
   final hoy = DateTime(2026, 8, 7);
 
-  group('BERNEL 07/08/2026 — cobro que salda toda la mora', () {
+  group('ARAZA 07/08/2026 — cobro que salda toda la mora', () {
     test('el desglose pre-cobro es la cuota 4 con 7 días = \$2.100', () {
-      final desglose = MoraCuotaCalculator.calcularDesglose(bernel(), hoy);
+      final desglose = MoraCuotaCalculator.calcularDesglose(araza(), hoy);
 
       expect(desglose.length, 1);
       expect(desglose.first.numeroCuota, 4);
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('cobrar los \$17.100 deja la mora en cero, no en \$2.100', () {
-      final contrato = bernel();
+      final contrato = araza();
       final desgloseBruto = MoraCuotaCalculator.calcularDesglose(contrato, hoy);
       final desgloseNeto = MoraCuotaCalculator.desglosePendiente(
         desgloseBruto,
@@ -111,7 +111,7 @@ void main() {
     test('sin la exención el aviso reclama la mora recién cobrada', () {
       // Reproduce el estado a medias que emitió el papel: tracked y offset
       // nuevos, exención vieja. Es el bug, y queda documentado como tal.
-      final contrato = bernel();
+      final contrato = araza();
       final aMedias = contrato.copyWith(
         moraPendienteTracked: 0,
         moraCobradaOffset: 17100,
@@ -132,7 +132,7 @@ void main() {
     test('la exención no depende de que el offset la tape', () {
       // El offset sube junto con el historial: el crédito FIFO queda igual que
       // antes del cobro. Si alguna vez se cambia esa regla, este test avisa.
-      final contrato = bernel();
+      final contrato = araza();
       final creditoAntes = MoraCuotaCalculator.moraCobradaParaFifo(
         moraCobradaHistorial: 0,
         moraCobradaOffset: contrato.moraCobradaOffset,
@@ -192,7 +192,7 @@ void main() {
     }
 
     test('cobro parcial → sin exención, la mora sigue viva', () {
-      final post = cobrar(bernel(), moraEsteCobro: 10000);
+      final post = cobrar(araza(), moraEsteCobro: 10000);
 
       expect(post.exentaHasta, isNull);
       expect(post.tracked, closeTo(5000, 0.01));
@@ -201,7 +201,7 @@ void main() {
     test('mora en cero → no toca la exención vigente', () {
       final vieja = DateTime(2026, 5, 31);
       final post = cobrar(
-        bernel(moraExentaHasta: vieja),
+        araza(moraExentaHasta: vieja),
         moraEsteCobro: 0,
         cuotasLiquidadas: 1,
       );
@@ -210,14 +210,14 @@ void main() {
     });
 
     test('contrato que queda saldado → no se exime nada', () {
-      final post = cobrar(bernel(), moraEsteCobro: 17100, saldoDeudorPost: 0);
+      final post = cobrar(araza(), moraEsteCobro: 17100, saldoDeudorPost: 0);
 
       expect(post.exentaHasta, isNull);
     });
 
     test('liquidar cuota base además de la mora → la exención reinicia', () {
       final post = cobrar(
-        bernel(moraPendienteTracked: 0),
+        araza(moraPendienteTracked: 0),
         moraEsteCobro: 2100,
         cuotasLiquidadas: 1,
       );
@@ -228,7 +228,7 @@ void main() {
 
     test('lote histórico sin fecha legible → conserva la exención vigente', () {
       final vieja = DateTime(2026, 5, 31);
-      final c = bernel(moraExentaHasta: vieja);
+      final c = araza(moraExentaHasta: vieja);
       final d = desgloseDe(c);
 
       final post = MoraCuotaCalculator.postCobroTrackedOffset(
@@ -260,7 +260,7 @@ void main() {
 
     test('aplica los cuatro campos de una sola vez', () {
       final c = post.aplicarA(
-        bernel(moraExentaHasta: DateTime(2026, 5, 31)),
+        araza(moraExentaHasta: DateTime(2026, 5, 31)),
         moraFechaReferencia: null,
       );
 
@@ -285,7 +285,7 @@ void main() {
 
     test('conserva la fecha de referencia salvo que se pida limpiarla', () {
       final ref = DateTime(2026, 7, 1);
-      final base = bernel();
+      final base = araza();
 
       expect(
         post.aplicarA(base, moraFechaReferencia: ref).moraFechaReferencia,
