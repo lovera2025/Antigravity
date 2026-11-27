@@ -711,7 +711,7 @@ void main() {
       expect(find.byKey(const Key('jefe_caja_tiene_que_haber')), findsOneWidget, reason: 'la plata se ve igual');
     });
 
-    testWidgets('la tarjeta dice lo que sacó la encargada, y avisa si algo llegó después del cierre', (tester) async {
+    testWidgets('la tarjeta dice quién sacó, y avisa si algo llegó después del cierre', (tester) async {
       await armarLaNoche();
       await prueba.barra.anotarMovimientoDeCaja(
         MovimientoDeCaja.nuevo(
@@ -736,6 +736,7 @@ void main() {
       ));
       await abrir(tester, pestana: PestanaBarraJefe.cajas);
       expect(find.byKey(Key('jefe_caja_retirado_${marta.id}')), findsOneWidget);
+      expect(find.text('Sacó Romi'), findsWidgets, reason: 'dice quién, no "la encargada" (28-nov)');
       expect(find.text(r'-$ 10.000'), findsWidgets);
       expect(texto(tester, 'jefe_caja_cambio_despues_${lucas.id}'), contains('justo, sin diferencia'));
       expect(find.text(r'Contó $ 23.500 · Faltan $ 500'), findsOneWidget, reason: 'lo anotado al cerrar no se toca');

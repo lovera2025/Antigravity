@@ -1,7 +1,7 @@
 el papel del cierre no dice lo que saco la encargada
 lib/features/barra/impresion/modelo_ticket.dart
 test/retiros_de_la_encargada_test.dart
-      if (centavos(cuentas.retirado) != 0) RenglonTicket('Sacó la encargada', masOMenos(-cuentas.retirado)),
+      if (centavos(cuentas.retirado) != 0) RenglonTicket(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado)),
 
 ---
 la caja no muestra la plata ni los botones

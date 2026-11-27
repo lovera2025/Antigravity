@@ -56,10 +56,15 @@ alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces 
    "Para los tragos" sí va) ni una silla de la noche (`esSillaDeLaPuerta`); lo ya elegido en una receta se sigue
    mostrando (`_puedeIrAdentro`). Prueba en `test/barra_jefe_pantalla_test.dart`; 3 roturas en
    `tool/roturas_recorrido_28nov.txt`. Las pruebas de la barra: 832 en verde.
+5. **El papel, el cartel del OK y LAS CAJAS dicen quién sacó o dio la plata** (el usuario: "que diga quién"):
+   "Cambio que dio Romi", "Sacó Romi y el jefe" (el jefe se anota "Jefe" y se lee "el jefe"); sin nadie anotado,
+   "la encargada". La cuenta guarda quiénes (`CierreDeBarra.dieronCambio`, `retiraron`, de `hechoPor`) y los rótulos
+   son `rotuloDelCambio` / `rotuloDeLoSacado` (`quienesLoHicieron`). Pruebas en
+   `test/retiros_de_la_encargada_test.dart` y `test/barra_jefe_pantalla_test.dart`; 5 roturas en
+   `tool/roturas_recorrido_28nov.txt` (y `tool/roturas_retiros_pantalla.txt` puesta al día: 10 de 10). Las pruebas
+   de la barra: 875 en verde.
 
 **Preguntas para el usuario (no se tocó nada):**
-- Cuando el jefe saca o da plata, la caja y el papel dicen "Sacó la encargada" / "Cambio de la encargada" (el historial
-  sí dice "Jefe"). Recomendación: dejarlo (el jefe hace de encargada).
 - GANANCIA dice "Se vendió $21.000" y LAS CAJAS "$21.400": la diferencia es el recargo por transferencia, que GANANCIA
   no cuenta como venta (paga Mercado Pago). Confirmar que está bien.
 
@@ -70,7 +75,7 @@ GANANCIA** (la cuenta estaba bien): prueba nueva en `test/cuenta_del_proveedor_t
 
 **Lo que falta, en orden:**
 1. Que mire las capturas (las de hoy y las de ayer: `build/capturas_4dic/`, `build/capturas_tele_27nov/`) y conteste las
-   dos preguntas que quedan arriba (la del recargo y la de "Elegí qué lleva" ya las contestó).
+   la pregunta que queda arriba (la de GANANCIA y el recargo; las otras ya las contestó).
 2. **Noche y Blanco** en todas las pantallas de la barra (`DisenioBarra`; cada aparato elige el suyo).
 3. El repositor, "¿Volvió el vale?", LA ENCARGADA ESTÁ ACÁ del jefe, el aviso del PIN maestro y **sin stock no se vende**;
    con el repositor, GANANCIA lee el stock por barra (hoy lo perdido da 0).

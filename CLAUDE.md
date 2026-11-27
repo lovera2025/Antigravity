@@ -818,7 +818,9 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
   encargada desde su sesión, en cualquier caja (también la suya), siempre con motivo; nunca la cajera ni con el PIN de
   la encargada en su tablet. Solo se agregan filas, y sobre una caja cerrada no (`CajaYaCerrada`). Cruzan por la red
   del salón **antes que `barra_cierres`**. **Toda pantalla o papel que diga el efectivo esperado pasa `movimientos:`**
-  (`test/cierre_con_retiros_test.dart` lo lee).
+  (`test/cierre_con_retiros_test.dart` lo lee). **Y dice quién lo hizo** (28-nov, el usuario: "que diga quién"):
+  `CierreDeBarra.rotuloDelCambio` y `rotuloDeLoSacado` ("Cambio que dio Romi", "Sacó Romi y el jefe";
+  `quienesLoHicieron`), nunca "la encargada" fijo.
 
 **La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
 foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta

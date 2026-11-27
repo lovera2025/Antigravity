@@ -120,9 +120,9 @@ class OkDelCierreDialog extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               if (centavos(cuentas.cambioAgregado) != 0)
-                renglon('Cambio de la encargada', masOMenos(cuentas.cambioAgregado), clave: 'ok_cierre_cambio_dado'),
+                renglon(cuentas.rotuloDelCambio, masOMenos(cuentas.cambioAgregado), clave: 'ok_cierre_cambio_dado'),
               if (centavos(cuentas.retirado) != 0)
-                renglon('Sacó la encargada', masOMenos(-cuentas.retirado), clave: 'ok_cierre_retirado'),
+                renglon(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado), clave: 'ok_cierre_retirado'),
               renglon('Efectivo esperado', pesos(cuentas.efectivoEsperado), clave: 'ok_cierre_esperado'),
               renglon('Contó', pesos(contado), clave: 'ok_cierre_conto'),
               Padding(

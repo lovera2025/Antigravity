@@ -52,3 +52,33 @@ test/barra_jefe_pantalla_test.dart
       !paraBuscar(f.producto.categoria).trim().startsWith('trago') &&
       !paraBuscar(f.producto.categoria).trim().contains('trago') &&
 ---
+el cierre no recuerda quién sacó
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/retiros_de_la_encargada_test.dart
+        if (quien.isNotEmpty && !retiraron.contains(quien)) retiraron.add(quien);
+
+---
+el jefe sale como "Jefe" y no como "el jefe"
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/retiros_de_la_encargada_test.dart
+      if (q.trim().isNotEmpty) q.trim().toLowerCase() == 'jefe' ? 'el jefe' : q.trim(),
+      if (q.trim().isNotEmpty) q.trim(),
+---
+el papel del cierre vuelve a decir "la encargada"
+lib/features/barra/impresion/modelo_ticket.dart
+test/retiros_de_la_encargada_test.dart
+RenglonTicket(cuentas.rotuloDelCambio, masOMenos(cuentas.cambioAgregado)),
+RenglonTicket('Cambio de la encargada', masOMenos(cuentas.cambioAgregado)),
+---
+el cartel del OK vuelve a decir "la encargada"
+lib/features/barra/widgets/ok_del_cierre.dart
+test/retiros_de_la_encargada_test.dart
+renglon(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado), clave: 'ok_cierre_retirado'),
+renglon('Sacó la encargada', masOMenos(-cuentas.retirado), clave: 'ok_cierre_retirado'),
+---
+la tarjeta de la caja vuelve a decir "la encargada"
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+child: renglon(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado)),
+child: renglon('Sacó la encargada', masOMenos(-cuentas.retirado)),
+---

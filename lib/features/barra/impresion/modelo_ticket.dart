@@ -374,8 +374,8 @@ abstract final class ModeloTicket {
       RenglonTicket('Cambio inicial', pesos(cuentas.cambioInicial)),
       // Lo que dio y lo que sacó la encargada (v84, maqueta del 27-nov): solo si hubo.
       if (centavos(cuentas.cambioAgregado) != 0)
-        RenglonTicket('Cambio de la encargada', masOMenos(cuentas.cambioAgregado)),
-      if (centavos(cuentas.retirado) != 0) RenglonTicket('Sacó la encargada', masOMenos(-cuentas.retirado)),
+        RenglonTicket(cuentas.rotuloDelCambio, masOMenos(cuentas.cambioAgregado)),
+      if (centavos(cuentas.retirado) != 0) RenglonTicket(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado)),
       RenglonTicket('Efectivo esperado', pesos(cuentas.efectivoEsperado), negrita: true),
       if (cerrada && caja.efectivoContado != null) ...[
         RenglonTicket('Efectivo contado', pesos(caja.efectivoContado!), negrita: true),

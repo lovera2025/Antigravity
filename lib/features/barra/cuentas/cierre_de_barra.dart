@@ -64,6 +64,18 @@ class CierreDeBarra {
   /// El efectivo que la encargada (o el jefe) se llevó de la caja: resta.
   final double retirado;
 
+  /// Quiénes dieron cambio (o lo corrigieron) y quiénes sacaron efectivo, sin repetir y en el
+  /// orden en que llegaron (`MovimientoDeCaja.hechoPor`). 28-nov-2026, el usuario: el papel y
+  /// las pantallas dicen quién lo hizo, no "la encargada" (también cuando fue el jefe).
+  final List<String> dieronCambio;
+  final List<String> retiraron;
+
+  /// "Cambio que dio Romi": para el papel y las pantallas.
+  String get rotuloDelCambio => 'Cambio que dio ${quienesLoHicieron(dieronCambio)}';
+
+  /// "Sacó Romi y el jefe": para el papel y las pantallas.
+  String get rotuloDeLoSacado => 'Sacó ${quienesLoHicieron(retiraron)}';
+
   /// Las que cuentan: sin las anuladas.
   final int ventas;
   final int anuladas;
@@ -99,6 +111,8 @@ class CierreDeBarra {
     required this.cambioInicial,
     this.cambioAgregado = 0,
     this.retirado = 0,
+    this.dieronCambio = const [],
+    this.retiraron = const [],
     required this.ventas,
     required this.anuladas,
     required this.mixtos,
@@ -166,15 +180,19 @@ class CierreDeBarra {
   }) {
     var cambioAgregado = 0, retirado = 0;
     final vistos = <String>{};
+    final dieronCambio = <String>[], retiraron = <String>[];
     for (final m in movimientos) {
       if (cajaId != null && m.cajaBarraId != cajaId) continue;
       // Solo se agregan filas: la misma, llegada dos veces, cuenta una.
       if (!vistos.add(m.id)) continue;
       final efecto = m.efectoEnCentavos;
+      final quien = (m.hechoPor ?? '').trim();
       if (m.tipo == TipoMovimientoDeCaja.retiro) {
         retirado += -efecto;
+        if (quien.isNotEmpty && !retiraron.contains(quien)) retiraron.add(quien);
       } else {
         cambioAgregado += efecto;
+        if (quien.isNotEmpty && !dieronCambio.contains(quien)) dieronCambio.add(quien);
       }
     }
     final anuladasIds = ventasAnuladas(anulaciones);
@@ -264,6 +282,8 @@ class CierreDeBarra {
       cambioInicial: cambioInicial,
       cambioAgregado: deCentavos(cambioAgregado),
       retirado: deCentavos(retirado),
+      dieronCambio: List.unmodifiable(dieronCambio),
+      retiraron: List.unmodifiable(retiraron),
       ventas: cuentan,
       anuladas: anuladas,
       mixtos: mixtos,
@@ -296,6 +316,19 @@ class CierreDeBarra {
 }
 
 /// La diferencia en palabras, para la pantalla y el papel.
+/// Quiénes movieron la plata de una caja, para leer: "Romi", "el jefe" (se anota "Jefe"
+/// cuando entra sin PIN de operador), "Romi y el jefe", "Romi, Juli y el jefe". Sin nadie
+/// anotado (una fila vieja), "la encargada".
+String quienesLoHicieron(List<String> quienes) {
+  final nombres = [
+    for (final q in quienes)
+      if (q.trim().isNotEmpty) q.trim().toLowerCase() == 'jefe' ? 'el jefe' : q.trim(),
+  ];
+  if (nombres.isEmpty) return 'la encargada';
+  if (nombres.length == 1) return nombres.single;
+  return '${nombres.sublist(0, nombres.length - 1).join(', ')} y ${nombres.last}';
+}
+
 String diferenciaEnPalabras(double diferencia) {
   final c = centavos(diferencia);
   if (c == 0) return 'Justo, sin diferencia';

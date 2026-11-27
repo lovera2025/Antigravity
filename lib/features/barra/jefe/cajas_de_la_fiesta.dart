@@ -251,9 +251,9 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               renglon('Cambio con que abrió', pesos(cuentas.cambioInicial)),
               renglon('Efectivo vendido', pesos(cuentas.efectivo)),
               if (centavos(cuentas.cambioAgregado) != 0)
-                renglon('Cambio que dio la encargada', masOMenos(cuentas.cambioAgregado), color: const Color(0xFF59D38A)),
+                renglon(cuentas.rotuloDelCambio, masOMenos(cuentas.cambioAgregado), color: const Color(0xFF59D38A)),
               if (centavos(cuentas.retirado) != 0)
-                renglon('Efectivo que sacó la encargada', masOMenos(-cuentas.retirado), color: const Color(0xFFFF8F82)),
+                renglon(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado), color: const Color(0xFFFF8F82)),
               if (orden.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 const Text('LO QUE SE HIZO CON LA PLATA',
@@ -1360,12 +1360,12 @@ class _TarjetaDeCaja extends StatelessWidget {
                 if (centavos(cuentas.cambioAgregado) != 0)
                   KeyedSubtree(
                     key: Key('jefe_caja_cambio_dado_${c.id}'),
-                    child: renglon('Cambio de la encargada', masOMenos(cuentas.cambioAgregado)),
+                    child: renglon(cuentas.rotuloDelCambio, masOMenos(cuentas.cambioAgregado)),
                   ),
                 if (centavos(cuentas.retirado) != 0)
                   KeyedSubtree(
                     key: Key('jefe_caja_retirado_${c.id}'),
-                    child: renglon('Sacó la encargada', masOMenos(-cuentas.retirado)),
+                    child: renglon(cuentas.rotuloDeLoSacado, masOMenos(-cuentas.retirado)),
                   ),
                 if (cuentas.sillas > 0)
                   KeyedSubtree(

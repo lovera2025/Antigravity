@@ -302,7 +302,8 @@ void main() {
       expect(noche.resumen.retirado, 5000);
     });
 
-    test('el papel del cierre dice lo que dio y lo que sacó la encargada, solo si hubo', () async {
+    // 28-nov-2026, el usuario: "que diga quién" (decía "la encargada" también cuando fue el jefe).
+    test('el papel del cierre dice quién dio cambio y quién sacó, solo si hubo', () async {
       final b = BarraEnMemoria();
       final caja = await b.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1, cambioInicial: 15000);
       List<String> renglones(Iterable<MovimientoDeCaja> movs) => [
@@ -311,11 +312,16 @@ void main() {
               '${r.izquierda} ${r.derecha}',
           ];
       expect(renglones(const []).where((r) => r.contains('encargada')), isEmpty);
-      final con = renglones([_cambio(caja, 5000), _retiro(caja, 25000)]);
+      final ahora = DateTime.utc(2026, 12, 5, 1);
+      final con = renglones([
+        _cambio(caja, 5000).sellado(hechoPor: 'Romi', ahora: ahora),
+        _retiro(caja, 20000).sellado(hechoPor: 'Romi', ahora: ahora),
+        _retiro(caja, 5000).sellado(hechoPor: 'Jefe', ahora: ahora),
+      ]);
       expect(con, containsAllInOrder([
         r'Cambio inicial $ 15.000',
-        r'Cambio de la encargada +$ 5.000',
-        r'Sacó la encargada -$ 25.000',
+        r'Cambio que dio Romi +$ 5.000',
+        r'Sacó Romi y el jefe -$ 25.000',
         r'Efectivo esperado $ -5.000',
       ]));
     });
@@ -334,8 +340,16 @@ void main() {
       expect((await cuentasParaElOk(b, caja)).efectivoEsperado, 17000);
     });
 
+    test('quién movió la plata, para leer', () {
+      expect(quienesLoHicieron(const []), 'la encargada', reason: 'una fila vieja, sin nadie anotado');
+      expect(quienesLoHicieron(const ['Romi']), 'Romi');
+      expect(quienesLoHicieron(const ['Jefe']), 'el jefe');
+      expect(quienesLoHicieron(const ['Romi', 'Jefe']), 'Romi y el jefe');
+      expect(quienesLoHicieron(const ['Romi', 'Juli', 'Jefe']), 'Romi, Juli y el jefe');
+    });
+
     // 28-nov-2026: el cartel tenía los renglones nuevos sin una prueba que los mirara.
-    testWidgets('el cartel del OK muestra lo que dio y lo que sacó la encargada, solo si hubo', (tester) async {
+    testWidgets('el cartel del OK dice quién dio cambio y quién sacó, solo si hubo', (tester) async {
       final caja = (await tester.runAsync(() => BarraEnMemoria().abrirCaja(
             eventoId: _fiesta,
             operadorId: 'm',
@@ -360,15 +374,19 @@ void main() {
       String texto(String clave) => tester.widget<Text>(find.byKey(Key(clave))).data!;
 
       await mostrar(const []);
-      expect(find.text('Cambio de la encargada'), findsNothing);
-      expect(find.text('Sacó la encargada'), findsNothing);
+      expect(find.textContaining('Cambio que dio'), findsNothing);
+      expect(find.textContaining('Sacó'), findsNothing);
       expect(texto('ok_cierre_esperado'), r'$ 15.000');
       expect(texto('ok_cierre_diferencia'), r'Faltan $ 5.000');
 
-      await mostrar([_cambio(caja, 5000), _retiro(caja, 10000)]);
-      expect(find.text('Cambio de la encargada'), findsOneWidget);
+      final ahora = DateTime.utc(2026, 12, 5, 1);
+      await mostrar([
+        _cambio(caja, 5000).sellado(hechoPor: 'Jefe', ahora: ahora),
+        _retiro(caja, 10000).sellado(hechoPor: 'Romi', ahora: ahora),
+      ]);
+      expect(find.text('Cambio que dio el jefe'), findsOneWidget);
       expect(texto('ok_cierre_cambio_dado'), r'+$ 5.000');
-      expect(find.text('Sacó la encargada'), findsOneWidget);
+      expect(find.text('Sacó Romi'), findsOneWidget);
       expect(texto('ok_cierre_retirado'), r'-$ 10.000');
       expect(texto('ok_cierre_esperado'), r'$ 10.000');
       expect(texto('ok_cierre_diferencia'), 'Justo, sin diferencia');
