@@ -859,6 +859,15 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
+**26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
+retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo
+chat, una detrás de la otra (lo pidió el usuario). El jefe quiere cargar con el stock el **precio de lista** del
+proveedor y ver, **solo él**, lo que le tiene que pagar y la ganancia, juntando varias noches (rinde el martes): la lista
+en PRECIOS por fiesta, lo perdido se paga igual, tabla nueva `barra_costos` en la v84, pestaña PROVEEDOR; maqueta
+primero. **Anular sigue como el 26-nov, y el posnet no lleva nada en la app** (quien vende mira el verde y aprieta
+CONFIRMAR, como hoy). **Las pantallas de la barra, atractivas, intuitivas y fáciles para cada rol**, con maqueta de
+estilos antes y probadas en el sandbox con capturas por rol.
+
 **26-nov (tarde): la barra sólida y segura — el PIN en la central y quién puede qué, SIN PUBLICAR** (plan del 26-nov;
 el detalle y lo que falta en "Para retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). Su orden: la barra y sus
 permisos, las pantallas en la app de verdad, publicar; el plano impreso entero, después.

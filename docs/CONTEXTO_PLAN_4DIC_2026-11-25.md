@@ -2,6 +2,29 @@
 
 ## Para retomar en otro chat
 
+**26-nov (noche): el audio 77 del jefe y todo en un solo chat.** Plan aprobado:
+`C:\Users\lover\.claude\plans\te-mando-un-audio-buzzing-bubble-of-20d8810b-4918-44eb-a5f5-b6b73407e7e6.md`.
+- **Todo se hace en un solo chat, sin sesiones en paralelo** (pedido del usuario: tenía que vigilar sesiones que
+  apuntaban a cosas distintas). La rama del APK (`claude/priceless-borg-e85cd6`) se junta acá con su OK (dado al
+  aprobar el plan); la sesión que coordinaba no se usa más.
+- **El audio** (`Desktop\AUDIOS ADRI\77.mp4`, pasado a texto en esta PC): el jefe carga con el stock el **precio de
+  lista** del proveedor y quiere ver, solo él, **lo que le tiene que pagar al proveedor y la ganancia**, juntando
+  varias noches (pide bebida para vie-sáb-dom-lun y rinde el martes; la primera tanda, del 4 al 7-dic). Ejemplo: 200
+  latas a $1.500, venta $5.000, vende 2 → recaudó $10.000, a pagar $3.000, ganancia $7.000. Decidido: la lista **en
+  PRECIOS, por fiesta**; **cada fiesta con su stock** y un botón para traer lo que quedó de la anterior; **lo perdido se
+  paga igual** (a pagar = vendidas + perdidas, por la lista). Tabla nueva `barra_costos` en la **v84** (con
+  `barra_caja_movimientos`), `CuentaDelProveedor`, pestaña **PROVEEDOR**. **Maqueta primero.**
+- **Anular sigue como el 26-nov** (el audio decía "todos pueden anular"; la cajera no anula).
+- **El posnet no lleva nada en la app**: quien vende mira el verde del posnet y aprieta CONFIRMAR como hoy. Lo de
+  "Cobrá en el posnet" y "APROBADO EN EL POSNET" de abajo **no se hace**.
+- **Las pantallas de la barra, atractivas, intuitivas y fáciles para cada rol** (cajera, encargada, repositor, la
+  barra): maqueta con dos o tres estilos lado a lado antes de programarlas, y todo probado en el sandbox (el APK en el
+  emulador con la central de verdad en esta PC) con capturas por rol antes de dárselo.
+- El plan para el 4-dic va por **~55 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
+  stock no se vende → el precio de lista y PROVEEDOR → la página de la encargada → la noche simulada y la tercera
+  revisión → las pantallas en la app de verdad y la tele con el APK → la v83/v84 sobre una copia, los SQL y publicar
+  cuando él diga.
+
 **26-nov (tarde): la barra sólida y segura — hecho hasta el PIN en la central y las reglas por rol** (sin publicar,
 en esta rama). Plan de esta vuelta, aprobado por el usuario el 26-nov a la tarde:
 `C:\Users\lover\.claude\plans\c-users-lover-desktop-plan-sp-fancy-wall-of-db314a36-8fe0-4cf2-ad8e-bd040753c86b.md`.
@@ -57,7 +80,7 @@ quiere **todo prolijo, punto por punto, y sin bugs** ("lo importante es que todo
 | 2. La barra por día de operación y la madrugada | **junta en esta rama el 26-nov** (merge `53303ba`, desde `claude/sleepy-jepsen-bea21a`; su sesión ya no la toca) | revisión independiente con 9 arreglos (`eb07be5`); sobre lo junto: la suite entera **6.424 y 0 fallos**, las roturas **41 de 41** y la huella de la base IGUAL; **el recorrido con el mouse no se hizo** (el usuario no dio el permiso de la pantalla el 26-nov) |
 | 3. La encargada en el iPhone por el wifi | acá, **después de juntar la Parte 2** (toca los mismos archivos) | sin empezar |
 | 4. El repositor y el stock por barra | acá | **la base (sin pantallas) cerrada el 26-nov**: las pruebas de la segunda revisión, las roturas y el SPEC (ver abajo) |
-| 2b. La barra sólida y segura (26-nov, tarde) | acá | **hecho hasta el PIN en la central y las reglas por rol**: el vale con la hora real, la reconexión al volver al wifi, el stock por noche que cruza sin internet, el PIN y quién puede qué (arriba). Falta: repositor, retiros y cambio de la encargada (v84), transferencia con el posnet, la noche simulada y la tercera revisión |
+| 2b. La barra sólida y segura (26-nov, tarde) | acá | **hecho hasta el PIN en la central y las reglas por rol**: el vale con la hora real, la reconexión al volver al wifi, el stock por noche que cruza sin internet, el PIN y quién puede qué (arriba). Falta: repositor, retiros y cambio de la encargada (v84), el precio de lista y PROVEEDOR, la noche simulada y la tercera revisión (el posnet no lleva nada: 26-nov, noche) |
 | 5. Publicar | con el usuario, cuando él diga | — |
 | 6. El plano impreso entero | después de publicar la barra | spec aprobada (en `Desktop\PLAN`), con lo que agregó él el 26-nov; sin empezar |
 
@@ -133,7 +156,7 @@ de este aparato: `rolEnLaBarraProvider` (`providers/barra_del_jefe_provider.dart
 | Abrir caja con el cambio (opcional) | sí | habilitada, en una tablet | no | — |
 | Cambiar el cambio después | **una sola vez, si abrió sin cambio y no vendió** (hecho); después no | **sí, con el porqué y el historial** (falta: v84) | no | sí |
 | Vender | sí (sin stock, no) | habilitada, en una tablet con su caja | no | — |
-| Transferencia | **primero el posnet de MP en verde, después confirma** (falta) | — | no | — |
+| Transferencia | mira el verde del posnet y aprieta CONFIRMAR **como hoy** (la app no cambia: 26-nov, noche) | — | no | — |
 | Sus ventas | **sin plata** (hecho) | — | no | — |
 | Anular, con motivo | **no** (hecho) | **sí**: desde su aparato, o **con su PIN en la tablet de la cajera** (hecho) | no | sí |
 | Retirar efectivo, con el porqué | no | **sí** (falta: v84) | no | sí |
@@ -181,8 +204,8 @@ fila firmada con el nombre de una encargada desde la tablet de la cajera se cree
      donde solo se agregan filas (`barra_caja_movimientos`, tipo `retiro`, `cambio` o `ajuste_cambio`), su SQL y la
      migración **v84** (el locutor pasa a la v85), probada sobre una copia y desde un equipo que ya está en la v83 (el
      APK de prueba); viaja por la central; el esperado del cierre la cuenta;
-   - **transferencia con el posnet**: "Cobrá en el posnet" y **APROBADO EN EL POSNET** (recién ahí se guarda y sale el
-     vale), y en el cierre la cantidad y el total de transferencias;
+   - ~~transferencia con el posnet~~ **no se hace** (26-nov, noche: la app queda como está; quien vende mira el
+     posnet y aprieta CONFIRMAR);
    - "¿Volvió el vale?" al anular (en el motivo);
    - el jefe con LA ENCARGADA ESTÁ ACÁ; el aviso del PIN maestro de fábrica en CAJAS;
    - **sin stock no se vende** adentro de `vender()` (y en VENDER) con `StockPorBarra.deLaNoche`.
