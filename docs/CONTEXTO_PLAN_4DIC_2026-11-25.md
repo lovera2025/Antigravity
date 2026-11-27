@@ -112,9 +112,21 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
    `Jefe_9` una caja con retiros, `Jefe_10` SACAR EFECTIVO) y diga si va así. **Correr la suite entera**
    (`bash tool/suite_por_tandas.sh`): la última, 6.698 y 1 falla (la de siempre), fue antes de la receta en chico;
    después solo se corrieron las pruebas de PRECIOS y GANANCIA.
-2. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
+2. **Pedido del usuario el 27-nov (noche): "no te olvides" — probar en el sandbox el circuito entero de las teles**,
+   antes de publicar y con todo lo de la barra ya junto: que ande y **tan fluido como la última vez en la Smart TV de
+   50"** (la Quint: 60 por segundo en la bienvenida y la flecha del camino, sin saltos); **todo lo del tótem y de
+   Recepción manejado desde la app** (los celulares de la puerta, marcar ingresos, saludos con la mesa, el plano con el
+   camino, cada tele con su escuela, MANTENER · CAMBIAR, girar, la Tele 2 enganchada a la 1, sin internet); y **que si
+   se sale de la página o de la app y se vuelve a entrar, siga todo perfecto** (la lista, las marcas, la escuela de cada
+   tele, la central y la conexión de los celulares). Con lo que ya existe: `tool/tele_prueba.dart`,
+   `tool/tele_salones_de_verdad_test.dart` (los 9 salones de verdad), `tool/puerta_sandbox_test.dart`,
+   `tool/kiosco_prueba.dart`, las roturas `tool/roturas_tele.txt`, y el APK en el emulador `Recepcion_Tablet` con
+   `-gpu host`; medir "Cómo anda" y compararlo con lo del 25-nov (`docs/CONTEXTO_TELE_COMO_TOTEM_2026-11-24.md`).
+   Pendientes viejos de la tele que entran acá: el APK de prueba suelto y por qué LA FIESTA del emulador no mostró la
+   línea de cada escuela. Analizar todo y contarle qué se probó y qué queda solo para la tele de verdad.
+3. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
    CAJAS, VENTAS y cerrar caja van siempre en Noche): cada aparato elige el suyo y vale para todas sus pantallas.
-3. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
+4. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
    PIN maestro), y lo demás en el mismo orden. **Con el repositor, GANANCIA tiene que leer el stock por barra** (hoy lo
    perdido da 0).
 
