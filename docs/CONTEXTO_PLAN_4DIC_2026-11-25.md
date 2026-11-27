@@ -37,7 +37,23 @@
   no ve esas pestañas (`test/encargada_de_barra_test.dart` lo exige): cambia. En `ReglasDeLaBarra`: `veCatalogoYPrecios`
   (encargada y jefe), `cambiaCatalogoYPrecios` (solo jefe, como hoy) y `veElCostoYLaGanancia` (solo jefe). PRECIOS de
   la encargada sin la columna "Lista", sin guardar, COPIAR ni SUMAR LO QUE QUEDÓ; y la doble llave al guardar.
-- El plan para el 4-dic va por **~55 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
+- **La cuenta de GANANCIA, programada y probada (26-nov, noche), sin pantalla:**
+  `lib/features/barra/cuentas/cuenta_del_proveedor.dart` (`CuentaDelProveedor.de`, `FiestaParaLaGanancia`,
+  `GananciaDeUnProducto`, `GananciaDeUnaFiesta`), en centavos. Vendidas y lo vendido salen de
+  `CierreDeBarra.deLaFiesta` sobre las ventas de **la noche de la fiesta** (`CajasPorDia`; si esa noche no tuvo cajas,
+  la que más vendió; las otras noches van en `otrasNoches`); perdidas de `StockPorBarra.deLaNoche` (faltantes y lo que
+  dio de menos un conteo, netos, nunca negativas); le debo = (vendidas + perdidas) × lista; sin lista, no entra y se
+  avisa (`faltaLaLista`); la silla con lista 0 es toda ganancia; el recargo por transferencia aparte. "Quedaron": del
+  stock por barra, y sin reparto, el stock del jefe menos lo vendido. `test/cuenta_del_proveedor_test.dart` (15, con
+  el ejemplo del audio y el del agua) y `tool/roturas_precio_de_lista.txt` (**13 de 13**).
+- **Roturas de la tele después de juntar el APK: 56 de 56**, después de arreglar la prueba de la R6 (tomaba un
+  "escuelas" viejo y a veces dejaba pasar la regla rota; ahora una ida y vuelta con "hola", `9749f20`).
+- **Lo que sigue, en orden:** la v84 (`barra_costos` y su modelo `costo_barra.dart`, las listas del sync, fuera de
+  `tablasDeLaRed` y de lo que baja la tablet), `ReglasDeLaBarra.veCatalogoYPrecios` y `veElCostoYLaGanancia`, la
+  prueba de la encargada en la notebook (PRENDER LA CENTRAL sí; CATÁLOGO y PRECIOS solo mirando; nunca GANANCIA), y
+  con sus respuestas a las maquetas, las pantallas (PRECIOS con la Lista y SUMAR LO QUE QUEDÓ, la pestaña GANANCIA y
+  su papel A4); después, el repositor, RETIRO y el cambio.
+- El plan para el 4-dic va por **~57 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
   stock no se vende → el precio de lista y PROVEEDOR → la página de la encargada → la noche simulada y la tercera
   revisión → las pantallas en la app de verdad y la tele con el APK → la v83/v84 sobre una copia, los SQL y publicar
   cuando él diga.

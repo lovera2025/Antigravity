@@ -1,0 +1,78 @@
+G1 lo perdido no se le paga al proveedor
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+leDebo: lista == null ? 0 : (vendidas + perdidas) * lista,
+leDebo: lista == null ? 0 : vendidas * lista,
+---
+G2 el recargo por transferencia entra en lo vendido
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+seVendio: centavos(v?.plata ?? 0),
+seVendio: centavos(v?.plata ?? 0) + centavos(cierre.recargos),
+---
+G3 suma las cajas de prueba de otro día
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+final ventas = [for (final v in porDia.ventasDelDia(f.ventas, noche)) if (v.eventoId == f.eventoId) v];
+final ventas = [for (final v in f.ventas) if (v.eventoId == f.eventoId) v];
+---
+G4 un conteo de más baja lo que se debe
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+final perdidas = math.max(0, netas);
+final perdidas = netas;
+---
+G5 no avisa que falta el precio de lista
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+final falta = lista == null && (vendidas > 0 || perdidas > 0);
+final falta = false;
+---
+G6 lo vendido en una barra sin reparto no baja lo que quedó
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+final sinDescontar = math.max(0, vendidas - lugares.fold<int>(0, (s, l) => s + l.vendido));
+final sinDescontar = 0;
+---
+G7 la fecha mal puesta deja la fiesta en cero
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+if (porDia.tiene(suya) || porDia.vacio) return suya;
+return suya;
+---
+G8 no dice que el precio de lista cambió entre fiestas
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+listaVaria: listas.length > 1,
+listaVaria: false,
+---
+G9 lo que quedó sale de la primera fiesta
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+quedaron: partes.last.quedaron,
+quedaron: partes.first.quedaron,
+---
+G10 la ganancia se calcula sin precio de lista
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+int? get ganancia => faltaLaLista ? null : seVendio - leDebo;
+int? get ganancia => seVendio - leDebo;
+---
+G11 la ganancia total no suma
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+int get ganancia => productos.fold(0, (s, p) => s + (p.ganancia ?? 0));
+int get ganancia => 0;
+---
+G12 sin reparto no dice lo que quedó
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+: (general == null ? null : math.max(0, general - vendidas));
+: null;
+---
+G13 el precio de lista pierde los centavos
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/cuenta_del_proveedor_test.dart
+final lista = listaPesos == null ? null : centavos(listaPesos);
+final lista = listaPesos == null ? null : listaPesos.truncate() * 100;
+---
