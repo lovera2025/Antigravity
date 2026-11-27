@@ -100,3 +100,21 @@ test/barra_jefe_pantalla_test.dart
                 debajoDelNombre: veCosto && _esTrago(f) ? _lineaDeLaReceta(f, esJefe) : null,
                 debajoDelNombre: null,
 ---
+el stock sin tildar vuelve a perderse
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+    if (b == null) return va || stockNum != null;
+    if (b == null) return va;
+---
+lo que no se vende solo se ofrece en VENDER
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+            activo: f.va,
+            activo: true,
+---
+el precio 0 se muestra como si se regalara
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+          text: base == null || (!base.activo && base.precio == 0) ? '' : PesosEnterosFormatter.escribir(base.precio),
+          text: base == null ? '' : PesosEnterosFormatter.escribir(base.precio),
+---

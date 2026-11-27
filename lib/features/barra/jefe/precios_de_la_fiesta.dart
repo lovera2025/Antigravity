@@ -66,7 +66,9 @@ class _Fila {
   _Fila(this.producto, this.base, this.baseCosto)
       : va = base?.activo ?? false,
         precio = TextEditingController(
-          text: base == null ? '' : PesosEnterosFormatter.escribir(base.precio),
+          // Lo que no se vende solo y tiene stock (la lata de Speed del vodka) se guarda con
+          // precio 0: no se muestra "$ 0" como si se vendiera regalado.
+          text: base == null || (!base.activo && base.precio == 0) ? '' : PesosEnterosFormatter.escribir(base.precio),
         ),
         stock = TextEditingController(text: base?.stockInicial?.toString() ?? ''),
         aviso = TextEditingController(text: base?.avisoStock?.toString() ?? ''),
@@ -92,9 +94,13 @@ class _Fila {
 
   bool get cambio {
     final b = base;
-    if (b == null) return va;
+    // Sin tildar, el stock también se guarda (28-nov-2026): la lata de Speed va entera en
+    // el vodka y baja de su stock aunque no se venda sola. Antes se escribía y se perdía.
+    if (b == null) return va || stockNum != null;
+    // Sin tildar y sin precio escrito, el precio es el de antes (0 si no se vende solo).
+    final precioAhora = precioNum ?? (va ? null : b.precio.round());
     return va != b.activo ||
-        precioNum != b.precio.round() ||
+        precioAhora != b.precio.round() ||
         stockNum != b.stockInicial ||
         avisoNum != (b.stockInicial == null ? null : b.avisoStock);
   }
@@ -298,7 +304,9 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
           listo = PrecioBarra.para(
             eventoId: widget.fiesta.id,
             productoId: f.producto.id,
-            precio: f.precioNum!.toDouble(),
+            // Sin tildar es solo el stock (no se ofrece en VENDER): precio 0.
+            precio: (f.precioNum ?? 0).toDouble(),
+            activo: f.va,
             orden: i,
             stockInicial: f.stockNum,
             avisoStock: f.avisoNum,

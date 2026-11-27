@@ -18,6 +18,7 @@ import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 import 'package:arguello_events/features/barra/services/fiestas_del_jefe.dart';
+import 'package:arguello_events/features/barra/services/productos_para_vender.dart';
 import 'package:arguello_events/features/barra/widgets/elegir_impresora_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -266,6 +267,22 @@ void main() {
       await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
       expect(find.text('Falta el precio de Agua sin gas.'), findsOneWidget);
       expect(prueba.barra.preciosGuardados, isEmpty);
+    });
+
+    // 28-nov-2026, el recorrido con el mouse: la lata de Speed va entera en el vodka y no
+    // se vende sola. Su stock se escribía y al guardar se perdía, sin aviso.
+    testWidgets('sin tildar, el stock se guarda igual: no se ofrece en VENDER, pero cuenta', (tester) async {
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      await escribir(tester, find.byKey(Key('jefe_stock_${agua.id}')), '40');
+      expect(texto(tester, 'jefe_precios_cambios'), '1 cambio sin guardar');
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      final p = prueba.barra.preciosGuardados.single;
+      expect((p.productoId, p.activo, p.precio, p.stockInicial), (agua.id, false, 0.0, 40));
+      expect(productosParaVender([agua], [p], eventoId: pinaroli.id), isEmpty, reason: 'no se vende solo');
+      expect(find.byKey(const Key('jefe_precios_cambios')), findsNothing, reason: 'nada quedó colgado');
+      final precio = tester.widget<TextField>(find.byKey(Key('jefe_precio_${agua.id}')));
+      expect(precio.controller!.text, isEmpty, reason: r'no dice "$ 0" como si se regalara');
+      expect(tester.widget<TextField>(find.byKey(Key('jefe_stock_${agua.id}'))).controller!.text, '40');
     });
 
     testWidgets('el precio de lista: dice cuánto gano y se guarda junto con lo demás', (tester) async {
