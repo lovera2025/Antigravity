@@ -175,11 +175,15 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   /// Lo que queda de un producto: lo cargado por el jefe, menos lo vendido por todas
   /// las cajas y lo que ya está en esta cuenta. Null: no se controla.
   int? _quedan(String productoId) {
-    // Un trago con algo entero (el vodka con su Speed): alcanza para lo que dé eso.
-    if (_recetas.enteros(productoId).isNotEmpty) {
-      return _recetas.alcanzaPara(productoId, _quedanDe);
-    }
-    return _quedanDe(productoId);
+    final propio = _quedanDe(productoId);
+    if (_recetas.enteros(productoId).isEmpty) return propio;
+    // Un trago con algo entero (el vodka con su Speed): alcanza para lo que dé eso, y
+    // si el jefe le cargó stock al trago mismo, también cuenta: queda lo menor (28-nov-2026;
+    // antes ese stock se ignoraba y LAS CAJAS decía otra cosa).
+    final alcanza = _recetas.alcanzaPara(productoId, _quedanDe);
+    if (propio == null) return alcanza;
+    if (alcanza == null) return propio;
+    return propio < alcanza ? propio : alcanza;
   }
 
   int? _quedanDe(String productoId) {

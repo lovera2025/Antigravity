@@ -124,6 +124,31 @@ void main() {
     expect(quedan(tester, speed), 'Quedan 3');
   });
 
+  // 28-nov-2026, el recorrido con el mouse: con receta, el stock que el jefe le cargó al
+  // trago mismo se ignoraba (VENDER no decía "Quedan" y LAS CAJAS sí lo contaba).
+  void stockDelVodka(int? stock, {int? speeds = 3}) {
+    final b = prueba.barra;
+    b.preciosGuardados.removeWhere((p) => p.productoId == vodka.id || p.productoId == speed.id);
+    b.precio(fiesta.id, speed, 3500, orden: 0, stock: speeds);
+    b.precio(fiesta.id, vodka, 10000, orden: 1, stock: stock);
+  }
+
+  testWidgets('el stock propio del vodka también cuenta: queda lo menor', (tester) async {
+    stockDelVodka(2);
+    await abrir(tester);
+    expect(quedan(tester, vodka), 'Quedan 2', reason: 'hay 3 Speed, pero el jefe cargó 2 vodkas');
+    await tocar(tester, find.byKey(Key('producto_${vodka.id}')));
+    expect(quedan(tester, vodka), 'Quedan 1');
+    expect(quedan(tester, speed), 'Quedan 2', reason: 'el vodka de la cuenta se lleva un Speed');
+  });
+
+  testWidgets('con el Speed sin stock, el vodka dice lo que le cargó el jefe', (tester) async {
+    stockDelVodka(4, speeds: null);
+    await abrir(tester);
+    expect(quedan(tester, speed), isNull);
+    expect(quedan(tester, vodka), 'Quedan 4');
+  });
+
   testWidgets('sin Speed, el vodka dice que no queda y pregunta antes, como cualquier producto', (tester) async {
     await abrir(tester);
     for (var i = 0; i < 3; i++) {
