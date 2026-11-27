@@ -107,12 +107,50 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   `Jefe_2b_precios_con_lista_pc.png`, `Jefe_2c_como_se_prepara_pc.png`, `Jefe_8_ganancia_pc.png` en
   `build/capturas_4dic/`.
 
+**La prueba de las teles del 27-nov (noche), con todo lo de la barra junto** (capturas en `build/capturas_tele_27nov/`):
+- Las pruebas de la tele, el tótem y la puerta (63 archivos): **1.170 en verde**.
+- Los salones de verdad sacados de nuevo de una copia (ahora 10: apareció uno de 12 mesas): el tótem en la tele se ve
+  igual que en la PC, como mucho 0,56 % de los puntos distintos a la vista (`tool/tele_salones_de_verdad_test.dart`, 25
+  en verde).
+- **La app de prueba en el emulador `Recepcion_Tablet` como una tele de 1920×1080 a 320 dpi y con `-gpu
+  swiftshader_indirect`** (dibuja con el procesador, como la vez pasada): **la espera, 48-49 por segundo** (el 25-nov,
+  40-44); **la bienvenida, lo peor 27 al aparecer el nombre, después 31-37** (el 25-nov, 24-29 y 35-44): igual o mejor.
+  Con el celular (el navegador por `adb forward tcp:8787`, código de la tele): entrar como Juli, elegir la Tele 1, dos
+  ingresos con su bienvenida (nombre en la pista, mesa encendida, la flecha, "Tele 1 · la maneja Juli"), GIRAR a vertical
+  desde el celular.
+- **Salir y volver:** Inicio en la tele, 20 s afuera y volver: mismo proceso, el tótem esperando, el celular seguía
+  conectado y el ingreso siguiente saludó bien. **La página del celular cerrada y abierta de nuevo: entra sola como Juli,
+  con su tele elegida y los ingresos**. Con la app nueva instalada encima (otro proceso), el celular se volvió a enganchar
+  solo ("La maneja: Juli"). En la app de prueba lo marcado vive en memoria (se pierde si se cierra la app, a propósito);
+  la de verdad lo guarda en la base: eso lo cubren las pruebas (`modo_tele_test`, `tele_dos_escuelas_test`, …).
+- **Encontrado: un borde verde finito alrededor de toda la app después de apretar una tecla del control** (en el inicio
+  del emulador no aparece). Se probó apagar el resaltado de foco de Android en el tema y en la vista: **no cambió nada**,
+  y se volvió atrás (no se deja un cambio que no demostró servir). Puede ser del emulador (una tablet con Android 16, que
+  muestra el foco del teclado). **Preguntarle si en la Quint aparece un borde verde al usar el control**; si aparece,
+  buscarlo con la tele de verdad. Una vez el primer OK solo puso ese borde y no abrió el menú (con la app recién
+  instalada, el primer OK sí lo abrió): parece el modo táctil del emulador.
+- Huella de la base antes y después: **IGUAL**. Roturas de la tele (`tool/roturas_tele.txt`) sobre todo lo junto:
+  **56 de 56 atrapadas**.
+- **Pedido del usuario (27-nov, noche): "el plano debe tomar toda la tele en horizontal, en lo posible".** Hoy, en una
+  tele acostada, el salón de 151 mesas ocupa ~58 % del ancho (1.120 de 1.920 puntos) y deja franjas a los costados:
+  el dibujo no se agranda (`CuadroDelSalon`, "no cambia de lugar ni de tamaño" desde la 6.6.2). **Propuesta: recortar
+  al dibujo (mesas, escenario y sectores, sin el borde vacío del playón de arriba) y agrandarlo hasta donde dé el alto,
+  sin deformarlo ni acostarlo** (con el escenario a un costado no se entiende): en ese salón quedaría ~75 % del ancho.
+  Hacerlo para la tele acostada (no para la parada), con `tool/tele_salones_de_verdad_test.dart` y los 10 salones de
+  verdad, mirando que el nombre en grande, la mesa encendida y la flecha sigan bien, y medir la fluidez de nuevo
+  (el salón más grande es más para dibujar). Mostrarle antes la muestra con los 10 salones.
+- **Falta de esta prueba:** la Tele 2 de punta a punta en el sandbox (la ventana `tool/tele_prueba.dart` en Windows con
+  las dos teles, o dos emuladores); está cubierta por las pruebas, no se recorrió hoy. Y la Quint de verdad (la fluidez
+  real, el borde verde, el control).
+
 **Lo que falta, en orden:**
 1. **Que mire las capturas** (`build/capturas_4dic/`: `Jefe_2b` PRECIOS, `Jefe_2c` cómo se prepara, `Jefe_8` GANANCIA,
    `Jefe_9` una caja con retiros, `Jefe_10` SACAR EFECTIVO) y diga si va así. **Correr la suite entera**
    (`bash tool/suite_por_tandas.sh`): la última, 6.698 y 1 falla (la de siempre), fue antes de la receta en chico;
    después solo se corrieron las pruebas de PRECIOS y GANANCIA.
-2. **Pedido del usuario el 27-nov (noche): "no te olvides" — probar en el sandbox el circuito entero de las teles**,
+2. **Pedido del usuario el 27-nov (noche): "no te olvides" — probar en el sandbox el circuito entero de las teles**
+   (**hecho en buena parte el 27-nov a la noche, "hacelo ya para ver"**; lo que dio, en "La prueba de las teles del
+   27-nov", abajo; falta lo que dice ahí),
    antes de publicar y con todo lo de la barra ya junto: que ande y **tan fluido como la última vez en la Smart TV de
    50"** (la Quint: 60 por segundo en la bienvenida y la flecha del camino, sin saltos); **todo lo del tótem y de
    Recepción manejado desde la app** (los celulares de la puerta, marcar ingresos, saludos con la mesa, el plano con el
