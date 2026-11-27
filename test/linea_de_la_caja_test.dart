@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,6 +39,59 @@ void main() {
     final caja = tester.renderObject<RenderParagraph>(find.byKey(Key(key)));
     expect(caja.didExceedMaxLines, isFalse, reason: '$key se corta');
   }
+
+  // Revisión del 27-nov-2026: lo que la central rechazaba y el PIN que no reconocía no se
+  // veían en ninguna pantalla; VENDER decía "Buscando la central…" toda la noche.
+  group('lo que la central no acepta se dice', () {
+    final datos = DatosSinInternetBarra(
+      hayInternet: false,
+      alDia: DateTime(2026, 12, 4, 21, 40),
+      pendientes: const PendientesDeLaBarra(),
+    );
+    const delPin = 'La central no reconoce tu PIN: la notebook tiene que bajar los operadores con internet';
+
+    test('con el PIN que la central no reconoce, la línea dice eso y no "Buscando…"', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.buscando, problema: delPin);
+      expect(t.central, delPin);
+      expect(t.central, isNot(contains('Buscando')));
+      expect(t.tonoCentral, TonoDeLaLinea.atencion);
+    });
+
+    test('y dice cuánto falta mandar', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.sinCentral, problema: delPin, porMandar: 4);
+      expect(t.central, '$delPin · 4 por mandar');
+    });
+
+    test('sin problema, buscando dice "Buscando la central…" como siempre', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.buscando);
+      expect(t.central, 'Buscando la central…');
+      expect(t.tonoCentral, TonoDeLaLinea.quieto);
+    });
+
+    test('conectada y con cosas que la central no guardó: lo dice, en amarillo', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.conectada, cajas: 3, rechazadas: 2);
+      expect(t.central, 'Central · 3 cajas · la central no aceptó 2');
+      expect(t.tonoCentral, TonoDeLaLinea.atencion);
+    });
+
+    test('conectada y sin rechazos: en verde, sin nada de más', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.conectada, cajas: 3);
+      expect(t.central, 'Central · 3 cajas');
+      expect(t.tonoCentral, TonoDeLaLinea.bien);
+    });
+
+    test('ya conectada, un problema viejo del PIN no se muestra', () {
+      final t = TextosDeLaCaja.de(datos, central: EstadoDeLaCentral.conectada, problema: delPin);
+      expect(t.central, 'Central conectada');
+    });
+
+    test('VENDER le pasa a la línea el problema y los rechazos del cliente', () {
+      final linea = File('lib/features/barra/central/linea_de_la_caja.dart').readAsStringSync();
+      expect(linea, contains('problema: cliente?.problema'));
+      expect(linea, contains('rechazadas: cliente?.rechazadas.length'));
+      expect(linea, contains("Key('central_rechazos')"), reason: 'el cartel de la central los lista');
+    });
+  });
 
   for (final (nombre, ancho) in [('una tablet', 800.0), ('una tablet parada', 600.0), ('un celular', 360.0)]) {
     testWidgets('en $nombre se lee entera, sin cortes ni desbordes', (tester) async {

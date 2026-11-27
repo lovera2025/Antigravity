@@ -50,7 +50,11 @@ cargando. Prueba `test/precio_de_lista_solo_lo_lee_el_jefe_test.dart` (lee `lib/
 **Programado el 27-nov: el 8** (`ReglasDeLaBarra.cierraSinPedir`: jefe y encargada; lo usan `puedeCerrar` y
 `cerrar_caja_barra_screen.dart`; prueba en `test/barra_cerrar_test.dart` y `test/reglas_de_la_barra_test.dart`; 2
 roturas en `tool/roturas_permisos_barra.txt`; lo de "su OK no vale para su propia caja" quedó en el código pero ya
-no se usa, porque ella no pide el OK). **Sin programar todavía: el 4, el 6 y el hallazgo 2.**
+no se usa, porque ella no pide el OK). **Programado el 27-nov: el hallazgo 2, en VENDER** (`TextosDeLaCaja.de(problema:, rechazadas:)`: con el PIN que la
+central no reconoce la línea dice eso y no "Buscando la central…"; conectada, "· la central no aceptó N" en
+amarillo; el cartel de la central lista los últimos 5 motivos; `test/linea_de_la_caja_test.dart`, 3 roturas). **Falta
+de ese hallazgo:** LAS CAJAS de la encargada en una tablet y la notebook (`CentralBarra.rechazos`) siguen sin
+mostrarlos. **Sin programar todavía: el 4 y el 6.**
 
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`

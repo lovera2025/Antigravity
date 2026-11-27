@@ -35,6 +35,8 @@ class TextosDeLaCaja {
     int cajas = 0,
     DateTime? desde,
     int porMandar = 0,
+    String? problema,
+    int rechazadas = 0,
   }) {
     final p = d.porSubir;
     final (subida, tono) = switch ((d.hayInternet, p.vacio)) {
@@ -44,12 +46,21 @@ class TextosDeLaCaja {
       (false, false) => ('Sin internet · ${p.enPalabras} por subir', TonoDeLaLinea.atencion),
     };
     final mandar = porMandar == 0 ? '' : ' · $porMandar por mandar';
+    // Lo que la central no guardó de este aparato (27-nov-2026): antes no se veía en
+    // ninguna pantalla, y quien lo hizo creía que había llegado.
+    final noAcepto = rechazadas == 0 ? '' : ' · la central no aceptó $rechazadas';
     final (textoCentral, tonoCentral) = switch (central) {
       null || EstadoDeLaCentral.apagada => (null, TonoDeLaLinea.quieto),
+      // La central contestó que no la deja entrar (el PIN): se dice eso, no "Buscando…",
+      // que con un PIN que la notebook no conoce quedaba toda la noche.
+      _ when problema != null && central != EstadoDeLaCentral.conectada => (
+          '$problema$mandar',
+          TonoDeLaLinea.atencion,
+        ),
       EstadoDeLaCentral.buscando => ('Buscando la central…$mandar', TonoDeLaLinea.quieto),
       EstadoDeLaCentral.conectada => (
-          cajas <= 1 ? 'Central conectada' : 'Central · $cajas cajas',
-          TonoDeLaLinea.bien,
+          '${cajas <= 1 ? 'Central conectada' : 'Central · $cajas cajas'}$noAcepto',
+          rechazadas == 0 ? TonoDeLaLinea.bien : TonoDeLaLinea.atencion,
         ),
       EstadoDeLaCentral.sinCentral => (
           '${desde == null ? 'Sin central' : 'Sin central desde las ${EstadoSinInternet.horaDe(desde)}'}$mandar',
@@ -78,6 +89,8 @@ class LineaDeLaCaja extends ConsumerWidget {
           cajas: cliente?.cajas ?? 0,
           desde: cliente?.desde,
           porMandar: cliente?.porMandar ?? 0,
+          problema: cliente?.problema,
+          rechazadas: cliente?.rechazadas.length ?? 0,
         );
         return LineaDeLaCajaVista(
           textos: t,
@@ -194,6 +207,26 @@ Future<void> mostrarLaCentral(BuildContext context, WidgetRef ref) async {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(estado, key: const Key('central_estado')),
+                  if (cliente.problema != null && cliente.estado != EstadoDeLaCentral.conectada) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      cliente.problema!,
+                      key: const Key('central_problema'),
+                      style: const TextStyle(color: Color(0xFFF2B84B), fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                  if (cliente.rechazadas.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      cliente.rechazadas.length == 1
+                          ? 'La central no aceptó una cosa de este aparato. Avisale a la encargada:'
+                          : 'La central no aceptó ${cliente.rechazadas.length} cosas de este aparato. Avisale a la encargada:',
+                      key: const Key('central_rechazos'),
+                      style: const TextStyle(color: Color(0xFFF2B84B), fontWeight: FontWeight.w700),
+                    ),
+                    for (final r in cliente.rechazadas.reversed.take(5))
+                      Text('· ${r.motivo}', style: const TextStyle(fontSize: 13)),
+                  ],
                   const SizedBox(height: 16),
                   const Text(
                     'Si no la encuentra sola, escribí la dirección que muestra la notebook de la barra:',

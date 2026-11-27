@@ -166,3 +166,21 @@ test/reglas_de_la_barra_test.dart
   static bool cierraSinPedir(RolEnLaBarra? r) => r == RolEnLaBarra.jefe || r == RolEnLaBarra.encargada;
   static bool cierraSinPedir(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
 ---
+con el PIN que la central no reconoce, VENDER vuelve a decir "Buscando la central…"
+lib/features/barra/central/linea_de_la_caja.dart
+test/linea_de_la_caja_test.dart
+      _ when problema != null && central != EstadoDeLaCentral.conectada => (
+      _ when false => (
+---
+lo que la central no aceptó no se dice en la línea de VENDER
+lib/features/barra/central/linea_de_la_caja.dart
+test/linea_de_la_caja_test.dart
+    final noAcepto = rechazadas == 0 ? '' : ' · la central no aceptó $rechazadas';
+    final noAcepto = '';
+---
+VENDER no le pasa a la línea los rechazos del cliente
+lib/features/barra/central/linea_de_la_caja.dart
+test/linea_de_la_caja_test.dart
+          rechazadas: cliente?.rechazadas.length ?? 0,
+
+---
