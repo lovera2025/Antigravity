@@ -376,6 +376,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // 28-nov-2026 (decisión del usuario: "que avise el 5 %"): sin elegir decía "Sin recargo"
+  // y cada cobro arrancaba con el último de la tablet, la primera vez 5 %.
+  for (final (pct, dice) in [
+    (null, 'Recargo por transferencia sin elegir: cada tablet arranca con el último que usó (la primera vez, 5 %).'),
+    (0.0, 'Sin recargo por transferencia en esta fiesta.'),
+    (8.0, 'Recargo por transferencia: 8 %, sobre lo transferido.'),
+  ]) {
+    testWidgets('el recargo de la fiesta, a la vista de la encargada: ${pct ?? 'sin elegir'}', (tester) async {
+      if (pct != null) {
+        prueba.barra.recargosGuardados.add(RecargoBarra.para(eventoId: fiesta.id, pct: pct, ahora: DateTime.now()));
+      }
+      await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+      await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+      await tocar(tester, find.byKey(const Key('las_cajas_catalogo_precios')));
+      expect(tester.widget<Text>(find.byKey(const Key('catalogo_precios_recargo'))).data, dice);
+    });
+  }
+
   testWidgets('LAS CAJAS pregunta la regla: con otro rol, sin CATÁLOGO Y PRECIOS', (tester) async {
     for (final (rol, ve) in [
       (RolEnLaBarra.cajera, false),

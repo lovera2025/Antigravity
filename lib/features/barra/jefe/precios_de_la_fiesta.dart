@@ -166,7 +166,10 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
   final _recetas = <String, List<_Ingrediente>>{};
 
 
-  double _recargo = 0;
+  /// El recargo de la fiesta. Null: el jefe todavía no lo eligió, y cada tablet arranca
+  /// con el último que usó (la primera vez, 5 %; `recargoDeArranque`). PRECIOS lo dice
+  /// (28-nov-2026: decía "sin" y los cobros arrancaban con 5 %).
+  double? _recargo;
   bool _guardando = false;
 
   /// Recién guardado: lo próximo que llegue de la base se carga aunque lo escrito
@@ -215,7 +218,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     for (final r in proveedor.recetas) {
       (_recetas[r.productoId] ??= []).add(_Ingrediente(r));
     }
-    _recargo = datos.recargo?.pct ?? 0;
+    _recargo = datos.recargo?.pct;
     _datos = datos;
     _productos = productos;
     _proveedor = proveedor;
@@ -261,7 +264,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
   int get _cambios =>
       _filas.where((f) => f.cambio || f.cambioCosto).length + _cambiosDeRecetas + (_recargoCambio ? 1 : 0);
 
-  bool get _recargoCambio => _recargo != (_datos?.recargo?.pct ?? 0);
+  bool get _recargoCambio => _recargo != null && _recargo != _datos?.recargo?.pct;
 
   bool _frenaSinModoJefe() {
     if (ref.read(esRolJefeProvider)) return false;
@@ -370,8 +373,8 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
       if (_recargoCambio) {
         final viejo = _datos?.recargo;
         final listo = viejo == null
-            ? RecargoBarra.para(eventoId: widget.fiesta.id, pct: _recargo, ahora: DateTime.now())
-            : viejo.conPct(_recargo);
+            ? RecargoBarra.para(eventoId: widget.fiesta.id, pct: _recargo!, ahora: DateTime.now())
+            : viejo.conPct(_recargo!);
         final guardado = await barra.guardarRecargo(listo, quien: quien);
         unawaited(subir('barra_recargos', guardado.id));
         conRecargo = true;
@@ -476,7 +479,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
             if (f.va && f.precioNum != null)
               (nombre: f.producto.nombre, categoria: f.producto.categoria, precio: f.precioNum!.toDouble()),
         ],
-        recargoPct: _recargo,
+        recargoPct: _recargo ?? 0,
       );
 
   Future<void> _pdf() => ref.read(guardarPdfDeLaBarraProvider)(
@@ -691,15 +694,16 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
                 IconButton.outlined(
                   key: const Key('jefe_recargo_menos'),
                   tooltip: 'Bajar el recargo',
-                  onPressed: puede && _recargo > 0
-                      ? () => setState(() => _recargo = (_recargo - 1).clamp(0, RecargoBarra.pctMaximo).toDouble())
+                  // Sin elegir, bajar es elegir "sin".
+                  onPressed: puede && (_recargo ?? 1) > 0
+                      ? () => setState(() => _recargo = ((_recargo ?? 1) - 1).clamp(0, RecargoBarra.pctMaximo).toDouble())
                       : null,
                   icon: const Icon(Icons.remove),
                 ),
                 SizedBox(
                   width: 72,
                   child: Text(
-                    _recargo == 0 ? 'sin' : '${pct(_recargo)} %',
+                    switch (_recargo) { null => '—', 0.0 => 'sin', final r => '${pct(r)} %' },
                     key: const Key('jefe_recargo_pct'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
@@ -708,18 +712,27 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
                 IconButton.outlined(
                   key: const Key('jefe_recargo_mas'),
                   tooltip: 'Subir el recargo',
-                  onPressed: puede && _recargo < 30
-                      ? () => setState(() => _recargo = (_recargo + 1).clamp(0, RecargoBarra.pctMaximo).toDouble())
+                  onPressed: puede && (_recargo ?? 0) < 30
+                      ? () => setState(() => _recargo = ((_recargo ?? 0) + 1).clamp(0, RecargoBarra.pctMaximo).toDouble())
                       : null,
                   icon: const Icon(Icons.add),
                 ),
               ],
             ),
-            const Text(
-              'Cada caja arranca cada cobro con este. Va sobre lo transferido, y la cajera lo puede '
-              'cambiar en un cobro si hace falta.',
-              style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
-            ),
+            if (_recargo == null)
+              Text(
+                'Sin elegir: cada tablet arranca cada cobro con el último que usó (la primera vez, '
+                '${pct(RecargoRecordado.pctDeArranque)} %), y la lista impresa no lo dice. Elegilo para que todas '
+                'arranquen igual.',
+                key: const Key('jefe_recargo_sin_elegir'),
+                style: const TextStyle(fontSize: 13, color: Color(0xFFF2D77C)),
+              )
+            else
+              const Text(
+                'Cada caja arranca cada cobro con este. Va sobre lo transferido, y la cajera lo puede '
+                'cambiar en un cobro si hace falta.',
+                style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
+              ),
           ],
         ),
       ),

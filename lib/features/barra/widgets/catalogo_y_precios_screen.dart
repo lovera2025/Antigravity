@@ -10,6 +10,7 @@ import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
 import '../jefe/barra_jefe_providers.dart';
 import '../providers/barra_del_jefe_provider.dart';
+import '../providers/barra_providers.dart' show RecargoRecordado;
 
 /// CATÁLOGO Y PRECIOS de la Encargada de barra (26-nov-2026: "que pueda ver el catálogo
 /// y precio, y hasta ahí"). **Solo mirar:** lo que se vende en la fiesta con su precio de
@@ -102,7 +103,7 @@ class _Lista extends ConsumerWidget {
       final c = a.$1.categoria.compareTo(b.$1.categoria);
       return c != 0 ? c : a.$2.orden.compareTo(b.$2.orden);
     });
-    final recargo = datos.recargo?.pct ?? 0;
+    final recargo = datos.recargo?.pct;
     String pct(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
     String? categoria;
     return ListView(
@@ -111,9 +112,14 @@ class _Lista extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Text(
-            recargo == 0
-                ? 'Sin recargo por transferencia en esta fiesta.'
-                : 'Recargo por transferencia: ${pct(recargo)} %, sobre lo transferido.',
+            // Sin elegir, cada tablet arranca con el último que usó (28-nov-2026: decía
+            // "Sin recargo" y los cobros arrancaban con 5 %).
+            switch (recargo) {
+              null => 'Recargo por transferencia sin elegir: cada tablet arranca con el último que usó '
+                  '(la primera vez, ${pct(RecargoRecordado.pctDeArranque)} %).',
+              0.0 => 'Sin recargo por transferencia en esta fiesta.',
+              final r => 'Recargo por transferencia: ${pct(r)} %, sobre lo transferido.',
+            },
             key: const Key('catalogo_precios_recargo'),
             style: const TextStyle(color: Color(0xFFC9C4BA)),
           ),

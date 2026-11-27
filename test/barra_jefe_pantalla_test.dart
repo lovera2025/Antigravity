@@ -232,7 +232,8 @@ void main() {
     testWidgets('tildar, poner precio, stock y aviso, y el recargo: se guarda todo junto', (tester) async {
       await abrir(tester, pestana: PestanaBarraJefe.precios);
       expect(find.byKey(const Key('jefe_precios_sin_precios')), findsOneWidget);
-      expect(texto(tester, 'jefe_recargo_pct'), 'sin');
+      expect(texto(tester, 'jefe_recargo_pct'), '—', reason: 'sin elegir no es "sin"');
+      expect(find.byKey(const Key('jefe_recargo_sin_elegir')), findsOneWidget);
       await tocar(tester, find.byKey(Key('jefe_va_${fernet.id}')));
       await escribir(tester, find.byKey(Key('jefe_precio_${fernet.id}')), '6000');
       expect(find.text('6.000'), findsWidgets, reason: 'la plata con los puntos');
@@ -259,6 +260,26 @@ void main() {
       expect(find.byKey(const Key('jefe_precios_cambios')), findsNothing);
       expect(find.text('Guardado: 1 precio y el recargo.'), findsOneWidget,
           reason: 'el aviso nombra también el recargo (decía solo los precios)');
+    });
+
+    // 28-nov-2026 (decisión del usuario: "que avise el 5 %"): sin elegir decía "sin" y cada
+    // cobro arrancaba con el último de la tablet, la primera vez 5 %.
+    testWidgets('el recargo sin elegir lo avisa, y bajarlo es elegir "sin"', (tester) async {
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('jefe_recargo_sin_elegir'))).data,
+        'Sin elegir: cada tablet arranca cada cobro con el último que usó (la primera vez, 5 %), y la lista '
+        'impresa no lo dice. Elegilo para que todas arranquen igual.',
+      );
+      expect(find.byKey(const Key('jefe_precios_cambios')), findsNothing, reason: 'mirar no es un cambio');
+      await tocar(tester, find.byKey(const Key('jefe_recargo_menos')));
+      expect(texto(tester, 'jefe_recargo_pct'), 'sin');
+      expect(find.byKey(const Key('jefe_recargo_sin_elegir')), findsNothing);
+      expect(texto(tester, 'jefe_precios_cambios'), '1 cambio sin guardar');
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      expect((await prueba.barra.recargo(pinaroli.id))!.pct, 0, reason: '"sin", elegido: los cobros arrancan sin');
+      expect(texto(tester, 'jefe_recargo_pct'), 'sin');
+      expect(find.byKey(const Key('jefe_recargo_sin_elegir')), findsNothing);
     });
 
     testWidgets('si va sin precio no guarda y dice de cuál falta', (tester) async {

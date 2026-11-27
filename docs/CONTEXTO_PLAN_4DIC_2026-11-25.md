@@ -41,13 +41,18 @@ alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces 
 2. `ec6c3f1` — **VENDER ignoraba el stock que el jefe le carga al trago con receta**: el vodka decía solo lo que alcanza
    el Speed (sin Speed controlado, nada), y LAS CAJAS contaba sus 12. Ahora dice lo menor de los dos. Pruebas en
    `test/recetas_en_la_barra_test.dart`; roturas en `tool/roturas_recorrido_28nov.txt`.
+3. **El recargo sin elegir, a la vista** (el usuario eligió **"que avise el 5 %"**: la regla del 3-nov,
+   `recargoDeArranque`, no cambia). Antes, si el jefe no lo había puesto, PRECIOS decía "sin" y la encargada "Sin
+   recargo por transferencia en esta fiesta", y cada cobro arrancaba con el último de la tablet (la primera vez, 5 %).
+   Ahora PRECIOS muestra "—" con el aviso en amarillo (`jefe_recargo_sin_elegir`: "Sin elegir: cada tablet arranca
+   cada cobro con el último que usó (la primera vez, 5 %), y la lista impresa no lo dice. Elegilo para que todas
+   arranquen igual.") y **bajar desde "—" es elegir "sin"** (se guarda en 0: los cobros arrancan sin); la encargada lee
+   "Recargo por transferencia sin elegir: cada tablet arranca con el último que usó (la primera vez, 5 %)." El
+   recargo de PRECIOS es `double?` (null = sin elegir). Pruebas en `test/barra_jefe_pantalla_test.dart` y
+   `test/encargada_de_barra_test.dart`; 4 roturas en `tool/roturas_recorrido_28nov.txt`. Las pruebas de la barra: 831
+   en verde.
 
 **Preguntas para el usuario (no se tocó nada):**
-- **El recargo por transferencia que nadie eligió.** Si el jefe no puso el de la fiesta, PRECIOS dice "sin" y la
-  encargada lee "Sin recargo por transferencia en esta fiesta", pero cada cobro arranca con el último de la tablet (la
-  primera vez, **5 % prendido**: a la cajera le cobró $400 de recargo). Es la regla del 3-nov (`recargoDeArranque`).
-  Recomendación: que sin elegir arranque **sin** recargo, como dicen las pantallas; o que las pantallas digan "sin
-  elegir: cada tablet arranca con el último (5 %)".
 - En "cómo se prepara", la lista de "Elegí qué lleva" ofrece también los tragos y la Silla extra. Recomendación:
   sacarlos (solo lo que puede ir adentro de un trago).
 - Cuando el jefe saca o da plata, la caja y el papel dicen "Sacó la encargada" / "Cambio de la encargada" (el historial
@@ -62,7 +67,7 @@ GANANCIA** (la cuenta estaba bien): prueba nueva en `test/cuenta_del_proveedor_t
 
 **Lo que falta, en orden:**
 1. Que mire las capturas (las de hoy y las de ayer: `build/capturas_4dic/`, `build/capturas_tele_27nov/`) y conteste las
-   cuatro preguntas de arriba.
+   tres preguntas que quedan arriba (la del recargo ya la contestó).
 2. **Noche y Blanco** en todas las pantallas de la barra (`DisenioBarra`; cada aparato elige el suyo).
 3. El repositor, "¿Volvió el vale?", LA ENCARGADA ESTÁ ACÁ del jefe, el aviso del PIN maestro y **sin stock no se vende**;
    con el repositor, GANANCIA lee el stock por barra (hoy lo perdido da 0).

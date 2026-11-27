@@ -10,3 +10,27 @@ test/recetas_en_la_barra_test.dart
     return propio < alcanza ? propio : alcanza;
     return propio > alcanza ? propio : alcanza;
 ---
+PRECIOS dice "sin" con el recargo sin elegir
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+switch (_recargo) { null => '—',
+switch (_recargo) { null => 'sin',
+---
+PRECIOS no avisa el 5 % sin elegir
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+            if (_recargo == null)
+            if (_recargo == -1)
+---
+sin elegir no se puede elegir "sin"
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                  onPressed: puede && (_recargo ?? 1) > 0
+                  onPressed: puede && (_recargo ?? 0) > 0
+---
+la encargada lee "Sin recargo" con el recargo sin elegir
+lib/features/barra/widgets/catalogo_y_precios_screen.dart
+test/encargada_de_barra_test.dart
+              null => 'Recargo por transferencia sin elegir: cada tablet arranca con el último que usó '
+              null => 'Sin recargo por transferencia en esta fiesta. '
+---
