@@ -2,7 +2,55 @@
 
 ## Para retomar en otro chat
 
-### LEER PRIMERO: dónde quedó al cerrar el 26-nov (23:40), chat "¿En qué quedamos?"
+### LEER PRIMERO: dónde quedó el 27-nov (chat "sigamos")
+
+**El plan para el 4-dic va por ~65 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
+`C:\Users\lover\.claude\plans\sigamos-peaceful-harp-of-314d8c5f-dfb0-4642-a1b4-8e6c4ea26b76.md`.
+
+**La maqueta de recetas y estilos no lo convenció** (27-nov): tiene que notarse qué es el **precio de lista** y qué es
+**lo que se le debe al proveedor**, intuitivo, fácil, **sin redundancia**; "si se cumple eso, todo ok". Los estilos
+Noche y Blanco no los objetó. **Se rehízo: `docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`** (commit
+`dac99a8`, abierta en Edge y mandada): siempre "Precio de lista · lo que me cobra el proveedor" y "Le debo al
+proveedor"; PRECIOS en dos bloques (lo que se vende, con el precio de lista del trago "sale de la receta" sin
+escribirse; y las botellas de los tragos con lo que trae); GANANCIA con **dos formas** (A recomendada: "LE DEBO AL
+PROVEEDOR" grande, una sola tabla por lo que entrega el proveedor y la ganancia por producto plegada; B: una tabla
+por lo vendido); la encargada con SACAR EFECTIVO · DAR CAMBIO · "Corregir (se anotó mal algo)"; los renglones nuevos
+del papel del cierre ("Cambio de la encargada", "Sacó la encargada"); y "Lo que saqué por repetido". **Espera su
+respuesta (A o B, y si va así). Sin su OK no se programan esas pantallas.**
+
+**Respuestas del 27-nov sobre RETIRO y CAMBIO (no volver a preguntar):** la encargada los anota **también en su propia
+caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN en la tablet de la cajera).
+
+**Hecho el 27-nov: RETIRO y CAMBIO por dentro, sin pantalla** (mientras nadie anote uno, nada cambia a la vista):
+- `BarraDelJefe.movimientosDeCaja` / `anotarMovimientoDeCaja(movimiento, quien:)` y
+  `BarraDeLaCaja.movimientosDeLaCaja` (solo leer), en `BarraLocal`, `BarraNube` (avisa a los equipos; sin la tabla en la
+  nube, ninguno), `BarraConLaRed` (segunda llave `manejaLaPlataDeLasCajas` y aviso a la red), `BarraEnMemoria` y
+  `_LoQueSubio`. **Sobre una caja cerrada no se anota** (`CajaYaCerrada`); el mismo, dos veces, queda uno.
+- `barra_caja_movimientos` en `tablasDeLaRed`, **antes que `barra_cierres`** (la tablet guarda en ese orden: tiene el
+  retiro antes que el OK) y en `_enOrden`; `ReglasDeLaBarra.porQueNoSeGuarda` lo acepta solo de encargada o jefe, en
+  cualquier caja abierta, sin cambiar uno que ya está.
+- `SyncEngine.bajarCierresDeLaBarra` baja los retiros antes que el OK (si los retiros no bajan, el OK baja igual).
+- Los 4 lugares del efectivo esperado pasan `movimientos:` (LAS CAJAS por `ResumenDeCajas.de` y `cajasDelJefeProvider`,
+  cerrar caja dos veces, `cuentasParaElOk`); la prueba que lo exige ya no está en espera. `ResumenDeCajas` suma
+  `retirado` y `cambioAgregado`, y `ResumenDeCaja.cambioDespuesDelCierre` / `diferenciaConTodo` dicen si un retiro (o una
+  anulación) llegó después del cierre, sin tocar lo anotado: **falta mostrarlo en la tarjeta** (va con las pantallas).
+- Pruebas: `test/retiros_de_la_encargada_test.dart` (SQLite de verdad, la llave, la regla, la central de verdad de
+  punta a punta, LAS CAJAS y el OK), dos en `test/barra_cerrar_test.dart` (el retiro antes y mientras espera el OK) y
+  tres en `test/barra_nube_test.dart`. Roturas: 19 nuevas en `tool/roturas_retiros.txt` (**23 de 23 atrapadas**). La
+  suite entera: **6.671 y 1 falla, la de siempre** (`modal_cobro_masivos_medios_pago_test.dart`, LA ALFONSINA).
+
+**Lo que falta, en orden:**
+1. **Con su respuesta a la maqueta nueva:** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
+   `RecetaBarra` por `BarraDelJefe`/`BarraLocal`/`BarraNube`; COPIAR DE OTRA FIESTA los trae), GANANCIA (la forma que
+   elija) con su papel A4, **la pantalla SACAR EFECTIVO · DAR CAMBIO · Corregir** en LAS CAJAS de la encargada, los dos
+   renglones nuevos en el papel del cierre, el cartel del OK y la tarjeta (con el aviso de `cambioDespuesDelCierre`), y
+   Noche y Blanco en todas las pantallas de la barra (`DisenioBarra`).
+2. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
+   PIN maestro), y lo demás en el mismo orden.
+
+---
+
+### Lo del 26-nov (23:40), chat "¿En qué quedamos?" (para la historia; lo vigente está arriba)
 
 **El plan para el 4-dic va por ~60 %** (sin el plano impreso). **Nada publicado.** Rama
 `feature/v4.6-cierre-por-sesiones`, último commit `0b74a37`, árbol limpio (salvo los archivos sueltos de siempre:

@@ -1,5 +1,4 @@
 import '../datos/barra_repositorio.dart';
-import '../datos/movimiento_de_caja.dart';
 import 'dia_de_operacion.dart';
 import 'pesos.dart';
 import 'silla_de_la_puerta.dart';
@@ -315,6 +314,25 @@ class ResumenDeCaja {
 
   double? get contado => caja.efectivoContado;
   double? get diferencia => caja.diferencia;
+
+  /// Con todo lo que se sabe hoy: lo contado menos lo que tiene que haber ahora. Null
+  /// con la caja abierta.
+  double? get diferenciaConTodo {
+    final c = contado;
+    if (caja.abierta || c == null) return null;
+    return cuentas.diferenciaCon(c);
+  }
+
+  /// **Lo que tenía que haber cambió después del cierre** (27-nov-2026): un retiro de la
+  /// encargada que le llegó a la tablet después de cerrar (cerró sin esperar, o sin
+  /// red), o una venta anulada después. Lo anotado al cerrar no se toca; esto lo dice.
+  /// Sin comparar la hora de dos equipos: lo contado menos la diferencia anotada es lo
+  /// que la tablet esperaba (como `CierreDeEntradas.esperadoAlCerrar`).
+  bool get cambioDespuesDelCierre {
+    final conTodo = diferenciaConTodo;
+    final anotada = diferencia;
+    return conTodo != null && anotada != null && centavos(conTodo) != centavos(anotada);
+  }
 }
 
 /// CAJAS del jefe: cada caja de la fiesta y los totales.
@@ -347,6 +365,11 @@ class ResumenDeCajas {
   /// El cambio con que abrieron todas las cajas.
   final double cambio;
 
+  /// El cambio que dio la encargada después (con las correcciones) y lo que sacó, en
+  /// todas las cajas (`barra_caja_movimientos`, v84).
+  final double cambioAgregado;
+  final double retirado;
+
   /// Las cuentas de **toda la fiesta**, con las cajas juntas: lo vendido por producto y
   /// por categoría (LO VENDIDO DE LA FIESTA, 11-nov-2026).
   final CierreDeBarra? deLaFiesta;
@@ -365,6 +388,8 @@ class ResumenDeCajas {
     this.sillas = 0,
     this.sillasSueltas = 0,
     this.cambio = 0,
+    this.cambioAgregado = 0,
+    this.retirado = 0,
     this.deLaFiesta,
   });
 
@@ -374,9 +399,11 @@ class ResumenDeCajas {
     required Iterable<AnulacionBarra> anulaciones,
     Map<String, String> categorias = const {},
     DiaDeOperacion? dia,
+    Iterable<MovimientoDeCaja> movimientos = const [],
   }) {
     final listaVentas = ventas.toList();
     final listaAnulaciones = anulaciones.toList();
+    final listaMovimientos = movimientos.toList();
     final ordenadas = cajas.toList()
       ..sort((a, b) {
         final n = a.numeroCaja.compareTo(b.numeroCaja);
@@ -386,13 +413,19 @@ class ResumenDeCajas {
       for (final c in ordenadas)
         ResumenDeCaja(
           c,
-          CierreDeBarra.de(c, listaVentas, listaAnulaciones, categorias: categorias),
+          CierreDeBarra.de(
+            c,
+            listaVentas,
+            listaAnulaciones,
+            categorias: categorias,
+            movimientos: listaMovimientos,
+          ),
         ),
     ];
     // Solo lo de las cajas de esta lista: una venta de otra fiesta no entra.
     final idsDeCajas = {for (final c in ordenadas) c.id};
     var v = 0, an = 0, mx = 0, si = 0, su = 0;
-    var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0, cam = 0;
+    var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0, cam = 0, agr = 0, ret = 0;
     for (final r in resumenes) {
       v += r.cuentas.ventas;
       an += r.cuentas.anuladas;
@@ -400,6 +433,8 @@ class ResumenDeCajas {
       si += r.cuentas.sillas;
       su += r.cuentas.sillasSueltas;
       cam += centavos(r.caja.cambioInicial);
+      agr += centavos(r.cuentas.cambioAgregado);
+      ret += centavos(r.cuentas.retirado);
       ef += centavos(r.cuentas.efectivo);
       tr += centavos(r.cuentas.transferencia);
       rec += centavos(r.cuentas.recargos);
@@ -422,11 +457,14 @@ class ResumenDeCajas {
       sillas: si,
       sillasSueltas: su,
       cambio: deCentavos(cam),
+      cambioAgregado: deCentavos(agr),
+      retirado: deCentavos(ret),
       deLaFiesta: CierreDeBarra.deLaFiesta(
         [for (final x in listaVentas) if (idsDeCajas.contains(x.cajaBarraId)) x],
         listaAnulaciones,
         cambioInicial: deCentavos(cam),
         categorias: categorias,
+        movimientos: [for (final m in listaMovimientos) if (idsDeCajas.contains(m.cajaBarraId)) m],
       ),
     );
   }

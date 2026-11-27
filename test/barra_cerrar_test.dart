@@ -297,6 +297,45 @@ void main() {
     expect(prueba.subidasDeLaBarra, isEmpty);
   });
 
+  /// Un retiro que la encargada anotó en su aparato: le llega a esta tablet por la red
+  /// del salón (`barra_caja_movimientos`, v84, 27-nov-2026).
+  Future<void> llegaUnRetiroDeRomi(double monto) async {
+    final retiro = MovimientoDeCaja.nuevo(
+      eventoId: caja.eventoId,
+      cajaBarraId: caja.id,
+      tipo: TipoMovimientoDeCaja.retiro,
+      monto: monto,
+      motivo: 'Mucho efectivo en la caja',
+      ahora: DateTime.utc(2026, 12, 5, 4),
+    ).sellado(hechoPor: 'Romi', deviceId: 'tablet-de-romi', ahora: DateTime.utc(2026, 12, 5, 4));
+    expect(await prueba.barra.guardarDeOtroEquipo('barra_caja_movimientos', retiro.toMap()), isTrue);
+  }
+
+  testWidgets('un retiro de la encargada entra en lo que tenía que haber, y la cajera no lo ve hasta cerrar',
+      (tester) async {
+    await llegaUnRetiroDeRomi(10000);
+    await abrir(tester);
+    await irACerrar(tester);
+    for (final plata in ['27.000', '17.000', '10.000']) {
+      expect(find.textContaining(plata), findsNothing, reason: 'antes de contar se ve $plata');
+    }
+    await contarYCerrar(tester, '17000');
+    expect(guardada().abierta, isFalse);
+    expect(guardada().diferencia, 0, reason: '20.000 + 7.000 - 10.000 que sacó la encargada');
+    expect(texto(tester, 'cierre_esperado'), r'Tenía que haber $ 17.000');
+  });
+
+  testWidgets('el retiro que llega mientras espera el OK también cuenta al cerrar', (tester) async {
+    await abrir(tester);
+    await irACerrar(tester);
+    await contarYPedir(tester, '17000');
+    expect(porClave('cierre_esperando'), findsOneWidget);
+    await llegaUnRetiroDeRomi(10000);
+    await contestaLaEncargada(tester, TipoPasoDelCierre.ok);
+    expect(guardada().abierta, isFalse);
+    expect(guardada().diferencia, 0);
+  });
+
   testWidgets('justo: lo dice; y con el cambio puesto después de abrir, cuenta igual', (tester) async {
     await abrir(tester);
     await irACerrar(tester);

@@ -118,6 +118,14 @@ abstract final class ReglasDeLaBarra {
     }
     final cajaPropia = caja != null && caja.deviceId == equipo;
     switch (tabla) {
+      case 'barra_caja_movimientos':
+        // La encargada desde su sesión, en cualquier caja, también la suya (27-nov-2026).
+        // Nunca con su PIN en la tablet de la cajera: la sesión es la de la cajera.
+        if (!manejaLaPlataDeLasCajas(rol)) return 'La plata de las cajas la maneja la encargada';
+        if (yaEsta != null) return 'Un retiro no se cambia';
+        if (caja == null) return 'No se sabe de qué caja es';
+        if (!caja.abierta) return 'La caja ya cerró';
+        return null;
       case 'barra_stock_movimientos':
         return mueveElStock(rol) ? null : 'El stock lo mueve el repositor';
       case 'barra_stock_barras':

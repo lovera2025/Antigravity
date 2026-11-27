@@ -38,6 +38,9 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   /// El stock por barra (v83): el reparto del jefe y lo que anota el repositor.
   final repartosGuardados = <StockEnLaBarra>[];
   final movimientosGuardados = <MovimientoDeStock>[];
+
+  /// Los retiros y el cambio de la encargada (`barra_caja_movimientos`, v84).
+  final movimientosDeCajaGuardados = <MovimientoDeCaja>[];
   String equipo = 'tablet-1';
   DateTime Function() reloj = () => DateTime.utc(2026, 12, 5, 2);
 
@@ -285,6 +288,26 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) async =>
       [for (final p in pasosGuardados) if (p.eventoId == eventoId) p];
 
+  @override
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) async {
+    final caja = cajasGuardadas.firstWhere((c) => c.id == movimiento.cajaBarraId);
+    if (!caja.abierta) throw CajaYaCerrada(caja.numeroCaja);
+    final ya = movimientosDeCajaGuardados.where((m) => m.id == movimiento.id).firstOrNull;
+    if (ya != null) return ya;
+    final sellado = movimiento.sellado(hechoPor: quien, deviceId: equipo, ahora: reloj());
+    movimientosDeCajaGuardados.add(sellado);
+    otrosSinSubir.add(sellado.id);
+    return sellado;
+  }
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId) async =>
+      [for (final m in movimientosDeCajaGuardados) if (m.eventoId == eventoId) m];
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId) async =>
+      [for (final m in movimientosDeCajaGuardados) if (m.cajaBarraId == cajaId) m];
+
   // ── La red del salón (`BarraDeLaRed`) ─────────────────────────────────────
 
   /// Cuántas filas llegaron de otro equipo y se guardaron.
@@ -304,6 +327,7 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
       'barra_anulaciones' => de(anulacionesGuardadas, (a) => a.id, (a) => a.toMap()),
       'barra_vales' => de(valesGuardados, (v) => v.id, (v) => v.toMap()),
       'barra_cierres' => de(pasosGuardados, (p) => p.id, (p) => p.toMap()),
+      'barra_caja_movimientos' => de(movimientosDeCajaGuardados, (m) => m.id, (m) => m.toMap()),
       'barra_stock_barras' => de(repartosGuardados, (r) => r.id, (r) => r.toMap()),
       'barra_stock_movimientos' => de(movimientosGuardados, (m) => m.id, (m) => m.toMap()),
       _ => null,
@@ -339,6 +363,8 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
         _ponerDeOtro(valesGuardados, ValeBarra.fromMap(m), (v) => v.id);
       case 'barra_cierres':
         _ponerDeOtro(pasosGuardados, PasoDelCierre.fromMap(m), (p) => p.id);
+      case 'barra_caja_movimientos':
+        _ponerDeOtro(movimientosDeCajaGuardados, MovimientoDeCaja.fromMap(m), (x) => x.id);
       case 'barra_stock_barras':
         _ponerDeOtro(repartosGuardados, StockEnLaBarra.fromMap(m), (r) => r.id);
       case 'barra_stock_movimientos':
@@ -351,6 +377,9 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   @override
   Future<Map<String, List<Map<String, Object?>>>> filasDeLaFiesta(String eventoId) async => {
         'barra_cajas': [for (final c in cajasGuardadas) if (c.eventoId == eventoId) c.toMap()],
+        'barra_caja_movimientos': [
+          for (final m in movimientosDeCajaGuardados) if (m.eventoId == eventoId) m.toMap(),
+        ],
         'barra_ventas': [for (final v in ventasGuardadas) if (v.eventoId == eventoId) v.toMap()],
         'barra_anulaciones': [
           for (final a in anulacionesGuardadas) if (a.eventoId == eventoId) a.toMap(),

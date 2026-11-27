@@ -191,6 +191,17 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return _avisar('barra_cajas', hecho.id, hecho);
   }
 
+  /// **Sacar efectivo, dar cambio o corregir** (27-nov-2026): la encargada desde su
+  /// sesión, también en su propia caja, y el jefe. Nunca la cajera ni el repositor, ni
+  /// con el PIN de la encargada en la tablet de la cajera. Sale a la red del salón: la
+  /// tablet de esa caja lo tiene antes de cerrar.
+  @override
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.manejaLaPlataDeLasCajas, 'La plata de las cajas la maneja la encargada');
+    final hecho = await _jefe.anotarMovimientoDeCaja(movimiento, quien: quien);
+    return _avisar('barra_caja_movimientos', hecho.id, hecho);
+  }
+
   // ── Lo del jefe: el catálogo, los precios y el recargo van por la nube ───────
 
   T _escribio<T>(T hecho) {
@@ -271,6 +282,12 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   @override
   Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) => _caja.pasosDelCierre(eventoId);
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId) => _jefe.movimientosDeCaja(eventoId);
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId) => _caja.movimientosDeLaCaja(cajaId);
 
   // ── La red ─────────────────────────────────────────────────────────────────
 

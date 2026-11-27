@@ -380,6 +380,14 @@ class _LoQueSubio implements BarraDelJefe {
 
   @override
   Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) => b.anotarPasoDelCierre(paso);
+
+  // Los retiros y el cambio de la encargada (v84): también compartidos.
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId) => b.movimientosDeCaja(eventoId);
+
+  @override
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) =>
+      b.anotarMovimientoDeCaja(movimiento, quien: quien);
 }
 
 /// La ventana: la cajera a la izquierda y el jefe a la derecha. **Cada lado es su propia

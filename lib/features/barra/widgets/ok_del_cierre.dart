@@ -184,7 +184,12 @@ Future<CierreDeBarra> cuentasParaElOk(BarraDelJefe barra, CajaBarra caja) async 
   try {
     categorias = {for (final p in await barra.productos(conBajas: true)) p.id: p.categoria};
   } catch (_) {}
-  return CierreDeBarra.de(caja, ventas, anulaciones, categorias: categorias);
+  // Los retiros y el cambio que dio la encargada (v84). Sin la tabla, ninguno.
+  var movimientos = const <MovimientoDeCaja>[];
+  try {
+    movimientos = await barra.movimientosDeCaja(caja.eventoId);
+  } catch (_) {}
+  return CierreDeBarra.de(caja, ventas, anulaciones, categorias: categorias, movimientos: movimientos);
 }
 
 /// **"La Caja 2 (Marta) pide cerrar"**: el aviso que le salta a la encargada de barra (o

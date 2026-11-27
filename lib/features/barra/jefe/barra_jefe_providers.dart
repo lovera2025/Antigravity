@@ -128,10 +128,14 @@ class CajasDeLaFiesta {
     this.categorias = const {},
     this.sinOk = const {},
     this.recetas = RecetasDeLaBarra.ninguna,
+    this.movimientos = const [],
   });
 
   /// Las recetas de los tragos (v84): el Speed de cada vodka baja del stock del Speed.
   final RecetasDeLaBarra recetas;
+
+  /// Los retiros y el cambio de la encargada (v84): entran en lo que tiene que haber.
+  final List<MovimientoDeCaja> movimientos;
 
   final _noches = <DiaDeOperacion, NocheDeLaBarra>{};
 
@@ -160,6 +164,7 @@ class CajasDeLaFiesta {
         // La categoría de cada bebida, para el papel corto y LO VENDIDO.
         categorias: categorias,
         dia: dia,
+        movimientos: movimientos,
       ),
       stock: [
         for (final s in StockDeLaBarra.paraElJefe(stock))
@@ -196,6 +201,11 @@ final cajasDelJefeProvider =
     sinOk = PedidoDeCierre.cerraronSinOk(await barra.pasosDelCierre(eventoId));
   } catch (_) {}
   final recetas = RecetasDeLaBarra.de(await barra.recetas(eventoId), eventoId: eventoId);
+  // Lo mismo: sin la tabla (v84), sin retiros.
+  var movimientos = const <MovimientoDeCaja>[];
+  try {
+    movimientos = await barra.movimientosDeCaja(eventoId);
+  } catch (_) {}
   return CajasDeLaFiesta(
     eventoId: eventoId,
     porDia: CajasPorDia.de(cajas),
@@ -207,5 +217,6 @@ final cajasDelJefeProvider =
     categorias: {for (final p in productos) p.id: p.categoria},
     sinOk: sinOk,
     recetas: recetas,
+    movimientos: movimientos,
   );
 });

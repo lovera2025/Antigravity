@@ -545,6 +545,60 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
           PasoDelCierre.fromMap(f),
       ];
 
+  // ── Los retiros y el cambio de la encargada (v84) ──────────────────────────
+
+  @override
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final filas = await txn.query(
+        'barra_cajas',
+        where: 'id = ?',
+        whereArgs: [movimiento.cajaBarraId],
+        limit: 1,
+      );
+      if (filas.isEmpty) {
+        throw StateError('la caja del movimiento no está en este equipo');
+      }
+      final caja = CajaBarra.fromMap(filas.first);
+      if (!caja.abierta) throw CajaYaCerrada(caja.numeroCaja);
+      // Solo se agregan filas: el mismo, anotado dos veces, queda como estaba.
+      final ya = await txn.query(
+        'barra_caja_movimientos',
+        where: 'id = ?',
+        whereArgs: [movimiento.id],
+        limit: 1,
+      );
+      if (ya.isNotEmpty) return MovimientoDeCaja.fromMap(ya.first);
+      final sellado = movimiento.sellado(hechoPor: quien, deviceId: equipo, ahora: _reloj());
+      await _guardar(txn, 'barra_caja_movimientos', sellado.id, sellado.toMap());
+      return sellado;
+    });
+  }
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_caja_movimientos',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'created_at, id',
+        ))
+          MovimientoDeCaja.fromMap(f),
+      ];
+
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId) async => [
+        for (final f in await _leer(
+          'barra_caja_movimientos',
+          where: 'caja_barra_id = ?',
+          whereArgs: [cajaId],
+          orderBy: 'created_at, id',
+        ))
+          MovimientoDeCaja.fromMap(f),
+      ];
+
   // ── La red del salón (la central de la barra) ─────────────────────────────
 
   /// Las columnas de cada tabla en esta base: una fila de un equipo con otra versión

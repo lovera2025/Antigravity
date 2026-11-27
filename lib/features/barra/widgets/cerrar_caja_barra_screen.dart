@@ -56,6 +56,10 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
   CajaBarra? _cerrada;
   List<VentaBarra> _ventas = const [];
   List<AnulacionBarra> _anulaciones = const [];
+
+  /// Los retiros y el cambio que anotó la encargada en esta caja (v84): entran en lo que
+  /// tenía que haber. Llegan por la red del salón antes que el OK.
+  List<MovimientoDeCaja> _movimientos = const [];
   bool _ocupado = false;
   ({String texto, bool error})? _aviso;
 
@@ -107,6 +111,7 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
         _ventas,
         _anulaciones,
         categorias: _categorias,
+        movimientos: _movimientos,
       );
 
   void _decir(String texto, {bool error = false}) {
@@ -117,6 +122,11 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     final barra = ref.read(barraDeLaCajaProvider);
     _ventas = await barra.ventasDeLaCaja(caja.id);
     _anulaciones = await barra.anulacionesDeLaCaja(caja.id);
+    try {
+      _movimientos = await barra.movimientosDeLaCaja(caja.id);
+    } catch (_) {
+      // Sin la tabla (una base sin la v84): sin retiros, como antes.
+    }
     try {
       _categorias = {
         for (final p in await barra.productos(conBajas: true)) p.id: p.categoria,
@@ -196,7 +206,8 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
           .firstOrNull;
       final caja = enLaBase ?? widget.caja;
       await _leerVentas(caja);
-      final diferencia = CierreDeBarra.de(caja, _ventas, _anulaciones).diferenciaCon(contado);
+      final diferencia =
+          CierreDeBarra.de(caja, _ventas, _anulaciones, movimientos: _movimientos).diferenciaCon(contado);
       cerrada = await barra.cerrarCaja(
         caja,
         efectivoContado: contado,

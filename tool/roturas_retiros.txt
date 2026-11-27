@@ -22,3 +22,117 @@ test/cierre_con_retiros_test.dart
         cambioAgregado += efecto;
         cambioAgregado += 0;
 ---
+los retiros no cruzan la red del salon
+lib/features/barra/central/filas_de_la_red.dart
+test/retiros_de_la_encargada_test.dart
+  'barra_caja_movimientos',
+
+---
+la central deja que la cajera saque efectivo
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/retiros_de_la_encargada_test.dart
+        if (!manejaLaPlataDeLasCajas(rol)) return 'La plata de las cajas la maneja la encargada';
+
+---
+la central acepta un retiro sobre una caja cerrada
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/retiros_de_la_encargada_test.dart
+        if (!caja.abierta) return 'La caja ya cerró';
+
+---
+la central deja cambiar un retiro que ya esta
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/retiros_de_la_encargada_test.dart
+        if (yaEsta != null) return 'Un retiro no se cambia';
+
+---
+sin la segunda llave: la cajera anota un retiro en su tablet
+lib/features/barra/central/barra_con_la_red.dart
+test/retiros_de_la_encargada_test.dart
+    _tieneQue(ReglasDeLaBarra.manejaLaPlataDeLasCajas, 'La plata de las cajas la maneja la encargada');
+
+---
+el retiro no sale a la red del salon
+lib/features/barra/central/barra_con_la_red.dart
+test/retiros_de_la_encargada_test.dart
+    return _avisar('barra_caja_movimientos', hecho.id, hecho);
+    return hecho;
+---
+la base anota un retiro sobre una caja cerrada
+lib/features/barra/datos/barra_local.dart
+test/retiros_de_la_encargada_test.dart
+      if (!caja.abierta) throw CajaYaCerrada(caja.numeroCaja);
+
+---
+la base no encola el retiro para subir
+lib/features/barra/datos/barra_local.dart
+test/retiros_de_la_encargada_test.dart
+      await _guardar(txn, 'barra_caja_movimientos', sellado.id, sellado.toMap());
+      await txn.insert('barra_caja_movimientos', sellado.toMap());
+---
+la base guarda dos veces el mismo retiro
+lib/features/barra/datos/barra_local.dart
+test/retiros_de_la_encargada_test.dart
+      if (ya.isNotEmpty) return MovimientoDeCaja.fromMap(ya.first);
+
+---
+la web anota un retiro sobre una caja cerrada
+lib/features/barra/datos/barra_nube.dart
+test/barra_nube_test.dart
+    if (!caja.abierta) throw CajaYaCerrada(caja.numeroCaja);
+
+---
+la web no avisa a los equipos del retiro
+lib/features/barra/datos/barra_nube.dart
+test/barra_nube_test.dart
+    await _avisar(const ['barra_caja_movimientos'], origen: equipo);
+
+---
+la tablet que espera el OK no baja los retiros
+lib/core/services/sync_engine.dart
+test/retiros_de_la_encargada_test.dart
+        await _pullTable(db, 'barra_caja_movimientos', 'updated_at');
+
+---
+LAS CAJAS no pasa los retiros a cada caja
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/retiros_de_la_encargada_test.dart
+            movimientos: listaMovimientos,
+
+---
+LAS CAJAS no lee los retiros
+lib/features/barra/jefe/barra_jefe_providers.dart
+test/retiros_de_la_encargada_test.dart
+    movimientos = await barra.movimientosDeCaja(eventoId);
+
+---
+LAS CAJAS no le pasa los retiros a la noche
+lib/features/barra/jefe/barra_jefe_providers.dart
+test/retiros_de_la_encargada_test.dart test/cierre_con_retiros_test.dart
+        movimientos: movimientos,
+
+---
+el cartel del OK no lee los retiros
+lib/features/barra/widgets/ok_del_cierre.dart
+test/retiros_de_la_encargada_test.dart
+    movimientos = await barra.movimientosDeCaja(caja.eventoId);
+
+---
+cerrar caja no lee los retiros
+lib/features/barra/widgets/cerrar_caja_barra_screen.dart
+test/barra_cerrar_test.dart
+      _movimientos = await barra.movimientosDeLaCaja(caja.id);
+
+---
+cerrar caja anota la diferencia sin los retiros
+lib/features/barra/widgets/cerrar_caja_barra_screen.dart
+test/barra_cerrar_test.dart
+          CierreDeBarra.de(caja, _ventas, _anulaciones, movimientos: _movimientos).diferenciaCon(contado);
+          CierreDeBarra.de(caja, _ventas, _anulaciones).diferenciaCon(contado);
+---
+lo que se ve al cerrar no cuenta los retiros
+lib/features/barra/widgets/cerrar_caja_barra_screen.dart
+test/barra_cerrar_test.dart test/cierre_con_retiros_test.dart
+        movimientos: _movimientos,
+
+---

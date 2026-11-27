@@ -3150,12 +3150,23 @@ class SyncEngine {
   /// aviso se puede perder. Sin esto esperaba la red de seguridad de 5 minutos,
   /// y a los 3 ya se ofrece CERRAR SIN ESPERAR (revisión del 13-nov).
   ///
-  /// Es una sola consulta chica, incremental, y no corre en reposo. Como
+  /// **Y antes, los retiros y el cambio de la encargada** (`barra_caja_movimientos`,
+  /// 27-nov-2026): el OK dado desde el iPhone no puede llegar sin el retiro que se
+  /// hizo antes, o la caja cerraría con una diferencia que no es. Si los movimientos
+  /// no bajan (la nube sin su tabla), el OK baja igual: una caja no se traba por eso,
+  /// y LAS CAJAS avisa si un movimiento llegó después del cierre.
+  ///
+  /// Son dos consultas chicas, incrementales, y no corren en reposo. Como
   /// [bajarParaLaBarra]: no espera al motor ni cambia su estado.
   Future<bool> bajarCierresDeLaBarra() async {
     if (_connectivity.currentStatus == AppConnectivity.offline) return false;
     try {
       final db = await LocalDatabase.instance;
+      try {
+        await _pullTable(db, 'barra_caja_movimientos', 'updated_at');
+      } catch (e) {
+        debugPrint('⚠️ No bajaron los retiros de la barra: $e');
+      }
       return await _pullTable(db, 'barra_cierres', 'updated_at');
     } catch (e) {
       debugPrint('⚠️ No bajaron los pasos de cierre de la barra: $e');

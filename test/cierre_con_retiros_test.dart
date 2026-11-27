@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
-import 'package:arguello_events/features/barra/datos/movimiento_de_caja.dart';
 
 /// Los retiros y el cambio de la encargada (v84, plan del 4-dic): entran en el efectivo
 /// que tiene que haber al cerrar. Retirar resta; dar cambio suma; el ajuste del cambio
@@ -119,6 +118,5 @@ void main() {
         }
       }
     },
-    skip: 'falta leer los movimientos en LAS CAJAS, el cierre y el OK (va con RETIRO, 26-nov)',
   );
 }

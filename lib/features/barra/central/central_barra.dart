@@ -505,8 +505,10 @@ class CentralBarra {
   }
 
   /// En qué orden se revisa lo que llega junto: los pasos del cierre antes que las cajas
-  /// (una caja se cierra con su OK), y las cajas antes que sus ventas.
+  /// (una caja se cierra con su OK), y las cajas antes que sus ventas. Los retiros y el
+  /// cambio de la encargada, primero: un retiro se anota con la caja abierta.
   static const _enOrden = [
+    'barra_caja_movimientos',
     'barra_cierres',
     'barra_cajas',
     'barra_ventas',

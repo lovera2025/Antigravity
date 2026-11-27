@@ -268,6 +268,53 @@ void main() {
     });
   });
 
+  // La encargada saca efectivo o da cambio desde el iPhone (v84, 27-nov-2026).
+  group('los retiros de la encargada desde la web', () {
+    final caja = CajaBarra.abrir(
+      eventoId: _evento,
+      operadorId: 'a0000000-0000-4000-8000-000000000001',
+      operadorNombre: 'Marta',
+      numeroCaja: 2,
+      cambioInicial: 15000,
+      ahora: DateTime.utc(2026, 12, 4, 23),
+    );
+    MovimientoDeCaja retiro() => MovimientoDeCaja.nuevo(
+          eventoId: _evento,
+          cajaBarraId: caja.id,
+          tipo: TipoMovimientoDeCaja.retiro,
+          monto: 25000,
+          motivo: 'Mucho efectivo en la caja',
+          ahora: ahora,
+        );
+
+    test('con la caja abierta queda en la nube, a su nombre, y les avisa a los equipos', () async {
+      nube.filas = (tabla, _) => tabla == 'barra_cajas' ? [caja.toMap()] : const [];
+      final hecho = await barra.anotarMovimientoDeCaja(retiro(), quien: 'Romi');
+      expect(hecho.hechoPor, 'Romi');
+      expect(hecho.deviceId, 'web');
+      expect(nube.pedidos.map((p) => '${p.metodo} ${p.tabla}'),
+          ['GET barra_cajas', 'POST barra_caja_movimientos', 'POST broadcast']);
+      expect(nube.pedidos[1].encabezados['Prefer'], contains('resolution=ignore-duplicates'));
+      final aviso = ((nube.pedidos.last.cuerpo as Map)['messages'] as List).single as Map;
+      expect(Map<String, dynamic>.from(aviso['payload'] as Map)['tablas'], ['barra_caja_movimientos']);
+    });
+
+    test('con la caja ya cerrada no se anota nada', () async {
+      final cerrada = caja.cerrada(efectivoContado: 15000, diferencia: 0, ahora: ahora);
+      nube.filas = (tabla, _) => tabla == 'barra_cajas' ? [cerrada.toMap()] : const [];
+      await expectLater(barra.anotarMovimientoDeCaja(retiro(), quien: 'Romi'), throwsA(isA<CajaYaCerrada>()));
+      expect(nube.pedidos.where((p) => p.metodo != 'GET'), isEmpty);
+    });
+
+    test('se leen en orden, y sin la tabla en la nube no hay ninguno', () async {
+      nube.filas = (tabla, _) => tabla == 'barra_caja_movimientos' ? [retiro().toMap()] : const [];
+      expect((await barra.movimientosDeCaja(_evento)).single.monto, 25000);
+      final orden = nube.pedidos.single.params['order']!.single;
+      expect(orden, isNot(contains('desc')));
+      expect(orden, contains('id.asc'));
+    });
+  });
+
   test('en la web, un error de la nube se dice: no se esconde detrás de una lista vacía', () async {
     nube.falla = true;
     expect(barra.cajas(_evento), throwsA(isA<PostgrestException>()));

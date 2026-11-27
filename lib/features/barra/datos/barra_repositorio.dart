@@ -1,6 +1,7 @@
 import '../cuentas/dia_de_operacion.dart';
 import 'anulacion_barra.dart';
 import 'caja_barra.dart';
+import 'movimiento_de_caja.dart';
 import 'paso_del_cierre.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
@@ -12,6 +13,7 @@ import 'venta_barra.dart';
 export '../cuentas/dia_de_operacion.dart' show DiaDeOperacion;
 export 'anulacion_barra.dart';
 export 'caja_barra.dart';
+export 'movimiento_de_caja.dart';
 export 'paso_del_cierre.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
@@ -74,6 +76,16 @@ abstract interface class BarraDelJefe {
   /// nuevo). **La caja de la cajera no se toca:** la cierra su tablet cuando le llega.
   /// Solo se agregan filas.
   Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso);
+
+  /// Los retiros de efectivo y el cambio que dio la encargada (o el jefe) en las cajas
+  /// de la fiesta (`barra_caja_movimientos`, v84). Entran en el efectivo que tiene que
+  /// haber (`CierreDeBarra.de(movimientos:)`).
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId);
+
+  /// Anota un retiro, un cambio o una corrección, **con motivo** y a nombre de [quien].
+  /// Solo se agregan filas. Sobre una caja ya cerrada no se anota: tira [CajaYaCerrada].
+  /// Lo hacen la encargada, desde su sesión (también en su propia caja), y el jefe.
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien});
 }
 
 /// Lo que hace la cajera, **solo en su equipo** (la tablet o la PC): abrir su caja,
@@ -185,6 +197,11 @@ abstract interface class BarraDeLaCaja {
   /// Los pasos del cierre con el OK de la encargada que conoce este equipo, de todas
   /// las cajas de la fiesta.
   Future<List<PasoDelCierre>> pasosDelCierre(String eventoId);
+
+  /// Los retiros y el cambio que la encargada anotó en [cajaId], que este equipo
+  /// conoce: con ellos la cajera, al cerrar, ve lo que tenía que haber. La cajera no los
+  /// anota (eso es [BarraDelJefe.anotarMovimientoDeCaja]).
+  Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId);
 
   /// Anota un paso del cierre (el pedido de la cajera, que volvió a vender, que cerró
   /// sin esperar; o la respuesta de la encargada desde su equipo). Solo se agregan

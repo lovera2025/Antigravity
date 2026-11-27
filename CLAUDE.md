@@ -805,6 +805,13 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
   (`CuentaDelProveedor.paraElProveedor`); lo que va entero (el Speed del vodka) **baja de su stock**. Toda cuenta del
   stock de la barra recibe las ventas por `RecetasDeLaBarra.paraElStock`; las cuentas de la plata, no. El precio de
   lista (`barra_costos`) es solo del jefe y **no baja a una tablet** (`SyncEngine.bajaLoDelJefe`).
+- **"Precio de lista · lo que me cobra el proveedor" y "Le debo al proveedor"**, siempre esas palabras, en pantalla y
+  en papel (27-nov: la primera maqueta no lo convenció por eso y por lo repetido). Nunca "lista" sola ni "costo".
+- **Los retiros y el cambio de la encargada** (`barra_caja_movimientos`, `MovimientoDeCaja`; 27-nov): los anota la
+  encargada desde su sesión, en cualquier caja (también la suya), siempre con motivo; nunca la cajera ni con el PIN de
+  la encargada en su tablet. Solo se agregan filas, y sobre una caja cerrada no (`CajaYaCerrada`). Cruzan por la red
+  del salón **antes que `barra_cierres`**. **Toda pantalla o papel que diga el efectivo esperado pasa `movimientos:`**
+  (`test/cierre_con_retiros_test.dart` lo lee).
 
 **La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
 foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta
@@ -866,9 +873,9 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
-**Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (26-nov,
-23:40: ~60 %, nada publicado, espera el OK de `docs/maqueta_recetas_y_estilos_2026-11-27.html`; ahí está lo hecho
-con sus commits y lo que falta, en orden).
+**Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (27-nov:
+~65 %, nada publicado; la maqueta de recetas no lo convenció y se rehízo: espera su respuesta a
+`docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`; ahí está lo hecho con sus commits y lo que falta, en orden).
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo

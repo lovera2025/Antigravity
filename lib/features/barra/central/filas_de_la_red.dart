@@ -13,8 +13,13 @@
 /// **El stock por barra (v83) también cruza** (26-nov-2026): el reparto del jefe y lo que
 /// anota el repositor. Sin internet, sin esto una barra no se enteraba de lo que se le
 /// repuso y seguía sin vender. Una versión que no conoce estas tablas las ignora.
+///
+/// **Los retiros y el cambio de la encargada (v84) van antes que `barra_cierres`**
+/// (27-nov-2026): la tablet guarda en este orden lo que le llega junto, así tiene el
+/// retiro antes que el OK y su caja no cierra con una diferencia que no es.
 const tablasDeLaRed = [
   'barra_cajas',
+  'barra_caja_movimientos',
   'barra_ventas',
   'barra_anulaciones',
   'barra_vales',

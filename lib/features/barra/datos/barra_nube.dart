@@ -239,6 +239,46 @@ class BarraNube implements BarraDelJefe {
     return conEquipo;
   }
 
+  // ── Los retiros y el cambio de la encargada (v84) ──────────────────────────
+
+  /// Sin la tabla en la nube (su SQL todavía no se corrió), ninguno: el efectivo que
+  /// tiene que haber sigue como antes.
+  @override
+  Future<List<MovimientoDeCaja>> movimientosDeCaja(String eventoId) async {
+    try {
+      final filas = await _todas(() => _supabase
+          .from('barra_caja_movimientos')
+          .select()
+          .eq('evento_id', eventoId)
+          .order('created_at', ascending: true)
+          .order('id', ascending: true));
+      return [for (final f in filas) MovimientoDeCaja.fromMap(f)];
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01' || e.code == 'PGRST205') return const [];
+      rethrow;
+    }
+  }
+
+  /// La encargada desde la web del iPhone: va derecho a la nube y **les avisa a los
+  /// equipos**, así la tablet de esa caja lo baja antes de cerrar. Sobre una caja que
+  /// ya cerró no se anota. Solo se agrega: si la fila ya está, queda como está.
+  @override
+  Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) async {
+    final fila = await _supabase
+        .from('barra_cajas')
+        .select()
+        .eq('id', movimiento.cajaBarraId)
+        .maybeSingle();
+    if (fila == null) throw StateError('la caja del movimiento no está en la nube');
+    final caja = CajaBarra.fromMap(fila);
+    if (!caja.abierta) throw CajaYaCerrada(caja.numeroCaja);
+    final equipo = await _equipo();
+    final sellado = movimiento.sellado(hechoPor: quien, deviceId: equipo, ahora: _reloj());
+    await _supabase.from('barra_caja_movimientos').upsert(sellado.toMap(), ignoreDuplicates: true);
+    await _avisar(const ['barra_caja_movimientos'], origen: equipo);
+    return sellado;
+  }
+
   RealtimeChannel? _canalDelAviso;
 
   /// Les avisa a las PCs y a las tablets que cambiaron [tablas], para que las bajen

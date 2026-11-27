@@ -9,7 +9,8 @@ enum TipoMovimientoDeCaja {
   /// La encargada le dio más cambio a una caja abierta.
   cambio('cambio'),
 
-  /// Se corrige el cambio con que abrió (se anotó mal): más o menos, con el porqué.
+  /// "Corregir (se anotó mal algo)": el cambio con que abrió, o un retiro o un cambio
+  /// anotado de más o de menos. Más o menos, con el porqué; no se borra nada.
   ajusteCambio('ajuste_cambio');
 
   final String clave;
@@ -22,6 +23,16 @@ enum TipoMovimientoDeCaja {
     }
     return null;
   }
+}
+
+/// Sobre una caja ya cerrada no se saca efectivo ni se da cambio (maqueta del 27-nov):
+/// lo contado y la diferencia ya quedaron.
+class CajaYaCerrada implements Exception {
+  final int numeroCaja;
+  const CajaYaCerrada(this.numeroCaja);
+
+  @override
+  String toString() => 'La Caja $numeroCaja ya cerró';
 }
 
 /// Un retiro de efectivo o un cambio dado a una caja de barra (`barra_caja_movimientos`,
