@@ -58,7 +58,11 @@ mostrarlos. **Programado el 27-nov: el 4** (`ReglasDeLaBarra.pisaElCambioInicial
 VENDER; la cajera **y la encargada** lo ponen una vez antes de vender; después la encargada lo cambia desde LAS CAJAS
 con DAR CAMBIO o Corregir, que ya pedían el porqué y quedan en el historial; el botón apagado le dice "El cambio se
 corrige desde LAS CAJAS, con el motivo"; guardado y central con la misma regla; `test/reglas_de_la_barra_test.dart`,
-3 roturas). **Sin programar todavía: el 6** (el jefe en una tablet se conecta a la central).
+3 roturas). **Programado el 27-nov: el 6** (`BarraJefeScreen._buscarLaCentral`: con modo jefe y fuera de la web llama a
+`arrancarSiNoHay(nombre: 'Jefe')`; entra con el PIN maestro del aparato y la central lo toma como jefe; prueba de
+punta a punta en `test/central_barra_provider_test.dart`: su OK le llega a la cajera sin internet; 2 roturas). **No
+se miró todavía en `tool/central_barra_prueba.dart` ni en `tool/dos_barras_prueba.dart`**, que abren esa pantalla
+con la red de verdad: va en el recorrido por rol. Las pruebas de la barra: **954 en verde**.
 
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`
@@ -85,8 +89,8 @@ cerrada; el cambio de la cajera sin mirar si vendió; OK con `caja == null`); 10
 de la cajera se valida por nombre; 11) una fila nueva con otro `device_id` se acepta de cualquier rol; 12) la nube
 no tiene llave (límite conocido). El informe entero se pegó en el chat; no quedó en un archivo.
 
-**Lo que sigue, en orden:** arreglar el 2 con sus pruebas y roturas; preguntarle 4, 6 y 8; las 16 listas de
-roturas sobre lo último; el recorrido por rol y la tele en el sandbox; y después el plan (Noche y Blanco, repositor,
+**Lo que sigue, en orden:** del hallazgo 2, mostrar los rechazos en LAS CAJAS y en la notebook; mirar los hallazgos
+5, 7, 9, 10 y 11 (sin verificar); las 16 listas de roturas y la suite entera sobre lo último; el recorrido por rol y la tele en el sandbox; y después el plan (Noche y Blanco, repositor,
 página de la encargada, plano a todo lo ancho, publicar).
 
 ---

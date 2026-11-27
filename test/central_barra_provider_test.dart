@@ -84,6 +84,7 @@ void main() {
     Future<String> Function()? elEquipo,
     Future<List<String>> Function()? direcciones,
     String? Function()? quien,
+    CredencialDeLaBarra Function()? credencial,
     List<Override> mas = const [],
   }) {
     final barra = deAntes ??
@@ -105,7 +106,7 @@ void main() {
       equipoDeLaBarraProvider.overrideWithValue(elEquipo ?? () async => id),
       guardadoDeLaCentralProvider.overrideWithValue(guardado),
       quienEsQuienEnLaBarraProvider.overrideWithValue(_personas),
-      credencialDeLaBarraProvider.overrideWithValue(() async => _credencialDe(id)),
+      credencialDeLaBarraProvider.overrideWithValue(() async => credencial?.call() ?? _credencialDe(id)),
       quienUsaLaBarraProvider.overrideWithValue(quien ?? () => 'operador:$id'),
       credencialDeLaCentralProvider.overrideWithValue(() async => _personas.credencialDelJefe),
       ...mas,
@@ -278,6 +279,54 @@ void main() {
     await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
     await notebook.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 9 · Jefe');
     expect(notebook.c.read(clienteDeLaBarraProvider), isNull);
+  });
+
+  // 27-nov-2026, lo pidió el usuario: el jefe en MODO JEFE desde una tablet (no desde la
+  // notebook) también se conecta. Antes, sin internet, lo que aceptaba no salía de su tablet.
+  group('el jefe en modo jefe desde una tablet', () {
+    test('se conecta con el PIN maestro, ve el pedido de la cajera y su OK le llega, sin internet', () async {
+      final notebook = equipo('notebook');
+      final cajera = equipo('tablet-cajera');
+      final jefe = equipo('tablet-jefe', quien: () => 'jefe', credencial: () => _personas.credencialDelJefe);
+      await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+
+      await cajera.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 1 · Marta');
+      await jefe.c.read(clienteDeLaBarraProvider.notifier).arrancarSiNoHay(eventoId: _fiesta, nombre: 'Jefe');
+      expect(jefe.c.read(clienteDeLaBarraProvider)!.nombreCaja, 'Jefe');
+      await hasta(() => notebook.c.read(centralDeLaBarraProvider).conectadas == 2, que: 'las dos tablets conectadas');
+      await hasta(() => jefe.c.read(clienteDeLaBarraProvider)!.rol == RolEnLaBarra.jefe, que: 'la central lo deja entrar como jefe');
+
+      final barraCajera = cajera.c.read(barraDeEsteEquipoProvider);
+      final caja = await barraCajera.abrirCaja(
+        eventoId: _fiesta,
+        operadorId: 'op-tablet-cajera',
+        operadorNombre: 'Marta',
+        numeroCaja: 1,
+      );
+      final pedido = await barraCajera.anotarPasoDelCierre(PasoDelCierre.pedir(
+        caja: caja,
+        efectivoContado: 27000,
+        hechoPor: 'Marta',
+        ahora: DateTime.now().toUtc(),
+      ));
+      await hasta(() => jefe.barra.pasosGuardados.any((p) => p.id == pedido.id), que: 'el pedido en la tablet del jefe');
+
+      final ok = await jefe.c.read(barraDelJefeProvider).anotarPasoDelCierre(PasoDelCierre.responder(
+            pedido: pedido,
+            tipo: TipoPasoDelCierre.ok,
+            hechoPor: 'Jefe',
+            ahora: DateTime.now().toUtc(),
+          ));
+      await hasta(() => cajera.barra.pasosGuardados.any((p) => p.id == ok.id), que: 'el OK del jefe en la tablet de la cajera');
+      // Que el OK llegue a la cajera ya dice que la central lo aceptó: lo rechazado no se reparte.
+      expect(jefe.c.read(clienteDeLaBarraProvider)!.rechazadas, isEmpty);
+    });
+
+    test('la pantalla BARRA del jefe la busca, salvo en la web y sin modo jefe', () {
+      final pantalla = File('lib/features/barra/jefe/barra_jefe_screen.dart').readAsStringSync();
+      expect(pantalla, contains('if (fiesta != null && esJefe && !enLaWeb) _buscarLaCentral(fiesta.id);'));
+      expect(pantalla, contains("arrancarSiNoHay(eventoId: eventoId, nombre: 'Jefe')"));
+    });
   });
 
   // Hasta la 6.8.0 solo VENDER buscaba la central: la encargada que reabría la app y

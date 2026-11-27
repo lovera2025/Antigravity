@@ -906,6 +906,18 @@ permisos, las pantallas en la app de verdad, publicar; el plano impreso entero, 
   vez (si abrió sin cambio y no vendió); **la encargada cierra su propia caja sola, sin pedirle el OK a nadie** (27-nov: "Ella es la
   encargada"; `ReglasDeLaBarra.cierraSinPedir`; el 26-nov la aprobaba el jefe), igual que el jefe; **LAS CAJAS no muestra nada sin encargada o jefe**. Una pantalla o un guardado nuevo de la barra pregunta
   por `ReglasDeLaBarra`, nunca por el rol a mano.
+- **27-nov, lo que cambió de esas reglas (programado, sin publicar; `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`, "LEER
+  PRIMERO (lo último)"):** la encargada **cierra su propia caja sola** (`cierraSinPedir`); **el cambio con que abrió una
+  caja, sin motivo, lo reescribe solo el jefe** (`pisaElCambioInicial`): la cajera y la encargada lo ponen una vez antes
+  de vender, y después la encargada lo cambia desde LAS CAJAS con el porqué; **leer el precio de lista y la ganancia
+  también mira el rol** (`BarraConLaRed.costos`, `listaDelProveedorProvider`, `gananciaDelJefeProvider`: vacío a quien
+  no es el jefe, **sin tirar un error**: Riverpod 3 reintenta al provider que falla y la pantalla queda cargando); **el
+  jefe en una tablet se conecta a la central** (`BarraJefeScreen._buscarLaCentral`); **la conexión con la central es de
+  la persona** (`quienUsaLaBarraProvider`: si entra otra, se rehace; toda prueba que arme un equipo de la barra lo
+  reemplaza); y **VENDER dice el problema del PIN y lo que la central no aceptó** (`TextosDeLaCaja.de(problema:,
+  rechazadas:)`). **Ninguna comprobación del rol pide la clave de nuevo.** El PIN maestro de fábrica no le preocupa al
+  usuario: no insistir ni poner un aviso. **Sin señal se sigue vendiendo**: con el stock en 0 avisa y deja vender, y lo
+  vendido de más se descuenta solo de lo que se reponga (falta programarlo, con el repositor).
 - **La segunda llave:** `BarraConLaRed(rolDeQuienUsa:)` tira `NoLeTocaEnLaBarra` si no le toca (anular, cerrar sin el
   OK, el cambio, el catálogo); `barraDeEsteEquipoProvider` la pone siempre.
 - **La central de la barra pide el PIN** (`central/llave_de_la_barra.dart`): reto y firma, **el PIN no viaja**; la

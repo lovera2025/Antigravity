@@ -6,6 +6,7 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../central/central_barra_provider.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
@@ -42,6 +43,24 @@ class BarraJefeScreen extends ConsumerStatefulWidget {
 
 class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
   late PestanaBarraJefe _pestana = widget.pestanaInicial;
+
+  /// La fiesta para la que este aparato ya buscó la central de la barra.
+  String? _buscoLaCentralDe;
+
+  /// **El jefe en MODO JEFE desde una tablet también se conecta a la central** (27-nov-2026,
+  /// lo pidió el usuario): sin internet, lo que acepta, anula o saca no les llegaba a las
+  /// cajas, porque solo VENDER y LAS CAJAS de la encargada la buscaban. Entra con el PIN
+  /// maestro de este aparato (`credencialDeLaBarraProvider`), que tiene que ser el de la
+  /// notebook. En la notebook que tiene la central prendida no hace nada (`arrancar`), y en
+  /// la web no hay red del salón.
+  void _buscarLaCentral(String eventoId) {
+    if (_buscoLaCentralDe == eventoId) return;
+    _buscoLaCentralDe = eventoId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(clienteDeLaBarraProvider.notifier).arrancarSiNoHay(eventoId: eventoId, nombre: 'Jefe').ignore();
+    });
+  }
 
   /// [donde] es el contexto de adentro del tema de la barra: con el de la pantalla, la
   /// ventana salía con los colores claros de la app.
@@ -113,6 +132,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
         data: (datos) {
           // La de esta noche, si hay (25-nov-2026): la barra abre en la fiesta en curso.
           final fiesta = datos.elegida(ref.watch(fiestaElegidaDelJefeProvider), enLaBarra: true);
+          if (fiesta != null && esJefe && !enLaWeb) _buscarLaCentral(fiesta.id);
           if (fiesta == null) {
             return const Center(
               key: Key('jefe_sin_fiestas'),

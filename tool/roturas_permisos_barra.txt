@@ -196,3 +196,15 @@ test/reglas_de_la_barra_test.dart
     if (rol != null && !ReglasDeLaBarra.pisaElCambioInicial(rol())) {
     if (rol != null && !ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol())) {
 ---
+el jefe en una tablet no busca la central (27-nov)
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/central_barra_provider_test.dart
+          if (fiesta != null && esJefe && !enLaWeb) _buscarLaCentral(fiesta.id);
+
+---
+el jefe busca la central también en la web
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/central_barra_provider_test.dart
+          if (fiesta != null && esJefe && !enLaWeb) _buscarLaCentral(fiesta.id);
+          if (fiesta != null && esJefe) _buscarLaCentral(fiesta.id);
+---
