@@ -1,0 +1,42 @@
+las fiestas que se rinden juntas son solo la elegida
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+  final hasta = dia.add(const Duration(days: 4));
+  final hasta = dia.add(const Duration(days: 1));
+---
+GANANCIA aparece sin modo jefe
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/ganancia_del_jefe_test.dart
+    final veGanancia = ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider));
+    final veGanancia = true;
+---
+la silla aparece en lo que se le debe al proveedor
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+bool deLoQueSePaga(UsoDelProveedor u) => u.seUso && u.lista != 0;
+bool deLoQueSePaga(UsoDelProveedor u) => u.seUso;
+---
+imprimir sale sin la ganancia por producto aunque este abierta
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+                    conProductos: _porProducto,
+                    conProductos: false,
+---
+GANANCIA no lee el precio de lista
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+      listas: {for (final c in costos) c.productoId: c.precioLista},
+      listas: const {},
+---
+GANANCIA no lee lo que trae cada botella
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+      contenidos: {for (final c in costos) c.productoId: c.contenidoCc},
+      contenidos: const {},
+---
+GANANCIA no lee las recetas
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/ganancia_del_jefe_test.dart
+      recetas: await barra.recetas(id),
+      recetas: const [],
+---

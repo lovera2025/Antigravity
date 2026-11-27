@@ -65,6 +65,15 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   muestra `Jefe_2b_precios_con_lista_pc.png` (`tool/barra_jefe_muestra_test.dart`).
 - PRECIOS cerrado: una prueba compara `costoDeUnTrago` con `CuentaDelProveedor` (dan lo mismo), y las roturas
   `tool/roturas_precios_con_lista.txt` (**14 de 14 atrapadas**).
+- `74203a6`: **la pestaña GANANCIA** (`jefe/ganancia_del_jefe.dart`; `PestanaBarraJefe.ganancia` al final, solo con
+  `veElCostoYLaGanancia`): las fiestas que se rinden juntas (`fiestasDeLaTanda`: la elegida y las de los 3 días que
+  siguen; CAMBIAR las elige), "LE DEBO AL PROVEEDOR" grande, la cuenta una vez, la tabla de `paraElProveedor` (sin lo de
+  precio de lista 0, como la silla: `deLoQueSePaga`), la ganancia por producto plegada, VER POR FIESTA, el aviso con
+  IR A PRECIOS si falta una lista, e IMPRIMIR en A4 (`GananciaPdf`, por `imprimirGananciaProvider`). **Le debo redondea
+  el centavo de cada botella** (así la tabla suma justo): un Fernet con coca debe $3.797,34 aunque PRECIOS diga
+  "$ 3.797". **Lo perdido es 0 hasta que exista el repositor** (no hay de dónde leer el stock por barra todavía).
+  Pruebas: `test/ganancia_del_jefe_test.dart` (9); muestra `Jefe_8_ganancia_pc.png`; roturas
+  `tool/roturas_ganancia.txt` (**7 de 7 atrapadas**).
 
 **Lo que falta, en orden:**
 1. **Programar lo de la maqueta aprobada (forma A):** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
