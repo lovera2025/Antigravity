@@ -326,11 +326,12 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     if (mounted) unawaited(_cargar());
   }
 
-  /// **El cambio: la cajera una sola vez** (26-nov-2026), si abrió sin cambio y todavía
-  /// no vendió; después lo maneja la encargada. La encargada y el jefe, siempre.
+  /// **El cambio: una sola vez** (26-nov-2026), si abrió sin cambio y todavía no vendió.
+  /// Después, la encargada lo cambia desde LAS CAJAS **con el motivo, también el de su
+  /// propia caja** (27-nov-2026); acá, sin motivo, solo el jefe.
   bool get _poneElCambio {
     final rol = ref.watch(rolEnLaBarraProvider);
-    if (ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol)) return true;
+    if (ReglasDeLaBarra.pisaElCambioInicial(rol)) return true;
     return ReglasDeLaBarra.cajeraPoneElCambio(_caja, yaVendio: _vendioAlgo);
   }
 
@@ -406,7 +407,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
             key: const Key('vender_cambio'),
             tooltip: _poneElCambio
                 ? (_caja.cambioInicial > 0 ? 'Cambio inicial: ${pesos(_caja.cambioInicial)}' : 'Poner el cambio inicial')
-                : 'El cambio lo maneja la encargada',
+                : ReglasDeLaBarra.porQueNoPoneElCambio(ref.watch(rolEnLaBarraProvider)),
             onPressed: _poneElCambio ? _ponerCambio : null,
             icon: Badge(
               isLabelVisible: _caja.cambioInicial > 0,

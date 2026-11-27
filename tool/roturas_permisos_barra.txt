@@ -61,7 +61,7 @@ test/central_barra_permisos_test.dart
 la cajera cambia el cambio una sola vez
 lib/features/barra/cuentas/reglas_de_la_barra.dart
 test/central_barra_permisos_test.dart
-            !manejaLaPlataDeLasCajas(rol) &&
+            !pisaElCambioInicial(rol) &&
             false &&
 ---
 el guardado: la cajera no anula
@@ -183,4 +183,16 @@ lib/features/barra/central/linea_de_la_caja.dart
 test/linea_de_la_caja_test.dart
           rechazadas: cliente?.rechazadas.length ?? 0,
 
+---
+la encargada pisa el cambio de su caja sin motivo (el guardado; 27-nov: con motivo y anotado)
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/reglas_de_la_barra_test.dart
+  static bool pisaElCambioInicial(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
+  static bool pisaElCambioInicial(RolEnLaBarra? r) => r == RolEnLaBarra.jefe || r == RolEnLaBarra.encargada;
+---
+el guardado no mira si el que pisa el cambio ya vendió
+lib/features/barra/central/barra_con_la_red.dart
+test/reglas_de_la_barra_test.dart
+    if (rol != null && !ReglasDeLaBarra.pisaElCambioInicial(rol())) {
+    if (rol != null && !ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol())) {
 ---

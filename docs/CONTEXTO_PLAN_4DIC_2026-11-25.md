@@ -54,7 +54,11 @@ no se usa, porque ella no pide el OK). **Programado el 27-nov: el hallazgo 2, en
 central no reconoce la línea dice eso y no "Buscando la central…"; conectada, "· la central no aceptó N" en
 amarillo; el cartel de la central lista los últimos 5 motivos; `test/linea_de_la_caja_test.dart`, 3 roturas). **Falta
 de ese hallazgo:** LAS CAJAS de la encargada en una tablet y la notebook (`CentralBarra.rechazos`) siguen sin
-mostrarlos. **Sin programar todavía: el 4 y el 6.**
+mostrarlos. **Programado el 27-nov: el 4** (`ReglasDeLaBarra.pisaElCambioInicial`: solo el jefe reescribe el cambio sin motivo desde
+VENDER; la cajera **y la encargada** lo ponen una vez antes de vender; después la encargada lo cambia desde LAS CAJAS
+con DAR CAMBIO o Corregir, que ya pedían el porqué y quedan en el historial; el botón apagado le dice "El cambio se
+corrige desde LAS CAJAS, con el motivo"; guardado y central con la misma regla; `test/reglas_de_la_barra_test.dart`,
+3 roturas). **Sin programar todavía: el 6** (el jefe en una tablet se conecta a la central).
 
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`

@@ -115,13 +115,31 @@ void main() {
       expect(barra.cajasGuardadas.single.abierta, isFalse);
     });
 
-    test('el cambio: la cajera una vez antes de vender; después, la encargada', () async {
+    test('el cambio: la cajera una vez antes de vender; después nadie lo pisa sin motivo, salvo el jefe', () async {
       var c = await conLlave.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
       c = await conLlave.ponerCambio(c, 20000, quien: 'Marta');
       await expectLater(conLlave.ponerCambio(c, 30000, quien: 'Marta'), throwsA(isA<NoLeTocaEnLaBarra>()));
+      // 27-nov-2026: la encargada tampoco, ni en su propia caja ("con motivo y anotado").
       rol = encargada;
-      c = await conLlave.ponerCambio(c, 30000, quien: 'Romi');
+      await expectLater(
+        conLlave.ponerCambio(c, 30000, quien: 'Romi'),
+        throwsA(isA<NoLeTocaEnLaBarra>().having((e) => e.motivo, 'motivo', contains('LAS CAJAS'))),
+      );
+      expect(barra.cajasGuardadas.single.cambioInicial, 20000, reason: 'no se pisó');
+      rol = RolEnLaBarra.jefe;
+      c = await conLlave.ponerCambio(c, 30000, quien: 'Jefe');
       expect(c.cambioInicial, 30000);
+    });
+
+    test('la encargada con su caja pone el cambio una vez, antes de vender, como cualquiera', () async {
+      rol = encargada;
+      var c = await conLlave.abrirCaja(eventoId: _fiesta, operadorId: 'r', operadorNombre: 'Romi', numeroCaja: 2);
+      c = await conLlave.ponerCambio(c, 15000, quien: 'Romi');
+      expect(c.cambioInicial, 15000);
+      await expectLater(conLlave.ponerCambio(c, 10000, quien: 'Romi'), throwsA(isA<NoLeTocaEnLaBarra>()));
+      expect(ReglasDeLaBarra.pisaElCambioInicial(encargada), isFalse);
+      expect(ReglasDeLaBarra.pisaElCambioInicial(cajera), isFalse);
+      expect(ReglasDeLaBarra.pisaElCambioInicial(RolEnLaBarra.jefe), isTrue);
     });
 
     test('la cajera que ya vendió no pone el cambio', () async {

@@ -54,6 +54,18 @@ abstract final class ReglasDeLaBarra {
   /// abierta (con el porqué). La cajera pone el cambio solo al abrir.
   static bool manejaLaPlataDeLasCajas(RolEnLaBarra? r) => r == RolEnLaBarra.encargada || r == RolEnLaBarra.jefe;
 
+  /// **Reescribir el cambio con que abrió una caja sin dar el porqué** (el botón de VENDER):
+  /// solo el jefe. **La encargada no, tampoco en su propia caja** (27-nov-2026, el usuario:
+  /// "con motivo y anotado"): lo cambia desde LAS CAJAS (DAR CAMBIO o Corregir), con el
+  /// porqué, y queda en el historial a la vista del jefe. Antes de vender, lo pone una vez
+  /// como cualquiera ([cajeraPoneElCambio]).
+  static bool pisaElCambioInicial(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
+
+  /// Lo que se le dice a quien no puede tocar el cambio desde VENDER.
+  static String porQueNoPoneElCambio(RolEnLaBarra? r) => manejaLaPlataDeLasCajas(r)
+      ? 'El cambio se corrige desde LAS CAJAS, con el motivo'
+      : 'El cambio lo maneja la encargada';
+
   /// **La cajera pone el cambio una sola vez** (26-nov-2026): si abrió sin cambio, lo
   /// puede poner mientras no vendió nada; después lo maneja la encargada.
   static bool cajeraPoneElCambio(CajaBarra caja, {required bool yaVendio}) => caja.cambioInicial == 0 && !yaVendio;
@@ -147,9 +159,9 @@ abstract final class ReglasDeLaBarra {
         if (yaEsta['device_id'] != equipo) return 'La caja es de otro aparato';
         final cambioAntes = yaEsta['cambio_inicial'];
         if ('$cambioAntes' != '${fila['cambio_inicial']}' &&
-            !manejaLaPlataDeLasCajas(rol) &&
+            !pisaElCambioInicial(rol) &&
             !(cambioAntes is num && cambioAntes == 0)) {
-          return 'El cambio lo maneja la encargada';
+          return porQueNoPoneElCambio(rol);
         }
         final cierra = yaEsta['cerrada_at'] == null && fila['cerrada_at'] != null;
         if (cierra && !puedeCerrar(rol, '${fila['id']}', pasos)) return 'Falta el OK de la encargada';

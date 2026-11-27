@@ -93,10 +93,12 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   @override
   Future<CajaBarra> ponerCambio(CajaBarra caja, double cambio, {required String quien}) async {
     final rol = rolDeQuienUsa;
-    if (rol != null && !ReglasDeLaBarra.manejaLaPlataDeLasCajas(rol())) {
+    // Sin dar el porqué, solo el jefe. La cajera **y la encargada** lo ponen una vez, antes
+    // de vender; después la encargada lo cambia con motivo (`anotarMovimientoDeCaja`).
+    if (rol != null && !ReglasDeLaBarra.pisaElCambioInicial(rol())) {
       final yaVendio = (await _caja.ventasDeLaCaja(caja.id)).isNotEmpty;
       if (!ReglasDeLaBarra.abreCajaYVende(rol()) || !ReglasDeLaBarra.cajeraPoneElCambio(caja, yaVendio: yaVendio)) {
-        throw const NoLeTocaEnLaBarra('El cambio lo maneja la encargada');
+        throw NoLeTocaEnLaBarra(ReglasDeLaBarra.porQueNoPoneElCambio(rol()));
       }
     }
     final hecho = await _caja.ponerCambio(caja, cambio, quien: quien);
