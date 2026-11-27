@@ -2,7 +2,76 @@
 
 ## Para retomar en otro chat
 
-### LEER PRIMERO: dónde quedó el 27-nov a la noche (chat "sigamos"; se sigue en otro chat)
+### LEER PRIMERO: dónde quedó el 28-nov (las pruebas a fondo; chat "sigamos, con lo que habíamos quedado")
+
+**El plan para el 4-dic va por ~76 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
+`C:\Users\lover\.claude\plans\sigamos-con-lo-que-glimmering-church-of-6c79e454-a838-433a-885a-f9d233311434.md`. El
+usuario pidió probar a fondo todo lo junto y dejar **la pantalla (el plano a todo lo ancho en la tele) para el final**;
+lo que no cierra se le dice y se arregla (un error claro, con su prueba; una decisión de cómo tiene que ser, se le
+pregunta antes).
+
+**El plano a todo lo ancho, aprobado con un dibujo** (widget del 28-nov: de 57 % a 71 % del ancho en el salón de 151
+mesas, recortado al dibujo del escenario al Ingreso con las barras, sin el playón vacío de arriba, agrandado hasta el
+alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces se ve muy bien"**. Se programa al final.
+
+**Lo que se probó el 28-nov:**
+- **La suite entera** antes de tocar nada: **6.701 en verde y 1 falla, la de siempre** (LA ALFONSINA).
+- **El cartel del OK** tiene su prueba (`fed01ec`, en `test/retiros_de_la_encargada_test.dart`): "Cambio de la
+  encargada" y "Sacó la encargada" solo si hubo, antes del esperado; 3 roturas atrapadas.
+- **La Tele 2 de punta a punta** (`tool/tele_prueba.dart` con `escuelas=distintas`, el celular en el navegador de la
+  app): cada tele saluda solo a su escuela (con la mesa encendida y la flecha), elegir la Tele 2 en el celular lo pasa
+  a la escuela de esa tele, GIRAR desde el celular, la página cerrada y abierta entra sola, apagar y prender las teles
+  y el celular se engancha solo, CAMBIAR LA ESCUELA pregunta antes ("Sus celulares pasan solos") y las dos teles lo
+  avisan, y con la misma escuela "Las dos" saluda en las dos. **Nada que arreglar.** Capturas:
+  `build/capturas_tele2_28nov/` (11).
+- **La barra recorrida por rol** (`tool/barra_prueba.dart`): el jefe carga botellas en CATÁLOGO y arma "cómo se
+  prepara" (Fernet con coca $3.200 → gana $2.800; Speed con vodka $1.886 → $6.114: las cuentas dan); la cajera vende en
+  efectivo y por transferencia, VENTAS sin plata, ANULAR con su PIN dice "Ese PIN no es de una encargada de barra"; el
+  jefe saca $5.000 y da $2.000 de cambio (TIENE QUE HABER $10.000); la cajera cuenta a ciegas $10.000, pide el OK, el
+  cartel dice +$2.000, −$5.000, esperado $10.000, "Justo, sin diferencia", y el papel del cierre, LAS CAJAS del jefe y
+  las de la encargada dicen lo mismo; GANANCIA: le debo $8.085,71 (suma justa), ganancia $12.914,29; la encargada ve
+  CATÁLOGO Y PRECIOS sin precio de lista ni recetas. Capturas: `build/capturas_barra_28nov/` (13).
+- La huella de la base antes y después: **IGUAL**.
+
+**Lo que se encontró y se arregló (con su prueba y sus roturas):**
+1. `2923777` — **En PRECIOS, el stock de lo que no se vende solo se perdía**: la lata de Speed (va entera en el vodka,
+   sin tildar) dejaba escribir el stock y al guardar no se guardaba ni contaba como cambio. Ahora se guarda como un
+   precio sin tildar (`activo: false`, precio 0: no se ofrece en VENDER ni dice "$ 0"). Prueba en
+   `test/barra_jefe_pantalla_test.dart`; 3 roturas al final de `tool/roturas_precios_con_lista.txt`.
+2. `ec6c3f1` — **VENDER ignoraba el stock que el jefe le carga al trago con receta**: el vodka decía solo lo que alcanza
+   el Speed (sin Speed controlado, nada), y LAS CAJAS contaba sus 12. Ahora dice lo menor de los dos. Pruebas en
+   `test/recetas_en_la_barra_test.dart`; roturas en `tool/roturas_recorrido_28nov.txt`.
+
+**Preguntas para el usuario (no se tocó nada):**
+- **El recargo por transferencia que nadie eligió.** Si el jefe no puso el de la fiesta, PRECIOS dice "sin" y la
+  encargada lee "Sin recargo por transferencia en esta fiesta", pero cada cobro arranca con el último de la tablet (la
+  primera vez, **5 % prendido**: a la cajera le cobró $400 de recargo). Es la regla del 3-nov (`recargoDeArranque`).
+  Recomendación: que sin elegir arranque **sin** recargo, como dicen las pantallas; o que las pantallas digan "sin
+  elegir: cada tablet arranca con el último (5 %)".
+- En "cómo se prepara", la lista de "Elegí qué lleva" ofrece también los tragos y la Silla extra. Recomendación:
+  sacarlos (solo lo que puede ir adentro de un trago).
+- Cuando el jefe saca o da plata, la caja y el papel dicen "Sacó la encargada" / "Cambio de la encargada" (el historial
+  sí dice "Jefe"). Recomendación: dejarlo (el jefe hace de encargada).
+- GANANCIA dice "Se vendió $21.000" y LAS CAJAS "$21.400": la diferencia es el recargo por transferencia, que GANANCIA
+  no cuenta como venta (paga Mercado Pago). Confirmar que está bien.
+
+**Las roturas de la barra y la tele, todas juntas sobre lo de hoy:** ver abajo el resultado (se corrieron en segundo
+plano; los registros en `build/roturas_28nov/`).
+
+**Lo que falta, en orden:**
+1. Que mire las capturas (las de hoy y las de ayer: `build/capturas_4dic/`, `build/capturas_tele_27nov/`) y conteste las
+   cuatro preguntas de arriba.
+2. **Noche y Blanco** en todas las pantallas de la barra (`DisenioBarra`; cada aparato elige el suyo).
+3. El repositor, "¿Volvió el vale?", LA ENCARGADA ESTÁ ACÁ del jefe, el aviso del PIN maestro y **sin stock no se vende**;
+   con el repositor, GANANCIA lee el stock por barra (hoy lo perdido da 0).
+4. La página de la encargada en el iPhone, la noche simulada y la tercera revisión independiente.
+5. **Al final, el plano a todo lo ancho en la tele acostada** (aprobado): la muestra con los 10 salones de verdad
+   (`tool/tele_salones_de_verdad_test.dart`) antes, que el nombre en grande, la mesa encendida y la flecha sigan bien,
+   y la fluidez de nuevo en el emulador. El borde verde y la fluidez real, con la Quint.
+
+---
+
+### Lo del 27-nov a la noche (chat "sigamos"; lo vigente está arriba)
 
 **El plan para el 4-dic va por ~73 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
 `C:\Users\lover\.claude\plans\sigamos-peaceful-harp-of-314d8c5f-dfb0-4642-a1b4-8e6c4ea26b76.md`.

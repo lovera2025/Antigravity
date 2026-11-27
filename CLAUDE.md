@@ -803,7 +803,9 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
 - **Los tragos llevan receta** (26-nov, WhatsApp del jefe; `docs/maqueta_recetas_y_estilos_2026-11-27.html`): lo que
   va en cc (fernet, coca, vodka) **no se cuenta en la barra**, solo calcula botellas para GANANCIA
   (`CuentaDelProveedor.paraElProveedor`); lo que va entero (el Speed del vodka) **baja de su stock**. Toda cuenta del
-  stock de la barra recibe las ventas por `RecetasDeLaBarra.paraElStock`; las cuentas de la plata, no. El precio de
+  stock de la barra recibe las ventas por `RecetasDeLaBarra.paraElStock`; las cuentas de la plata, no. **El stock de lo
+  que no se vende solo se carga en PRECIOS sin tildar** (se guarda con `activo: false` y precio 0), y el "Quedan" de un
+  trago con receta es lo menor entre su propio stock y lo que alcanza lo entero (28-nov). El precio de
   lista (`barra_costos`) es solo del jefe y **no baja a una tablet** (`SyncEngine.bajaLoDelJefe`).
 - **En PRECIOS, un trago es un renglón más** (27-nov, noche): su precio de lista sale de las botellas, y **cómo se
   prepara va en una línea chica debajo del nombre**; tocándola se abre su ventanita (`_abrirReceta`). Nunca la receta
@@ -878,11 +880,10 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
-**Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (27-nov:
-~73 %, nada publicado; la maqueta rehecha, `docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`, se aprobó con
-la forma A de GANANCIA y ya están PRECIOS con el precio de lista, GANANCIA y SACAR EFECTIVO · DAR CAMBIO; la prueba de
-las teles en el sandbox salió bien; sigue: que mire las capturas, el plano a todo lo ancho en la tele y Noche y Blanco;
-ahí está lo hecho con sus commits y lo que falta, en orden).
+**Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (28-nov:
+~76 %, nada publicado; las pruebas a fondo de lo junto, con dos arreglos y cuatro preguntas para el usuario; el plano a
+todo lo ancho en la tele quedó aprobado con un dibujo y va al final; sigue Noche y Blanco y el repositor; ahí está lo
+hecho con sus commits y lo que falta, en orden).
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo
