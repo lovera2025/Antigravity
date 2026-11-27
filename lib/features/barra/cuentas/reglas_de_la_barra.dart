@@ -73,6 +73,15 @@ abstract final class ReglasDeLaBarra {
   /// El catálogo, los precios y el recargo.
   static bool cambiaCatalogoYPrecios(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
 
+  /// **Ver** el catálogo y los precios de venta, sin cambiarlos: la encargada y el jefe
+  /// (pedido del usuario el 26-nov-2026: "que pueda ver el catálogo y precio, y hasta
+  /// ahí").
+  static bool veCatalogoYPrecios(RolEnLaBarra? r) => r == RolEnLaBarra.encargada || r == RolEnLaBarra.jefe;
+
+  /// El precio de lista, las recetas, lo que se le debe al proveedor y la ganancia:
+  /// **solo el jefe** (audio 77, 26-nov-2026). La encargada no.
+  static bool veElCostoYLaGanancia(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
+
   /// **Si la caja [cajaId] se puede cerrar ya**: el jefe sí; los demás, solo con el OK
   /// del último pedido o habiendo cerrado sin esperar (con su motivo, anotado antes).
   static bool puedeCerrar(RolEnLaBarra? rol, String cajaId, Iterable<PasoDelCierre> pasos) {

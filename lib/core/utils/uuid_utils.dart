@@ -122,6 +122,15 @@ class UuidUtils {
   static String barraStockBarraId(String eventoId, String productoId, String claveBarra) =>
       _uuidDe('barra_stock_barras_v1|$eventoId|$productoId|$claveBarra');
 
+  /// PK estable para `barra_costos` (v84): el precio de lista de un producto en una
+  /// fiesta. Si el jefe lo cambia desde dos equipos, escriben la misma fila.
+  static String barraCostoId(String eventoId, String productoId) =>
+      _uuidDe('barra_costos_v1|$eventoId|$productoId');
+
+  /// PK estable para `barra_recetas` (v84): un ingrediente de un trago en una fiesta.
+  static String barraRecetaId(String eventoId, String productoId, String ingredienteId) =>
+      _uuidDe('barra_recetas_v1|$eventoId|$productoId|$ingredienteId');
+
   /// PK estable para `entradas_config` (v80): una por fiesta. Si el jefe cambia el
   /// precio desde dos PCs, escriben la misma fila (gana la última).
   static String entradasConfigId(String eventoId) =>

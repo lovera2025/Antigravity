@@ -24,6 +24,8 @@ void main() {
     'lib/features/barra/widgets/elegir_impresora_screen.dart',
     // 6.5.0: el inicio de la barra en la web (la encargada, desde un iPhone).
     'lib/features/barra/widgets/barra_home_web.dart',
+    // 26-nov-2026: el catálogo y los precios de la encargada, solo mirando.
+    'lib/features/barra/widgets/catalogo_y_precios_screen.dart',
   ];
 
   test('las pantallas de la barra no llevan al panel, a la fiesta ni a cobrar cuotas', () {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,9 +9,11 @@ import 'package:arguello_events/features/barra/central/central_barra_provider.da
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/cuentas/pesos.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
+import 'package:arguello_events/features/barra/widgets/catalogo_y_precios_screen.dart';
 import 'package:arguello_events/features/barra/widgets/las_cajas_screen.dart';
 import 'package:arguello_events/features/barra/widgets/ok_del_cierre.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
@@ -90,6 +94,7 @@ void main() {
     WidgetTester tester, {
     required PermisosEfectivos permisos,
     Size tamano = const Size(1024, 800),
+    bool enLaNotebook = false,
   }) async {
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
@@ -98,9 +103,10 @@ void main() {
       overrides: [
         ...operadores.reemplazos,
         ...prueba.reemplazos,
-        // En la tablet: la barra del equipo, sin modo jefe y sin la central.
+        // En la tablet: la barra del equipo, sin modo jefe y sin la central. En la
+        // notebook de la barra, la central se prende (sin modo jefe: 26-nov-2026).
         barraDelJefeProvider.overrideWithValue(prueba.barra),
-        centralSePrendeAcaProvider.overrideWithValue(false),
+        centralSePrendeAcaProvider.overrideWithValue(enLaNotebook),
         sonarPedidoDeCierreProvider.overrideWithValue(() => sonidos++),
       ],
       child: MaterialApp(home: BarraHomeScreen(onCajaLista: (_, _, _) {})),
@@ -329,5 +335,92 @@ void main() {
     await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
     await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
     expect(tester.takeException(), isNull);
+  });
+
+  // 26-nov-2026 (noche): esa noche la notebook no se pone en modo jefe; la encargada
+  // prende la central desde LAS CAJAS, y ve el catálogo y los precios de venta solo
+  // mirando. Nunca el precio de lista, las recetas ni la ganancia.
+  test('quién ve el catálogo y los precios, y quién el costo y la ganancia', () {
+    expect(ReglasDeLaBarra.veCatalogoYPrecios(RolEnLaBarra.encargada), isTrue);
+    expect(ReglasDeLaBarra.veCatalogoYPrecios(RolEnLaBarra.jefe), isTrue);
+    expect(ReglasDeLaBarra.veCatalogoYPrecios(RolEnLaBarra.cajera), isFalse);
+    expect(ReglasDeLaBarra.veCatalogoYPrecios(RolEnLaBarra.repositor), isFalse);
+    expect(ReglasDeLaBarra.veCatalogoYPrecios(null), isFalse);
+    expect(ReglasDeLaBarra.cambiaCatalogoYPrecios(RolEnLaBarra.encargada), isFalse);
+    expect(ReglasDeLaBarra.veElCostoYLaGanancia(RolEnLaBarra.jefe), isTrue);
+    for (final r in [RolEnLaBarra.encargada, RolEnLaBarra.cajera, RolEnLaBarra.repositor, null]) {
+      expect(ReglasDeLaBarra.veElCostoYLaGanancia(r), isFalse, reason: '$r');
+    }
+  });
+
+  testWidgets('en la notebook, la encargada prende la central sin modo jefe', (tester) async {
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true), enLaNotebook: true);
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    expect(find.text('PRENDER LA CENTRAL'), findsOneWidget);
+    expect(find.byKey(const Key('jefe_pestana_catalogo')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('la encargada ve el catálogo y los precios de venta, sin poder cambiarlos', (tester) async {
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    await tocar(tester, find.byKey(const Key('las_cajas_catalogo_precios')));
+    expect(find.byType(CatalogoYPreciosScreen), findsOneWidget);
+    expect(find.text('Fernet con coca'), findsOneWidget);
+    expect(find.text(r'$ 6.000'), findsOneWidget);
+    expect(find.text(r'$ 8.000'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing, reason: 'nada para escribir');
+    for (final no in ['GUARDAR CAMBIOS', 'COPIAR DE OTRA FIESTA', 'GANANCIA', 'Lista']) {
+      expect(find.textContaining(no), findsNothing, reason: no);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('LAS CAJAS pregunta la regla: con otro rol, sin CATÁLOGO Y PRECIOS', (tester) async {
+    for (final (rol, ve) in [
+      (RolEnLaBarra.cajera, false),
+      (RolEnLaBarra.repositor, false),
+      (RolEnLaBarra.encargada, true),
+    ]) {
+      await tester.pumpWidget(ProviderScope(
+        key: ValueKey(rol),
+        overrides: [
+          ...operadores.reemplazos,
+          ...prueba.reemplazos,
+          barraDelJefeProvider.overrideWithValue(prueba.barra),
+          centralSePrendeAcaProvider.overrideWithValue(false),
+          rolEnLaBarraProvider.overrideWithValue(rol),
+        ],
+        child: MaterialApp(home: LasCajasScreen(fiesta: fiesta)),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('las_cajas_catalogo_precios')), ve ? findsOneWidget : findsNothing,
+          reason: '$rol');
+    }
+  });
+
+  testWidgets('la cajera no tiene CATÁLOGO Y PRECIOS', (tester) async {
+    await abrir(tester, permisos: const PermisosEfectivos(barra: true));
+    expect(find.byKey(const Key('las_cajas_catalogo_precios')), findsNothing);
+  });
+
+  test('CATÁLOGO Y PRECIOS no nombra el costo ni la ganancia, ni guarda nada', () {
+    final fuente = File('lib/features/barra/widgets/catalogo_y_precios_screen.dart')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+    final codigo = fuente.split('\n').where((l) => !l.trimLeft().startsWith('///')).join('\n');
+    for (final prohibido in [
+      'precioLista',
+      'barra_costos',
+      'CostoBarra',
+      'CuentaDelProveedor',
+      'receta',
+      'guardar',
+      'TextField',
+      'esRolJefeProvider',
+    ]) {
+      expect(codigo.contains(prohibido), isFalse, reason: prohibido);
+    }
+    expect(codigo, contains('ReglasDeLaBarra.veCatalogoYPrecios'));
   });
 }

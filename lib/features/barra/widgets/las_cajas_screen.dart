@@ -1,25 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/evento.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../jefe/cajas_de_la_fiesta.dart';
+import '../providers/barra_del_jefe_provider.dart';
+import 'catalogo_y_precios_screen.dart';
 
 /// LAS CAJAS de la Encargada de barra (6.4.0): cómo va cada caja de la fiesta, con
 /// cuánto cambio arrancó, cuánto generó y las sillas vendidas, y anular o reimprimir
 /// cualquier venta con motivo. Es la misma vista que CAJAS del jefe
 /// ([CajasDeLaFiestaVista]); la llave es `mandaEnLaBarraProvider`.
 ///
-/// Se llega solo desde el inicio de la barra de la encargada. Sin catálogo, sin
-/// precios y sin nada más del modo jefe (`test/modo_barra_cerrado_test.dart`).
-class LasCajasScreen extends StatelessWidget {
+/// Se llega solo desde el inicio de la barra de la encargada. Sin nada más del modo
+/// jefe (`test/modo_barra_cerrado_test.dart`): el catálogo y los precios de venta los
+/// ve **solo mirando** (CATÁLOGO Y PRECIOS, 26-nov-2026), nunca el precio de lista ni la
+/// ganancia.
+class LasCajasScreen extends ConsumerWidget {
   final Evento fiesta;
 
   const LasCajasScreen({super.key, required this.fiesta});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final veCatalogo = ReglasDeLaBarra.veCatalogoYPrecios(ref.watch(rolEnLaBarraProvider));
     final tema = temaDeVender(DisenioBarra.nocheDorada, base: Theme.of(context));
     return Theme(
       data: tema,
@@ -44,6 +51,20 @@ class LasCajasScreen extends StatelessWidget {
                 ),
               ],
             ),
+            actions: [
+              if (veCatalogo)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: TextButton.icon(
+                    key: const Key('las_cajas_catalogo_precios'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => CatalogoYPreciosScreen(fiesta: fiesta),
+                    )),
+                    icon: const Icon(Icons.list_alt_outlined),
+                    label: Text(CortesPantalla.esCelular(ancho) ? 'PRECIOS' : 'CATÁLOGO Y PRECIOS'),
+                  ),
+                ),
+            ],
           ),
           body: Align(
             alignment: Alignment.topCenter,

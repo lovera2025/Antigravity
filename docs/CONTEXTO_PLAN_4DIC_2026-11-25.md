@@ -68,6 +68,34 @@
     recibe las ventas con el ingrediente entero adentro. La receta va por fiesta en PRECIOS (`barra_recetas`, v84).
   - Maqueta mandada: `docs/maqueta_recetas_y_estilos_2026-11-27.html` (PRECIOS con recetas, GANANCIA con "Para el
     proveedor", Noche y Blanco en VENDER, LAS CAJAS y STOCK). Las pantallas esperan su OK; los datos y la cuenta no.
+  - **Hecho esa noche:**
+    - **La encargada ve CATÁLOGO Y PRECIOS solo mirando**: `ReglasDeLaBarra.veCatalogoYPrecios` (encargada y jefe) y
+      `veElCostoYLaGanancia` (solo jefe); botón en LAS CAJAS → `widgets/catalogo_y_precios_screen.dart` (sin
+      campos, sin guardar, sin costo). Pruebas en `test/encargada_de_barra_test.dart` (26 en verde, con la central en
+      la notebook sin modo jefe) y la pantalla en `test/modo_barra_cerrado_test.dart`.
+    - **Las recetas, datos y cuenta (sin pantallas ni base todavía):** `datos/receta_barra.dart` (`RecetaBarra`,
+      `UnidadDeReceta` cc · unidad; id `UuidUtils.barraRecetaId`), `datos/costo_barra.dart` (`CostoBarra`: lista y
+      `contenidoCc`; id `UuidUtils.barraCostoId`), `cuentas/recetas_de_la_barra.dart` (`RecetasDeLaBarra`:
+      `paraElStock` suma lo entero adentro de cada trago con precio 0, `loQueBaja`, `alcanzaPara`) y
+      `CuentaDelProveedor` con tragos (costo por receta, `porReceta`, y **`paraElProveedor`** por botella y lata, que
+      suma lo mismo que "Le debo"; sin la lista de un ingrediente, el trago debe lo que sí se sabe y la ganancia no
+      se sabe). `test/recetas_de_la_barra_test.dart` (12) con los números de la maqueta. El SQL de la nube suma
+      `contenido_cc` y la tabla `barra_recetas` (sin correr).
+    - **Roturas: 15 de 15** (6 de la encargada en `tool/roturas_permisos_barra.txt`, 9 de las recetas en
+      `tool/roturas_precio_de_lista.txt`). Dos agujeros que encontraron, cerrados: LAS CAJAS con otro rol (prueba
+      nueva que la monta con cajera, repositor y encargada) y la cuenta del fernet que dependía de un `cc!` para
+      compilar (ahora `trae`).
+  - **Lo que sigue, en orden:** (1) la **v84** con tres tablas: `barra_costos` (con `contenido_cc`), `barra_recetas`
+    y `barra_caja_movimientos` (retiro · cambio · ajuste_cambio, solo se agregan filas; borrador del modelo
+    `MovimientoDeCaja` en el scratchpad de este chat: rehacerlo si se perdió) + las listas de `sync_engine.dart`
+    (`barra_costos` **no se baja en Android**; `barra_recetas` va en `tablasDeLaBarra`; `barra_caja_movimientos` en
+    `tablasDeLaRed` y su regla en `ReglasDeLaBarra.porQueNoSeGuarda`: solo encargada y jefe) + leer y guardar en
+    `BarraDelJefe`/`BarraLocal`/`BarraNube`; (2) **toda cuenta del stock recibe las ventas por
+    `RecetasDeLaBarra.paraElStock`** (`StockDeLaBarra.deLaNoche` en `barra_jefe_providers.dart` y en
+    `vender_screen.dart`) y sin stock no se vende en `vender()` con `loQueBaja`; (3) el efectivo esperado del cierre
+    con retiros y cambio (`CierreDeBarra`: 17 lugares lo usan; un test que exija pasar los movimientos); (4) las
+    pantallas con su OK de la maqueta: PRECIOS (Lista, Trae, receta), GANANCIA con su A4, RETIRO y CAMBIO en LAS
+    CAJAS, el repositor (Barra con un 3), Noche y Blanco.
 - El plan para el 4-dic va por **~57 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
   stock no se vende → el precio de lista y PROVEEDOR → la página de la encargada → la noche simulada y la tercera
   revisión → las pantallas en la app de verdad y la tele con el APK → la v83/v84 sobre una copia, los SQL y publicar

@@ -76,3 +76,57 @@ test/cuenta_del_proveedor_test.dart
 final lista = listaPesos == null ? null : centavos(listaPesos);
 final lista = listaPesos == null ? null : listaPesos.truncate() * 100;
 ---
+el vodka no baja el Speed del stock
+lib/features/barra/cuentas/recetas_de_la_barra.dart
+test/recetas_de_la_barra_test.dart
+          if (r.unidad == UnidadDeReceta.unidad) r.ingredienteId: r.cantidad,
+          if (r.unidad == UnidadDeReceta.cc) r.ingredienteId: r.cantidad,
+---
+el renglón de adentro del trago lleva plata
+lib/features/barra/cuentas/recetas_de_la_barra.dart
+test/recetas_de_la_barra_test.dart
+          precio: 0,
+          precio: r.precio,
+---
+las recetas sacadas siguen contando
+lib/features/barra/cuentas/recetas_de_la_barra.dart
+test/recetas_de_la_barra_test.dart
+      if (r.eventoId != eventoId || !r.activo || r.cantidad <= 0) continue;
+      if (r.eventoId != eventoId || r.cantidad <= 0) continue;
+---
+GANANCIA cuenta el stock sin lo de adentro de los tragos
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+      ventas: recetas.paraElStock(f.ventas),
+      ventas: f.ventas,
+---
+el fernet en cc se cobra entero, como una botella por trago
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+            parte = (vendidas * r.cantidad * l / cc).round();
+            parte = vendidas * l;
+---
+el trago se paga como si fuera de stock propio y no por la receta
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+      if (recetas.tieneReceta(id)) {
+      if (false) {
+---
+Para el proveedor no suma lo que va en los tragos
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+            u.enTragos += vendidas * r.cantidad;
+            u.enTragos += 0;
+---
+el costo del trago no divide por lo que trae la botella
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+            porUno += r.cantidad * l / trae;
+            porUno += r.cantidad * l / 1000;
+---
+lo que se debe del fernet no divide por lo que trae la botella
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/recetas_de_la_barra_test.dart
+            parte = (vendidas * r.cantidad * l / trae).round();
+            parte = (vendidas * r.cantidad * l / 1000).round();
+---

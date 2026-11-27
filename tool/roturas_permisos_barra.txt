@@ -112,3 +112,39 @@ test/barra_cerrar_test.dart
     final cierraSola = ref.read(rolEnLaBarraProvider) == RolEnLaBarra.jefe;
     final cierraSola = ref.read(mandaEnLaBarraProvider);
 ---
+la encargada ve el costo y la ganancia
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/encargada_de_barra_test.dart
+  static bool veElCostoYLaGanancia(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
+  static bool veElCostoYLaGanancia(RolEnLaBarra? r) => r == RolEnLaBarra.jefe || r == RolEnLaBarra.encargada;
+---
+la cajera ve el catálogo y los precios
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/encargada_de_barra_test.dart
+  static bool veCatalogoYPrecios(RolEnLaBarra? r) => r == RolEnLaBarra.encargada || r == RolEnLaBarra.jefe;
+  static bool veCatalogoYPrecios(RolEnLaBarra? r) => r != null;
+---
+LAS CAJAS no pregunta la regla para el botón
+lib/features/barra/widgets/las_cajas_screen.dart
+test/encargada_de_barra_test.dart
+              if (veCatalogo)
+              if (true)
+---
+la encargada no ve el botón de CATÁLOGO Y PRECIOS
+lib/features/barra/widgets/las_cajas_screen.dart
+test/encargada_de_barra_test.dart
+              if (veCatalogo)
+              if (false)
+---
+la lista de la encargada guarda
+lib/features/barra/widgets/catalogo_y_precios_screen.dart
+test/encargada_de_barra_test.dart
+    final recargo = datos.recargo?.pct ?? 0;
+    final recargo = datos.recargo?.pct ?? 0; void guardar() {}
+---
+la lista no muestra los precios
+lib/features/barra/widgets/catalogo_y_precios_screen.dart
+test/encargada_de_barra_test.dart
+                    pesos(precio.precio),
+                    '',
+---
