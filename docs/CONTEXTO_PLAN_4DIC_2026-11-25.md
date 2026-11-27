@@ -15,8 +15,9 @@ proveedor"; PRECIOS en dos bloques (lo que se vende, con el precio de lista del 
 escribirse; y las botellas de los tragos con lo que trae); GANANCIA con **dos formas** (A recomendada: "LE DEBO AL
 PROVEEDOR" grande, una sola tabla por lo que entrega el proveedor y la ganancia por producto plegada; B: una tabla
 por lo vendido); la encargada con SACAR EFECTIVO · DAR CAMBIO · "Corregir (se anotó mal algo)"; los renglones nuevos
-del papel del cierre ("Cambio de la encargada", "Sacó la encargada"); y "Lo que saqué por repetido". **Espera su
-respuesta (A o B, y si va así). Sin su OK no se programan esas pantallas.**
+del papel del cierre ("Cambio de la encargada", "Sacó la encargada"); y "Lo que saqué por repetido". **Aprobada el
+27-nov con la forma A de GANANCIA** (se le mandó sola, cerrada y abierta: `build/maquetas/ganancia_forma_A.png`;
+contestó "Perfecto"). Se programan las pantallas.
 
 **Respuestas del 27-nov sobre RETIRO y CAMBIO (no volver a preguntar):** la encargada los anota **también en su propia
 caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN en la tablet de la cajera).
@@ -39,8 +40,21 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   tres en `test/barra_nube_test.dart`. Roturas: 19 nuevas en `tool/roturas_retiros.txt` (**23 de 23 atrapadas**). La
   suite entera: **6.671 y 1 falla, la de siempre** (`modal_cobro_masivos_medios_pago_test.dart`, LA ALFONSINA).
 
+**Cómo se programan (decidido por Claude el 27-nov, con la maqueta aprobada):**
+- **Datos:** `BarraDelJefe.costos(evento)` / `guardarCosto(costo, quien:)` y `guardarReceta(receta, quien:)` (sacar un
+  ingrediente es guardarlo con `activo: false`, mismo id fijo), en `BarraLocal` (con la cola), `BarraNube`,
+  `BarraConLaRed` (llave `veElCostoYLaGanancia`), `BarraEnMemoria` y `_LoQueSubio`.
+- **PRECIOS:** las columnas de hoy (VA · PRODUCTO · PRECIO · STOCK · AVISAR DESDE) más **PRECIO DE LISTA** y **GANO**.
+  Un producto con receta (o de la categoría "Tragos") muestra el precio de lista gris "sale de la receta" y "RECETA ▸"
+  plegada (ingredientes del catálogo, cc o unidades, "+ AGREGAR INGREDIENTE", "Cuesta · ganás por trago"). Lo que va
+  por cc en alguna receta sale de la lista y va al bloque **LAS BOTELLAS DE LOS TRAGOS** (precio de lista de la botella
+  y cuánto trae). Todo se guarda junto con GUARDAR CAMBIOS; COPIAR DE OTRA FIESTA trae también lista, botellas y recetas.
+- **GANANCIA** (pestaña nueva, solo `veElCostoYLaGanancia`): elegir las fiestas (desde · hasta), la tarjeta grande "LE
+  DEBO AL PROVEEDOR", la cuenta una vez, la tabla de `CuentaDelProveedor.paraElProveedor`, la ganancia por producto
+  plegada, VER POR FIESTA y IMPRIMIR (A4, con botón).
+
 **Lo que falta, en orden:**
-1. **Con su respuesta a la maqueta nueva:** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
+1. **Programar lo de la maqueta aprobada (forma A):** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
    `RecetaBarra` por `BarraDelJefe`/`BarraLocal`/`BarraNube`; COPIAR DE OTRA FIESTA los trae), GANANCIA (la forma que
    elija) con su papel A4, **la pantalla SACAR EFECTIVO · DAR CAMBIO · Corregir** en LAS CAJAS de la encargada, los dos
    renglones nuevos en el papel del cierre, el cartel del OK y la tarjeta (con el aviso de `cambioDespuesDelCierre`), y
