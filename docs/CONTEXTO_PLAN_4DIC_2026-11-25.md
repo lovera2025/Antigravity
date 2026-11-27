@@ -64,8 +64,38 @@ punta a punta en `test/central_barra_provider_test.dart`: su OK le llega a la ca
 se miró todavía en `tool/central_barra_prueba.dart` ni en `tool/dos_barras_prueba.dart`**, que abren esa pantalla
 con la red de verdad: va en el recorrido por rol. Las pruebas de la barra: **954 en verde**.
 
-**La notebook de la barra bloqueada (pedido del usuario el 27-nov a la noche; maqueta mandada, ESPERA SU OK; sin
-programar):** la notebook del jefe queda toda la noche con la central prendida y la pantalla abierta, y cualquiera
+**LA VISTA SIMPLE DE LA NOTEBOOK (27-nov, noche): PROGRAMADA, SIN SUS PRUEBAS. Es lo primero a retomar.** El usuario
+vio la maqueta de más abajo y la cambió: **no es una pantalla tapada**. Lo que decidió, en orden:
+- La notebook queda en **la vista simple**: solo la central (las cajas conectadas, si está todo subido). **Sin las
+  cajas con la plata, sin catálogo, precios ni GANANCIA.**
+- **Un logo arriba** (el isotipo, en la barra de arriba, como un adorno): **mantenerlo apretado 2 segundos** pide **la
+  clave de esa notebook, la que ese aparato ya tiene para el modo jefe** (`pinMaestroDeEstaPc`; hoy 2026, "lo cambio
+  después"). **No es una clave nueva.**
+- **La seguridad viene APAGADA** ("que haya una opción para activar esa seguridad, porque si no el jefe va a estar a
+  cada rato después de las fiestas"): el candado de arriba abre "Dejar solo la central ahora" y el tilde "Que se
+  bloquee sola a los 2 minutos (con la central prendida)", que se recuerda en el equipo.
+- **"La central debe estar prendida, si no todos se desconectan"**: en la vista simple **no hay botón APAGAR**
+  (`PanelCentralDeLaBarra(sinApagar: true)`); PRENDER sí, por si está apagada. Bloquear nunca toca la central.
+Lo programado: `lib/features/barra/jefe/vista_simple_de_la_notebook.dart` (la clave, el tilde, el cartel) y
+`barra_jefe_screen.dart` (`_vistaSimple`, el logo `jefe_logo`, el candado `jefe_bloquear`, `PopScope` para que no se
+salga para atrás, el uso mirado en toda la app con `pointerRouter.addGlobalRoute`, y al bloquear se cierra lo que
+quedó abierto encima). Solo en la notebook (`centralSePrendeAcaProvider`), con modo jefe y fuera de la web.
+**Falta:** sus pruebas (`test/notebook_de_la_barra_a_la_vista_test.dart`, sin escribir: el candado, el logo menos de
+2 s y 2 s, clave mala y buena, que no se vea ningún "$" ni APAGAR, que se bloquee sola solo con el tilde y la central
+prendida, que en la web, en una tablet y sin modo jefe no aparezca), sus roturas, las capturas para el usuario, y la
+misma vista para **la encargada en la notebook** (LAS CAJAS: hoy no la tiene; preguntarle). La maqueta vieja
+(`docs/maqueta_notebook_bloqueada_2026-11-27.html`) quedó superada.
+
+**Un aviso de la app en uso (27-nov, 19:40), sin tocar nada:** el usuario agregó una mesa después del sorteo y las
+entradas le salen "con descuento". Mirado en la nube (solo lectura): esa fiesta se sorteó el **10-nov**, antes de la
+regla de la 6.9.2, y **nadie aceptó la lista** (ENTRADAS -> PRECIOS -> REVISAR LA LISTA): su sorteo no tiene
+`_lugares`, y hasta aceptarla **todo va con descuento, a propósito**. En esa fiesta el programa dio 12 mesas después
+del sorteo. **5 de las 9 fiestas con precios están igual.** Los precios cargados (23-nov, en 8 fiestas): entrada
+$15.000, anticipada $10.000 hasta el 30-nov, lugares al 50 % ($7.500). Quedó por saber qué versión tiene cada PC y
+en qué pantalla ve "15.000" en una y "10 mil" en otra.
+
+**La maqueta de antes (superada):** la notebook del jefe queda toda la noche con la central prendida (pedido del 27-nov
+a la noche): la notebook del jefe queda toda la noche con la central prendida y la pantalla abierta, y cualquiera
 podía mirar las cajas. Maqueta: `docs/maqueta_notebook_bloqueada_2026-11-27.html` (`preview_start` con `maquetas`).
 Lo que eligió: **el logo** (el isotipo, `assets/icons/isotipo-ej.png`, grande y al centro) y que **desde el logo
 también se prenda o apague esta seguridad**. El diseño:

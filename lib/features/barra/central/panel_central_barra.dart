@@ -26,7 +26,17 @@ class PanelCentralDeLaBarra extends ConsumerStatefulWidget {
   /// La fecha de la fiesta: esa noche la central vuelve sola después de un reinicio.
   final DateTime? fechaDeLaFiesta;
 
-  const PanelCentralDeLaBarra({super.key, required this.eventoId, this.fechaDeLaFiesta});
+  /// **Sin el botón APAGAR** (27-nov-2026): en la vista simple de la notebook, a la vista de
+  /// todos, la central prendida no se apaga con un clic ("la central debe estar prendida,
+  /// si no todos se desconectan"). PRENDER sí queda, por si está apagada.
+  final bool sinApagar;
+
+  const PanelCentralDeLaBarra({
+    super.key,
+    required this.eventoId,
+    this.fechaDeLaFiesta,
+    this.sinApagar = false,
+  });
 
   @override
   ConsumerState<PanelCentralDeLaBarra> createState() => _PanelCentralDeLaBarraState();
@@ -101,13 +111,13 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
                     ),
                   ],
                 ),
-                if (deEstaFiesta)
+                if (deEstaFiesta && !widget.sinApagar)
                   TextButton(
                     key: const Key('central_barra_apagar'),
                     onPressed: () => ref.read(centralDeLaBarraProvider.notifier).apagar(),
                     child: const Text('APAGAR'),
                   )
-                else
+                else if (!deEstaFiesta)
                   FilledButton.icon(
                     key: const Key('central_barra_prender'),
                     onPressed: _prendiendo ? null : _prender,

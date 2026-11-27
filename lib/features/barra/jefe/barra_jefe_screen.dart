@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/evento.dart';
@@ -7,6 +11,7 @@ import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../central/central_barra_provider.dart';
+import '../central/panel_central_barra.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
@@ -19,6 +24,7 @@ import 'catalogo_del_jefe.dart';
 import 'elegir_fiesta.dart';
 import 'ganancia_del_jefe.dart';
 import 'precios_de_la_fiesta.dart';
+import 'vista_simple_de_la_notebook.dart';
 
 /// Las tres partes de BARRA.
 /// GANANCIA va al final y solo la ve el jefe (`ReglasDeLaBarra.veElCostoYLaGanancia`).
@@ -46,6 +52,72 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
 
   /// La fiesta para la que este aparato ya buscó la central de la barra.
   String? _buscoLaCentralDe;
+
+  /// **La vista simple** (27-nov-2026, `vista_simple_de_la_notebook.dart`): en la notebook
+  /// de la barra queda a la vista solo la central. Lo demás vuelve con el logo y la clave.
+  bool _vistaSimple = false;
+  Timer? _sinUso;
+
+  @override
+  void initState() {
+    super.initState();
+    // El uso se mira en toda la app, no solo en esta pantalla: si el jefe está leyendo una
+    // caja (otra pantalla, encima de esta), no se le tiene que cerrar.
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_alTocar);
+    HardwareKeyboard.instance.addHandler(_alTeclear);
+    _huboUso();
+  }
+
+  @override
+  void dispose() {
+    _sinUso?.cancel();
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_alTocar);
+    HardwareKeyboard.instance.removeHandler(_alTeclear);
+    super.dispose();
+  }
+
+  void _alTocar(PointerEvent e) => _huboUso();
+
+  bool _alTeclear(KeyEvent e) {
+    _huboUso();
+    return false;
+  }
+
+  void _huboUso() {
+    _sinUso?.cancel();
+    if (!mounted) return;
+    _sinUso = Timer(ref.read(esperaParaLaVistaSimpleProvider), _nadieLaToca);
+  }
+
+  /// Solo en la notebook (donde se prende la central) y con el modo jefe: en una tablet o
+  /// en la web no hay vista simple.
+  bool get _esLaNotebookDelJefe =>
+      !ref.read(enLaWebProvider) && ref.read(centralSePrendeAcaProvider) && ref.read(esRolJefeProvider);
+
+  /// Pasó el tiempo sin que nadie la toque: con la central prendida acá, queda la vista
+  /// simple (si el jefe no lo apagó al desbloquear).
+  void _nadieLaToca() {
+    if (!mounted || _vistaSimple || !_esLaNotebookDelJefe) return;
+    if (!ref.read(vuelveSolaALaVistaSimpleProvider)) return;
+    if (!ref.read(centralDeLaBarraProvider).prendida) return;
+    _dejarSoloLaCentral();
+  }
+
+  /// El candado, o el tiempo sin uso. Lo que haya quedado abierto encima (una caja, un
+  /// cartel) se cierra: mostraría la plata.
+  void _dejarSoloLaCentral() {
+    final esta = ModalRoute.of(context);
+    Navigator.of(context).popUntil((r) => r == esta || r.isFirst);
+    setState(() => _vistaSimple = true);
+  }
+
+  /// El logo, apretado: la clave de esta notebook y, si está bien, vuelve todo.
+  Future<void> _pedirLaClave(BuildContext donde) async {
+    final entro = await showDialog<bool>(context: donde, builder: (_) => const ClaveDeLaNotebookDialog());
+    if (entro != true || !mounted) return;
+    setState(() => _vistaSimple = false);
+    _huboUso();
+  }
 
   /// **El jefe en MODO JEFE desde una tablet también se conecta a la central** (27-nov-2026,
   /// lo pidió el usuario): sin internet, lo que acepta, anula o saca no les llegaba a las
@@ -94,24 +166,63 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
     final enLaWeb = ref.watch(enLaWebProvider);
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
-    return Scaffold(
+    // La notebook de la barra (donde se prende la central), con el modo jefe.
+    final enLaNotebook = !enLaWeb && ref.watch(centralSePrendeAcaProvider) && esJefe;
+    final simple = _vistaSimple && enLaNotebook;
+    return PopScope(
+      // En la vista simple no se sale para atrás: del otro lado está todo lo del jefe.
+      canPop: !simple,
+      child: Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        automaticallyImplyLeading: !simple,
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'BARRA',
-              key: Key('jefe_titulo'),
-              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.5),
+            // El logo va siempre, como un adorno. En la vista simple, mantenerlo apretado
+            // pide la clave de la notebook; nada en la pantalla lo dice.
+            if (enLaNotebook) ...[
+              RawGestureDetector(
+                key: const Key('jefe_logo'),
+                gestures: {
+                  LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                    () => LongPressGestureRecognizer(duration: kApretarElLogo),
+                    (r) => r.onLongPress = simple ? () => _pedirLaClave(context) : null,
+                  ),
+                },
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/icons/isotipo-ej.png',
+                    width: 38,
+                    height: 38,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(Icons.local_bar_outlined, size: 30),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'BARRA',
+                  key: Key('jefe_titulo'),
+                  style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.5),
+                ),
+                Text(
+                  simple ? 'Central' : 'Modo jefe',
+                  key: const Key('jefe_subtitulo'),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFA7A29A)),
+                ),
+              ],
             ),
-            Text('Modo jefe', style: TextStyle(fontSize: 12, color: Color(0xFFA7A29A))),
           ],
         ),
         // La impresora de esta PC, para la lista de precios, las copias y el cierre: la
         // misma pantalla que la cajera abre desde VENDER. En la web no hay Bluetooth.
         actions: [
-          if (!enLaWeb)
+          if (!enLaWeb && !simple)
             IconButton(
               key: const Key('jefe_impresora'),
               tooltip: 'La impresora de esta PC',
@@ -122,6 +233,41 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                   papel: ref.read(papelDeLaBarraProvider),
                 ),
               )),
+            ),
+          // El candado: dejar solo la central a la vista ya, y prender o apagar que se
+          // bloquee sola (viene apagado: el jefe lo prende para la fiesta).
+          if (enLaNotebook && !simple)
+            PopupMenuButton<String>(
+              key: const Key('jefe_bloquear'),
+              tooltip: 'La notebook a la vista de todos',
+              icon: Icon(ref.watch(vuelveSolaALaVistaSimpleProvider) ? Icons.lock_clock_outlined : Icons.lock_outline),
+              onSelected: (que) {
+                if (que == 'ahora') {
+                  _dejarSoloLaCentral();
+                } else {
+                  final notifier = ref.read(vuelveSolaALaVistaSimpleProvider.notifier);
+                  notifier.poner(!ref.read(vuelveSolaALaVistaSimpleProvider));
+                  _huboUso();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  key: Key('jefe_bloquear_ahora'),
+                  value: 'ahora',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.lock_outline),
+                    title: Text('Dejar solo la central ahora'),
+                    subtitle: Text('Lo demás vuelve apretando el logo, con la clave'),
+                  ),
+                ),
+                CheckedPopupMenuItem(
+                  key: const Key('jefe_bloquear_sola'),
+                  value: 'sola',
+                  checked: ref.read(vuelveSolaALaVistaSimpleProvider),
+                  child: Text('Que se bloquee sola a los ${kVistaSimpleSinUso.inMinutes} minutos\n(con la central prendida)'),
+                ),
+              ],
             ),
           const SizedBox(width: 8),
         ],
@@ -141,6 +287,38 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                 child: Text(
                   'Todavía no hay fiestas cargadas. Se crean en EVENTOS.',
                   textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+          if (simple) {
+            // Solo la central: las cajas conectadas y si está todo subido. Prendida, **no se
+            // apaga desde acá** (se desconectarían todas las cajas); apagada, se puede prender.
+            // Ni las cajas con la plata, ni el catálogo, ni los precios, ni GANANCIA.
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: ListView(
+                  key: const Key('jefe_vista_simple'),
+                  padding: EdgeInsets.fromLTRB(margen, 8, margen, 24),
+                  children: [
+                    _BloqueFiesta(
+                      fiesta: fiesta,
+                      fecha: fechaConCuando(
+                        fiesta.fechaEvento,
+                        ref.read(relojDelJefeProvider)(),
+                        esLaQueAbre: fiesta.id == datos.laQueAbreEnLaBarra?.id,
+                      ),
+                      onCambiar: null,
+                    ),
+                    const SizedBox(height: 12),
+                    PanelCentralDeLaBarra(
+                      eventoId: fiesta.id,
+                      fechaDeLaFiesta: fiesta.fechaEvento,
+                      sinApagar: true,
+                    ),
+                  ],
                 ),
               ),
             );
@@ -207,6 +385,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }
