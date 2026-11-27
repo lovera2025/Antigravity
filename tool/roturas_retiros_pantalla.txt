@@ -1,0 +1,42 @@
+el papel del cierre no dice lo que saco la encargada
+lib/features/barra/impresion/modelo_ticket.dart
+test/retiros_de_la_encargada_test.dart
+      if (centavos(cuentas.retirado) != 0) RenglonTicket('Sacó la encargada', masOMenos(-cuentas.retirado)),
+
+---
+la caja no muestra la plata ni los botones
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+          if (esJefe) _plataDeLaCaja(r, [for (final m in datos.movimientos) if (m.cajaBarraId == caja.id) m]),
+
+---
+se saca efectivo sin motivo
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+    final listo = n != null && n > 0 && _motivo.text.trim().isNotEmpty;
+    final listo = n != null && n > 0;
+---
+corregir de menos suma
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                    monto: (widget.tipo == TipoMovimientoDeCaja.ajusteCambio && !_suma ? -n : n).toDouble(),
+                    monto: n.toDouble(),
+---
+el retiro anotado no sube
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+        unawaited(ref.read(subirDeLaBarraProvider)('barra_caja_movimientos', hecho.id));
+
+---
+la tarjeta no avisa lo que llego despues del cierre
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                if (r.cambioDespuesDelCierre)
+                if (false)
+---
+la tarjeta no dice lo que saco la encargada
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                    key: Key('jefe_caja_retirado_${c.id}'),
+                    key: Key('jefe_caja_retirado_x${c.id}'),
+---

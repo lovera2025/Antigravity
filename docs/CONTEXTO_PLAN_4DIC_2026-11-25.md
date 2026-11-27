@@ -4,7 +4,7 @@
 
 ### LEER PRIMERO: dónde quedó el 27-nov (chat "sigamos")
 
-**El plan para el 4-dic va por ~65 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
+**El plan para el 4-dic va por ~72 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
 `C:\Users\lover\.claude\plans\sigamos-peaceful-harp-of-314d8c5f-dfb0-4642-a1b4-8e6c4ea26b76.md`.
 
 **La maqueta de recetas y estilos no lo convenció** (27-nov): tiene que notarse qué es el **precio de lista** y qué es
@@ -75,14 +75,23 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   Pruebas: `test/ganancia_del_jefe_test.dart` (9); muestra `Jefe_8_ganancia_pc.png`; roturas
   `tool/roturas_ganancia.txt` (**7 de 7 atrapadas**).
 
+- `3cde476`: **SACAR EFECTIVO · DAR CAMBIO · Corregir** en el detalle de una caja de LAS CAJAS (`_plataDeLaCaja` y
+  `_PedirMovimiento` en `jefe/cajas_de_la_fiesta.dart`; solo con `mandaEnLaBarraProvider`, y los botones solo con la
+  caja abierta): TIENE QUE HABER con de dónde sale, LO QUE SE HIZO CON LA PLATA, monto y motivo obligatorio (con
+  motivos rápidos), Corregir suma o resta. La tarjeta, el cartel del OK y el papel del cierre dicen "Cambio de la
+  encargada" y "Sacó la encargada" (`masOMenos`, en `cuentas/pesos.dart`) solo si hubo, y la tarjeta avisa si algo llegó
+  después del cierre. Pruebas: 4 en `test/barra_jefe_pantalla_test.dart` y 1 del papel en
+  `test/retiros_de_la_encargada_test.dart`; muestras `Jefe_9_caja_con_retiros_pc.png` y `Jefe_10_sacar_efectivo_pc.png`;
+  roturas `tool/roturas_retiros_pantalla.txt` (**7 de 7 atrapadas**). **El cartel del OK no tiene una prueba que mire sus renglones nuevos.**
+
 **Lo que falta, en orden:**
-1. **Programar lo de la maqueta aprobada (forma A):** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
-   `RecetaBarra` por `BarraDelJefe`/`BarraLocal`/`BarraNube`; COPIAR DE OTRA FIESTA los trae), GANANCIA (la forma que
-   elija) con su papel A4, **la pantalla SACAR EFECTIVO · DAR CAMBIO · Corregir** en LAS CAJAS de la encargada, los dos
-   renglones nuevos en el papel del cierre, el cartel del OK y la tarjeta (con el aviso de `cambioDespuesDelCierre`), y
-   Noche y Blanco en todas las pantallas de la barra (`DisenioBarra`).
-2. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
-   PIN maestro), y lo demás en el mismo orden.
+1. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
+   CAJAS, VENTAS y cerrar caja van siempre en Noche): cada aparato elige el suyo y vale para todas sus pantallas.
+2. Que mire las capturas que se le mandaron el 27-nov (`build/capturas_4dic/`: PRECIOS, GANANCIA, la caja con
+   retiros y el cartel de SACAR EFECTIVO). La suite entera sobre todo lo de hoy: **6.698 y 1 falla, la de siempre**.
+3. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
+   PIN maestro), y lo demás en el mismo orden. **Con el repositor, GANANCIA tiene que leer el stock por barra** (hoy lo
+   perdido da 0).
 
 ---
 
