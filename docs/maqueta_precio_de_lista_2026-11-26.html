@@ -1,0 +1,243 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Precio de lista y GANANCIA</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#b9bbd0; --tinta:#1d1d2b; --tinta2:#5d6078; --primario:#5a5e9c; --primario-suave:#dcdcf0;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+  --app:#0f0e12; --card:#17161a; --borde:#2a2830; --gris:#a7a29a; --texto:#f2efe8; --dorado:#d4af37;
+  --verde:#59d38a; --rojo:#ff8f82; --ambar:#f2b84b; --celeste:#7cc7ff;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#1b1b26; --panel:#262636; --linea:#4a4c66; --tinta:#eceaf6; --tinta2:#aeb0c4; --primario:#9a9ee6; --primario-suave:#34365a; color-scheme:dark } }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;padding:18px 16px 56px}
+h1{font-weight:700;font-size:26px;margin:0;text-wrap:balance}
+h2{font-weight:700;font-size:19px;margin:10px 0 0}
+p{margin:0}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:16px}
+.sub{color:var(--tinta2);font-size:14.5px;max-width:900px}
+.nota{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px;font-size:14.5px}
+.nota ul,.decidir ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.decidir{border:2px solid var(--primario);border-radius:14px;padding:12px 14px;background:var(--panel);display:grid;gap:8px}
+.etiqueta{font-size:12.5px;font-weight:800;letter-spacing:.08em;color:var(--tinta2);margin-bottom:6px}
+.lado{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+
+.app{background:var(--app);color:var(--texto);border-radius:20px;border:1px solid var(--borde);padding:16px;display:grid;gap:14px;align-content:start}
+.app.pc{flex:1;min-width:320px}
+.barraApp{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.barraApp .tit{font-weight:800;letter-spacing:.06em;font-size:16px;flex:1;min-width:0}
+.pestanas{display:flex;gap:6px;flex-wrap:wrap}
+.pes{border:1.5px solid var(--borde);border-radius:999px;padding:7px 16px;font-weight:800;font-size:13px;letter-spacing:.06em;color:var(--gris)}
+.pes.on{border-color:var(--dorado);color:var(--dorado);background:rgba(212,175,55,.12)}
+.b{border:1.5px solid var(--borde);background:transparent;color:var(--texto);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;font-size:14px;letter-spacing:.04em}
+.b.dorado{background:var(--dorado);border-color:var(--dorado);color:#16130a}
+.b.linea{border-color:var(--dorado);color:var(--dorado)}
+.gris{color:var(--gris)}
+.chica{font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--borde);border-radius:18px;padding:12px 14px;display:grid;gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:10px 14px}
+.kpi .t{font-size:11px;letter-spacing:.08em;font-weight:800;color:var(--gris)}
+.kpi .v{font-size:26px;font-weight:800}
+.kpi .s{font-size:12px;color:var(--gris)}
+.kpi.pagar .v{color:var(--ambar)}
+.kpi.gana .v{color:var(--verde)}
+.tabla{width:100%;border-collapse:collapse;font-size:14px}
+.tabla th{font-size:11px;letter-spacing:.06em;color:var(--gris);font-weight:800;text-align:right;padding:7px 8px;border-bottom:1px solid var(--borde);white-space:nowrap}
+.tabla th:first-child,.tabla td:first-child{text-align:left}
+.tabla td{padding:9px 8px;border-bottom:1px solid var(--borde);text-align:right;white-space:nowrap}
+.tabla tr.total td{font-weight:800;border-bottom:0;border-top:2px solid rgba(212,175,55,.45)}
+.tabla td.nuevo,.tabla th.nuevo{background:rgba(212,175,55,.08)}
+.scrollx{overflow-x:auto}
+.falta{color:var(--rojo);font-weight:700}
+.pagar{color:var(--ambar);font-weight:700}
+.gana{color:var(--verde);font-weight:700}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#16130a;background:var(--dorado);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.franja{border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:600}
+.franja.ambar{background:rgba(242,184,75,.14);color:var(--ambar)}
+.franja.rojo{background:rgba(255,143,130,.12);color:var(--rojo)}
+.franja.celeste{background:rgba(124,199,255,.12);color:var(--celeste)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{border:1.5px solid var(--borde);border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;color:var(--texto)}
+.chip.on{border-color:var(--dorado);color:var(--dorado);background:rgba(212,175,55,.12)}
+.fecha{border:1.5px solid var(--borde);border-radius:10px;padding:7px 12px;font-weight:700;background:#0f0e12}
+.dialogo{background:#1d1c21;border:2px solid var(--dorado);border-radius:16px;padding:14px;display:grid;gap:10px;max-width:560px}
+.ejemplo{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.ejemplo div{background:var(--panel);border:1.5px solid var(--linea);border-radius:12px;padding:8px 12px}
+.ejemplo b{display:block;font-size:20px}
+
+.hoja{background:#fff;color:#111;width:620px;max-width:100%;aspect-ratio:210/297;border-radius:4px;box-shadow:0 2px 14px rgba(0,0,0,.25);padding:30px 32px;font-size:11.5px;display:grid;align-content:start;gap:10px}
+.hoja h3{margin:0;font-size:17px}
+.hoja .tabla{font-size:11px}
+.hoja .tabla th{color:#555;border-bottom:1px solid #999}
+.hoja .tabla td{border-bottom:1px solid #ddd}
+.hoja .tabla tr.total td{border-top:2px solid #333}
+.hoja .tres{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hoja .tres div{border:1px solid #bbb;border-radius:6px;padding:6px 8px}
+.hoja .tres b{display:block;font-size:15px}
+.mini{width:300px}
+.mini .app{min-height:0}
+</style></head><body><div class="wrap">
+
+<div>
+  <h1>El precio de lista y lo que se le paga al proveedor</h1>
+  <p class="sub">Del audio del jefe (26-nov). Él carga con el stock lo que le cobra el proveedor por unidad, y ve, <b>solo él</b>, cuánto tiene
+  que pagar y cuánto ganó, juntando las noches que rinde de una vez. Los datos son inventados. Lo marcado con <span class="tag">NUEVO</span>
+  es lo que se agrega.</p>
+</div>
+
+<div class="nota" style="border:2px solid var(--primario)">
+  <div class="etiqueta">EL AGUA, DE PUNTA A PUNTA (inventado)</div>
+  <div class="ejemplo">
+    <div>El jefe carga<b>100 aguas</b><span class="chica">precio de lista $600 = le cuestan $60.000</span></div>
+    <div>Las pone a la venta a<b>$2.000</b><span class="chica">gana $1.400 por cada una</span></div>
+    <div>Se vendieron<b>70 aguas</b><span class="chica">se vendió $140.000 · quedan 30</span></div>
+    <div>Le debe al proveedor<b>$42.000</b><span class="chica">70 × $600</span></div>
+    <div>Ganó<b>$98.000</b><span class="chica">$140.000 − $42.000</span></div>
+  </div>
+  <p class="chica" style="margin-top:8px">Si además se rompe 1: le debe 71 × $600 = $42.600 y gana $97.400 (lo perdido se le paga igual al proveedor).</p>
+</div>
+
+<div class="nota">
+  <div class="etiqueta">EL EJEMPLO DEL AUDIO</div>
+  <div class="ejemplo">
+    <div>Cargó<b>200 latas</b><span class="chica">a $1.500 de lista = $300.000</span></div>
+    <div>Vendió<b>2 latas</b><span class="chica">a $5.000 · quedan 198</span></div>
+    <div>Recaudó<b>$10.000</b></div>
+    <div>Le debe al proveedor<b>$3.000</b></div>
+    <div>Ganó<b>$7.000</b></div>
+  </div>
+</div>
+
+<h2>1. PRECIOS de la fiesta (PC del jefe, en modo jefe)</h2>
+<p class="sub">Se agrega una columna: el precio de lista. Al lado, en gris, cuánto se gana por unidad. COPIAR DE OTRA FIESTA trae también
+la lista. Un precio de lista vacío dice "falta"; en 0 es algo que no se le paga a nadie (la silla).</p>
+<div class="app pc">
+  <div class="barraApp">
+    <span class="tit">BARRA · SÁB 5/12 · COLEGIO DEL SOL</span>
+    <div class="pestanas"><span class="pes">CATÁLOGO</span><span class="pes on">PRECIOS</span><span class="pes">CAJAS</span><span class="pes">GANANCIA <span class="tag">NUEVO</span></span></div>
+  </div>
+  <div class="chips">
+    <span class="b linea">COPIAR DE OTRA FIESTA</span>
+    <span class="b linea">SUMAR LO QUE QUEDÓ DE… <span class="tag">NUEVO</span></span>
+    <span class="gris chica">Recargo por transferencia: 5 %</span>
+  </div>
+  <div class="scrollx"><table class="tabla">
+    <tr><th>PRODUCTO</th><th>PRECIO DE VENTA</th><th class="nuevo">PRECIO DE LISTA</th><th class="nuevo">GANA POR UNIDAD</th><th>STOCK</th><th>AVISO</th></tr>
+    <tr><td>Cerveza lata 473</td><td>$5.000</td><td class="nuevo">$1.500</td><td class="nuevo gris">$3.500</td><td>286</td><td>40</td></tr>
+    <tr><td>Fernet con coca</td><td>$6.000</td><td class="nuevo">$1.467,50</td><td class="nuevo gris">$4.532,50</td><td>120</td><td>20</td></tr>
+    <tr><td>Agua 500</td><td>$2.000</td><td class="nuevo">$600</td><td class="nuevo gris">$1.400</td><td>96</td><td>15</td></tr>
+    <tr><td>Speed</td><td>$4.000</td><td class="nuevo">$1.200</td><td class="nuevo gris">$2.800</td><td>60</td><td>10</td></tr>
+    <tr><td>Gaseosa lata</td><td>$3.000</td><td class="nuevo falta">falta</td><td class="nuevo gris">—</td><td>80</td><td>12</td></tr>
+    <tr><td>Silla</td><td>$10.000</td><td class="nuevo">$0</td><td class="nuevo gris">$10.000</td><td>—</td><td>—</td></tr>
+  </table></div>
+  <div class="franja rojo">Falta el precio de lista de 1 producto (Gaseosa lata): no va a entrar en lo que se le debe al proveedor.</div>
+</div>
+
+<div class="lado">
+  <div style="flex:1;min-width:300px;display:grid;gap:8px">
+    <h2 style="margin:0">SUMAR LO QUE QUEDÓ DE…</h2>
+    <p class="sub">El sábado llega bebida nueva y sobró la del viernes. El botón suma lo que quedó a lo que ya se cargó para esta fiesta. Se ve
+    antes de guardar, y se guarda como siempre en PRECIOS.</p>
+  </div>
+  <div class="app" style="flex:1;min-width:320px">
+    <div class="dialogo">
+      <b>Sumar lo que quedó de la fiesta anterior</b>
+      <div class="chips"><span class="gris chica">De:</span><span class="chip on">VIE 4/12 · TÉCNICA PINAROLI ▾</span></div>
+      <table class="tabla">
+        <tr><th>PRODUCTO</th><th>QUEDÓ</th><th>STOCK DE ESTA FIESTA</th></tr>
+        <tr><td>Cerveza lata 473</td><td>86</td><td>200 → <b>286</b></td></tr>
+        <tr><td>Fernet con coca</td><td>0</td><td>120 → <b>120</b></td></tr>
+        <tr><td>Agua 500</td><td>36</td><td>60 → <b>96</b></td></tr>
+      </table>
+      <span class="gris chica">"Quedó" es lo que contó el repositor al final de la noche; si no contó, lo que dice el sistema.</span>
+      <div class="chips" style="justify-content:flex-end"><span class="b">VOLVER</span><span class="b dorado">SUMAR</span></div>
+    </div>
+  </div>
+</div>
+
+<h2>2. La pestaña GANANCIA <span class="tag">NUEVO</span> (adentro de BARRA, en la PC del jefe y su iPhone, solo en modo jefe)</h2>
+<p class="sub">Elige de qué día a qué día rinde; vienen tildadas las fiestas de ese tramo. Arriba lo que importa: lo recaudado, lo que le
+tiene que pagar y lo que ganó. Abajo, producto por producto.</p>
+<div class="app pc">
+  <div class="barraApp">
+    <span class="tit">MODO JEFE · BARRA · GANANCIA</span>
+    <div class="pestanas"><span class="pes">CATÁLOGO</span><span class="pes">PRECIOS</span><span class="pes">CAJAS</span><span class="pes on">GANANCIA</span></div>
+  </div>
+  <div class="chips">
+    <span class="gris chica">Desde</span><span class="fecha">vie 4/12/2026</span>
+    <span class="gris chica">hasta</span><span class="fecha">lun 7/12/2026</span>
+  </div>
+  <div class="chips">
+    <span class="chip on">✓ vie 4 · TÉCNICA PINAROLI</span><span class="chip on">✓ sáb 5 · COLEGIO DEL SOL</span>
+    <span class="chip on">✓ dom 6 · ESCUELA 25 DE MAYO</span><span class="chip on">✓ lun 7 · INSTITUTO DEL LAGO</span>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="t">SE VENDIÓ (A MI PRECIO)</div><div class="v">$7.130.000</div><div class="s">4 fiestas · sin el recargo por transferencia</div></div>
+    <div class="kpi pagar"><div class="t">LE DEBO AL PROVEEDOR</div><div class="v">$1.803.250</div><div class="s">lo vendido y lo perdido, a precio de lista</div></div>
+    <div class="kpi gana"><div class="t">GANANCIA</div><div class="v">$4.726.750</div><div class="s">sin contar Gaseosa lata (falta su precio de lista)</div></div>
+  </div>
+  <div class="scrollx"><table class="tabla">
+    <tr><th>PRODUCTO</th><th>VENDIDAS</th><th>PERDIDAS</th><th>PRECIO DE LISTA</th><th>LE DEBO</th><th>SE VENDIÓ</th><th>GANANCIA</th></tr>
+    <tr><td>Cerveza lata 473</td><td>610</td><td>4</td><td>$1.500</td><td class="pagar">$921.000</td><td>$3.050.000</td><td class="gana">$2.129.000</td></tr>
+    <tr><td>Fernet con coca</td><td>380</td><td>0</td><td>$1.467,50</td><td class="pagar">$557.650</td><td>$2.280.000</td><td class="gana">$1.722.350</td></tr>
+    <tr><td>Agua 500</td><td>240</td><td>1</td><td>$600</td><td class="pagar">$144.600</td><td>$480.000</td><td class="gana">$335.400</td></tr>
+    <tr><td>Speed</td><td>150</td><td>0</td><td>$1.200</td><td class="pagar">$180.000</td><td>$600.000</td><td class="gana">$420.000</td></tr>
+    <tr><td>Gaseosa lata</td><td>200</td><td>0</td><td class="falta">falta</td><td class="falta">—</td><td>$600.000</td><td class="gris">—</td></tr>
+    <tr><td>Silla</td><td>12</td><td>—</td><td>$0</td><td>$0</td><td>$120.000</td><td class="gana">$120.000</td></tr>
+    <tr class="total"><td>TOTAL</td><td>1.592</td><td>5</td><td></td><td class="pagar">$1.803.250</td><td>$7.130.000</td><td class="gana">$4.726.750</td></tr>
+  </table></div>
+  <div class="franja ambar">Perdidas: 5 (Cerveza: 2 rotas y 2 congeladas, el sáb 5; Agua: 1 rota, el dom 6). Se le pagan igual al proveedor.</div>
+  <div class="franja rojo">Falta el precio de lista de Gaseosa lata en 4 fiestas: cargalo en PRECIOS de cada una (o COPIAR DE OTRA FIESTA).</div>
+  <div class="franja celeste">Recargo por transferencia cobrado: $96.400. No entra en la ganancia: cubre la comisión de Mercado Pago.</div>
+  <div class="card">
+    <div class="etiqueta" style="color:var(--gris)">LO QUE QUEDÓ EL LUN 7 (para devolver o guardar)</div>
+    <div class="chips"><span class="chip">Cerveza lata 473 · 74</span><span class="chip">Agua 500 · 22</span><span class="chip">Speed · 9</span><span class="chip">Gaseosa lata · 31</span></div>
+  </div>
+  <div class="chips" style="justify-content:flex-end"><span class="b linea">VER POR FIESTA</span><span class="b dorado">IMPRIMIR</span></div>
+</div>
+
+<h2>3. El papel (A4, una sola hoja, con su botón)</h2>
+<div class="hoja">
+  <div style="display:flex;justify-content:space-between;align-items:baseline"><h3>Barra · Ganancia y lo que se le debe al proveedor</h3><span>Junior Eventos</span></div>
+  <div>Del viernes 4/12/2026 al lunes 7/12/2026 · 4 fiestas: Técnica Pinaroli (vie 4), Colegio del Sol (sáb 5), Escuela 25 de Mayo (dom 6), Instituto del Lago (lun 7).</div>
+  <div class="tres"><div>Se vendió<b>$7.130.000</b></div><div>Le debo al proveedor<b>$1.803.250</b></div><div>Ganancia<b>$4.726.750</b></div></div>
+  <table class="tabla">
+    <tr><th>PRODUCTO</th><th>VENDIDAS</th><th>PERDIDAS</th><th>LISTA</th><th>LE DEBO</th><th>SE VENDIÓ</th><th>GANANCIA</th></tr>
+    <tr><td>Cerveza lata 473</td><td>610</td><td>4</td><td>$1.500</td><td>$921.000</td><td>$3.050.000</td><td>$2.129.000</td></tr>
+    <tr><td>Fernet con coca</td><td>380</td><td>0</td><td>$1.467,50</td><td>$557.650</td><td>$2.280.000</td><td>$1.722.350</td></tr>
+    <tr><td>Agua 500</td><td>240</td><td>1</td><td>$600</td><td>$144.600</td><td>$480.000</td><td>$335.400</td></tr>
+    <tr><td>Speed</td><td>150</td><td>0</td><td>$1.200</td><td>$180.000</td><td>$600.000</td><td>$420.000</td></tr>
+    <tr><td>Gaseosa lata</td><td>200</td><td>0</td><td>falta</td><td>—</td><td>$600.000</td><td>—</td></tr>
+    <tr><td>Silla</td><td>12</td><td>—</td><td>$0</td><td>$0</td><td>$120.000</td><td>$120.000</td></tr>
+    <tr class="total"><td>TOTAL</td><td>1.592</td><td>5</td><td></td><td>$1.803.250</td><td>$7.130.000</td><td>$4.726.750</td></tr>
+  </table>
+  <div>Perdidas: Cerveza 2 rotas y 2 congeladas (sáb 5); Agua 1 rota (dom 6). · Falta el precio de lista de Gaseosa lata.</div>
+  <div>Recargo por transferencia cobrado: $96.400 (no entra en la ganancia).</div>
+  <div>Quedó el lun 7: Cerveza 74 · Agua 22 · Speed 9 · Gaseosa 31.</div>
+  <div style="color:#666">Impreso el mar 8/12/2026 10:15 · No cuenta las ventas anuladas ni las cajas de prueba de otro día.</div>
+</div>
+
+<h2>4. Lo que ven los demás: nada de esto</h2>
+<p class="sub">La encargada, la cajera y el repositor no tienen PRECIOS ni GANANCIA, y en ninguna de sus pantallas aparece el precio de lista
+ni la ganancia. El precio de lista no viaja a las tablets por el wifi del salón.</p>
+<div class="lado">
+  <div class="mini"><div class="etiqueta">LA ENCARGADA · LAS CAJAS</div><div class="app"><div class="barraApp"><span class="tit">LAS CAJAS</span></div><div class="card"><span>Caja 1 · Barra 1 · abierta</span><span class="gris chica">Lo vendido, la plata de cada caja y el OK del cierre, como hoy. Sin costo ni ganancia.</span></div></div></div>
+  <div class="mini"><div class="etiqueta">LA CAJERA · VENDER</div><div class="app"><div class="barraApp"><span class="tit">VENDER</span></div><div class="card"><span>Como hoy.</span><span class="gris chica">TRANSFERENCIA → CONFIRMAR sin cambios: ella mira el verde del posnet.</span></div></div></div>
+  <div class="mini"><div class="etiqueta">EL REPOSITOR · STOCK</div><div class="app"><div class="barraApp"><span class="tit">STOCK</span></div><div class="card"><span>Cuánto queda y cuánto reponer.</span><span class="gris chica">Sin precios ni plata.</span></div></div></div>
+</div>
+
+<div class="decidir">
+  <div class="etiqueta">PARA DECIDIR (CONTESTÁ CON EL NÚMERO)</div>
+  <ol>
+    <li><b>Los tragos</b> (Fernet con coca): el proveedor vende la botella, no el vaso. <b>Recomiendo</b> que el jefe ponga el precio de lista
+    <b>por vaso</b> (ej.: botella $11.740 que rinde 8 vasos → $1.467,50). La otra forma es cargar la botella y cuántos vasos rinde, y que el
+    programa haga la cuenta: más cómodo para él, un poco más de trabajo. ¿Por vaso, o botella y rinde?</li>
+        <li><b>Las columnas de GANANCIA</b>: Vendidas · Perdidas · Precio de lista · Le debo · Se vendió · Ganancia. ¿Está bien así, o le saco o
+    agrego alguna?</li>
+    <li><b>SUMAR LO QUE QUEDÓ</b> suma a lo ya cargado (200 que llegaron + 86 que quedaron = 286). ¿Así, o prefiere que lo reemplace?</li>
+  </ol>
+</div>
+
+</div></body></html>

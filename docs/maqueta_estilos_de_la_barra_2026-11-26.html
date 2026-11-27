@@ -1,0 +1,184 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estilos para las pantallas de la barra</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#ecebf5;--panel:#fbfaff;--linea:#b9bbd0;--tinta:#1d1d2b;--tinta2:#5d6078;--primario:#5a5e9c;--cuerpo:'Outfit',system-ui,sans-serif}
+@media (prefers-color-scheme: dark){:root{--bg:#1b1b26;--panel:#262636;--linea:#4a4c66;--tinta:#eceaf6;--tinta2:#aeb0c4;--primario:#9a9ee6;color-scheme:dark}}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;padding:18px 16px 56px}
+h1{font-size:26px;margin:0}
+h2{font-size:21px;margin:0}
+p{margin:0}
+.wrap{max-width:1200px;margin:0 auto;display:grid;gap:18px}
+.sub{color:var(--tinta2);font-size:14.5px;max-width:920px}
+.dir{background:var(--panel);border:1.5px solid var(--linea);border-radius:18px;padding:14px;display:grid;gap:12px}
+.dir .cab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.letra{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--primario);color:#fff;font-weight:800}
+.fila{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+.rol{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--tinta2);margin-bottom:6px}
+.decidir{border:2px solid var(--primario);border-radius:14px;padding:12px 14px;background:var(--panel);display:grid;gap:8px}
+.decidir ol,.reglas ul{margin:0;padding-left:20px;display:grid;gap:4px}
+.reglas{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:10px 14px}
+
+/* ===== el aparato, igual para las tres direcciones ===== */
+.tel{border-radius:30px;padding:10px;background:#000;border:1px solid #333}
+.pant{border-radius:22px;min-height:560px;padding:16px 14px 14px;display:flex;flex-direction:column;gap:12px;font-size:15px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top .t{font-weight:800;letter-spacing:.05em;font-size:15px}
+.top .q{font-size:12px;opacity:.75}
+.estado{border-radius:12px;padding:8px 12px;font-weight:700;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.estado i{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.grande{border-radius:18px;padding:18px;font-weight:800;font-size:24px;letter-spacing:.04em;text-align:center}
+.seg{border-radius:14px;padding:13px;font-weight:700;font-size:16px;text-align:center}
+.tarjeta{border-radius:16px;padding:11px 13px;display:grid;gap:4px}
+.tarjeta .r{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tarjeta .n{font-weight:800;font-size:16px}
+.pill{font-size:11px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.plata{font-weight:800;font-size:18px}
+.mini{font-size:12.5px;opacity:.8}
+.alerta{border-radius:16px;padding:12px 13px;display:grid;gap:8px}
+.alerta b{font-size:16px}
+.accion{border-radius:12px;padding:11px;font-weight:800;text-align:center;letter-spacing:.04em}
+.prod{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid}
+.prod .q{font-weight:800;font-size:18px}
+.abajo{margin-top:auto;display:grid;gap:8px}
+
+/* ===== A · Noche dorada (como VENDER hoy) ===== */
+.A .pant{background:radial-gradient(120% 60% at 0 0,#2a2412 0,#0f0e12 55%);color:#f2efe8}
+.A .estado.ok{background:rgba(89,211,138,.13);color:#59d38a}.A .estado.ok i{background:#59d38a}
+.A .grande{background:#d4af37;color:#16130a}
+.A .seg{border:1.5px solid #3a3630;color:#f2efe8}
+.A .tarjeta{background:#17161a;border:1px solid #2a2830}
+.A .pill.ab{background:rgba(89,211,138,.15);color:#59d38a}
+.A .pill.ok{background:rgba(212,175,55,.22);color:#d4af37}
+.A .pill.ce{background:#2a2830;color:#c9c4ba}
+.A .pill.poco{background:rgba(242,184,75,.16);color:#f2b84b}
+.A .pill.sin{background:rgba(255,143,130,.16);color:#ff8f82}
+.A .alerta{background:#1b1912;border:2px solid #d4af37}
+.A .accion{background:#d4af37;color:#16130a}
+.A .prod{border-color:#2a2830}
+.A .poco{color:#f2b84b}.A .sin{color:#ff8f82}
+
+/* ===== B · Mostrador claro ===== */
+.B .pant{background:#f3f2ee;color:#16151a}
+.B .estado.ok{background:#e1f5e8;color:#11733a}.B .estado.ok i{background:#11733a}
+.B .grande{background:#16151a;color:#fff}
+.B .seg{background:#fff;border:1.5px solid #d6d3cb;color:#16151a}
+.B .tarjeta{background:#fff;border:1px solid #e0ddd5;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.B .plata{font-size:21px}
+.B .pill.ab{background:#e1f5e8;color:#11733a}
+.B .pill.ok{background:#fff1c7;color:#7a5a00}
+.B .pill.ce{background:#ecebe6;color:#55534c}
+.B .pill.poco{background:#fff1c7;color:#7a5a00}
+.B .pill.sin{background:#ffe2de;color:#a3241a}
+.B .alerta{background:#fff8e1;border:2px solid #e2b33c}
+.B .accion{background:#16151a;color:#fff}
+.B .prod{border-color:#e0ddd5}
+.B .poco{color:#9a6b00}.B .sin{color:#b3261e}
+
+/* ===== C · Semáforo (oscuro neutro, cada tarjeta con su franja de color) ===== */
+.C .pant{background:#121417;color:#eef0f3}
+.C .estado.ok{background:#173322;color:#6fe39b}.C .estado.ok i{background:#6fe39b}
+.C .grande{background:#2fbf71;color:#04170c}
+.C .seg{background:#1c1f24;color:#eef0f3}
+.C .tarjeta{background:#1c1f24;border-left:6px solid #3b4048}
+.C .tarjeta.ab{border-left-color:#2fbf71}.C .tarjeta.ok{border-left-color:#f0b429}.C .tarjeta.ce{border-left-color:#5b616b}
+.C .pill.ab{background:#173322;color:#6fe39b}
+.C .pill.ok{background:#3a2e0b;color:#f0b429}
+.C .pill.ce{background:#2a2e35;color:#b8bec7}
+.C .pill.poco{background:#3a2e0b;color:#f0b429}
+.C .pill.sin{background:#3d1714;color:#ff8a7f}
+.C .alerta{background:#2a230c;border-left:6px solid #f0b429}
+.C .accion{background:#f0b429;color:#1d1603}
+.C .prod{border-color:#262a30}
+.C .poco{color:#f0b429}.C .sin{color:#ff8a7f}
+</style></head><body><div class="wrap">
+
+<div>
+  <h1>Las pantallas de la barra: tres estilos para elegir</h1>
+  <p class="sub">Para la cajera, la encargada y el repositor. Las tres direcciones muestran lo mismo; cambia cómo se ve. VENDER sigue con sus dos
+  diseños (Noche dorada y Mostrador). Esto es para lo de alrededor: el inicio de la caja, LAS CAJAS de la encargada y el STOCK del repositor.
+  Los datos son inventados.</p>
+</div>
+
+<div class="reglas">
+  <b>Lo que tienen las tres, sí o sí:</b>
+  <ul>
+    <li><b>Una acción principal por pantalla</b>, grande y abajo, donde llega el pulgar.</li>
+    <li>Letra que se lea de noche y con apuro; pocas palabras.</li>
+    <li>El estado siempre dicho con palabras (ABIERTA, PIDE EL OK, QUEDA POCO, SIN STOCK), nunca solo con el color.</li>
+    <li>A cada uno, solo lo suyo: la cajera no ve plata; el repositor, solo el stock.</li>
+    <li>Arriba, siempre: dónde estoy (caja, barra, noche) y si está todo subido.</li>
+  </ul>
+</div>
+
+<!-- el mismo contenido, tres veces -->
+<template id="contenido">
+  <div class="fila">
+    <div>
+      <div class="rol">LA CAJERA · SU CAJA (TABLET)</div>
+      <div class="tel"><div class="pant">
+        <div class="top"><span class="t">CAJA 3 · BARRA 1</span><span class="q">Noche del vie 4/12</span></div>
+        <div class="estado ok"><i></i>Conectada a la Barra 1 · Todo subido</div>
+        <div class="tarjeta"><div class="r"><span class="n">Romina</span><span class="pill ab">ABIERTA</span></div><span class="mini">Abrió 21:02 · 48 ventas</span></div>
+        <div class="abajo">
+          <div class="seg">MIS VENTAS</div>
+          <div class="seg">CERRAR LA CAJA</div>
+          <div class="grande">VENDER</div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="rol">LA ENCARGADA · LAS CAJAS (IPHONE)</div>
+      <div class="tel"><div class="pant">
+        <div class="top"><span class="t">LAS CAJAS</span><span class="q">vie 4/12 · 23:40</span></div>
+        <div class="alerta"><b>La Caja 2 pide el OK</b><span class="mini">Contó $380.500 en efectivo · esperado $381.000 · falta $500</span><div class="accion">VER Y DAR EL OK</div></div>
+        <div class="tarjeta ab"><div class="r"><span class="n">Caja 1 · Barra 1</span><span class="pill ab">ABIERTA</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$412.000</span></div></div>
+        <div class="tarjeta ok"><div class="r"><span class="n">Caja 2 · Barra 1</span><span class="pill ok">PIDE EL OK</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$381.000</span></div></div>
+        <div class="tarjeta ce"><div class="r"><span class="n">Caja 7 · Barra 2</span><span class="pill ce">CERRADA</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$295.000</span></div></div>
+      </div></div>
+    </div>
+    <div>
+      <div class="rol">EL REPOSITOR · STOCK (CELULAR)</div>
+      <div class="tel"><div class="pant">
+        <div class="top"><span class="t">STOCK · BARRA 1</span><span class="q">vie 4/12</span></div>
+        <div class="alerta"><b>Barra 2: Cerveza, quedan 12</b><span class="mini">El aviso es 40. Hay 180 en el depósito.</span><div class="accion">VOY EN CAMINO</div></div>
+        <div>
+          <div class="prod"><span>Cerveza lata<br><span class="pill poco">QUEDA POCO</span></span><span class="q poco">18</span></div>
+          <div class="prod"><span>Fernet con coca</span><span class="q">64</span></div>
+          <div class="prod"><span>Agua 500<br><span class="pill sin">SIN STOCK</span></span><span class="q sin">0</span></div>
+          <div class="prod"><span>Speed</span><span class="q">31</span></div>
+        </div>
+        <div class="abajo"><div class="grande">REPONER</div></div>
+      </div></div>
+    </div>
+  </div>
+</template>
+
+<div class="dir A">
+  <div class="cab"><span class="letra">A</span><h2>Noche dorada</h2><span class="sub">Negro y dorado, como VENDER hoy. Todo combina con la caja.</span></div>
+  <div class="aqui"></div>
+</div>
+<div class="dir B">
+  <div class="cab"><span class="letra">B</span><h2>Mostrador claro</h2><span class="sub">Fondo claro, tarjetas blancas y números grandes. Se lee mejor con luz de salón o al aire libre.</span></div>
+  <div class="aqui"></div>
+</div>
+<div class="dir C">
+  <div class="cab"><span class="letra">C</span><h2>Semáforo</h2><span class="sub">Oscuro neutro; cada tarjeta lleva una franja del color de su estado. Lo que pide atención salta a la vista.</span></div>
+  <div class="aqui"></div>
+</div>
+
+<div class="decidir">
+  <b>PARA DECIDIR</b>
+  <ol>
+    <li><b>¿A, B o C?</b> También puede ser una mezcla.</li>
+    <li><b>Mi recomendación:</b> que cada aparato siga el diseño que eligió para VENDER (Noche dorada → A, Mostrador → B), y sumarles a las dos la
+    franja de color de C en las tarjetas que piden atención. Así la cajera no cambia de mundo al salir de VENDER, y lo urgente se ve igual.</li>
+  </ol>
+</div>
+
+<script>
+const t=document.getElementById('contenido');
+document.querySelectorAll('.aqui').forEach(a=>a.appendChild(t.content.cloneNode(true)));
+</script>
+</div></body></html>
