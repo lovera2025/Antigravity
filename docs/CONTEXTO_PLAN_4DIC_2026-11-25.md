@@ -64,6 +64,26 @@ punta a punta en `test/central_barra_provider_test.dart`: su OK le llega a la ca
 se miró todavía en `tool/central_barra_prueba.dart` ni en `tool/dos_barras_prueba.dart`**, que abren esa pantalla
 con la red de verdad: va en el recorrido por rol. Las pruebas de la barra: **954 en verde**.
 
+**La notebook de la barra bloqueada (pedido del usuario el 27-nov a la noche; maqueta mandada, ESPERA SU OK; sin
+programar):** la notebook del jefe queda toda la noche con la central prendida y la pantalla abierta, y cualquiera
+podía mirar las cajas. Maqueta: `docs/maqueta_notebook_bloqueada_2026-11-27.html` (`preview_start` con `maquetas`).
+Lo que eligió: **el logo** (el isotipo, `assets/icons/isotipo-ej.png`, grande y al centro) y que **desde el logo
+también se prenda o apague esta seguridad**. El diseño:
+- **Bloqueada muestra solo:** el logo, "CENTRAL DE LA BARRA 1 · PRENDIDA", cuántas cajas conectadas, "Todo subido" o
+  cuánto falta, y la hora. Sin plata, cajas, ventas, nombres ni botones.
+- **Se abre** manteniendo apretado el logo 2 segundos y escribiendo una **clave de bloqueo propia de esa notebook**
+  (no es el PIN del modo jefe; se guarda solo en el equipo). Con la clave: ENTRAR · "Se bloquea sola: SÍ (2 min) / NO"
+  · Cambiar la clave.
+- **Un candado** arriba a la derecha de BARRA y LAS CAJAS (al lado de la impresora) bloquea en el momento; la primera
+  vez pide elegir la clave, y hasta entonces la seguridad está apagada.
+- **La central sigue andando siempre**: en el código no depende de la sesión (se apaga solo con su botón,
+  `panel_central_barra.dart`), **pero no se probó** dejarla prendida y salir: hay que escribir esa prueba.
+- Si se olvidan la clave: cerrar el programa y entrar con el PIN del jefe. **El PIN queda en 2026** ("lo cambio
+  después"): el bloqueo frena al que pasa y hace clic, no a quien cierra el programa y conoce el 2026 (se le dijo).
+- Va **antes que Noche y Blanco**.
+
+**La suite entera sobre todo lo del 27-nov: 6.742 en verde y 1 falla, la de siempre** (`build/suite_27nov_b/`).
+
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`
 recuerda de quién es la conexión, `_deQuien`, y `arrancar` / `arrancarSiNoHay` la rehacen si entró otra persona;
