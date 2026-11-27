@@ -649,26 +649,22 @@ void main() {
       expect(prueba.barra.cajasGuardadas.firstWhere((c) => c.id == caja.id).abierta, isTrue);
     });
 
-    // 26-nov-2026: su propia caja no se la aprueba ella (antes cerraba sin pedir nada).
-    testWidgets('la encargada con su propia caja pide el OK como cualquiera, y con su PIN no se lo aprueba', (tester) async {
+    // 27-nov-2026, el usuario: "La encargada puede cerrar su caja sin necesidad que le
+    // confirmen. Ella es la encargada." (El 26-nov su caja la aprobaba el jefe.)
+    testWidgets('la encargada cierra su propia caja sola: no le pide el OK a nadie', (tester) async {
       operadores.permisos.poner(_marta, const PermisosEfectivos(barra: true, encargadaBarra: true));
       await abrir(tester, encargada: true);
       await irACerrar(tester);
       await tester.enterText(porClave('cierre_contado'), '27000');
       await tester.pumpAndSettle();
       await tocar(tester, porClave('cierre_cerrar'));
-      expect(texto(tester, 'cierre_que_pasa'), contains('se le pide el cierre a la encargada'));
+      expect(texto(tester, 'cierre_que_pasa'), contains('La caja se cierra con ese número'));
+      expect(find.text('SÍ, CERRAR'), findsOneWidget);
       await tocar(tester, porClave('cierre_confirmar'));
-      expect(guardada().abierta, isTrue, reason: 'espera el OK');
-      expect(pasos().single.tipo, TipoPasoDelCierre.pedido);
-
-      // Con su propio PIN, en su tablet: no.
-      await tocar(tester, porClave('cierre_encargada_aca'));
-      await tester.enterText(porClave('pin_de_la_encargada'), '5555');
-      await tocar(tester, porClave('pin_de_la_encargada_listo'));
-      expect(texto(tester, 'cierre_aviso'), 'Tu propia caja la aprueba el jefe.');
+      expect(guardada().abierta, isFalse, reason: 'cerró sin esperar a nadie');
+      expect(guardada().efectivoContado, 27000);
+      expect(pasos(), isEmpty, reason: 'no hay pedido de cierre: no se lo pide a nadie');
       expect(find.byType(OkDelCierreDialog), findsNothing);
-      expect(guardada().abierta, isTrue);
     });
 
     for (final (nombre, tamano) in [

@@ -82,10 +82,16 @@ abstract final class ReglasDeLaBarra {
   /// **solo el jefe** (audio 77, 26-nov-2026). La encargada no.
   static bool veElCostoYLaGanancia(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
 
-  /// **Si la caja [cajaId] se puede cerrar ya**: el jefe sí; los demás, solo con el OK
-  /// del último pedido o habiendo cerrado sin esperar (con su motivo, anotado antes).
+  /// **Cerrar su caja sin pedirle el OK a nadie**: el jefe, y **la encargada con la suya**
+  /// (27-nov-2026, el usuario: "La encargada puede cerrar su caja sin necesidad que le
+  /// confirmen. Ella es la encargada."). El 26-nov su caja la aprobaba el jefe.
+  static bool cierraSinPedir(RolEnLaBarra? r) => r == RolEnLaBarra.jefe || r == RolEnLaBarra.encargada;
+
+  /// **Si la caja [cajaId] se puede cerrar ya**: el jefe y la encargada sí
+  /// ([cierraSinPedir]); la cajera, solo con el OK del último pedido o habiendo cerrado
+  /// sin esperar (con su motivo, anotado antes).
   static bool puedeCerrar(RolEnLaBarra? rol, String cajaId, Iterable<PasoDelCierre> pasos) {
-    if (rol == RolEnLaBarra.jefe || rol == RolEnLaBarra.central) return true;
+    if (cierraSinPedir(rol) || rol == RolEnLaBarra.central) return true;
     final e = PedidoDeCierre.de(cajaId, pasos);
     return e.aceptado || e.sinOk;
   }

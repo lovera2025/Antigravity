@@ -52,7 +52,7 @@ void main() {
       expect(ReglasDeLaBarra.cajeraPoneElCambio(con, yaVendio: false), isFalse);
     });
 
-    test('cerrar: con el OK o sin esperar (con motivo); el jefe, siempre', () {
+    test('cerrar: con el OK o sin esperar (con motivo); el jefe y la encargada, siempre', () {
       final c = CajaBarra.abrir(eventoId: _fiesta, numeroCaja: 1, ahora: DateTime.now());
       final pedido = PasoDelCierre.pedir(caja: c, efectivoContado: 0, hechoPor: 'Marta', ahora: DateTime.now());
       PasoDelCierre resp(TipoPasoDelCierre t) =>
@@ -63,6 +63,11 @@ void main() {
       expect(ReglasDeLaBarra.puedeCerrar(cajera, c.id, [pedido, resp(TipoPasoDelCierre.ok)]), isTrue);
       expect(ReglasDeLaBarra.puedeCerrar(encargada, c.id, [pedido, resp(TipoPasoDelCierre.sinOk)]), isTrue);
       expect(ReglasDeLaBarra.puedeCerrar(jefe, c.id, const []), isTrue);
+      // 27-nov-2026: "La encargada puede cerrar su caja sin necesidad que le confirmen."
+      expect(ReglasDeLaBarra.puedeCerrar(encargada, c.id, const []), isTrue);
+      expect(ReglasDeLaBarra.cierraSinPedir(encargada), isTrue);
+      expect(ReglasDeLaBarra.cierraSinPedir(cajera), isFalse);
+      expect(ReglasDeLaBarra.cierraSinPedir(RolEnLaBarra.repositor), isFalse);
     });
   });
 

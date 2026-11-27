@@ -106,11 +106,11 @@ test/barra_cerrar_test.dart
     if (encontrado.operador.id == caja.operadorId) {
     if (false) {
 ---
-la encargada con su caja pide el OK: solo el jefe cierra sin pedir
+la encargada vuelve a pedir el OK para su propia caja (27-nov: la cierra sola)
 lib/features/barra/widgets/cerrar_caja_barra_screen.dart
 test/barra_cerrar_test.dart
+    final cierraSola = ReglasDeLaBarra.cierraSinPedir(ref.read(rolEnLaBarraProvider));
     final cierraSola = ref.read(rolEnLaBarraProvider) == RolEnLaBarra.jefe;
-    final cierraSola = ref.read(mandaEnLaBarraProvider);
 ---
 la encargada ve el costo y la ganancia
 lib/features/barra/cuentas/reglas_de_la_barra.dart
@@ -159,4 +159,10 @@ lib/features/barra/central/central_barra_provider.dart
 test/central_barra_provider_test.dart
     if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja && _deQuien == quien) return;
     if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja) return;
+---
+la encargada no puede cerrar su caja sin el OK (la regla, 27-nov: la cierra sola)
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/reglas_de_la_barra_test.dart
+  static bool cierraSinPedir(RolEnLaBarra? r) => r == RolEnLaBarra.jefe || r == RolEnLaBarra.encargada;
+  static bool cierraSinPedir(RolEnLaBarra? r) => r == RolEnLaBarra.jefe;
 ---

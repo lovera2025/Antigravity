@@ -903,8 +903,8 @@ permisos, las pantallas en la app de verdad, publicar; el plano impreso entero, 
 - **Quién puede qué en la barra: una sola regla, `ReglasDeLaBarra`** (`barra/cuentas/reglas_de_la_barra.dart`), con
   el rol del aparato en **`rolEnLaBarraProvider`**. **La cajera no anula** (la encargada, desde su aparato o con su
   PIN en la tablet: `laEncargadaAutoriza`, `anularConLaEncargada`), **no ve plata en VENTAS**, pone el cambio una sola
-  vez (si abrió sin cambio y no vendió); **la encargada no se aprueba su propia caja** (pide el OK; el jefe cierra sin
-  pedir); **LAS CAJAS no muestra nada sin encargada o jefe**. Una pantalla o un guardado nuevo de la barra pregunta
+  vez (si abrió sin cambio y no vendió); **la encargada cierra su propia caja sola, sin pedirle el OK a nadie** (27-nov: "Ella es la
+  encargada"; `ReglasDeLaBarra.cierraSinPedir`; el 26-nov la aprobaba el jefe), igual que el jefe; **LAS CAJAS no muestra nada sin encargada o jefe**. Una pantalla o un guardado nuevo de la barra pregunta
   por `ReglasDeLaBarra`, nunca por el rol a mano.
 - **La segunda llave:** `BarraConLaRed(rolDeQuienUsa:)` tira `NoLeTocaEnLaBarra` si no le toca (anular, cerrar sin el
   OK, el cambio, el catálogo); `barraDeEsteEquipoProvider` la pone siempre.

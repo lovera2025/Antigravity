@@ -145,9 +145,9 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
   Future<void> _cerrar() async {
     final contado = _contadoEscrito;
     if (contado == null || _ocupado) return;
-    // Solo el jefe cierra sin pedirle el OK a nadie. **La encargada con su propia caja
-    // pide el OK como cualquiera** (26-nov-2026): su caja no se la aprueba ella.
-    final cierraSola = ref.read(rolEnLaBarraProvider) == RolEnLaBarra.jefe;
+    // El jefe y **la encargada con su propia caja** cierran sin pedirle el OK a nadie
+    // (27-nov-2026: "Ella es la encargada"; el 26-nov pedía el OK del jefe). La cajera lo pide.
+    final cierraSola = ReglasDeLaBarra.cierraSinPedir(ref.read(rolEnLaBarraProvider));
     final seguro = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

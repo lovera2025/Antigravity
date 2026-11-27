@@ -47,7 +47,10 @@ cargando. Prueba `test/precio_de_lista_solo_lo_lee_el_jefe_test.dart` (lee `lib/
 - **6 → sí, que se conecte:** el jefe en MODO JEFE desde una tablet se conecta a la central como la encargada. **El
   PIN maestro de fábrica (2026) no le preocupa** ("si es 2026 de fábrica no hay problema"): no insistir con cambiarlo
   y **no hacer el aviso del PIN maestro** que estaba en la lista.
-**Sin programar todavía: estas tres y el hallazgo 2.**
+**Programado el 27-nov: el 8** (`ReglasDeLaBarra.cierraSinPedir`: jefe y encargada; lo usan `puedeCerrar` y
+`cerrar_caja_barra_screen.dart`; prueba en `test/barra_cerrar_test.dart` y `test/reglas_de_la_barra_test.dart`; 2
+roturas en `tool/roturas_permisos_barra.txt`; lo de "su OK no vale para su propia caja" quedó en el código pero ya
+no se usa, porque ella no pide el OK). **Sin programar todavía: el 4, el 6 y el hallazgo 2.**
 
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`
