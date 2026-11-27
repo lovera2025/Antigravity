@@ -261,12 +261,20 @@ void main() {
       await t.espera('central');
       final caro = await celular('Caro', tele: 2);
       await caro.espera('puerta');
+      // Lo que llegó antes del cambio no cuenta: un "escuelas" de antes que ya
+      // nombraba a B cortaba la espera de abajo antes de tiempo.
+      t.darPorMiradoLoQueLlego();
       t.mandar({'t': 'escuela', 'evento': _b});
       await caro.espera('puerta', cumple: (m) => m['evento'] == _b);
       expect((await caro.espera('aviso'))['texto'], 'La Tele 2 pasó a ESCUELA B');
-      // Lo último que la Tele 1 le manda después de un cambio: si le hubiera
-      // pedido la escuela, ya habría llegado (van por el mismo cable, en orden).
       await t.espera('escuelas', cumple: (m) => (m['escuelas'] as List).contains(_b));
+      // Una ida y vuelta por el mismo cable: la central atiende los mensajes de la
+      // tele en orden, así que si le hubiera pedido la escuela, ese pedido ya llegó
+      // antes que este "hola". (Esperar solo "escuelas" no alcanzaba: sale uno antes
+      // del pedido, y la rotura R6 pasaba a veces.)
+      t.darPorMiradoLoQueLlego();
+      t.mandar({'t': 'hola'});
+      await t.espera('hola');
       expect(t.cuantos('escuela'), 0);
     });
 

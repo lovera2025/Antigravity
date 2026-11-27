@@ -126,6 +126,15 @@ class CelularDePrueba {
   /// Cuántos mensajes de tipo [tipo] llegaron hasta ahora.
   int cuantos(String tipo) => _llegados.where((m) => m['t'] == tipo).length;
 
+  /// Da por mirado todo lo que llegó hasta ahora: el próximo [espera] solo ve lo que
+  /// llegue después. Sin esto, un "escuelas" de antes que ya nombraba la escuela
+  /// cortaba la espera antes de tiempo (la rotura R6 de la tele pasaba a veces).
+  void darPorMiradoLoQueLlego() {
+    for (var i = 0; i < _llegados.length; i++) {
+      _leidos.add(i);
+    }
+  }
+
   Future<int?> cerro() => _cerro.future.timeout(const Duration(seconds: 5));
 
   Future<void> irse() => ws.close();

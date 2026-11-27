@@ -20,6 +20,23 @@
 - **Las pantallas de la barra, atractivas, intuitivas y fáciles para cada rol** (cajera, encargada, repositor, la
   barra): maqueta con dos o tres estilos lado a lado antes de programarlas, y todo probado en el sandbox (el APK en el
   emulador con la central de verdad en esta PC) con capturas por rol antes de dárselo.
+- **Hecho esa noche:** la rama del APK juntada (`74d3306`; la reconexión de la barra era el mismo cambio que
+  `18b1b5d`: en sus cinco archivos quedó la versión de acá). La suite entera sobre lo junto: **6.568 y 1 falla**, la
+  de siempre (`modal_cobro_masivos_medios_pago_test.dart`, LA ALFONSINA, no es de la barra). Roturas de la nube sin
+  stock 3 de 3. Las maquetas mandadas (`docs/maqueta_precio_de_lista_2026-11-26.html`, con el agua arriba, y
+  `docs/maqueta_estilos_de_la_barra_2026-11-26.html`: A Noche dorada · B Mostrador claro · C Semáforo); **esperan sus
+  respuestas** (los tragos: lista por vaso o botella y rinde; las columnas; SUMAR o reemplazar; qué estilo). El SQL
+  `supabase/migrations/20261127120000_barra_costos.sql` escrito, **sin correr**.
+- **La encargada prende la central sin modo jefe** (lo pidió el 26-nov, noche: esa noche la notebook no se pone en
+  modo jefe y nadie ve lo recaudado ni la ganancia): ya es así en el código (LAS CAJAS de la encargada en la notebook
+  tiene PRENDER LA CENTRAL; en la tablet no). **Falta la prueba** que lo vigile (en `test/encargada_de_barra_test.dart`
+  solo está el caso de la tablet) y que no vea CATÁLOGO, PRECIOS ni GANANCIA. Recordarle: **cambiar el PIN maestro de
+  las dos notebooks** (el mismo en las dos). Su propia caja la aprueba el jefe; si no está, CERRAR SIN ESPERAR.
+- **La encargada ve el CATÁLOGO y los PRECIOS de venta, solo mirando** (pedido del 26-nov, noche: "que pueda ver el
+  catálogo y precio, y hasta ahí"). **No ve el precio de lista, lo que se le debe al proveedor ni la ganancia.** Hoy
+  no ve esas pestañas (`test/encargada_de_barra_test.dart` lo exige): cambia. En `ReglasDeLaBarra`: `veCatalogoYPrecios`
+  (encargada y jefe), `cambiaCatalogoYPrecios` (solo jefe, como hoy) y `veElCostoYLaGanancia` (solo jefe). PRECIOS de
+  la encargada sin la columna "Lista", sin guardar, COPIAR ni SUMAR LO QUE QUEDÓ; y la doble llave al guardar.
 - El plan para el 4-dic va por **~55 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
   stock no se vende → el precio de lista y PROVEEDOR → la página de la encargada → la noche simulada y la tercera
   revisión → las pantallas en la app de verdad y la tele con el APK → la v83/v84 sobre una copia, los SQL y publicar
@@ -164,7 +181,8 @@ de este aparato: `rolEnLaBarraProvider` (`providers/barra_del_jefe_provider.dart
 | Contar al cerrar | a ciegas, pide el OK | da el OK; **su propia caja no** (hecho) | — | da el OK y cierra sin pedir |
 | Ver el stock | — | lo ve, no lo cambia | **solo el stock** | todo |
 | Mover el stock, con nota | no | no | sí | sí |
-| Repartir el stock, catálogo, precios | no | no | no | sí |
+| Repartir el stock, catálogo, precios | no | **ve el catálogo y los precios de venta, sin cambiarlos** (26-nov, noche) | no | sí |
+| Precio de lista, lo que se le debe al proveedor, GANANCIA | no | **no** | no | sí |
 
 **El PIN en la central** (`lib/features/barra/central/llave_de_la_barra.dart`): la central manda un número (`reto`);
 el aparato contesta quién es (`operador` + id, o `maestro`) y la firma con una llave sacada de su PIN (**el PIN no
