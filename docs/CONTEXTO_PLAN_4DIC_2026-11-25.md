@@ -2,6 +2,77 @@
 
 ## Para retomar en otro chat
 
+### LEER PRIMERO: dónde quedó al cerrar el 26-nov (23:40), chat "¿En qué quedamos?"
+
+**El plan para el 4-dic va por ~60 %** (sin el plano impreso). **Nada publicado.** Rama
+`feature/v4.6-cierre-por-sesiones`, último commit `0b74a37`, árbol limpio (salvo los archivos sueltos de siempre:
+`Nuevo Documento de texto.txt`, `scripts_ver_cola.dart`, `scripts/descartar_cola.dart`, `docs/SPEC_locutor_…`, que
+no son de esto). **Todo en un solo chat, uno detrás del otro** (el chat "Planes para barra" ya no se usa). Plan de
+esta vuelta: `C:\Users\lover\.claude\plans\en-que-quedamos-resilient-river-of-eeea9ef1-6b33-47bb-97b6-06dbde9b3e95.md`.
+
+**Esperando al usuario:** que mire la maqueta `docs/maqueta_recetas_y_estilos_2026-11-27.html` (PRECIOS con la
+receta, GANANCIA con "Para el proveedor", y los estilos Noche y Blanco mejorados en VENDER, LAS CAJAS y STOCK) y diga
+"va así" o qué cambia. **Sin su OK no se programan esas pantallas.**
+
+**Lo que decidió esta noche (no volver a preguntar):**
+- Columnas de GANANCIA: Vendidas · Perdidas · Precio de lista · Le debo · Se vendió · Ganancia. **Ningún botón** de
+  "traer lo que quedó": cada fiesta carga su stock en PRECIOS como hoy.
+- **Estilo:** cada aparato elige **Noche o Blanco**, pero mejores, en **todas** las pantallas de la barra.
+- **Los tragos llevan receta** (el jefe por WhatsApp): trago de 1 L, receta editable; Fernet con coca = 200 cc de
+  fernet + 500 cc de coca + hielo; vodka = 500 cc de vodka + 1 Speed de 250 cc + hielo; lista **por botella** (y por
+  lata). "Más o menos, para calcularle". El usuario aclaró: **las botellas se calculan con los tragos vendidos** y
+  **no se muestra en la barra cuántas botellas quedan** ni la empezada ("es raro"). Lo demás lo decide Claude.
+- Decidido por Claude con eso: lo que va **en cc** no tiene stock en la barra, solo calcula botellas para GANANCIA;
+  lo que va **entero** (el Speed) **baja de su stock** como si se vendiera suelto (si no, al contar faltarían Speed y
+  se pagarían dos veces); un trago no se frena por la receta; sin la lista de un ingrediente, el trago debe lo que sí
+  se sabe y la ganancia queda sin saber, con aviso.
+- La receta, la lista, las botellas y GANANCIA **solo las ve el jefe**. La receta (sin plata) viaja a la tablet para
+  descontar el Speed; la lista no baja nunca a una tablet.
+
+**Hecho esta noche, cada paso con pruebas, roturas a propósito y commit:**
+1. `ed21ab9` — la maqueta y las decisiones.
+2. `776e4bf` — **la encargada ve CATÁLOGO Y PRECIOS solo mirando** (botón en LAS CAJAS,
+   `widgets/catalogo_y_precios_screen.dart`; `ReglasDeLaBarra.veCatalogoYPrecios` y `veElCostoYLaGanancia`) y **las
+   recetas**: modelos `RecetaBarra` y `CostoBarra`, la cuenta `RecetasDeLaBarra` (`paraElStock`, `loQueBaja`,
+   `alcanzaPara`) y `CuentaDelProveedor` con tragos y `paraElProveedor`. Roturas 15 de 15.
+3. `99220c0` — **la v84** (`barra_costos` con `contenido_cc`, `barra_recetas`, `barra_caja_movimientos`), las listas
+   del sync (`barra_costos` no baja en Android: `SyncEngine.bajaLoDelJefe`), el modelo `MovimientoDeCaja` y el SQL de
+   la nube `supabase/migrations/20261127120000_barra_costos.sql` con las tres (**sin correr**). Roturas 6 de 6, y
+   `tool/romper_una_regla.sh` ahora reintenta la restauración y frena si un archivo no vuelve igual (Windows lo tuvo
+   tomado y dejó `local_database.dart` roto; se reparó).
+4. `3a9cebf` — CLAUDE.md con la v84 y las recetas.
+5. `969e46b` — **VENDER y CAJAS descuentan el Speed de cada vodka** y el vodka dice "Quedan N" por su Speed
+   (`recetas(evento)` en los repositorios). Una prueba lee el código: toda cuenta del stock pasa por `paraElStock`.
+6. `0b74a37` — **el efectivo esperado del cierre cuenta retiros y cambio** (`CierreDeBarra.cambioAgregado` y
+   `retirado`), solo la cuenta. Roturas 4 de 4.
+
+**Lo que falta, en orden:**
+1. **Con el OK de la maqueta:** PRECIOS del jefe con Lista, "Trae" y la receta (guardar `CostoBarra` y `RecetaBarra`
+   por `BarraDelJefe`/`BarraLocal`/`BarraNube`, que todavía no los guardan; COPIAR DE OTRA FIESTA los trae); la
+   pestaña **GANANCIA** con su papel A4 (con botón, nada sale solo); y **Noche y Blanco** en todas las pantallas de la
+   barra (`DisenioBarra` ya existe para VENDER).
+2. **RETIRO y CAMBIO de la encargada:** leer y guardar `MovimientoDeCaja` en `BarraDelJefe` y `BarraDeLaCaja` (y sus
+   cinco implementaciones: `BarraLocal`, `BarraNube`, `BarraConLaRed`, `BarraEnMemoria`, `_LoQueSubio` de
+   `tool/barra_prueba.dart`); `barra_caja_movimientos` en `tablasDeLaRed` (y `_enOrden` de `central_barra.dart`) con su
+   regla en `ReglasDeLaBarra.porQueNoSeGuarda` (solo encargada y jefe); pasar `movimientos:` en los 4 lugares que dicen
+   el esperado (LAS CAJAS por `ResumenDeCajas.de`, cerrar caja dos veces, el OK); **sacarle el `skip` a la última
+   prueba de `test/cierre_con_retiros_test.dart`**; y la pantalla (maqueta antes).
+3. El **repositor** (Barra con un 3: `PermisoOperador.repositorBarra`, OPERADORES sin borrar el 3, su pantalla); "¿Volvió
+   el vale?" al anular; el jefe con LA ENCARGADA ESTÁ ACÁ; el aviso del PIN maestro de fábrica en CAJAS; **sin stock no
+   se vende de verdad** con el stock por barra en VENDER (hoy pregunta y deja VENDER IGUAL), con `loQueBaja`.
+4. La página de la encargada en el iPhone (Parte 3).
+5. La noche simulada y la tercera revisión independiente (también con tragos y retiros).
+6. Las pantallas en la app de verdad con capturas por rol (el APK en el emulador con la central en esta PC).
+7. La v83/v84 sobre una copia de la base real, los SQL con su OK (el de la v83 y el de la v84 están sin correr), la
+   foto de la mora, y publicar cuando él diga.
+8. Después: el plano impreso entero.
+
+**Recordarle al usuario:** cambiar el PIN maestro de fábrica en las dos notebooks de la barra (el mismo en las dos).
+La falla de siempre de la suite (`modal_cobro_masivos_medios_pago_test.dart`, LA ALFONSINA, del cobro de cuotas) se
+mira aparte con él.
+
+---
+
 **26-nov (noche): el audio 77 del jefe y todo en un solo chat.** Plan aprobado:
 `C:\Users\lover\.claude\plans\te-mando-un-audio-buzzing-bubble-of-20d8810b-4918-44eb-a5f5-b6b73407e7e6.md`.
 - **Todo se hace en un solo chat, sin sesiones en paralelo** (pedido del usuario: tenía que vigilar sesiones que
