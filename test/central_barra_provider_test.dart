@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';

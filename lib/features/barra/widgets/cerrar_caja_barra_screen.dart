@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/pesos.dart';

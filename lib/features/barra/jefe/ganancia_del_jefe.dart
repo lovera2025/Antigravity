@@ -11,6 +11,7 @@ import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../cuentas/cuenta_del_proveedor.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import 'barra_jefe_providers.dart';
@@ -53,6 +54,12 @@ String periodoDe(List<Evento> fiestas) {
 /// de la barra de este equipo (en la web, de la nube).
 final gananciaDelJefeProvider = FutureProvider.family<CuentaDelProveedor, String>((ref, ids) async {
   ref.watch(operationalSyncRevisionProvider);
+  // Solo el jefe, también en la web (ahí la barra es la nube y no tiene la segunda llave).
+  // A quien no le toca le llega la cuenta de ninguna fiesta, sin leer nada. No tira un
+  // error: Riverpod reintenta solo al provider que falla y la pantalla quedaría cargando.
+  if (!ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider))) {
+    return CuentaDelProveedor.de(const [], nombres: const {});
+  }
   final barra = ref.read(barraDelJefeProvider);
   final datos = await ref.watch(fiestasDelJefeProvider.future);
   final eventos = {for (final e in datos.todas) e.id: e};

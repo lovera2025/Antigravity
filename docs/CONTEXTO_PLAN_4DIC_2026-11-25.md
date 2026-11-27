@@ -64,9 +64,10 @@ alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces 
    `tool/roturas_recorrido_28nov.txt` (y `tool/roturas_retiros_pantalla.txt` puesta al día: 10 de 10). Las pruebas
    de la barra: 875 en verde.
 
-**Preguntas para el usuario (no se tocó nada):**
+**Preguntas para el usuario: contestadas todas.**
 - GANANCIA dice "Se vendió $21.000" y LAS CAJAS "$21.400": la diferencia es el recargo por transferencia, que GANANCIA
-  no cuenta como venta (paga Mercado Pago). Confirmar que está bien.
+  no cuenta como venta. **Contestado el 27-nov: "El recargo es el recargo por transferencia, no cuenta como
+  vendido."** Queda como está.
 
 **Las roturas de la barra y la tele, todas juntas sobre lo de hoy: 262 de 262 atrapadas** (14 listas; registros en
 `build/roturas_28nov/`). La primera pasada dio 258: tres de `tool/roturas_precio_de_lista.txt` tenían el texto de

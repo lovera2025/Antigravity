@@ -40,3 +40,21 @@ test/ganancia_del_jefe_test.dart
       recetas: await barra.recetas(id),
       recetas: const [],
 ---
+leer el precio de lista sin mirar el rol (la segunda llave)
+lib/features/barra/central/barra_con_la_red.dart
+test/precio_de_lista_solo_lo_lee_el_jefe_test.dart
+    if (quien != null && !ReglasDeLaBarra.veElCostoYLaGanancia(quien())) return const [];
+
+---
+la lista del proveedor le llega a quien no es el jefe
+lib/features/barra/jefe/barra_jefe_providers.dart
+test/precio_de_lista_solo_lo_lee_el_jefe_test.dart
+  if (!ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider))) return const ListaDelProveedor();
+
+---
+la ganancia se calcula para quien no es el jefe
+lib/features/barra/jefe/ganancia_del_jefe.dart
+test/precio_de_lista_solo_lo_lee_el_jefe_test.dart
+    return CuentaDelProveedor.de(const [], nombres: const {});
+
+---

@@ -236,7 +236,14 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   }
 
   @override
-  Future<List<CostoBarra>> costos(String eventoId) => _jefe.costos(eventoId);
+  Future<List<CostoBarra>> costos(String eventoId) async {
+    // Leer el precio de lista también es solo del jefe (27-nov-2026): la pantalla ya no
+    // lo muestra, y esto hace que una pantalla nueva que se equivoque no lo pueda leer.
+    // No pregunta nada: mira quién entró en este aparato.
+    final quien = rolDeQuienUsa;
+    if (quien != null && !ReglasDeLaBarra.veElCostoYLaGanancia(quien())) return const [];
+    return _jefe.costos(eventoId);
+  }
 
   @override
   Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {

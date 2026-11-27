@@ -11,7 +11,6 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
-import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_local.dart';

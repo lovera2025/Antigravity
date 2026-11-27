@@ -6,6 +6,7 @@ import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/recetas_de_la_barra.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/impresora_bluetooth.dart';
@@ -115,6 +116,8 @@ class ListaDelProveedor {
 
 final listaDelProveedorProvider = FutureProvider.family<ListaDelProveedor, String>((ref, eventoId) async {
   ref.watch(operationalSyncRevisionProvider);
+  // Solo el jefe, también en la web (ahí la barra es la nube y no tiene la segunda llave).
+  if (!ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider))) return const ListaDelProveedor();
   final barra = ref.read(barraDelJefeProvider);
   return ListaDelProveedor(costos: await barra.costos(eventoId), recetas: await barra.recetas(eventoId));
 });

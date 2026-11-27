@@ -7,7 +7,6 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
 import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
