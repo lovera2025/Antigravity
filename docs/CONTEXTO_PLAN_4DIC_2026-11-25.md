@@ -53,6 +53,19 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   DEBO AL PROVEEDOR", la cuenta una vez, la tabla de `CuentaDelProveedor.paraElProveedor`, la ganancia por producto
   plegada, VER POR FIESTA y IMPRIMIR (A4, con botón).
 
+**Hecho el 27-nov (tarde), con la maqueta aprobada:**
+- `9a1d048`: los datos (`costos`, `guardarCosto`, `guardarReceta` en las cinco barras; la llave es
+  `veElCostoYLaGanancia`). Pruebas: `test/precio_de_lista_y_recetas_datos_test.dart`.
+- PRECIOS (`jefe/precios_de_la_fiesta.dart`): columnas VENDO A · STOCK · AVISAR DESDE · **PRECIO DE LISTA** (con
+  centavos: `PesosConCentavosFormatter`) · **GANO**; la receta plegada en cada trago (categoría "Tragos" o con
+  receta), con ingredientes del catálogo, cc o entero, "Cuesta · ganás por trago" (`costoDeUnTrago`, la misma cuenta
+  que GANANCIA, redondeada a pesos en pantalla); un trago **sin** ingredientes deja escribir su precio de lista; el
+  bloque **LAS BOTELLAS DE LOS TRAGOS**; COPIAR DE OTRA FIESTA trae lista y recetas. Lee `listaDelProveedorProvider`
+  (solo PRECIOS del jefe y GANANCIA). 5 pruebas nuevas en `test/barra_jefe_pantalla_test.dart` (42 en verde) y la
+  muestra `Jefe_2b_precios_con_lista_pc.png` (`tool/barra_jefe_muestra_test.dart`).
+- **Falta de PRECIOS:** que `costoDeUnTrago` y `CuentaDelProveedor` den lo mismo (una prueba que las compare) y sus
+  roturas a propósito.
+
 **Lo que falta, en orden:**
 1. **Programar lo de la maqueta aprobada (forma A):** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
    `RecetaBarra` por `BarraDelJefe`/`BarraLocal`/`BarraNube`; COPIAR DE OTRA FIESTA los trae), GANANCIA (la forma que

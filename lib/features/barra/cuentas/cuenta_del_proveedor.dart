@@ -10,6 +10,32 @@ import 'pesos.dart';
 import 'recetas_de_la_barra.dart';
 import 'stock_por_barra.dart';
 
+/// **Lo que cuesta un trago a precio de lista**, por su receta: lo que dice PRECIOS al
+/// lado del trago ("sale de la receta"). La misma cuenta que usa [CuentaDelProveedor] por
+/// cada vendido (`test/precio_de_lista_y_recetas_datos_test.dart` compara las dos), en
+/// centavos. [faltan]: los ingredientes sin precio de lista, o por cc sin cuánto trae la
+/// botella; con alguno, [centavos] es null (no se sabe).
+({int? centavos, List<String> faltan}) costoDeUnTrago(
+  Iterable<RecetaBarra> ingredientes, {
+  required double? Function(String ingredienteId) lista,
+  required int? Function(String ingredienteId) contenidoCc,
+}) {
+  var porUno = 0.0;
+  final faltan = <String>[];
+  for (final r in ingredientes) {
+    if (!r.activo || r.cantidad <= 0) continue;
+    final l = lista(r.ingredienteId);
+    final cc = contenidoCc(r.ingredienteId);
+    if (l == null || (r.unidad == UnidadDeReceta.cc && (cc == null || cc <= 0))) {
+      faltan.add(r.ingredienteId);
+      continue;
+    }
+    final c = centavos(l);
+    porUno += r.unidad == UnidadDeReceta.cc ? r.cantidad * c / cc! : r.cantidad * c.toDouble();
+  }
+  return (centavos: faltan.isEmpty ? porUno.round() : null, faltan: faltan);
+}
+
 /// Lo que hace falta de una fiesta para la pestaña GANANCIA del jefe (audio 77 del jefe,
 /// 26-nov-2026). Todo de esa fiesta; [listas] es el precio de lista de cada producto
 /// (`barra_costos`): sin clave o null, falta cargarlo; en 0, no se le paga a nadie.

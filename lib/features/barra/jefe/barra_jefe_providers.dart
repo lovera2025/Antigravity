@@ -94,6 +94,31 @@ final preciosDelJefeProvider =
   );
 });
 
+/// El precio de lista y las recetas de una fiesta (v84). **Solo para el jefe**: lo leen
+/// PRECIOS del jefe y GANANCIA, nunca una pantalla de la cajera, la encargada o el
+/// repositor (`test/recetas_en_la_barra_test.dart`).
+class ListaDelProveedor {
+  final List<CostoBarra> costos;
+
+  /// Las activas.
+  final List<RecetaBarra> recetas;
+
+  const ListaDelProveedor({this.costos = const [], this.recetas = const []});
+
+  CostoBarra? costoDe(String productoId) {
+    for (final c in costos) {
+      if (c.productoId == productoId) return c;
+    }
+    return null;
+  }
+}
+
+final listaDelProveedorProvider = FutureProvider.family<ListaDelProveedor, String>((ref, eventoId) async {
+  ref.watch(operationalSyncRevisionProvider);
+  final barra = ref.read(barraDelJefeProvider);
+  return ListaDelProveedor(costos: await barra.costos(eventoId), recetas: await barra.recetas(eventoId));
+});
+
 /// Un producto en el stock de CAJAS, con su nombre.
 typedef StockConNombre = ({StockDeProducto stock, String nombre});
 

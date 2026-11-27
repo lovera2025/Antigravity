@@ -268,6 +268,142 @@ void main() {
       expect(prueba.barra.preciosGuardados, isEmpty);
     });
 
+    testWidgets('el precio de lista: dice cuánto gano y se guarda junto con lo demás', (tester) async {
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      expect(find.text('PRECIO DE LISTA\n'), findsNothing);
+      expect(find.textContaining('lo que me cobra el proveedor'), findsOneWidget, reason: 'se nota qué es');
+      await tocar(tester, find.byKey(Key('jefe_va_${cerveza.id}')));
+      await escribir(tester, find.byKey(Key('jefe_precio_${cerveza.id}')), '4000');
+      expect(texto(tester, 'jefe_gano_${cerveza.id}'), '—', reason: 'sin precio de lista no se sabe');
+      await escribir(tester, find.byKey(Key('jefe_lista_${cerveza.id}')), '1500');
+      expect(texto(tester, 'jefe_gano_${cerveza.id}'), r'$ 2.500');
+      expect(prueba.barra.costosGuardados, isEmpty, reason: 'nada se guarda hasta GUARDAR CAMBIOS');
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      final c = prueba.barra.costosGuardados.single;
+      expect((c.eventoId, c.productoId, c.precioLista), (pinaroli.id, cerveza.id, 1500));
+      expect(prueba.subidasDeLaBarra, contains('barra_costos ${c.id}'));
+      expect(find.text('Guardado: 1 precio y 1 precio de lista.'), findsOneWidget);
+    });
+
+    testWidgets('el precio de lista acepta centavos', (tester) async {
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      await escribir(tester, find.byKey(Key('jefe_lista_${cerveza.id}')), '1333,33');
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      expect(prueba.barra.costosGuardados.single.precioLista, closeTo(1333.33, 0.001));
+    });
+
+    testWidgets('un trago: la receta viene plegada, se arma con el catálogo y sus botellas van aparte', (tester) async {
+      final botellaFernet = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
+      final coca = prueba.barra.producto('Coca-Cola 2,25', categoria: 'Botellas');
+      // Alta, para que la receta y las botellas estén las dos armadas a la vez.
+      await abrir(tester, pestana: PestanaBarraJefe.precios, tamano: const Size(1400, 2400));
+      final receta = find.byKey(Key('jefe_receta_${fernet.id}'));
+      expect(texto(tester, 'jefe_receta_cuantos_${fernet.id}'), 'sin ingredientes');
+      expect(find.byKey(Key('jefe_receta_abierta_${fernet.id}')), findsNothing, reason: 'viene plegada');
+      expect(find.byKey(Key('jefe_lista_${fernet.id}')), findsOneWidget,
+          reason: 'sin receta todavía, su precio de lista se escribe (no dice "\$ 0")');
+
+      await tocar(tester, receta);
+      Future<void> agregar(int n, String nombre, String cc) async {
+        await tocar(tester, find.byKey(Key('jefe_agregar_ingrediente_${fernet.id}')));
+        await tocar(tester, find.byKey(Key('jefe_ingrediente_${fernet.id}_$n')));
+        await tocar(tester, find.text(nombre).last);
+        await escribir(tester, find.byKey(Key('jefe_cantidad_${fernet.id}_$n')), cc);
+      }
+
+      await agregar(0, 'Fernet 750', '200');
+      expect(find.byKey(Key('jefe_lista_de_la_receta_${fernet.id}')), findsOneWidget,
+          reason: 'con receta, sale de la receta y no se escribe');
+      await agregar(1, 'Coca-Cola 2,25', '500');
+      // Las botellas salen de la lista y van a su bloque, con el precio de lista y lo que traen.
+      expect(find.byKey(const Key('jefe_botellas')), findsOneWidget);
+      expect(find.byKey(Key('jefe_va_${botellaFernet.id}')), findsNothing, reason: 'no se vende sola');
+      await escribir(tester, find.byKey(Key('jefe_botella_lista_${botellaFernet.id}')), '11740');
+      await escribir(tester, find.byKey(Key('jefe_botella_trae_${botellaFernet.id}')), '750');
+      expect(texto(tester, 'jefe_receta_cuesta_${fernet.id}'), contains('Falta el precio de lista de Coca-Cola 2,25'));
+      await escribir(tester, find.byKey(Key('jefe_botella_lista_${coca.id}')), '3000');
+      await escribir(tester, find.byKey(Key('jefe_botella_trae_${coca.id}')), '2250');
+      await tocar(tester, find.byKey(Key('jefe_va_${fernet.id}')));
+      await escribir(tester, find.byKey(Key('jefe_precio_${fernet.id}')), '10000');
+      // 200 cc de 11.740 / 750 + 500 cc de 3.000 / 2.250 = 3.797,33: "más o menos".
+      expect(texto(tester, 'jefe_receta_cuesta_${fernet.id}'), r'Cuesta $ 3.797 · ganás $ 6.203 por trago');
+      expect(texto(tester, 'jefe_gano_${fernet.id}'), r'$ 6.203');
+
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      expect(
+        {for (final r in prueba.barra.recetasGuardadas) r.ingredienteId: (r.cantidad, r.unidad, r.activo)},
+        {
+          botellaFernet.id: (200, UnidadDeReceta.cc, true),
+          coca.id: (500, UnidadDeReceta.cc, true),
+        },
+      );
+      expect(
+        {for (final c in prueba.barra.costosGuardados) c.productoId: (c.precioLista, c.contenidoCc)},
+        {botellaFernet.id: (11740.0, 750), coca.id: (3000.0, 2250)},
+      );
+      expect(prueba.subidasDeLaBarra.where((s) => s.startsWith('barra_recetas ')), hasLength(2));
+    });
+
+    testWidgets('sacar un ingrediente guardado lo apaga, no lo borra', (tester) async {
+      final botellaFernet = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
+      final coca = prueba.barra.producto('Coca-Cola 2,25', categoria: 'Botellas');
+      for (final (id, cc) in [(botellaFernet.id, 200), (coca.id, 500)]) {
+        await prueba.barra.guardarReceta(
+          RecetaBarra.para(
+            eventoId: pinaroli.id,
+            productoId: fernet.id,
+            ingredienteId: id,
+            cantidad: cc,
+            unidad: UnidadDeReceta.cc,
+            ahora: DateTime(2026, 11, 1),
+          ),
+          quien: 'Jefe',
+        );
+      }
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      expect(texto(tester, 'jefe_receta_cuantos_${fernet.id}'), '2 ingredientes');
+      await tocar(tester, find.byKey(Key('jefe_receta_${fernet.id}')));
+      await tocar(tester, find.byKey(Key('jefe_sacar_${fernet.id}_1')));
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      expect(prueba.barra.recetasGuardadas, hasLength(2), reason: 'nada se borra');
+      expect((await prueba.barra.recetas(pinaroli.id)).single.ingredienteId, botellaFernet.id);
+    });
+
+    testWidgets('COPIAR DE OTRA FIESTA trae también el precio de lista y las recetas', (tester) async {
+      final botellaFernet = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
+      prueba.barra.precio(rotonda.id, fernet, 9000);
+      await prueba.barra.guardarCosto(
+        CostoBarra.para(
+          eventoId: rotonda.id,
+          productoId: botellaFernet.id,
+          precioLista: 11000,
+          contenidoCc: 750,
+          ahora: DateTime(2026, 11, 1),
+        ),
+        quien: 'Jefe',
+      );
+      await prueba.barra.guardarReceta(
+        RecetaBarra.para(
+          eventoId: rotonda.id,
+          productoId: fernet.id,
+          ingredienteId: botellaFernet.id,
+          cantidad: 200,
+          unidad: UnidadDeReceta.cc,
+          ahora: DateTime(2026, 11, 1),
+        ),
+        quien: 'Jefe',
+      );
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      await tocar(tester, find.byKey(const Key('jefe_copiar')));
+      await tocar(tester, find.byKey(Key('jefe_copiar_de_${rotonda.id}')));
+      expect(find.textContaining('con el precio de lista y las recetas'), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
+      final costo = prueba.barra.costosGuardados.where((c) => c.eventoId == pinaroli.id).single;
+      expect((costo.productoId, costo.precioLista, costo.contenidoCc), (botellaFernet.id, 11000, 750));
+      final receta = (await prueba.barra.recetas(pinaroli.id)).single;
+      expect((receta.productoId, receta.ingredienteId, receta.cantidad), (fernet.id, botellaFernet.id, 200));
+    });
+
     testWidgets('sacar un producto de la fiesta no borra su precio: queda sin ofrecerse', (tester) async {
       prueba.barra.precio(pinaroli.id, cerveza, 4000, stock: 200, aviso: 30);
       await abrir(tester, pestana: PestanaBarraJefe.precios);

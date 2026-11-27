@@ -45,3 +45,45 @@ class PesosEnterosFormatter extends TextInputFormatter {
     );
   }
 }
+
+/// El **precio de lista** mientras se escribe (lo que cobra el proveedor por unidad):
+/// como [PesosEnterosFormatter], con los puntos de mil, y **con centavos si hacen falta**
+/// después de una coma ("1.333,33"), porque una caja dividida por unidades los puede dar
+/// (audio 77 del jefe).
+class PesosConCentavosFormatter extends TextInputFormatter {
+  const PesosConCentavosFormatter();
+
+  /// "1.333,33" → 1333.33; "11.740" → 11740. Vacío: null.
+  static double? leer(String texto) {
+    final partes = texto.split(',');
+    final enteros = partes.first.replaceAll(RegExp(r'[^0-9]'), '');
+    final decimales = partes.length > 1 ? partes[1].replaceAll(RegExp(r'[^0-9]'), '') : '';
+    if (enteros.isEmpty && decimales.isEmpty) return null;
+    final c = decimales.isEmpty ? 0 : int.parse(decimales.padRight(2, '0').substring(0, 2));
+    return (int.tryParse(enteros.isEmpty ? '0' : enteros) ?? 0) + c / 100;
+  }
+
+  /// 1333.33 → "1.333,33"; 11740 → "11.740". Null: vacío.
+  static String escribir(num? valor) {
+    if (valor == null) return '';
+    final c = (valor * 100).round().abs();
+    final enteros = PesosEnterosFormatter.escribir(c ~/ 100);
+    final resto = c % 100;
+    return resto == 0 ? enteros : '$enteros,${resto.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final texto = newValue.text.replaceAll('.', '');
+    final coma = texto.indexOf(',');
+    var enteros = (coma < 0 ? texto : texto.substring(0, coma)).replaceAll(RegExp(r'[^0-9]'), '');
+    enteros = enteros.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+    if (enteros.length > 12) enteros = enteros.substring(0, 12);
+    var salida = enteros.isEmpty ? '' : PesosEnterosFormatter.escribir(int.parse(enteros));
+    if (coma >= 0) {
+      final dec = texto.substring(coma + 1).replaceAll(RegExp(r'[^0-9]'), '');
+      salida = '${salida.isEmpty ? '0' : salida},${dec.length > 2 ? dec.substring(0, 2) : dec}';
+    }
+    return TextEditingValue(text: salida, selection: TextSelection.collapsed(offset: salida.length));
+  }
+}

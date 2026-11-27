@@ -74,9 +74,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<(GlobalKey, CajaBarra)> montar(WidgetTester tester, Size tamano, PestanaBarraJefe pestana) async {
+  Future<(GlobalKey, CajaBarra)> montar(
+    WidgetTester tester,
+    Size tamano,
+    PestanaBarraJefe pestana, {
+    Future<void> Function(BarraEnPrueba prueba)? antes,
+  }) async {
     await letras();
     final (prueba, operadores, marta) = await noche();
+    await antes?.call(prueba);
     final clave = GlobalKey();
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
@@ -113,6 +119,54 @@ void main() {
     final (clave, _) = await montar(tester, const Size(1280, 860), PestanaBarraJefe.precios);
     expect(tester.takeException(), isNull);
     await guardar(tester, clave, 'Jefe_2_precios_pc.png');
+  });
+
+  testWidgets('PRECIOS con el precio de lista, una receta abierta y las botellas', (tester) async {
+    late String fernetConCoca;
+    final (clave, _) = await montar(
+      tester,
+      const Size(1400, 1500),
+      PestanaBarraJefe.precios,
+      antes: (prueba) async {
+        final b = prueba.barra;
+        final ahora = DateTime(2026, 11, 20);
+        ProductoBarra de(String nombre) => b.productosGuardados.firstWhere((p) => p.nombre == nombre);
+        fernetConCoca = de('Fernet con coca').id;
+        final botellaFernet = b.producto('Fernet 750', categoria: 'Botellas');
+        final botellaCoca = b.producto('Coca-Cola 2,25', categoria: 'Botellas');
+        for (final (id, lista, cc) in [
+          (de('Cerveza tirada').id, 1500.0, null),
+          (de('Quilmes lata').id, 1500.0, null),
+          (de('Coca-Cola').id, 900.0, null),
+          (de('Champán').id, 14000.0, null),
+          (de('Silla extra').id, 0.0, null),
+          (botellaFernet.id, 11740.0, 750),
+          (botellaCoca.id, 3000.0, 2250),
+        ]) {
+          await b.guardarCosto(
+            CostoBarra.para(eventoId: BarraEnPrueba.id(1), productoId: id, precioLista: lista, contenidoCc: cc, ahora: ahora),
+            quien: 'Jefe',
+          );
+        }
+        for (final (id, cc) in [(botellaFernet.id, 200), (botellaCoca.id, 500)]) {
+          await b.guardarReceta(
+            RecetaBarra.para(
+              eventoId: BarraEnPrueba.id(1),
+              productoId: fernetConCoca,
+              ingredienteId: id,
+              cantidad: cc,
+              unidad: UnidadDeReceta.cc,
+              ahora: ahora,
+            ),
+            quien: 'Jefe',
+          );
+        }
+      },
+    );
+    await tester.tap(find.byKey(Key('jefe_receta_$fernetConCoca')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Jefe_2b_precios_con_lista_pc.png');
   });
 
   testWidgets('CAJAS y las ventas de una caja en la PC', (tester) async {
