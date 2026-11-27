@@ -37,6 +37,18 @@ cargando. Prueba `test/precio_de_lista_solo_lo_lee_el_jefe_test.dart` (lee `lib/
 - **La tele se prueba de nuevo entera en el sandbox** (ahora y después del plano a todo lo ancho), y la barra rol por
   rol (cajera, encargada, repositor, jefe).
 
+**Contestado por el usuario el 27-nov sobre los hallazgos 4, 6 y 8 (no volver a preguntar):**
+- **4 → con motivo y anotado:** la encargada cambia el cambio inicial de su propia caja poniendo el porqué, y queda
+  en el historial (como un retiro), a la vista del jefe en LAS CAJAS y en el papel del cierre.
+- **8 → cambia una regla del 26-nov: "La encargada puede cerrar su caja sin necesidad que le confirmen. Ella es la
+  encargada."** Su propia caja la cierra ella sola, sin OK de nadie (como el jefe), y puede ver lo esperado. Hay que
+  cambiar `ReglasDeLaBarra.puedeCerrar`, `ok_del_cierre.dart`, la central, las pruebas y las roturas que decían "la
+  encargada no se aprueba su propia caja", **la tabla de más abajo y CLAUDE.md**.
+- **6 → sí, que se conecte:** el jefe en MODO JEFE desde una tablet se conecta a la central como la encargada. **El
+  PIN maestro de fábrica (2026) no le preocupa** ("si es 2026 de fábrica no hay problema"): no insistir con cambiarlo
+  y **no hacer el aviso del PIN maestro** que estaba en la lista.
+**Sin programar todavía: estas tres y el hallazgo 2.**
+
 **La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
 **El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`
 recuerda de quién es la conexión, `_deQuien`, y `arrancar` / `arrancarSiNoHay` la rehacen si entró otra persona;
