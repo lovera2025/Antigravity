@@ -539,8 +539,9 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v83 (25-nov, el stock por barra): no correr la app desde esta carpeta contra la base
-  de verdad** hasta que esta PC tenga instalada la versión con la v83. Los arneses que no abren la base sí.
+- **La base del equipo va por la v84 (26-nov: el precio de lista, las recetas de los tragos y los retiros y el cambio
+  de la encargada): no correr la app desde esta carpeta contra la base de verdad** hasta que esta PC tenga instalada
+  la versión con la v84. Los arneses que no abren la base sí.
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
     (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
@@ -796,8 +797,14 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
     papel de lo vendido dice "pulseras"**, salvo el historial A4, que espera una pregunta al usuario (cambiar su texto
     cambia `firmaDeLasHojas`). **Una ventana de prueba que llegue a PARA RENDIR reemplaza
     `abrirConstanciaParaRendirProvider`** (`test/arneses_sin_base_test.dart`).
-- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v84**: la v81 es de la entrega en dos partes,
-  la v82 de las entradas para rendir y la v83 del stock por barra.
+- **El locutor (en pausa, `docs/SPEC_locutor_2026-11-18.md`) pasa a la v85**: la v81 es de la entrega en dos partes,
+  la v82 de las entradas para rendir, la v83 del stock por barra y la v84 del precio de lista, las recetas y los
+  retiros.
+- **Los tragos llevan receta** (26-nov, WhatsApp del jefe; `docs/maqueta_recetas_y_estilos_2026-11-27.html`): lo que
+  va en cc (fernet, coca, vodka) **no se cuenta en la barra**, solo calcula botellas para GANANCIA
+  (`CuentaDelProveedor.paraElProveedor`); lo que va entero (el Speed del vodka) **baja de su stock**. Toda cuenta del
+  stock de la barra recibe las ventas por `RecetasDeLaBarra.paraElStock`; las cuentas de la plata, no. El precio de
+  lista (`barra_costos`) es solo del jefe y **no baja a una tablet** (`SyncEngine.bajaLoDelJefe`).
 
 **La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
 foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta
@@ -943,7 +950,7 @@ En la historia de git y en las ramas viejas siguen los reales. Un caso nuevo va 
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 83 en la rama, con las tablas de la entrega en dos partes, de las entradas para rendir y del stock por barra; las PCs tienen la 80 o la 82) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 84 en la rama, con las tablas de la entrega en dos partes, de las entradas para rendir, del stock por barra y del precio de lista, las recetas y los retiros; las PCs tienen la 80 o la 82) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
