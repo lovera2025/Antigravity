@@ -82,3 +82,15 @@ test/barra_jefe_pantalla_test.dart
     final c = decimales.isEmpty ? 0 : int.parse(decimales.padRight(2, '0').substring(0, 2));
     const c = 0;
 ---
+sin modo jefe PRECIOS lee el precio de lista
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+        veCosto ? ref.watch(listaDelProveedorProvider(widget.fiesta.id)) : const AsyncData(ListaDelProveedor());
+        ref.watch(listaDelProveedorProvider(widget.fiesta.id));
+---
+sin modo jefe PRECIOS muestra el precio de lista y lo que se gana
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+              if (conCosto) ...[
+              if (true) ...[
+---

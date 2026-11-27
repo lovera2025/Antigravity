@@ -10,6 +10,7 @@ import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../cuentas/cuenta_del_proveedor.dart' show costoDeUnTrago;
 import '../cuentas/pesos.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
 import '../impresion/modelo_ticket.dart';
@@ -503,7 +504,11 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
   Widget build(BuildContext context) {
     final catalogo = ref.watch(catalogoDelJefeProvider);
     final precios = ref.watch(preciosDelJefeProvider(widget.fiesta.id));
-    final deLaLista = ref.watch(listaDelProveedorProvider(widget.fiesta.id));
+    // El precio de lista, lo que se gana y las recetas: **solo el jefe** (audio 77; lo
+    // recordó el usuario el 27-nov). Sin modo jefe ni se leen.
+    final veCosto = ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider));
+    final AsyncValue<ListaDelProveedor> deLaLista =
+        veCosto ? ref.watch(listaDelProveedorProvider(widget.fiesta.id)) : const AsyncData(ListaDelProveedor());
     final esJefe = ref.watch(esRolJefeProvider);
     final imagen = ref.watch(imagenDelProductoProvider);
     if (catalogo.hasError || precios.hasError || deLaLista.hasError) {
@@ -566,7 +571,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
                 style: TextStyle(color: Color(0xFFF2D77C)),
               ),
             ),
-          if (!angosto) const _Encabezado(),
+          if (!angosto) _Encabezado(conCosto: veCosto),
           for (final f in _filas)
             // Una botella de los tragos que no se vende sola va abajo, en su bloque.
             if (f.va || !botellas.contains(f.producto.id)) ...[
@@ -575,12 +580,13 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
                 imagen: imagen(f.producto),
                 angosto: angosto,
                 esJefe: esJefe,
+                conCosto: veCosto,
                 trago: _ingredientesDe(f.producto.id).isNotEmpty ? _costoDe(f.producto.id) : null,
                 onCambio: () => setState(() {}),
               ),
-              if (_esTrago(f)) _receta(f, esJefe),
+              if (veCosto && _esTrago(f)) _receta(f, esJefe),
             ],
-          if (botellas.isNotEmpty) _lasBotellas(botellas, esJefe),
+          if (veCosto && botellas.isNotEmpty) _lasBotellas(botellas, esJefe),
         ],
       ];
       final papel = Column(
@@ -984,22 +990,26 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
 }
 
 class _Encabezado extends StatelessWidget {
-  const _Encabezado();
+  /// Con el precio de lista y lo que se gana: solo el jefe.
+  final bool conCosto;
+
+  const _Encabezado({required this.conCosto});
 
   @override
   Widget build(BuildContext context) {
     const estilo = TextStyle(fontSize: 12, letterSpacing: .8, fontWeight: FontWeight.w700, color: Color(0xFFA7A29A));
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(4, 0, 4, 6),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
       child: Row(
         children: [
-          SizedBox(width: 56, child: Text('VA', style: estilo)),
-          Expanded(child: Text('PRODUCTO', style: estilo)),
-          SizedBox(width: 130, child: Text('VENDO A', style: estilo)),
-          SizedBox(width: 10),
-          SizedBox(width: 112, child: Text('STOCK', style: estilo)),
-          SizedBox(width: 10),
-          SizedBox(width: 112, child: Text('AVISAR DESDE', style: estilo)),
+          const SizedBox(width: 56, child: Text('VA', style: estilo)),
+          const Expanded(child: Text('PRODUCTO', style: estilo)),
+          SizedBox(width: 130, child: Text(conCosto ? 'VENDO A' : 'PRECIO', style: estilo)),
+          const SizedBox(width: 10),
+          const SizedBox(width: 112, child: Text('STOCK', style: estilo)),
+          const SizedBox(width: 10),
+          const SizedBox(width: 112, child: Text('AVISAR DESDE', style: estilo)),
+          if (conCosto) ...const [
           SizedBox(width: 10),
           SizedBox(
             width: 140,
@@ -1016,6 +1026,7 @@ class _Encabezado extends StatelessWidget {
           ),
           SizedBox(width: 10),
           SizedBox(width: 90, child: Text('GANO', style: estilo, textAlign: TextAlign.right)),
+          ],
         ],
       ),
     );
@@ -1032,6 +1043,9 @@ class _FilaDePrecio extends StatelessWidget {
   /// De un trago: lo que cuesta por su receta (no se escribe). Null: no es un trago.
   final ({int? centavos, List<String> faltan})? trago;
 
+  /// Con el precio de lista y lo que se gana: solo el jefe.
+  final bool conCosto;
+
   const _FilaDePrecio({
     required this.fila,
     required this.imagen,
@@ -1039,6 +1053,7 @@ class _FilaDePrecio extends StatelessWidget {
     required this.esJefe,
     required this.onCambio,
     this.trago,
+    this.conCosto = true,
   });
 
   @override
@@ -1158,7 +1173,8 @@ class _FilaDePrecio extends StatelessWidget {
                   Expanded(flex: 2, child: aviso),
                 ],
               ),
-              const SizedBox(height: 8),
+              if (conCosto) const SizedBox(height: 8),
+              if (conCosto)
               Row(
                 children: [
                   Expanded(flex: 3, child: lista),
@@ -1186,10 +1202,12 @@ class _FilaDePrecio extends StatelessWidget {
               SizedBox(width: 112, child: stock),
               const SizedBox(width: 10),
               SizedBox(width: 112, child: aviso),
-              const SizedBox(width: 10),
-              SizedBox(width: 140, child: lista),
-              const SizedBox(width: 10),
-              SizedBox(width: 90, child: gano),
+              if (conCosto) ...[
+                const SizedBox(width: 10),
+                SizedBox(width: 140, child: lista),
+                const SizedBox(width: 10),
+                SizedBox(width: 90, child: gano),
+              ],
             ],
           );
     return Opacity(

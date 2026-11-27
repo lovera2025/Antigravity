@@ -285,6 +285,23 @@ void main() {
       expect(find.text('Guardado: 1 precio y 1 precio de lista.'), findsOneWidget);
     });
 
+    testWidgets('sin modo jefe, PRECIOS no muestra el precio de lista, lo que se gana ni las recetas', (tester) async {
+      await prueba.barra.guardarCosto(
+        CostoBarra.para(eventoId: pinaroli.id, productoId: cerveza.id, precioLista: 1500, ahora: DateTime(2026, 11, 1)),
+        quien: 'Jefe',
+      );
+      prueba.barra.precio(pinaroli.id, cerveza, 4000);
+      await abrir(tester, pestana: PestanaBarraJefe.precios, esJefe: false);
+      expect(find.byKey(Key('jefe_precio_${cerveza.id}')), findsOneWidget, reason: 'el precio de venta se ve');
+      expect(find.byKey(Key('jefe_lista_${cerveza.id}')), findsNothing);
+      expect(find.byKey(Key('jefe_gano_${cerveza.id}')), findsNothing);
+      expect(find.byKey(Key('jefe_receta_${fernet.id}')), findsNothing);
+      expect(find.textContaining('lo que me cobra el proveedor'), findsNothing);
+      expect(find.textContaining('1.500'), findsNothing, reason: 'el precio de lista no aparece en ningún lado');
+      expect(find.byKey(const Key('jefe_pestana_ganancia')), findsNothing);
+      expect(prueba.barra.lecturasDeCostos, 0, reason: 'sin modo jefe, el precio de lista ni se lee');
+    });
+
     testWidgets('el precio de lista acepta centavos', (tester) async {
       await abrir(tester, pestana: PestanaBarraJefe.precios);
       await escribir(tester, find.byKey(Key('jefe_lista_${cerveza.id}')), '1333,33');

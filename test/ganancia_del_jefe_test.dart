@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/cuentas/cuenta_del_proveedor.dart';
+import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
@@ -196,6 +197,35 @@ void main() {
     await abrir(tester, esJefe: false);
     expect(find.byKey(const Key('jefe_pestana_ganancia')), findsNothing);
     expect(find.byKey(const Key('jefe_pestana_cajas')), findsOneWidget);
+  });
+
+  testWidgets('la encargada de barra no ve GANANCIA: solo el jefe', (tester) async {
+    tester.view.physicalSize = const Size(1280, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ...operadores.reemplazos,
+        ...prueba.reemplazos,
+        barraDelJefeProvider.overrideWithValue(prueba.barra),
+        esRolJefeProvider.overrideWithValue(false),
+        enLaWebProvider.overrideWithValue(false),
+        relojDelJefeProvider.overrideWithValue(() => DateTime(2026, 11, 20, 15)),
+        rolEnLaBarraProvider.overrideWithValue(RolEnLaBarra.encargada),
+      ],
+      child: const MaterialApp(home: BarraJefeScreen(pestanaInicial: PestanaBarraJefe.ganancia)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('jefe_pestana_ganancia')), findsNothing);
+    expect(find.byKey(const Key('jefe_ganancia')), findsNothing, reason: 'ni pidiéndola de entrada');
+    expect(find.byKey(const Key('jefe_ganancia_le_debo')), findsNothing);
+  });
+
+  test('solo el jefe ve el costo y la ganancia', () {
+    for (final rol in RolEnLaBarra.values) {
+      expect(ReglasDeLaBarra.veElCostoYLaGanancia(rol), rol == RolEnLaBarra.jefe, reason: rol.name);
+    }
+    expect(ReglasDeLaBarra.veElCostoYLaGanancia(null), isFalse);
   });
 
   testWidgets('en un celular no se desborda', (tester) async {

@@ -84,9 +84,14 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   /// El precio de lista de cada producto (v84).
   final costosGuardados = <CostoBarra>[];
 
+  /// Cuántas veces se leyó el precio de lista: sin modo jefe, ninguna (27-nov).
+  var lecturasDeCostos = 0;
+
   @override
-  Future<List<CostoBarra>> costos(String eventoId) async =>
-      [for (final c in costosGuardados) if (c.eventoId == eventoId) c];
+  Future<List<CostoBarra>> costos(String eventoId) async {
+    lecturasDeCostos++;
+    return [for (final c in costosGuardados) if (c.eventoId == eventoId) c];
+  }
 
   @override
   Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) async {

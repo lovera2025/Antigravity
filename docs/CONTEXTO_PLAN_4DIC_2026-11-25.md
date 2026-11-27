@@ -84,6 +84,12 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   `test/retiros_de_la_encargada_test.dart`; muestras `Jefe_9_caja_con_retiros_pc.png` y `Jefe_10_sacar_efectivo_pc.png`;
   roturas `tool/roturas_retiros_pantalla.txt` (**7 de 7 atrapadas**). **El cartel del OK no tiene una prueba que mire sus renglones nuevos.**
 
+- **Solo el jefe ve el precio de lista y la ganancia** (lo recordó el usuario el 27-nov: "la encargada no puede ver la
+  ganancia"). Se encontró un hueco y se cerró: BARRA del jefe se abre sin modo jefe para mirar, y PRECIOS mostraba
+  igual el precio de lista y GANO. Ahora PRECIOS lo muestra y lo lee solo con `veElCostoYLaGanancia` (sin modo jefe:
+  sin esas columnas, sin recetas ni botellas, y sin leerlas). Pruebas: la encargada sin GANANCIA, PRECIOS sin modo jefe
+  (con `lecturasDeCostos` = 0) y la regla para cada rol; 2 roturas más en `tool/roturas_precios_con_lista.txt` (16 de 16).
+
 **Lo que falta, en orden:**
 1. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
    CAJAS, VENTAS y cerrar caja van siempre en Noche): cada aparato elige el suyo y vale para todas sus pantallas.
