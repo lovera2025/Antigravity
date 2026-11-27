@@ -51,10 +51,13 @@ alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces 
    recargo de PRECIOS es `double?` (null = sin elegir). Pruebas en `test/barra_jefe_pantalla_test.dart` y
    `test/encargada_de_barra_test.dart`; 4 roturas en `tool/roturas_recorrido_28nov.txt`. Las pruebas de la barra: 831
    en verde.
+4. **"Elegí qué lleva" ofrece solo lo que puede ir adentro de un trago** (el usuario: "perfecto", después de
+   aclararle que el catálogo no cambia): ni otro trago (con receta, o de una categoría que empieza con "Trago";
+   "Para los tragos" sí va) ni una silla de la noche (`esSillaDeLaPuerta`); lo ya elegido en una receta se sigue
+   mostrando (`_puedeIrAdentro`). Prueba en `test/barra_jefe_pantalla_test.dart`; 3 roturas en
+   `tool/roturas_recorrido_28nov.txt`. Las pruebas de la barra: 832 en verde.
 
 **Preguntas para el usuario (no se tocó nada):**
-- En "cómo se prepara", la lista de "Elegí qué lleva" ofrece también los tragos y la Silla extra. Recomendación:
-  sacarlos (solo lo que puede ir adentro de un trago).
 - Cuando el jefe saca o da plata, la caja y el papel dicen "Sacó la encargada" / "Cambio de la encargada" (el historial
   sí dice "Jefe"). Recomendación: dejarlo (el jefe hace de encargada).
 - GANANCIA dice "Se vendió $21.000" y LAS CAJAS "$21.400": la diferencia es el recargo por transferencia, que GANANCIA
@@ -67,7 +70,7 @@ GANANCIA** (la cuenta estaba bien): prueba nueva en `test/cuenta_del_proveedor_t
 
 **Lo que falta, en orden:**
 1. Que mire las capturas (las de hoy y las de ayer: `build/capturas_4dic/`, `build/capturas_tele_27nov/`) y conteste las
-   tres preguntas que quedan arriba (la del recargo ya la contestó).
+   dos preguntas que quedan arriba (la del recargo y la de "Elegí qué lleva" ya las contestó).
 2. **Noche y Blanco** en todas las pantallas de la barra (`DisenioBarra`; cada aparato elige el suyo).
 3. El repositor, "¿Volvió el vale?", LA ENCARGADA ESTÁ ACÁ del jefe, el aviso del PIN maestro y **sin stock no se vende**;
    con el repositor, GANANCIA lee el stock por barra (hoy lo perdido da 0).

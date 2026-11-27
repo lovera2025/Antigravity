@@ -34,3 +34,21 @@ test/encargada_de_barra_test.dart
               null => 'Recargo por transferencia sin elegir: cada tablet arranca con el último que usó '
               null => 'Sin recargo por transferencia en esta fiesta. '
 ---
+"Elegí qué lleva" vuelve a ofrecer otros tragos
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+      !paraBuscar(f.producto.categoria).trim().startsWith('trago') &&
+      true &&
+---
+"Elegí qué lleva" vuelve a ofrecer la silla
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+      !esSillaDeLaPuerta(f.producto.nombre);
+      true;
+---
+"Elegí qué lleva" saca también las botellas "Para los tragos"
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+      !paraBuscar(f.producto.categoria).trim().startsWith('trago') &&
+      !paraBuscar(f.producto.categoria).trim().contains('trago') &&
+---

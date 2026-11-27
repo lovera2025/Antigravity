@@ -347,6 +347,31 @@ void main() {
       expect(prueba.barra.costosGuardados.single.precioLista, closeTo(1333.33, 0.001));
     });
 
+    // 28-nov-2026 (el usuario: "perfecto"): en "Elegí qué lleva" solo lo que puede ir adentro
+    // de un trago. El catálogo no cambia.
+    testWidgets('"Elegí qué lleva" no ofrece otros tragos ni las sillas', (tester) async {
+      final botella = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
+      final vodka = prueba.barra.producto('Vodka 1 L', categoria: 'Para los tragos');
+      final gin = prueba.barra.producto('Gin tonic', categoria: 'Tragos');
+      final silla = prueba.barra.producto('Silla extra', categoria: 'Sillas');
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      await tocar(tester, find.byKey(Key('jefe_receta_${fernet.id}')));
+      await tocar(tester, find.byKey(Key('jefe_agregar_ingrediente_${fernet.id}')));
+      final ofrece = tester
+          .widget<DropdownButton<String>>(find.descendant(
+            of: find.byKey(Key('jefe_ingrediente_${fernet.id}_0')),
+            matching: find.byType(DropdownButton<String>),
+          ))
+          .items!
+          .map((i) => i.value)
+          .toSet();
+      expect(ofrece, containsAll([botella.id, vodka.id, cerveza.id, agua.id]),
+          reason: '"Para los tragos" sí: empieza con "Para", no con "Trago"');
+      expect(ofrece, isNot(contains(gin.id)), reason: 'otro trago');
+      expect(ofrece, isNot(contains(silla.id)), reason: 'una silla de la noche');
+      expect(ofrece, isNot(contains(fernet.id)), reason: 'él mismo');
+    });
+
     testWidgets('un trago: debajo del nombre, en chico, cómo se prepara; se arma en su ventanita', (tester) async {
       final botellaFernet = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
       final coca = prueba.barra.producto('Coca-Cola 2,25', categoria: 'Botellas');

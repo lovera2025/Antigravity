@@ -10,6 +10,7 @@ import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../cuentas/cuenta_del_proveedor.dart' show costoDeUnTrago;
 import '../cuentas/pesos.dart';
+import '../cuentas/silla_de_la_puerta.dart' show esSillaDeLaPuerta;
 import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
@@ -21,6 +22,7 @@ import '../providers/barra_providers.dart';
 import '../services/papel_de_la_barra.dart';
 import '../services/fiestas_del_jefe.dart';
 import '../services/imagen_de_producto.dart';
+import '../services/productos_para_vender.dart' show paraBuscar;
 import '../widgets/pesos_enteros_formatter.dart';
 import 'barra_jefe_providers.dart';
 import 'catalogo_del_jefe.dart';
@@ -230,6 +232,15 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
   /// Un trago: tiene receta, o es de la categoría de los tragos (para poder ponérsela).
   bool _esTrago(_Fila f) =>
       _ingredientesDe(f.producto.id).isNotEmpty || f.producto.categoria.toLowerCase().contains('trago');
+
+  /// Lo que se ofrece en "Elegí qué lleva" (28-nov-2026, el usuario: solo lo que puede ir
+  /// adentro de un trago): ni otro trago (con receta, o de una categoría que empieza con
+  /// "Trago"; "Para los tragos" sí va) ni una silla de la noche. El catálogo no cambia, y
+  /// lo que ya está elegido en una receta se sigue mostrando.
+  bool _puedeIrAdentro(_Fila f) =>
+      _ingredientesDe(f.producto.id).isEmpty &&
+      !paraBuscar(f.producto.categoria).trim().startsWith('trago') &&
+      !esSillaDeLaPuerta(f.producto.nombre);
 
   /// Lo que va por cc en algún trago: son las botellas, que no se venden solas.
   Set<String> get _botellas => {
@@ -813,7 +824,9 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     final ingredientes = _ingredientesDe(id);
     final opciones = [
       for (final f in _filas)
-        if (f.producto.id != id) f.producto,
+        if (f.producto.id != id &&
+            (_puedeIrAdentro(f) || ingredientes.any((i) => i.ingredienteId == f.producto.id)))
+          f.producto,
     ];
     final costo = _costoDe(id);
     final precio = trago.precioNum;
