@@ -193,6 +193,40 @@ void main() {
     expect(cuenta.ganancia, 700000);
   });
 
+  // 28-nov-2026: una rotura mostró que nada vigilaba el recargo de un trago con receta
+  // (la cuenta del trago va por otro camino que la de la lata).
+  test('el recargo de un trago con receta tampoco entra en lo vendido', () {
+    const botella = 'p0000000-0000-4000-8000-000000000009';
+    final c = caja(_viernes, noche4);
+    final cuenta = CuentaDelProveedor.de([
+      FiestaParaLaGanancia(
+        eventoId: _viernes,
+        nombre: 'TÉCNICA',
+        fecha: DateTime(2026, 12, 4),
+        cajas: [c],
+        ventas: [vender(c, _fernet, 6000, 2, recargo: 600)],
+        precios: [precio(_viernes, _fernet, 6000)],
+        recetas: [
+          RecetaBarra.para(
+            eventoId: _viernes,
+            productoId: _fernet,
+            ingredienteId: botella,
+            cantidad: 200,
+            unidad: UnidadDeReceta.cc,
+            ahora: noche4,
+          ),
+        ],
+        listas: {botella: 9000},
+        contenidos: {botella: 750},
+      ),
+    ]);
+    final fernet = cuenta.productos.singleWhere((p) => p.productoId == _fernet);
+    expect(fernet.seVendio, 1200000, reason: r'2 x $6.000, sin los $600 de recargo');
+    expect(fernet.leDebo, 480000, reason: r'400 cc de una botella de $9.000 que trae 750');
+    expect(cuenta.recargo, 60000);
+    expect(cuenta.ganancia, 720000);
+  });
+
   test('una caja de prueba de otro día no suma, y se dice', () {
     final prueba = caja(_viernes, DateTime.utc(2026, 12, 2, 18), n: 9);
     final c = caja(_viernes, noche4);

@@ -55,8 +55,10 @@ alto, sin acostarlo): **"claro, iría así, grande y que muestre todo, entonces 
 - GANANCIA dice "Se vendió $21.000" y LAS CAJAS "$21.400": la diferencia es el recargo por transferencia, que GANANCIA
   no cuenta como venta (paga Mercado Pago). Confirmar que está bien.
 
-**Las roturas de la barra y la tele, todas juntas sobre lo de hoy:** ver abajo el resultado (se corrieron en segundo
-plano; los registros en `build/roturas_28nov/`).
+**Las roturas de la barra y la tele, todas juntas sobre lo de hoy: 262 de 262 atrapadas** (14 listas; registros en
+`build/roturas_28nov/`). La primera pasada dio 258: tres de `tool/roturas_precio_de_lista.txt` tenían el texto de
+antes de cambios posteriores (puestas al día) y una mostró que **nada vigilaba el recargo de un trago con receta en
+GANANCIA** (la cuenta estaba bien): prueba nueva en `test/cuenta_del_proveedor_test.dart`.
 
 **Lo que falta, en orden:**
 1. Que mire las capturas (las de hoy y las de ayer: `build/capturas_4dic/`, `build/capturas_tele_27nov/`) y conteste las

@@ -73,8 +73,8 @@ test/cuenta_del_proveedor_test.dart
 G13 el precio de lista pierde los centavos
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/cuenta_del_proveedor_test.dart
-final lista = listaPesos == null ? null : centavos(listaPesos);
-final lista = listaPesos == null ? null : listaPesos.truncate() * 100;
+return l == null ? null : centavos(l);
+return l == null ? null : l.truncate() * 100;
 ---
 el vodka no baja el Speed del stock
 lib/features/barra/cuentas/recetas_de_la_barra.dart
@@ -103,7 +103,7 @@ test/recetas_de_la_barra_test.dart
 el fernet en cc se cobra entero, como una botella por trago
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/recetas_de_la_barra_test.dart
-            parte = (vendidas * r.cantidad * l / cc).round();
+            parte = (vendidas * r.cantidad * l / trae).round();
             parte = vendidas * l;
 ---
 el trago se paga como si fuera de stock propio y no por la receta
@@ -145,8 +145,8 @@ test/recetas_en_la_barra_test.dart
 VENDER no dice cuántos vodkas quedan
 lib/features/barra/widgets/vender_screen.dart
 test/recetas_en_la_barra_test.dart
-    if (_recetas.enteros(productoId).isNotEmpty) {
-    if (false) {
+    final alcanza = _recetas.alcanzaPara(productoId, _quedanDe);
+    final alcanza = _recetas.alcanzaPara(productoId, (_) => null);
 ---
 la cuenta no se lleva el Speed de los vodkas
 lib/features/barra/widgets/vender_screen.dart
