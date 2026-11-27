@@ -624,6 +624,13 @@ tablets: sin confirmar. Hasta que todos los equipos la tengan: **no vender entra
     `upsert`). **Pide internet y relee todo antes de guardar** (`SyncEngine.bajarParaLosLugares`); si la lista cambió
     mientras se miraba, muestra la nueva. Solo en modo jefe, y la venta de entradas no puede llamarlo
     (`test/solo_modo_jefe_test.dart`, `test/venta_entradas_no_toca_test.dart`).
+  - **Lo que cuenta es cuándo se AGREGÓ, no cuándo se pagó** (el usuario, 27-nov). Para una fiesta sorteada antes de la
+    6.9.2 se averigua con **las copias de la base** (`Documentos\Junior Eventos\backups\antes_de_vNN.db`:
+    `mesa_extra_cantidad` y `sillas_extra_cantidad` de cada ficha ese día) y con **`mora_fotos.contrato_updated_at`**
+    (la última vez que se tocó la ficha en cada foto). **Una lista aceptada no se vuelve a abrir desde el programa**:
+    el 27-nov se corrigieron tres alumnos en la nube con su OK. `tool/lugares_para_aceptar_test.dart` calcula, con el
+    código del programa, lo que quedaría anotado. **El arreglo va en la versión del 4-dic** (un registro en la nube
+    de cada cambio de mesas o sillas; ver "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`).
   - **La lista no vive en `lib/features/entradas/`**: lee alumnos y pagos, que la venta no toca. PRECIOS recibe la
     foto y un `revisarLugares` de quien lo abre.
   - `sorteos_mesas` está en `tablasDeLaPuerta`: la tablet que vende sin internet necesita el registro.
@@ -918,6 +925,11 @@ permisos, las pantallas en la app de verdad, publicar; el plano impreso entero, 
   rechazadas:)`). **Ninguna comprobación del rol pide la clave de nuevo.** El PIN maestro de fábrica no le preocupa al
   usuario: no insistir ni poner un aviso. **Sin señal se sigue vendiendo**: con el stock en 0 avisa y deja vender, y lo
   vendido de más se descuenta solo de lo que se reponga (falta programarlo, con el repositor).
+- **La notebook de la barra a la vista de todos (27-nov, programado SIN PRUEBAS; `jefe/vista_simple_de_la_notebook.dart`):**
+  queda en **la vista simple**, solo la central y **sin botón APAGAR** (`PanelCentralDeLaBarra(sinApagar:)`: "si no, todos
+  se desconectan"); lo del jefe vuelve **manteniendo apretado 2 s el logo de arriba** con **la clave de esa notebook, la
+  que ya tiene para el modo jefe** (no una nueva). **Viene apagado**: el candado de arriba la deja así ya o tilda que se
+  bloquee sola a los 2 minutos con la central prendida. Bloquear nunca toca la central.
 - **La segunda llave:** `BarraConLaRed(rolDeQuienUsa:)` tira `NoLeTocaEnLaBarra` si no le toca (anular, cerrar sin el
   OK, el cambio, el catálogo); `barraDeEsteEquipoProvider` la pone siempre.
 - **La central de la barra pide el PIN** (`central/llave_de_la_barra.dart`): reto y firma, **el PIN no viaja**; la

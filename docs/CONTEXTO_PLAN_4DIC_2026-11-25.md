@@ -2,6 +2,56 @@
 
 ## Para retomar en otro chat
 
+### EMPEZAR POR ACÁ: cómo quedó el 27-nov a las 20:30 (el usuario cerró el chat: "retomaré en otro chat")
+
+**El plan del 4-dic va por ~78 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Recomendado: publicar
+a más tardar el martes 1 o miércoles 2-dic. Todo lo de abajo está guardado y subido (último commit: el de esta nota).
+El detalle de cada cosa está en los bloques que siguen, en este orden.
+
+**Lo que se hizo el 27-nov (tarde y noche), ya guardado:**
+- Repaso entero: `flutter analyze` sin errores en `lib/` y `test/`; la suite entera **6.742 en verde y 1 falla, la de
+  siempre** (LA ALFONSINA), corrida ANTES de la vista simple de la notebook; después, las pruebas de la barra: 954.
+- La revisión independiente de los roles (12 hallazgos) y lo que salió de ahí: la conexión con la central es de la
+  persona; VENDER dice el problema del PIN y lo que la central no aceptó; leer el precio de lista mira el rol; **la
+  encargada cierra su propia caja sola**; su cambio, con motivo; **el jefe en una tablet se conecta a la central**.
+- **La vista simple de la notebook de la barra: programada, SIN PRUEBAS** (ver su bloque).
+- **Lugares al sorteo, en la app en uso:** tres alumnos de una fiesta corregidos en la nube con el OK del usuario
+  (cargaron después del sorteo y habían quedado con descuento).
+
+**Lo que falta, en orden:**
+1. **Lugares al sorteo, las 4 fiestas con la lista sin aceptar: PREPARADO, SIN APLICAR.** El usuario dijo "yo veré
+   ahora, otras instituciones, cuando llego a casa": **no aplicar nada sin que lo pida.** Está todo en
+   `build/lugares_27nov/` (fuera de git): `anotar_lugares.sql` (un `update` por fiesta, atado a la huella del
+   renglón y a que no tenga lista: si el jefe aceptó esa lista desde el programa, no hace nada), `tildar.json`,
+   `lugares_para_aceptar.json` y los dos scripts. Se rehace con `tool/lugares_para_aceptar_test.dart` sobre una copia
+   nueva (`tool/copiar_base_solo_lectura.py`). Marcaba sin descuento a 10 (las 6 mesas adicionales que el programa
+   tilda solo y 4 casos de sillas probados) y dejaba **4 dudosos con descuento** (uno de la fiesta ya aceptada y
+   tres de dos de las pendientes): los decide el jefe. La guía con nombres: `build/revisar_lugares_2026-11-27.md`.
+2. **El arreglo de fondo, decidido para ESTA versión** ("no da para estar revisando todas las listas todo el tiempo",
+   "poné algo más que sea verificable, más confiable"), sin programar:
+   - **un registro en la nube de cada vez que cambia la cantidad de mesas adicionales o de sillas de una ficha**
+     (qué había, qué quedó, cuándo, desde qué equipo), escrito por un trigger como el de `mora_cambios` (solo anota,
+     nunca frena; SQL solo de agregar, con su OK): vale para todas las PCs y versiones;
+   - que el programa decida solo con eso (y con la foto del sorteo) qué va con descuento, y que se vea la fecha;
+   - que lo "para revisar" no se acepte sin elegir, y que el jefe pueda corregir una familia de una lista aceptada.
+   **Decirle el diseño antes de programar** (maqueta si cambia una pantalla).
+3. **La vista simple de la notebook:** escribir sus pruebas y roturas, las capturas, y preguntarle por la misma vista
+   para la encargada en la notebook.
+4. Del hallazgo 2 de los roles: mostrar los rechazos en LAS CAJAS y en la notebook. Los hallazgos 5, 7, 9, 10 y 11,
+   sin verificar.
+5. Las 16 listas de roturas y la suite entera sobre lo último; el recorrido por rol y **la tele entera en el
+   sandbox** (lo pidió), con capturas.
+6. El plan: **Noche y Blanco**; **el repositor** ("Voy en camino", todo al toque, sin stock no se vende con señal y
+   con aviso sin señal, lo vendido de más se descuenta de lo repuesto); **la página de la encargada en el iPhone**;
+   la noche simulada y la tercera revisión; **el plano a todo lo ancho en la tele**; y **publicar con él** (v83 y v84
+   sobre una copia, los dos SQL de la barra, foto de la mora).
+
+**Lo que depende del usuario:** instalar la 6.9.4 en las otras dos PCs y avisar (foto "después"); decir **qué versión
+tiene cada PC y en qué pantalla ve "15.000" en una y "10 mil" en otra** (quedó sin resolver); mirar las capturas;
+probar el APK en la Quint; las tablets y el router del salón. El PIN maestro queda en 2026 ("lo cambio después").
+
+---
+
 ### LEER PRIMERO (lo último): 27-nov a la tarde, chat "decime bien qué falta" — el repaso y la revisión de los roles
 
 **Ojo con las fechas:** lo que más abajo dice "28-nov" se hizo el **27-nov** (git lo fecha el 27; ese chat iba un día
