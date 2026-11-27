@@ -106,6 +106,14 @@
     `paraElStock`**, y otra que ninguna pantalla de la cajera, la encargada o el repositor nombre el costo).
     Roturas 5 de 5 (al final de `tool/roturas_precio_de_lista.txt`). **"Sin stock no se vende" sigue como antes
     (pregunta y deja VENDER IGUAL)**: el freno de verdad va con el stock por barra en VENDER.
+  - **El efectivo esperado con retiros y cambio, la cuenta (26-nov, noche):** `CierreDeBarra` tiene `cambioAgregado`
+    y `retirado`, y `efectivoEsperado` = cambio + cambio agregado + efectivo − retirado; `CierreDeBarra.de` y
+    `deLaFiesta` reciben `movimientos:` (lo de otra caja no cuenta; el mismo llegado dos veces, una).
+    `test/cierre_con_retiros_test.dart` (7) y `tool/roturas_retiros.txt` (4 de 4). **Falta:** que la barra lea y
+    guarde los movimientos (`BarraDelJefe`/`BarraDeLaCaja` y sus cinco implementaciones), que viajen por la central
+    (`tablasDeLaRed` + `porQueNoSeGuarda`: solo encargada y jefe), y pasarlos en los 4 lugares de la app que dicen el
+    esperado (LAS CAJAS con `ResumenDeCajas.de`, cerrar caja dos veces, el OK). **La prueba que lo exige ya está
+    escrita, en espera (`skip`)**: al cablearlo, sacarle el `skip`. Y las pantallas RETIRO y CAMBIO (con maqueta).
   - **Lo que sigue, en orden:** (1) la **v84** con tres tablas: `barra_costos` (con `contenido_cc`), `barra_recetas`
     y `barra_caja_movimientos` (retiro · cambio · ajuste_cambio, solo se agregan filas; borrador del modelo
     `MovimientoDeCaja` en el scratchpad de este chat: rehacerlo si se perdió) + las listas de `sync_engine.dart`

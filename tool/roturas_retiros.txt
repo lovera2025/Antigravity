@@ -1,0 +1,24 @@
+el retiro no resta del efectivo esperado
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/cierre_con_retiros_test.dart
+        centavos(cambioInicial) + centavos(cambioAgregado) + centavos(efectivo) - centavos(retirado),
+        centavos(cambioInicial) + centavos(cambioAgregado) + centavos(efectivo),
+---
+el retiro de otra caja cuenta
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/cierre_con_retiros_test.dart
+      if (cajaId != null && m.cajaBarraId != cajaId) continue;
+
+---
+el mismo movimiento llegado dos veces cuenta dos
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/cierre_con_retiros_test.dart
+      if (!vistos.add(m.id)) continue;
+      vistos.add(m.id);
+---
+el cambio que da la encargada no suma
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/cierre_con_retiros_test.dart
+        cambioAgregado += efecto;
+        cambioAgregado += 0;
+---

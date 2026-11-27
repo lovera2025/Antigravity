@@ -1,4 +1,5 @@
 import '../datos/barra_repositorio.dart';
+import '../datos/movimiento_de_caja.dart';
 import 'dia_de_operacion.dart';
 import 'pesos.dart';
 import 'silla_de_la_puerta.dart';
@@ -57,6 +58,13 @@ class VendidoDeCategoria {
 class CierreDeBarra {
   final double cambioInicial;
 
+  /// El cambio que la encargada le dio después de abrir, y los ajustes del cambio
+  /// (`barra_caja_movimientos`, v84): suman al efectivo que tiene que haber.
+  final double cambioAgregado;
+
+  /// El efectivo que la encargada (o el jefe) se llevó de la caja: resta.
+  final double retirado;
+
   /// Las que cuentan: sin las anuladas.
   final int ventas;
   final int anuladas;
@@ -90,6 +98,8 @@ class CierreDeBarra {
 
   const CierreDeBarra({
     required this.cambioInicial,
+    this.cambioAgregado = 0,
+    this.retirado = 0,
     required this.ventas,
     required this.anuladas,
     required this.mixtos,
@@ -108,11 +118,15 @@ class CierreDeBarra {
 
   /// Las de [caja] entre [ventas]; las de otra caja no se cuentan. [categorias] es la
   /// categoría de cada producto del catálogo (id → "Tragos"): sin ella todo va a "Otros".
+  /// [movimientos]: los retiros y el cambio de la encargada (v84); los de otra caja no
+  /// cuentan. **Toda pantalla o papel de la app que diga el efectivo esperado los pasa**
+  /// (`test/cierre_con_retiros_test.dart` lo lee).
   factory CierreDeBarra.de(
     CajaBarra caja,
     Iterable<VentaBarra> ventas,
     Iterable<AnulacionBarra> anulaciones, {
     Map<String, String> categorias = const {},
+    Iterable<MovimientoDeCaja> movimientos = const [],
   }) =>
       CierreDeBarra._contar(
         cajaId: caja.id,
@@ -120,6 +134,7 @@ class CierreDeBarra {
         ventas: ventas,
         anulaciones: anulaciones,
         categorias: categorias,
+        movimientos: movimientos,
       );
 
   /// **Todas las cajas de la fiesta juntas** (LO VENDIDO DE LA FIESTA): las mismas
@@ -130,6 +145,7 @@ class CierreDeBarra {
     Iterable<AnulacionBarra> anulaciones, {
     double cambioInicial = 0,
     Map<String, String> categorias = const {},
+    Iterable<MovimientoDeCaja> movimientos = const [],
   }) =>
       CierreDeBarra._contar(
         cajaId: null,
@@ -137,6 +153,7 @@ class CierreDeBarra {
         ventas: ventas,
         anulaciones: anulaciones,
         categorias: categorias,
+        movimientos: movimientos,
       );
 
   /// [cajaId] null: las de todas las cajas.
@@ -146,7 +163,21 @@ class CierreDeBarra {
     required Iterable<VentaBarra> ventas,
     required Iterable<AnulacionBarra> anulaciones,
     required Map<String, String> categorias,
+    Iterable<MovimientoDeCaja> movimientos = const [],
   }) {
+    var cambioAgregado = 0, retirado = 0;
+    final vistos = <String>{};
+    for (final m in movimientos) {
+      if (cajaId != null && m.cajaBarraId != cajaId) continue;
+      // Solo se agregan filas: la misma, llegada dos veces, cuenta una.
+      if (!vistos.add(m.id)) continue;
+      final efecto = m.efectoEnCentavos;
+      if (m.tipo == TipoMovimientoDeCaja.retiro) {
+        retirado += -efecto;
+      } else {
+        cambioAgregado += efecto;
+      }
+    }
     final anuladasIds = ventasAnuladas(anulaciones);
     var cuentan = 0, anuladas = 0, mixtos = 0, conTransferencia = 0;
     var efectivo = 0, transferencia = 0, efectivoAnulado = 0, transferenciaAnulada = 0;
@@ -232,6 +263,8 @@ class CierreDeBarra {
       });
     return CierreDeBarra(
       cambioInicial: cambioInicial,
+      cambioAgregado: deCentavos(cambioAgregado),
+      retirado: deCentavos(retirado),
       ventas: cuentan,
       anuladas: anuladas,
       mixtos: mixtos,
@@ -252,8 +285,11 @@ class CierreDeBarra {
   /// Lo cobrado que cuenta, en efectivo y por transferencia (con los recargos).
   double get total => deCentavos(centavos(efectivo) + centavos(transferencia));
 
-  /// El cambio con que abrió más el efectivo de lo vendido.
-  double get efectivoEsperado => deCentavos(centavos(cambioInicial) + centavos(efectivo));
+  /// El cambio con que abrió, más el que le dio la encargada, más el efectivo de lo
+  /// vendido, menos lo que se retiró.
+  double get efectivoEsperado => deCentavos(
+        centavos(cambioInicial) + centavos(cambioAgregado) + centavos(efectivo) - centavos(retirado),
+      );
 
   /// Lo contado menos lo esperado: positivo sobra, negativo falta.
   double diferenciaCon(double contado) =>
