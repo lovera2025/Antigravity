@@ -169,6 +169,58 @@ void main() {
     await guardar(tester, clave, 'Jefe_2b_precios_con_lista_pc.png');
   });
 
+  testWidgets('GANANCIA en la PC, con la ganancia de cada producto abierta', (tester) async {
+    final (clave, _) = await montar(
+      tester,
+      const Size(1280, 1300),
+      PestanaBarraJefe.ganancia,
+      antes: (prueba) async {
+        final b = prueba.barra;
+        final ahora = DateTime(2026, 11, 20);
+        ProductoBarra de(String nombre) => b.productosGuardados.firstWhere((p) => p.nombre == nombre);
+        final fernetConCoca = de('Fernet con coca').id;
+        final botellaFernet = b.producto('Fernet 750', categoria: 'Botellas');
+        final botellaCoca = b.producto('Coca-Cola 2,25', categoria: 'Botellas');
+        for (final (id, lista, cc) in [
+          (de('Cerveza tirada').id, 1500.0, null),
+          (de('Quilmes lata').id, 1500.0, null),
+          (de('Coca-Cola').id, 900.0, null),
+          (de('Gin tonic').id, 2400.0, null),
+          (de('Mojito').id, 2100.0, null),
+          (de('Campari con naranja').id, 2200.0, null),
+          (de('Speed con vodka').id, 2600.0, null),
+          (de('Agua sin gas').id, 600.0, null),
+          (de('Champán').id, 14000.0, null),
+          (de('Silla extra').id, 0.0, null),
+          (botellaFernet.id, 11740.0, 750),
+          (botellaCoca.id, 3000.0, 2250),
+        ]) {
+          await b.guardarCosto(
+            CostoBarra.para(eventoId: BarraEnPrueba.id(1), productoId: id, precioLista: lista, contenidoCc: cc, ahora: ahora),
+            quien: 'Jefe',
+          );
+        }
+        for (final (id, cc) in [(botellaFernet.id, 200), (botellaCoca.id, 500)]) {
+          await b.guardarReceta(
+            RecetaBarra.para(
+              eventoId: BarraEnPrueba.id(1),
+              productoId: fernetConCoca,
+              ingredienteId: id,
+              cantidad: cc,
+              unidad: UnidadDeReceta.cc,
+              ahora: ahora,
+            ),
+            quien: 'Jefe',
+          );
+        }
+      },
+    );
+    await tester.tap(find.byKey(const Key('jefe_ganancia_por_producto')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Jefe_8_ganancia_pc.png');
+  });
+
   testWidgets('CAJAS y las ventas de una caja en la PC', (tester) async {
     final (clave, marta) = await montar(tester, const Size(1280, 860), PestanaBarraJefe.cajas);
     expect(tester.takeException(), isNull);

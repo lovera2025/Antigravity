@@ -6,7 +6,9 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
+import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/fiestas_del_jefe.dart';
 import '../widgets/elegir_impresora_screen.dart';
@@ -14,10 +16,12 @@ import 'barra_jefe_providers.dart';
 import 'cajas_de_la_fiesta.dart';
 import 'catalogo_del_jefe.dart';
 import 'elegir_fiesta.dart';
+import 'ganancia_del_jefe.dart';
 import 'precios_de_la_fiesta.dart';
 
 /// Las tres partes de BARRA.
-enum PestanaBarraJefe { catalogo, precios, cajas }
+/// GANANCIA va al final y solo la ve el jefe (`ReglasDeLaBarra.veElCostoYLaGanancia`).
+enum PestanaBarraJefe { catalogo, precios, cajas, ganancia }
 
 /// BARRA, la pantalla del jefe en la PC (etapa 7): **primero la fiesta** (abre en la
 /// próxima; CAMBIAR DE FIESTA para otra), y debajo CATÁLOGO, PRECIOS y CAJAS.
@@ -66,6 +70,8 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
   Widget _pantalla(BuildContext context) {
     final fiestas = ref.watch(fiestasDelJefeProvider);
     final esJefe = ref.watch(esRolJefeProvider);
+    // GANANCIA (lo que se le debe al proveedor y lo que se gana): solo el jefe.
+    final veGanancia = ReglasDeLaBarra.veElCostoYLaGanancia(ref.watch(rolEnLaBarraProvider));
     final enLaWeb = ref.watch(enLaWebProvider);
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
@@ -150,6 +156,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                     _Pestanas(
                       elegida: _pestana,
                       onElegir: (p) => setState(() => _pestana = p),
+                      conGanancia: veGanancia,
                     ),
                     const SizedBox(height: 12),
                     Expanded(
@@ -164,6 +171,14 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                             key: ValueKey('cajas_${fiesta.id}'),
                             fiesta: fiesta,
                           ),
+                        // Sin modo jefe no se ve (y la pestaña ni aparece).
+                        PestanaBarraJefe.ganancia when veGanancia => GananciaDelJefeVista(
+                            key: ValueKey('ganancia_${fiesta.id}'),
+                            fiesta: fiesta,
+                            todas: datos.todas,
+                            onIrAPrecios: () => setState(() => _pestana = PestanaBarraJefe.precios),
+                          ),
+                        PestanaBarraJefe.ganancia => const SizedBox.shrink(),
                       },
                     ),
                   ],
@@ -246,8 +261,9 @@ class _BloqueFiesta extends StatelessWidget {
 class _Pestanas extends StatelessWidget {
   final PestanaBarraJefe elegida;
   final ValueChanged<PestanaBarraJefe> onElegir;
+  final bool conGanancia;
 
-  const _Pestanas({required this.elegida, required this.onElegir});
+  const _Pestanas({required this.elegida, required this.onElegir, this.conGanancia = false});
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +275,7 @@ class _Pestanas extends StatelessWidget {
           (PestanaBarraJefe.catalogo, 'CATÁLOGO'),
           (PestanaBarraJefe.precios, 'PRECIOS'),
           (PestanaBarraJefe.cajas, 'CAJAS'),
+          if (conGanancia) (PestanaBarraJefe.ganancia, 'GANANCIA'),
         ])
           ChoiceChip(
             key: Key('jefe_pestana_${p.name}'),
