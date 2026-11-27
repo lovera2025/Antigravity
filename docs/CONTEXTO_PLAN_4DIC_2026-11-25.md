@@ -120,6 +120,20 @@ nombres en `build/revisar_lugares_2026-11-27.md`, fuera de git, mandado al usuar
 - **4 fiestas siguen con la lista sin aceptar**: 16 familias en duda (3, 3, 6 y 4) que van a aparecer para revisar.
 - **4 fiestas sorteadas con la versión nueva** tienen la foto tomada en el sorteo: nada que revisar.
 
+**Lo que cuenta es CUÁNDO SE AGREGÓ, no cuándo se pagó** (el usuario lo remarcó el 27-nov: "el haber agregado, ahí
+está el tema"). Cómo se sabe, para cualquier alumno:
+- **Las copias de la base de la PC** (`Documentos\Junior Eventosackupsntes_de_vNN.db`, una antes de cada
+  actualización: 9, 11, 15 y 22-nov) tienen `mesa_extra_cantidad` y `sillas_extra_cantidad` de cada ficha ese día
+  (se leen con `mode=ro&immutable=1`).
+- **La nube, sin depender de ninguna PC:** `mora_fotos.contrato_updated_at` dice cuándo se tocó la ficha por última
+  vez en cada foto; si entre el sorteo y una fecha nadie la tocó, nada se cargó en ese tramo. Y `sorteos_mesas` dice
+  a qué hora el programa dio una mesa "al cargarla".
+Con eso, en la fiesta aceptada el 27-nov: **dos alumnos agregaron después del sorteo y quedaron con descuento** (uno
+2 sillas, otro la mesa adicional) y uno queda sin prueba. **La corrección de esos dos está simulada y SIN APLICAR:**
+el usuario dijo "bancame, te digo que revises de vuelta, esperame". El SQL listo y las huellas, en
+`build/correccion_lugares_2026-11-27.md`; la guía alumno por alumno de las 5 fiestas, en
+`build/revisar_lugares_2026-11-27.md`. **No aplicar nada hasta que lo diga.**
+
 **Lo que dejó a la vista (ya decidido arriba):**
 - que el jefe pueda **corregir una familia de una lista ya aceptada** (hoy hace falta tocar la nube a mano);
 - que **lo que se carga después del sorteo deje huella** (hoy las sillas sin pago anterior quedan "para revisar" y es
