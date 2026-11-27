@@ -880,8 +880,9 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
 
 **Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (27-nov:
 ~73 %, nada publicado; la maqueta rehecha, `docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`, se aprobó con
-la forma A de GANANCIA y ya están PRECIOS con el precio de lista, GANANCIA y SACAR EFECTIVO · DAR CAMBIO; sigue Noche y
-Blanco; ahí está lo hecho con sus commits y lo que falta, en orden).
+la forma A de GANANCIA y ya están PRECIOS con el precio de lista, GANANCIA y SACAR EFECTIVO · DAR CAMBIO; la prueba de
+las teles en el sandbox salió bien; sigue: que mire las capturas, el plano a todo lo ancho en la tele y Noche y Blanco;
+ahí está lo hecho con sus commits y lo que falta, en orden).
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo

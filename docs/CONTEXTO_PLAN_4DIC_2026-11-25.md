@@ -143,25 +143,18 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   las dos teles, o dos emuladores); está cubierta por las pruebas, no se recorrió hoy. Y la Quint de verdad (la fluidez
   real, el borde verde, el control).
 
-**Lo que falta, en orden:**
+**Lo que falta, en orden** (27-nov, cierre del chat; el usuario: "vemos cómo queda en el próximo intento, retomamos
+en otro chat"):
 1. **Que mire las capturas** (`build/capturas_4dic/`: `Jefe_2b` PRECIOS, `Jefe_2c` cómo se prepara, `Jefe_8` GANANCIA,
-   `Jefe_9` una caja con retiros, `Jefe_10` SACAR EFECTIVO) y diga si va así. **Correr la suite entera**
-   (`bash tool/suite_por_tandas.sh`): la última, 6.698 y 1 falla (la de siempre), fue antes de la receta en chico;
-   después solo se corrieron las pruebas de PRECIOS y GANANCIA.
-2. **Pedido del usuario el 27-nov (noche): "no te olvides" — probar en el sandbox el circuito entero de las teles**
-   (**hecho en buena parte el 27-nov a la noche, "hacelo ya para ver"**; lo que dio, en "La prueba de las teles del
-   27-nov", abajo; falta lo que dice ahí),
-   antes de publicar y con todo lo de la barra ya junto: que ande y **tan fluido como la última vez en la Smart TV de
-   50"** (la Quint: 60 por segundo en la bienvenida y la flecha del camino, sin saltos); **todo lo del tótem y de
-   Recepción manejado desde la app** (los celulares de la puerta, marcar ingresos, saludos con la mesa, el plano con el
-   camino, cada tele con su escuela, MANTENER · CAMBIAR, girar, la Tele 2 enganchada a la 1, sin internet); y **que si
-   se sale de la página o de la app y se vuelve a entrar, siga todo perfecto** (la lista, las marcas, la escuela de cada
-   tele, la central y la conexión de los celulares). Con lo que ya existe: `tool/tele_prueba.dart`,
-   `tool/tele_salones_de_verdad_test.dart` (los 9 salones de verdad), `tool/puerta_sandbox_test.dart`,
-   `tool/kiosco_prueba.dart`, las roturas `tool/roturas_tele.txt`, y el APK en el emulador `Recepcion_Tablet` con
-   `-gpu host`; medir "Cómo anda" y compararlo con lo del 25-nov (`docs/CONTEXTO_TELE_COMO_TOTEM_2026-11-24.md`).
-   Pendientes viejos de la tele que entran acá: el APK de prueba suelto y por qué LA FIESTA del emulador no mostró la
-   línea de cada escuela. Analizar todo y contarle qué se probó y qué queda solo para la tele de verdad.
+   `Jefe_9` una caja con retiros, `Jefe_10` SACAR EFECTIVO; `build/capturas_tele_27nov/`: la tele en el emulador) y
+   diga si va así. **Correr la suite entera** (`bash tool/suite_por_tandas.sh`): la última, 6.698 y 1 falla (la de
+   siempre), fue antes de la receta en chico; después corrieron PRECIOS, GANANCIA y las 1.170 de la tele, la puerta y
+   el tótem.
+2. **La tele: el plano a todo lo ancho** (el pedido y la propuesta, en "La prueba de las teles del 27-nov", arriba):
+   muestra con los 10 salones de verdad antes de programarlo, después la fluidez de nuevo. **El borde verde:** se ve
+   en el próximo intento con la Quint (el usuario: "vemos cómo queda en el próximo intento"); si aparece en la tele de
+   verdad, buscarlo ahí. **La Tele 2 de punta a punta** en el sandbox (la ventana `tool/tele_prueba.dart` con las dos
+   teles, o dos emuladores). Quedan para la tele de verdad: la fluidez real, el control y dos teles por el router.
 3. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
    CAJAS, VENTAS y cerrar caja van siempre en Noche): cada aparato elige el suyo y vale para todas sus pantallas.
 4. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
