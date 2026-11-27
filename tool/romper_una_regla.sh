@@ -40,9 +40,16 @@ romper() {
   fi
   flutter test --reporter=expanded $prueba > "$TMP/rotura.log" 2>&1
   local codigo=$?
-  cp "$TMP/respaldo.dart" "$archivo"
-  local despues
-  despues=$(sha256sum "$archivo" | cut -d' ' -f1)
+  # En Windows el compilador de la prueba (o el antivirus) puede tener el archivo
+  # tomado un rato después de terminar, y la copia falla (26-nov: dejó
+  # local_database.dart roto). Se reintenta hasta que quede exactamente como estaba.
+  local despues intento
+  for intento in 1 2 3 4 5 6 7 8 9 10; do
+    cp "$TMP/respaldo.dart" "$archivo" 2>/dev/null
+    despues=$(sha256sum "$archivo" | cut -d' ' -f1)
+    [ "$antes" = "$despues" ] && break
+    sleep 2
+  done
   local fallaron
   fallaron=$(grep -E "\[E\]$" "$TMP/rotura.log" | sed -E 's/^.*_test\.dart: //; s/ \[E\]$//' | sort -u | head -3 | cut -c1-110 | tr '\n' '|')
   if [ "$codigo" -ne 0 ]; then
@@ -50,7 +57,10 @@ romper() {
   else
     echo "[$nombre] ATENCION: el test sigue pasando con la regla rota"
   fi
-  [ "$antes" = "$despues" ] || echo "[$nombre] ATENCION: el archivo no quedo como estaba"
+  if [ "$antes" != "$despues" ]; then
+    echo "[$nombre] ATENCION: el archivo no quedo como estaba (el respaldo esta en $TMP/respaldo.dart): se frena aca"
+    exit 1
+  fi
 }
 
 # Sin los \r: en una carpeta con core.autocrlf el archivo de casos sale con finales de

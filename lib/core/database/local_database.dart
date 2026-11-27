@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 83;
+  static const int _version = 84;
 
   /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
   /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
@@ -170,6 +170,11 @@ class LocalDatabase {
       await crearTablasV83(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v83 sin crear: $e');
+    }
+    try {
+      await crearTablasV84(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v84 sin crear: $e');
     }
     return db;
   }
@@ -762,6 +767,7 @@ class LocalDatabase {
     await crearTablasV81(db);
     await crearTablasV82(db);
     await crearTablasV83(db);
+    await crearTablasV84(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1464,6 +1470,72 @@ class LocalDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_barra_stock_movimientos_evento ON barra_stock_movimientos(evento_id)',
+    );
+  }
+
+  /// Las tres tablas de la v84 (26-nov-2026): **lo que se le paga al proveedor, las
+  /// recetas de los tragos y la plata que mueve la encargada** (audio 77 y WhatsApp del
+  /// jefe; plan del 4-dic).
+  ///
+  /// `barra_costos`: el precio de lista de un producto en una fiesta y cuánto trae la
+  /// botella (`CostoBarra`), solo del jefe. `barra_recetas`: lo que lleva un trago
+  /// (`RecetaBarra`), sin plata. Las dos con id fijo, sin borrar. `barra_caja_movimientos`:
+  /// los retiros y el cambio que da la encargada (`MovimientoDeCaja`); **solo se agregan
+  /// filas**.
+  ///
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF NOT
+  /// EXISTS`, sin tocar ninguna tabla que ya exista. Una versión anterior no las conoce.
+  static Future<void> crearTablasV84(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_costos (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        producto_id TEXT NOT NULL,
+        precio_lista REAL,
+        contenido_cc INTEGER,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_costos_evento ON barra_costos(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_recetas (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        producto_id TEXT NOT NULL,
+        ingrediente_id TEXT NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 0,
+        unidad TEXT NOT NULL DEFAULT 'cc',
+        activo INTEGER NOT NULL DEFAULT 1,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_recetas_evento ON barra_recetas(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_caja_movimientos (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        caja_barra_id TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        monto REAL NOT NULL DEFAULT 0,
+        motivo TEXT NOT NULL DEFAULT '',
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_caja_movimientos_caja ON barra_caja_movimientos(caja_barra_id)',
     );
   }
 
@@ -3795,6 +3867,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v83 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v83: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 83, las tablas de la v84 no aparecen.
+    if (oldVersion < 84 && newVersion >= 84) {
+      debugPrint('  🔧 v84: el precio de lista, las recetas y la plata de la encargada');
+      try {
+        await crearTablasV84(db);
+        debugPrint('✅ Migración v84 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v84: $e');
       }
     }
   }

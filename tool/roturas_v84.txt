@@ -1,0 +1,36 @@
+la tablet baja el precio de lista
+lib/core/services/sync_engine.dart
+test/sync_tablas_v84_test.dart
+    if (table == 'barra_costos' && !bajaLoDelJefe) return true;
+
+---
+una tablet Android pasa por la PC del jefe
+lib/core/services/sync_engine.dart
+test/sync_tablas_v84_test.dart
+  static bool get bajaLoDelJefe => !(enAndroidParaLaPrueba ?? (!kIsWeb && Platform.isAndroid));
+  static bool get bajaLoDelJefe => true;
+---
+las recetas no bajan con lo de carga
+lib/core/services/sync_engine.dart
+test/sync_tablas_v84_test.dart
+    'barra_recetas',
+
+---
+los retiros no bajan con lo del cobro
+lib/core/services/sync_engine.dart
+test/sync_tablas_v84_test.dart
+    'barra_caja_movimientos',
+
+---
+una base nueva no crea las tablas de la v84 al abrir
+lib/core/database/local_database.dart
+test/migracion_v84_test.dart
+    await crearTablasV84(db);
+
+---
+la migración a la 84 no crea las tablas
+lib/core/database/local_database.dart
+test/migracion_v84_test.dart
+        await crearTablasV84(db);
+        debugPrint('sin crear las tablas');
+---

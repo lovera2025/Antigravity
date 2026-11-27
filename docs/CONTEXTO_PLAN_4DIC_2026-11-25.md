@@ -85,6 +85,19 @@
       `tool/roturas_precio_de_lista.txt`). Dos agujeros que encontraron, cerrados: LAS CAJAS con otro rol (prueba
       nueva que la monta con cajera, repositor y encargada) y la cuenta del fernet que dependía de un `cc!` para
       compilar (ahora `trae`).
+  - **La v84, programada (26-nov, noche):** `crearTablasV84` (`barra_costos` con `contenido_cc`, `barra_recetas`,
+    `barra_caja_movimientos`) y `_version = 84`; el modelo `datos/movimiento_de_caja.dart` (`MovimientoDeCaja`,
+    `TipoMovimientoDeCaja`: retiro · cambio · ajuste_cambio, con motivo); en `sync_engine.dart` las tres en las listas
+    (costos y recetas con lo de carga, los movimientos con lo del cobro), **`barra_costos` no baja en Android**
+    (`SyncEngine.bajaLoDelJefe`, `enAndroidParaLaPrueba`, en `_pullTable`) y `barra_recetas` en `tablasDeLaBarra`.
+    El SQL de la nube con las tres (sin correr). Pruebas: `test/migracion_v84_test.dart` (de 80 y de 83 a 84, la
+    vuelta atrás, la copia `antes_de_v84`), `test/sync_tablas_v84_test.dart`; `migracion_v83_test.dart` quedó fija
+    en la 83 y `sync_tablas_v77_test.dart` suma las recetas. Roturas: `tool/roturas_v84.txt` (**6 de 6**). Una de
+    ellas dejó `local_database.dart` roto: Windows tenía el archivo tomado un rato después de la prueba y el
+    respaldo no se pudo copiar. **`tool/romper_una_regla.sh` ahora reintenta la restauración y frena si no queda
+    igual.** **Falta de la v84:**
+    leer y guardar en `BarraDelJefe`/`BarraLocal`/`BarraNube`, y `barra_caja_movimientos` en `tablasDeLaRed` con
+    su regla en `porQueNoSeGuarda` (va con RETIRO).
   - **Lo que sigue, en orden:** (1) la **v84** con tres tablas: `barra_costos` (con `contenido_cc`), `barra_recetas`
     y `barra_caja_movimientos` (retiro · cambio · ajuste_cambio, solo se agregan filas; borrador del modelo
     `MovimientoDeCaja` en el scratchpad de este chat: rehacerlo si se perdió) + las listas de `sync_engine.dart`

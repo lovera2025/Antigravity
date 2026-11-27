@@ -172,7 +172,7 @@ void main() {
       }
     });
 
-    test('la tablet se lleva la fiesta, los PIN, el catálogo, los precios y el recargo', () {
+    test('la tablet se lleva la fiesta, los PIN, el catálogo, los precios, el recargo y las recetas', () {
       expect(SyncEngine.tablasDeLaBarra.toSet(), {
         'eventos',
         'operadores_caja',
@@ -181,6 +181,9 @@ void main() {
         'barra_precios',
         // v78: el recargo por transferencia de cada fiesta.
         'barra_recargos',
+        // v84: las recetas de los tragos (sin plata: el Speed del vodka baja el stock).
+        // El precio de lista (`barra_costos`) no: es solo del jefe.
+        'barra_recetas',
       });
     });
   });

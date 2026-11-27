@@ -1,6 +1,6 @@
--- 2026-11-26 — Dos tablas nuevas: el precio de lista de la barra y las recetas de los
--- tragos. Van con la v84 de la base local (plan del 26-nov, audio 77 del jefe, y sus
--- mensajes de esa noche por WhatsApp).
+-- 2026-11-26 — Tres tablas nuevas: el precio de lista de la barra, las recetas de los
+-- tragos y los retiros y el cambio de la encargada. Van con la v84 de la base local
+-- (plan del 4-dic; audio 77 del jefe y sus mensajes de esa noche por WhatsApp).
 --
 -- Pedido del jefe: al cargar el stock pone lo que le cobra el proveedor por unidad
 -- (el "precio de lista"); vende a su precio; y ve, **solo él** (pestaña GANANCIA,
@@ -19,6 +19,10 @@
 --   en la barra: sirve para calcular botellas) o 'unidad' (baja del stock, como el
 --   Speed). Sacar un ingrediente le pone `activo` en false: no se borra. **No lleva
 --   plata**: la baja la tablet (el Speed del vodka baja su stock).
+-- - `barra_caja_movimientos`: los retiros de efectivo y el cambio que da o corrige la
+--   encargada en una caja (`tipo`: 'retiro', 'cambio' o 'ajuste_cambio'), siempre con
+--   su porqué. **Solo se agregan filas**: corregir es otro movimiento. Entra en el
+--   efectivo que tiene que haber al cerrar la caja.
 --
 -- **No toca ninguna tabla existente.** Solo `create table if not exists`, sus
 -- índices, su RLS y sus disparadores de `updated_at`. Las versiones anteriores no
@@ -43,6 +47,7 @@
 -- ROLLBACK:
 --   drop table if exists public.barra_costos;
 --   drop table if exists public.barra_recetas;
+--   drop table if exists public.barra_caja_movimientos;
 
 create table if not exists public.barra_costos (
   id uuid primary key,
@@ -82,6 +87,25 @@ create index if not exists idx_barra_recetas_evento
 create index if not exists idx_barra_recetas_updated
   on public.barra_recetas(updated_at desc);
 
+create table if not exists public.barra_caja_movimientos (
+  id uuid primary key,
+  evento_id uuid not null,
+  caja_barra_id uuid not null,
+  tipo text not null,
+  monto numeric not null default 0,
+  motivo text not null default '',
+  hecho_por text,
+  device_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_barra_caja_movimientos_caja
+  on public.barra_caja_movimientos(caja_barra_id);
+
+create index if not exists idx_barra_caja_movimientos_updated
+  on public.barra_caja_movimientos(updated_at desc);
+
 -- ── 2. RLS y disparadores ───────────────────────────────────────────────────
 --
 -- RLS: igual que las demás de la barra, cualquier usuario logueado.
@@ -97,13 +121,13 @@ create index if not exists idx_barra_recetas_updated
 --   drop trigger if exists set_updated_at_ins_barra_costos on public.barra_costos;
 --   drop trigger if exists set_updated_at_upd_barra_costos on public.barra_costos;
 --   alter table public.barra_costos disable row level security;
---   (y lo mismo con barra_recetas)
+--   (y lo mismo con barra_recetas y barra_caja_movimientos)
 
 do $$
 declare
   t text;
 begin
-  foreach t in array array['barra_costos', 'barra_recetas'] loop
+  foreach t in array array['barra_costos', 'barra_recetas', 'barra_caja_movimientos'] loop
   execute format('alter table public.%I enable row level security', t);
 
   if not exists (
@@ -146,8 +170,8 @@ end $$;
 --     (select count(*) from public.barra_ventas)              as ventas_barra,
 --     (select count(*) from public.eventos)                   as eventos;
 --
--- DESPUÉS: las dos tablas con RLS prendida, y exactamente un disparador de insert y
--- uno de update cada una. Tiene que devolver dos filas, con rls = true, trg_insert = 1
+-- DESPUÉS: las tres tablas con RLS prendida, y exactamente un disparador de insert y
+-- uno de update cada una. Tiene que devolver tres filas, con rls = true, trg_insert = 1
 -- y trg_update = 1:
 --
 --   select c.relname as tabla,
@@ -157,15 +181,17 @@ end $$;
 --   from pg_class c
 --   left join pg_trigger t on t.tgrelid = c.oid and not t.tgisinternal
 --   where c.relnamespace = 'public'::regnamespace
---     and c.relname in ('barra_costos', 'barra_recetas')
+--     and c.relname in ('barra_costos', 'barra_recetas', 'barra_caja_movimientos')
 --   group by c.relname, c.relrowsecurity;
 --
--- Las policies (tiene que devolver dos filas):
+-- Las policies (tiene que devolver tres filas):
 --
 --   select tablename, policyname from pg_policies
---   where schemaname = 'public' and tablename in ('barra_costos', 'barra_recetas');
+--   where schemaname = 'public'
+--     and tablename in ('barra_costos', 'barra_recetas', 'barra_caja_movimientos');
 --
 -- Y que no entró a Realtime (tiene que devolver cero filas):
 --
 --   select tablename from pg_publication_tables
---   where pubname = 'supabase_realtime' and tablename in ('barra_costos', 'barra_recetas');
+--   where pubname = 'supabase_realtime'
+--     and tablename in ('barra_costos', 'barra_recetas', 'barra_caja_movimientos');

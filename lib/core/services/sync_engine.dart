@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -450,6 +451,9 @@ class SyncEngine {
     'barra_cierres': 'updated_at',
     'barra_stock_barras': 'updated_at',
     'barra_stock_movimientos': 'updated_at',
+    'barra_costos': 'updated_at',
+    'barra_recetas': 'updated_at',
+    'barra_caja_movimientos': 'updated_at',
     'entradas_config': 'updated_at',
     'entradas_cajas': 'updated_at',
     'entradas_ventas': 'updated_at',
@@ -1647,6 +1651,9 @@ class SyncEngine {
     // reposición o el reparto del jefe tienen que llegar enseguida a las cajas.
     'barra_stock_barras',
     'barra_stock_movimientos',
+    // Los retiros y el cambio de la encargada (v84): es plata, y entra en lo que tiene
+    // que haber al cerrar cada caja.
+    'barra_caja_movimientos',
     // La venta de entradas (v80): es plata, y dos PCs vendiendo la misma fiesta
     // tienen que verse en segundos (los números del talonario, las de los
     // lugares que ya compró una familia) y una anulación tiene que llegar a
@@ -1714,6 +1721,10 @@ class SyncEngine {
     'barra_precios',
     // El recargo de cada fiesta (v78): lo pone el jefe con los precios.
     'barra_recargos',
+    // El precio de lista y las recetas de los tragos (v84): los pone el jefe con los
+    // precios. El precio de lista no baja en una tablet ([_bajaLoDelJefe]).
+    'barra_costos',
+    'barra_recetas',
     // "Pago verificado" (v80): lo marca el jefe en la oficina. El precio de la
     // entrada pasó a lo del cobro el 22-nov-2026.
     'entradas_verificaciones',
@@ -2109,6 +2120,10 @@ class SyncEngine {
       if (table == 'barra_recargos') return 2;
       // El stock por barra (v83) cuelga de la fiesta y del producto, como el precio.
       if (table == 'barra_stock_barras' || table == 'barra_stock_movimientos') return 2;
+      // El precio de lista y las recetas (v84) cuelgan de la fiesta y del producto.
+      if (table == 'barra_costos' || table == 'barra_recetas') return 2;
+      // Los retiros y el cambio (v84) cuelgan de la caja.
+      if (table == 'barra_caja_movimientos') return 5;
       // La venta de entradas (v80), de padres a hijas, como la barra.
       if (table == 'entradas_config' || table == 'entradas_cajas') return 2;
       if (table == 'entradas_ventas') return 4;
@@ -2484,6 +2499,9 @@ class SyncEngine {
       _pullTable(db, 'barra_cierres', 'updated_at'),
       _pullTable(db, 'barra_stock_barras', 'updated_at'),
       _pullTable(db, 'barra_stock_movimientos', 'updated_at'),
+      _pullTable(db, 'barra_costos', 'updated_at'),
+      _pullTable(db, 'barra_recetas', 'updated_at'),
+      _pullTable(db, 'barra_caja_movimientos', 'updated_at'),
       _pullTable(db, 'entradas_config', 'updated_at'),
       _pullTable(db, 'entradas_cajas', 'updated_at'),
       _pullTable(db, 'entradas_ventas', 'updated_at'),
@@ -2561,6 +2579,8 @@ class SyncEngine {
     /// de una caja de la otra PC (6.3.3).
     bool avisar = true,
   }) async {
+    // El precio de lista es solo del jefe: una tablet no lo baja (v84).
+    if (table == 'barra_costos' && !bajaLoDelJefe) return true;
     try {
       final String claveMeta = 'last_pull_$table';
       // Consultar última fecha de sincronización exitosa
@@ -3094,7 +3114,18 @@ class SyncEngine {
     'barra_productos',
     'barra_precios',
     'barra_recargos',
+    // Las recetas (v84, sin plata): el Speed del vodka baja del stock de la tablet.
+    'barra_recetas',
   ];
+
+  /// En las pruebas: si el motor corre en una tablet Android.
+  @visibleForTesting
+  static bool? enAndroidParaLaPrueba;
+
+  /// Si este equipo baja el precio de lista de la barra (`barra_costos`, v84): **no en
+  /// una tablet Android** (la cajera, la encargada o el repositor); sí en la PC del jefe.
+  /// En la web el jefe lo lee directo de la nube.
+  static bool get bajaLoDelJefe => !(enAndroidParaLaPrueba ?? (!kIsWeb && Platform.isAndroid));
 
   /// Baja ya las [tablasDeLaBarra], para preparar la tablet en la oficina. Devuelve
   /// si bajaron todas. Igual que [bajarParaLaPuerta]: no espera al ciclo ni cambia el
@@ -3679,6 +3710,44 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v84: exactamente las del `toMap()` de `CostoBarra`, `RecetaBarra` y
+      // `MovimientoDeCaja`, y las del SQL (`test/sync_tablas_v84_test.dart`).
+      'barra_costos': [
+        'id',
+        'evento_id',
+        'producto_id',
+        'precio_lista',
+        'contenido_cc',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_recetas': [
+        'id',
+        'evento_id',
+        'producto_id',
+        'ingrediente_id',
+        'cantidad',
+        'unidad',
+        'activo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_caja_movimientos': [
+        'id',
+        'evento_id',
+        'caja_barra_id',
+        'tipo',
+        'monto',
+        'motivo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'barra_stock_movimientos': [
         'id',
         'evento_id',
@@ -4009,6 +4078,12 @@ class SyncEngine {
         'una fila por fiesta, producto y barra con id fijo: sacarla le pone activo en 0, no se borra',
     'barra_stock_movimientos':
         'solo se agregan filas: corregir es otro movimiento',
+    'barra_costos':
+        'una fila por fiesta y producto con id fijo: cambiar la lista la actualiza, no se borra',
+    'barra_recetas':
+        'una fila por fiesta, trago e ingrediente con id fijo: sacarlo le pone activo en 0, no se borra',
+    'barra_caja_movimientos':
+        'solo se agregan filas: corregir un retiro o un cambio es otro movimiento',
     'entradas_config':
         'una fila por fiesta con id fijo: cambiar el precio la actualiza, no se borra',
     'entradas_cajas': 'una caja se cierra, no se borra',
