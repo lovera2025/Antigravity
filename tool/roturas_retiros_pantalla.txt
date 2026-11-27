@@ -40,3 +40,21 @@ test/barra_jefe_pantalla_test.dart
                     key: Key('jefe_caja_retirado_${c.id}'),
                     key: Key('jefe_caja_retirado_x${c.id}'),
 ---
+el cartel del OK no dice lo que saco la encargada
+lib/features/barra/widgets/ok_del_cierre.dart
+test/retiros_de_la_encargada_test.dart
+              if (centavos(cuentas.retirado) != 0)
+              if (centavos(cuentas.retirado) == 12345)
+---
+el cartel del OK no dice el cambio que dio la encargada
+lib/features/barra/widgets/ok_del_cierre.dart
+test/retiros_de_la_encargada_test.dart
+              if (centavos(cuentas.cambioAgregado) != 0)
+              if (centavos(cuentas.cambioAgregado) < 0)
+---
+el cartel del OK pone lo sacado con signo mas
+lib/features/barra/widgets/ok_del_cierre.dart
+test/retiros_de_la_encargada_test.dart
+masOMenos(-cuentas.retirado), clave: 'ok_cierre_retirado'
+masOMenos(cuentas.retirado), clave: 'ok_cierre_retirado'
+---

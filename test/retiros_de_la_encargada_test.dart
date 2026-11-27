@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -331,6 +332,53 @@ void main() {
       );
       await b.anotarMovimientoDeCaja(_retiro(caja, 10000), quien: 'Romi');
       expect((await cuentasParaElOk(b, caja)).efectivoEsperado, 17000);
+    });
+
+    // 28-nov-2026: el cartel tenía los renglones nuevos sin una prueba que los mirara.
+    testWidgets('el cartel del OK muestra lo que dio y lo que sacó la encargada, solo si hubo', (tester) async {
+      final caja = (await tester.runAsync(() => BarraEnMemoria().abrirCaja(
+            eventoId: _fiesta,
+            operadorId: 'm',
+            operadorNombre: 'Marta',
+            numeroCaja: 1,
+            cambioInicial: 15000,
+          )))!;
+      final pedido = PasoDelCierre.pedir(caja: caja, efectivoContado: 10000, ahora: DateTime.utc(2026, 12, 5, 2));
+      Future<void> mostrar(List<MovimientoDeCaja> movs) async {
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: OkDelCierreDialog(
+              caja: caja,
+              pedido: pedido,
+              cuentas: CierreDeBarra.de(caja, const [], const [], movimientos: movs),
+            ),
+          ),
+        ));
+        await tester.pump();
+      }
+
+      String texto(String clave) => tester.widget<Text>(find.byKey(Key(clave))).data!;
+
+      await mostrar(const []);
+      expect(find.text('Cambio de la encargada'), findsNothing);
+      expect(find.text('Sacó la encargada'), findsNothing);
+      expect(texto('ok_cierre_esperado'), r'$ 15.000');
+      expect(texto('ok_cierre_diferencia'), r'Faltan $ 5.000');
+
+      await mostrar([_cambio(caja, 5000), _retiro(caja, 10000)]);
+      expect(find.text('Cambio de la encargada'), findsOneWidget);
+      expect(texto('ok_cierre_cambio_dado'), r'+$ 5.000');
+      expect(find.text('Sacó la encargada'), findsOneWidget);
+      expect(texto('ok_cierre_retirado'), r'-$ 10.000');
+      expect(texto('ok_cierre_esperado'), r'$ 10.000');
+      expect(texto('ok_cierre_diferencia'), 'Justo, sin diferencia');
+      // Lo que dio y lo que sacó, antes del esperado (como en el papel del cierre).
+      final arriba = [
+        for (final clave in ['ok_cierre_cambio_dado', 'ok_cierre_retirado', 'ok_cierre_esperado'])
+          tester.getTopLeft(find.byKey(Key(clave))).dy,
+      ];
+      expect(arriba, orderedEquals([...arriba]..sort()));
+      expect(tester.takeException(), isNull);
     });
   });
 
