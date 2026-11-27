@@ -37,8 +37,11 @@ cargando. Prueba `test/precio_de_lista_solo_lo_lee_el_jefe_test.dart` (lee `lib/
 - **La tele se prueba de nuevo entera en el sandbox** (ahora y después del plano a todo lo ancho), y la barra rol por
   rol (cajera, encargada, repositor, jefe).
 
-**La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código
-y sin arreglar todavía**:
+**La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código**.
+**El 1 quedó arreglado el 27-nov** (`quienUsaLaBarraProvider`: "operador:<id>", "jefe" o null; `ClienteDeLaBarra`
+recuerda de quién es la conexión, `_deQuien`, y `arrancar` / `arrancarSiNoHay` la rehacen si entró otra persona;
+prueba en `test/central_barra_provider_test.dart`, 2 roturas al final de `tool/roturas_permisos_barra.txt`; **toda
+prueba que arme un equipo de la barra reemplaza `quienUsaLaBarraProvider`**). **El 2 sigue sin arreglar:**
 1. **La conexión con la central queda a nombre de quien usó antes la tablet** (`central_barra_provider.dart`:
    `arrancar` solo la rehace si cambia el nombre de la caja, y `arrancarSiNoHay` no hace nada si ya hay una de esa
    fiesta). Una cajera sale, la encargada entra en esa tablet a LAS CAJAS: lo que acepta, anula o saca lo rechaza la
@@ -59,7 +62,7 @@ cerrada; el cambio de la cajera sin mirar si vendió; OK con `caja == null`); 10
 de la cajera se valida por nombre; 11) una fila nueva con otro `device_id` se acepta de cualquier rol; 12) la nube
 no tiene llave (límite conocido). El informe entero se pegó en el chat; no quedó en un archivo.
 
-**Lo que sigue, en orden:** arreglar 1 y 2 con sus pruebas y roturas; preguntarle 4, 6 y 8; las 16 listas de
+**Lo que sigue, en orden:** arreglar el 2 con sus pruebas y roturas; preguntarle 4, 6 y 8; las 16 listas de
 roturas sobre lo último; el recorrido por rol y la tele en el sandbox; y después el plan (Noche y Blanco, repositor,
 página de la encargada, plano a todo lo ancho, publicar).
 

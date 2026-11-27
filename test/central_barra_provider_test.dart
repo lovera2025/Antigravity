@@ -83,6 +83,7 @@ void main() {
     DateTime Function()? reloj,
     Future<String> Function()? elEquipo,
     Future<List<String>> Function()? direcciones,
+    String? Function()? quien,
     List<Override> mas = const [],
   }) {
     final barra = deAntes ??
@@ -105,6 +106,7 @@ void main() {
       guardadoDeLaCentralProvider.overrideWithValue(guardado),
       quienEsQuienEnLaBarraProvider.overrideWithValue(_personas),
       credencialDeLaBarraProvider.overrideWithValue(() async => _credencialDe(id)),
+      quienUsaLaBarraProvider.overrideWithValue(quien ?? () => 'operador:$id'),
       credencialDeLaCentralProvider.overrideWithValue(() async => _personas.credencialDelJefe),
       ...mas,
     ]);
@@ -330,6 +332,34 @@ void main() {
       await notifier.arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada · Romi');
       expect(identical(tablet.c.read(clienteDeLaBarraProvider), deVender), isTrue);
       expect(tablet.c.read(clienteDeLaBarraProvider)!.nombreCaja, 'Caja 2 · Romi');
+    });
+
+    // Revisión del 27-nov-2026: la cajera sale y la encargada entra en esa tablet a LAS
+    // CAJAS. La central reconoce a quien puso su PIN al conectarse: si la conexión no se
+    // rehace, la sigue tomando por la cajera y rechaza el OK, la anulación o el retiro.
+    test('si en la tablet entra otra persona, la conexión se rehace con la suya', () async {
+      String? quien = 'operador:sofia';
+      final tablet = equipo('tablet-a', quien: () => quien);
+      final notifier = tablet.c.read(clienteDeLaBarraProvider.notifier);
+      await notifier.arrancar(eventoId: _fiesta, nombreCaja: 'Caja 2 · Sofía');
+      final deSofia = tablet.c.read(clienteDeLaBarraProvider);
+      expect(deSofia, isNotNull);
+
+      quien = 'operador:romi';
+      await notifier.arrancarSiNoHay(eventoId: _fiesta, nombre: 'Encargada · Romi');
+      final deRomi = tablet.c.read(clienteDeLaBarraProvider);
+      expect(identical(deRomi, deSofia), isFalse, reason: 'la de Sofía se corta');
+      expect(deRomi!.nombreCaja, 'Encargada · Romi');
+
+      // La misma caja y el mismo nombre, pero ahora es el jefe en modo jefe: también.
+      quien = 'jefe';
+      await notifier.arrancar(eventoId: _fiesta, nombreCaja: 'Encargada · Romi');
+      expect(identical(tablet.c.read(clienteDeLaBarraProvider), deRomi), isFalse);
+
+      // Y la misma persona de nuevo: queda la que está.
+      final delJefe = tablet.c.read(clienteDeLaBarraProvider);
+      await notifier.arrancarSiNoHay(eventoId: _fiesta, nombre: 'Jefe');
+      expect(identical(tablet.c.read(clienteDeLaBarraProvider), delJefe), isTrue);
     });
 
     test('en la notebook con la central prendida, tampoco arranca otro cliente', () async {

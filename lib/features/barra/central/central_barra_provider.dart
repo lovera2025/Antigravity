@@ -114,6 +114,19 @@ final credencialDeLaBarraProvider = Provider<Future<CredencialDeLaBarra?> Functi
       return null;
     });
 
+/// **Quién está usando la barra en este aparato** ("operador:<id>", "jefe" o null), para
+/// saber si la conexión con la central sigue siendo de la misma persona. La central
+/// reconoce a quien puso su PIN **al conectarse**: si en la tablet entra otra persona (la
+/// cajera sale y la encargada abre LAS CAJAS) y la conexión no se rehace, la central la
+/// sigue tomando por la anterior y rechaza lo que hace (revisión del 27-nov-2026).
+final quienUsaLaBarraProvider = Provider<String? Function()>((ref) => () {
+      final estado = ref.read(appRoleProvider);
+      final op = estado.operador;
+      if (estado.esBarra && op != null) return 'operador:${op.id}';
+      if (ref.read(esRolJefeProvider)) return 'jefe';
+      return null;
+    });
+
 /// Con qué se engancha esta central a la de la otra barra: el PIN maestro de esta
 /// notebook (las dos notebooks tienen que tener el mismo). Los tests lo reemplazan.
 final credencialDeLaCentralProvider = Provider<Future<CredencialDeLaBarra?> Function()>(
@@ -503,6 +516,9 @@ final centralDeLaBarraProvider =
 class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
   ClienteDeLaCentral? _cliente;
 
+  /// De quién es la conexión que está abierta ([quienUsaLaBarraProvider] al arrancarla).
+  String? _deQuien;
+
   /// Si la tablet cambia de red, la caja busca la central de nuevo (26-nov-2026).
   VigiaDeLaRed? _vigia;
 
@@ -526,8 +542,12 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
     final central = ref.read(centralDeLaBarraProvider);
     if (central.prendida && central.eventoId == eventoId) return;
     final ya = _cliente;
-    if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja) return;
+    final quien = ref.read(quienUsaLaBarraProvider)();
+    // La misma fiesta, la misma caja **y la misma persona**: con otra, la conexión se
+    // rehace para que la central la reconozca por su PIN.
+    if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja && _deQuien == quien) return;
     _soltar();
+    _deQuien = quien;
     final equipo = await ref.read(equipoDeLaBarraProvider)();
     final aMano = await ref.read(guardadoDeLaCentralProvider).aMano();
     if (_cliente != null) return;
@@ -566,7 +586,9 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
   /// caja, queda esa, con su nombre; [arrancar] con otro nombre la cortaría y la
   /// volvería a armar.
   Future<void> arrancarSiNoHay({required String eventoId, required String nombre}) async {
-    if (_cliente?.eventoId == eventoId) return;
+    // "Queda esa" vale mientras sea de la misma persona: si la dejó conectada otra (la
+    // cajera que salió), se rehace con quien entró ahora.
+    if (_cliente?.eventoId == eventoId && _deQuien == ref.read(quienUsaLaBarraProvider)()) return;
     await arrancar(eventoId: eventoId, nombreCaja: nombre);
   }
 
@@ -585,6 +607,7 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
   void _soltar() {
     unawaited(_vigia?.cerrar());
     _vigia = null;
+    _deQuien = null;
     final c = _cliente;
     if (c == null) return;
     final aviso = ref.read(avisoALaRedProvider);

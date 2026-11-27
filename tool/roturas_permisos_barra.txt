@@ -148,3 +148,15 @@ test/encargada_de_barra_test.dart
                     pesos(precio.precio),
                     '',
 ---
+la conexión con la central queda a nombre de quien usó antes la tablet (LAS CAJAS)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    if (_cliente?.eventoId == eventoId && _deQuien == ref.read(quienUsaLaBarraProvider)()) return;
+    if (_cliente?.eventoId == eventoId) return;
+---
+la conexión con la central no mira quién la abrió (VENDER)
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja && _deQuien == quien) return;
+    if (ya != null && ya.eventoId == eventoId && ya.nombreCaja == nombreCaja) return;
+---
