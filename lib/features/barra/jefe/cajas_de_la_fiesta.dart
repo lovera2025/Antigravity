@@ -23,6 +23,7 @@ import '../providers/barra_providers.dart';
 import '../services/pantalla_despierta.dart';
 import '../services/papel_de_la_barra.dart';
 import '../widgets/elegir_papel.dart';
+import '../widgets/pesos_enteros_formatter.dart';
 import '../widgets/ok_del_cierre.dart';
 import '../widgets/vales_de_la_venta_screen.dart';
 import '../central/central_barra_provider.dart';
@@ -155,6 +156,177 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
       ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
       if (mounted) setState(() => _ocupado = false);
     }
+  }
+
+  /// Lo último que pasó con la plata de la caja que se está mirando.
+  ({String texto, bool error})? _avisoPlata;
+
+  /// **SACAR EFECTIVO, DAR CAMBIO o Corregir** (maqueta aprobada el 27-nov): la encargada
+  /// desde su sesión (también en su caja) o el jefe, siempre con motivo. Solo se agrega
+  /// una fila; sale a la red del salón y la tablet de esa caja lo cuenta al cerrar.
+  Future<void> _anotarPlata(CajaBarra caja, TipoMovimientoDeCaja tipo) => _conFreno(() async {
+        final pedido = await showDialog<({double monto, String motivo})>(
+          context: context,
+          builder: (_) => _PedirMovimiento(caja: caja, tipo: tipo),
+        );
+        if (pedido == null || !mounted) return;
+        if (_frenaSinModoJefe()) return;
+        final MovimientoDeCaja hecho;
+        try {
+          hecho = await ref.read(barraDelJefeProvider).anotarMovimientoDeCaja(
+                MovimientoDeCaja.nuevo(
+                  eventoId: caja.eventoId,
+                  cajaBarraId: caja.id,
+                  tipo: tipo,
+                  monto: pedido.monto,
+                  motivo: pedido.motivo,
+                  ahora: DateTime.now(),
+                ),
+                quien: quienEsElJefe(ref),
+              );
+        } on CajaYaCerrada {
+          if (mounted) setState(() => _avisoPlata = (texto: 'La Caja ${caja.numeroCaja} ya cerró: no se anota.', error: true));
+          return;
+        } catch (_) {
+          if (mounted) setState(() => _avisoPlata = (texto: 'No se pudo anotar. Probá de nuevo.', error: true));
+          return;
+        }
+        unawaited(ref.read(subirDeLaBarraProvider)('barra_caja_movimientos', hecho.id));
+        if (mounted) {
+          setState(() => _avisoPlata = (
+                texto: switch (tipo) {
+                  TipoMovimientoDeCaja.retiro => 'Anotado: sacaste ${pesos(pedido.monto)} de la Caja ${caja.numeroCaja}.',
+                  TipoMovimientoDeCaja.cambio => 'Anotado: le diste ${pesos(pedido.monto)} de cambio a la Caja ${caja.numeroCaja}.',
+                  TipoMovimientoDeCaja.ajusteCambio => 'Anotada la corrección de ${masOMenos(pedido.monto)}.',
+                },
+                error: false,
+              ));
+        }
+      });
+
+  /// La plata de la caja: lo que tiene que haber, de dónde sale, lo que se hizo con la
+  /// plata y los botones (con la caja abierta).
+  Widget _plataDeLaCaja(ResumenDeCaja r, List<MovimientoDeCaja> movimientos) {
+    final caja = r.caja;
+    final cuentas = r.cuentas;
+    final aviso = _avisoPlata;
+    Widget renglon(String a, String b, {Key? key, Color? color}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Expanded(child: Text(a, style: const TextStyle(color: Color(0xFFC9C4BA)))),
+              Text(b, key: key, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+            ],
+          ),
+        );
+    final orden = [...movimientos]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: DecoratedBox(
+        key: Key('jefe_caja_plata_${caja.id}'),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1913),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF4A3F1C)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('TIENE QUE HABER',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, letterSpacing: 1, color: Color(0xFFC9C4BA))),
+                  ),
+                  Text(
+                    pesos(cuentas.efectivoEsperado),
+                    key: const Key('jefe_caja_tiene_que_haber'),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              renglon('Cambio con que abrió', pesos(cuentas.cambioInicial)),
+              renglon('Efectivo vendido', pesos(cuentas.efectivo)),
+              if (centavos(cuentas.cambioAgregado) != 0)
+                renglon('Cambio que dio la encargada', masOMenos(cuentas.cambioAgregado), color: const Color(0xFF59D38A)),
+              if (centavos(cuentas.retirado) != 0)
+                renglon('Efectivo que sacó la encargada', masOMenos(-cuentas.retirado), color: const Color(0xFFFF8F82)),
+              if (orden.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text('LO QUE SE HIZO CON LA PLATA',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: .8, color: Color(0xFFA7A29A))),
+                for (final m in orden)
+                  Padding(
+                    key: Key('jefe_caja_movimiento_${m.id}'),
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${ArTime.formatHora(DateTime.parse(m.createdAt))} · ${switch (m.tipo) {
+                              TipoMovimientoDeCaja.retiro => 'Sacó efectivo',
+                              TipoMovimientoDeCaja.cambio => 'Dio cambio',
+                              TipoMovimientoDeCaja.ajusteCambio => 'Corrigió',
+                              null => 'Otro',
+                            }}${m.hechoPor == null ? '' : ' · ${m.hechoPor}'}\n${m.motivo}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        Text(masOMenos(deCentavos(m.efectoEnCentavos)), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+              ],
+              if (aviso != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    aviso.texto,
+                    key: const Key('jefe_caja_plata_aviso'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: aviso.error ? const Color(0xFFFF8F82) : const Color(0xFF59D38A),
+                    ),
+                  ),
+                ),
+              if (caja.abierta) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      key: const Key('jefe_caja_sacar_efectivo'),
+                      onPressed: _ocupado ? null : () => _anotarPlata(caja, TipoMovimientoDeCaja.retiro),
+                      icon: const Icon(Icons.south_west),
+                      label: const Text('SACAR EFECTIVO'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('jefe_caja_dar_cambio'),
+                      onPressed: _ocupado ? null : () => _anotarPlata(caja, TipoMovimientoDeCaja.cambio),
+                      icon: const Icon(Icons.north_east),
+                      label: const Text('DAR CAMBIO'),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                    ),
+                    TextButton(
+                      key: const Key('jefe_caja_corregir'),
+                      onPressed: _ocupado ? null : () => _anotarPlata(caja, TipoMovimientoDeCaja.ajusteCambio),
+                      child: const Text('Corregir (se anotó mal algo)'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _anular(VentaDeLaCaja x) => _conFreno(() async {
@@ -650,6 +822,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               ],
             ),
           ),
+          if (esJefe) _plataDeLaCaja(r, [for (final m in datos.movimientos) if (m.cajaBarraId == caja.id) m]),
           // VENTAS (una por una) o LO VENDIDO (cada bebida, por categoría).
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -1184,6 +1357,16 @@ class _TarjetaDeCaja extends StatelessWidget {
                 ),
                 renglon('Efectivo', pesos(cuentas.efectivo)),
                 renglon('Transferencia', pesos(cuentas.transferencia)),
+                if (centavos(cuentas.cambioAgregado) != 0)
+                  KeyedSubtree(
+                    key: Key('jefe_caja_cambio_dado_${c.id}'),
+                    child: renglon('Cambio de la encargada', masOMenos(cuentas.cambioAgregado)),
+                  ),
+                if (centavos(cuentas.retirado) != 0)
+                  KeyedSubtree(
+                    key: Key('jefe_caja_retirado_${c.id}'),
+                    child: renglon('Sacó la encargada', masOMenos(-cuentas.retirado)),
+                  ),
                 if (cuentas.sillas > 0)
                   KeyedSubtree(
                     key: Key('jefe_caja_sillas_${c.id}'),
@@ -1214,6 +1397,18 @@ class _TarjetaDeCaja extends StatelessWidget {
                   const Text(
                     'Lo contado y la diferencia aparecen cuando la cajera cierra.',
                     style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
+                  ),
+                // Un retiro (o una anulación) que llegó después de cerrar: lo anotado no se
+                // toca; esto lo dice, con la cuenta de ahora (27-nov).
+                if (r.cambioDespuesDelCierre)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Algo llegó después del cierre (un retiro o una anulación): con todo, '
+                      '${diferenciaEnPalabras(r.diferenciaConTodo!).toLowerCase()}.',
+                      key: Key('jefe_caja_cambio_despues_${c.id}'),
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFF2B84B)),
+                    ),
                   ),
                 // Cerró sin esperar el OK de la encargada (11-nov): para que el jefe la mire.
                 if (sinOk)
@@ -1327,6 +1522,126 @@ class _Stock extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// SACAR EFECTIVO, DAR CAMBIO o Corregir: cuánto y por qué. **El motivo es obligatorio.**
+/// Corregir pregunta si suma o resta (se anotó de menos o de más).
+class _PedirMovimiento extends StatefulWidget {
+  final CajaBarra caja;
+  final TipoMovimientoDeCaja tipo;
+
+  const _PedirMovimiento({required this.caja, required this.tipo});
+
+  @override
+  State<_PedirMovimiento> createState() => _PedirMovimientoState();
+}
+
+class _PedirMovimientoState extends State<_PedirMovimiento> {
+  final _monto = TextEditingController();
+  final _motivo = TextEditingController();
+  bool _suma = true;
+
+  static const _rapidos = {
+    TipoMovimientoDeCaja.retiro: ['Mucho efectivo en la caja', 'Para pagar algo', 'Lo pidió el jefe'],
+    TipoMovimientoDeCaja.cambio: ['Se quedó sin billetes chicos', 'Pidió más cambio'],
+    TipoMovimientoDeCaja.ajusteCambio: ['El cambio se anotó mal al abrir', 'Un retiro se anotó mal'],
+  };
+
+  @override
+  void dispose() {
+    _monto.dispose();
+    _motivo.dispose();
+    super.dispose();
+  }
+
+  int? get _numero => PesosEnterosFormatter.leer(_monto.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final n = _numero;
+    final listo = n != null && n > 0 && _motivo.text.trim().isNotEmpty;
+    final caja = 'Caja ${widget.caja.numeroCaja}${widget.caja.operadorNombre == null ? '' : ' · ${widget.caja.operadorNombre}'}';
+    final (titulo, boton) = switch (widget.tipo) {
+      TipoMovimientoDeCaja.retiro => ('Sacar efectivo · $caja', n == null ? 'SACAR' : 'SACAR ${pesos(n.toDouble())}'),
+      TipoMovimientoDeCaja.cambio => ('Dar cambio · $caja', n == null ? 'DAR' : 'DAR ${pesos(n.toDouble())}'),
+      TipoMovimientoDeCaja.ajusteCambio => ('Corregir · $caja', 'CORREGIR'),
+    };
+    return AlertDialog(
+      title: Text(titulo),
+      content: SizedBox(
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.tipo == TipoMovimientoDeCaja.ajusteCambio) ...[
+                SegmentedButton<bool>(
+                  key: const Key('mov_suma'),
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('Hay más (suma)', key: Key('mov_mas'))),
+                    ButtonSegment(value: false, label: Text('Hay menos (resta)', key: Key('mov_menos'))),
+                  ],
+                  selected: {_suma},
+                  onSelectionChanged: (v) => setState(() => _suma = v.first),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                key: const Key('mov_monto'),
+                controller: _monto,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [PesosEnterosFormatter()],
+                decoration: const InputDecoration(labelText: 'Cuánto', prefixText: '\$ '),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('mov_motivo'),
+                controller: _motivo,
+                decoration: const InputDecoration(labelText: 'Por qué (obligatorio)'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final (i, t) in (_rapidos[widget.tipo] ?? const <String>[]).indexed)
+                    ActionChip(
+                      key: Key('mov_rapido_$i'),
+                      label: Text(t),
+                      onPressed: () => setState(() => _motivo.text = t),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Queda anotado con tu nombre y la hora. No se borra: si te equivocás, "Corregir".',
+                style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+        FilledButton(
+          key: const Key('mov_confirmar'),
+          onPressed: listo
+              ? () => Navigator.pop(context, (
+                    monto: (widget.tipo == TipoMovimientoDeCaja.ajusteCambio && !_suma ? -n : n).toDouble(),
+                    motivo: _motivo.text.trim(),
+                  ))
+              : null,
+          child: Text(boton),
+        ),
+      ],
     );
   }
 }

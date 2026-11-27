@@ -561,7 +561,8 @@ void main() {
 
     testWidgets('el jefe anula cualquier venta, con motivo, y deja de contar', (tester) async {
       await armarLaNoche();
-      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      // Alta: con la plata de la caja arriba (27-nov), el total queda a la vista al anular.
+      await abrir(tester, pestana: PestanaBarraJefe.cajas, tamano: const Size(1280, 1500));
       await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
       await tocar(tester, find.byKey(Key('jefe_anular_${primera.id}')));
       await escribir(tester, find.byKey(const Key('motivo_texto')), 'se cobró dos veces');
@@ -573,6 +574,88 @@ void main() {
       expect(prueba.subidasDeLaBarra, contains('barra_anulaciones ${a.id}'));
       expect(find.byKey(Key('jefe_anulada_${primera.id}')), findsOneWidget);
       expect(texto(tester, 'jefe_kpi_total_valor'), r'$ 32.400');
+    });
+
+    testWidgets('SACAR EFECTIVO: con motivo, a su nombre, sube, y lo que tiene que haber baja', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      expect(texto(tester, 'jefe_caja_tiene_que_haber'), r'$ 18.000');
+      await tocar(tester, find.byKey(const Key('jefe_caja_sacar_efectivo')));
+      expect(apagado(tester, 'mov_confirmar'), isTrue, reason: 'sin monto ni motivo no se anota');
+      await escribir(tester, find.byKey(const Key('mov_monto')), '10000');
+      expect(apagado(tester, 'mov_confirmar'), isTrue, reason: 'el motivo es obligatorio');
+      await tocar(tester, find.byKey(const Key('mov_rapido_0')));
+      expect(find.text(r'SACAR $ 10.000'), findsOneWidget, reason: 'el botón dice cuánto');
+      await tocar(tester, find.byKey(const Key('mov_confirmar')));
+      final m = prueba.barra.movimientosDeCajaGuardados.single;
+      expect((m.tipo, m.monto, m.motivo, m.hechoPor, m.cajaBarraId),
+          (TipoMovimientoDeCaja.retiro, 10000, 'Mucho efectivo en la caja', 'Jefe', marta.id));
+      expect(prueba.subidasDeLaBarra, contains('barra_caja_movimientos ${m.id}'));
+      expect(texto(tester, 'jefe_caja_tiene_que_haber'), r'$ 8.000');
+      expect(texto(tester, 'jefe_caja_plata_aviso'), contains(r'sacaste $ 10.000 de la Caja 1'));
+      expect(find.byKey(Key('jefe_caja_movimiento_${m.id}')), findsOneWidget, reason: 'queda en lo que se hizo con la plata');
+    });
+
+    testWidgets('DAR CAMBIO suma y Corregir resta, cada uno con su fila', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      await tocar(tester, find.byKey(const Key('jefe_caja_dar_cambio')));
+      await escribir(tester, find.byKey(const Key('mov_monto')), '5000');
+      await escribir(tester, find.byKey(const Key('mov_motivo')), 'sin billetes chicos');
+      await tocar(tester, find.byKey(const Key('mov_confirmar')));
+      expect(texto(tester, 'jefe_caja_tiene_que_haber'), r'$ 23.000');
+      await tocar(tester, find.byKey(const Key('jefe_caja_corregir')));
+      await tocar(tester, find.byKey(const Key('mov_menos')));
+      await escribir(tester, find.byKey(const Key('mov_monto')), '2000');
+      await escribir(tester, find.byKey(const Key('mov_motivo')), 'el cambio se dio de más');
+      await tocar(tester, find.byKey(const Key('mov_confirmar')));
+      expect(texto(tester, 'jefe_caja_tiene_que_haber'), r'$ 21.000');
+      expect(
+        [for (final m in prueba.barra.movimientosDeCajaGuardados) (m.tipo, m.monto)],
+        [(TipoMovimientoDeCaja.cambio, 5000), (TipoMovimientoDeCaja.ajusteCambio, -2000)],
+      );
+    });
+
+    testWidgets('una caja cerrada no tiene SACAR EFECTIVO ni DAR CAMBIO', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${lucas.id}')));
+      expect(find.byKey(const Key('jefe_caja_sacar_efectivo')), findsNothing);
+      expect(find.byKey(const Key('jefe_caja_dar_cambio')), findsNothing);
+      expect(find.byKey(const Key('jefe_caja_tiene_que_haber')), findsOneWidget, reason: 'la plata se ve igual');
+    });
+
+    testWidgets('la tarjeta dice lo que sacó la encargada, y avisa si algo llegó después del cierre', (tester) async {
+      await armarLaNoche();
+      await prueba.barra.anotarMovimientoDeCaja(
+        MovimientoDeCaja.nuevo(
+          eventoId: pinaroli.id,
+          cajaBarraId: marta.id,
+          tipo: TipoMovimientoDeCaja.retiro,
+          monto: 10000,
+          motivo: 'Mucho efectivo',
+          ahora: DateTime(2026, 12, 4, 23, 30),
+        ),
+        quien: 'Romi',
+      );
+      // Un retiro de la caja de Lucas que a su tablet le llegó después de cerrar: contó
+      // 23.500 y anotó "faltan 500"; con el retiro, da justo.
+      prueba.barra.movimientosDeCajaGuardados.add(MovimientoDeCaja.nuevo(
+        eventoId: pinaroli.id,
+        cajaBarraId: lucas.id,
+        tipo: TipoMovimientoDeCaja.retiro,
+        monto: 500,
+        motivo: 'Para pagar el hielo',
+        ahora: DateTime(2026, 12, 4, 23, 30),
+      ));
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      expect(find.byKey(Key('jefe_caja_retirado_${marta.id}')), findsOneWidget);
+      expect(find.text(r'-$ 10.000'), findsWidgets);
+      expect(texto(tester, 'jefe_caja_cambio_despues_${lucas.id}'), contains('justo, sin diferencia'));
+      expect(find.text(r'Contó $ 23.500 · Faltan $ 500'), findsOneWidget, reason: 'lo anotado al cerrar no se toca');
+      expect(find.byKey(Key('jefe_caja_cambio_despues_${marta.id}')), findsNothing, reason: 'la abierta, no');
     });
 
     testWidgets('el jefe reimprime cualquier venta, no solo la última, y las veces que haga falta', (tester) async {

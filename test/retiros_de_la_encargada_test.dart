@@ -15,6 +15,8 @@ import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_local.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/widgets/ok_del_cierre.dart';
@@ -297,6 +299,24 @@ void main() {
       final noche = fiesta.delDia(DiaDeOperacion.deLaCaja(caja));
       expect(noche.resumen.cajas.single.cuentas.efectivoEsperado, 10000);
       expect(noche.resumen.retirado, 5000);
+    });
+
+    test('el papel del cierre dice lo que dio y lo que sacó la encargada, solo si hubo', () async {
+      final b = BarraEnMemoria();
+      final caja = await b.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1, cambioInicial: 15000);
+      List<String> renglones(Iterable<MovimientoDeCaja> movs) => [
+            for (final r in ModeloTicket.deCierre(caja, CierreDeBarra.de(caja, const [], const [], movimientos: movs), fiesta: 'X')
+                .whereType<RenglonTicket>())
+              '${r.izquierda} ${r.derecha}',
+          ];
+      expect(renglones(const []).where((r) => r.contains('encargada')), isEmpty);
+      final con = renglones([_cambio(caja, 5000), _retiro(caja, 25000)]);
+      expect(con, containsAllInOrder([
+        r'Cambio inicial $ 15.000',
+        r'Cambio de la encargada +$ 5.000',
+        r'Sacó la encargada -$ 25.000',
+        r'Efectivo esperado $ -5.000',
+      ]));
     });
 
     test('el cartel del OK cuenta lo que sacó la encargada', () async {

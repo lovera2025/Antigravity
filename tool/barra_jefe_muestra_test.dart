@@ -221,6 +221,49 @@ void main() {
     await guardar(tester, clave, 'Jefe_8_ganancia_pc.png');
   });
 
+  testWidgets('CAJAS: una caja con lo que sacó y dio la encargada, y el cartel de SACAR EFECTIVO', (tester) async {
+    late CajaBarra laDeMarta;
+    final (clave, marta) = await montar(
+      tester,
+      const Size(1280, 1100),
+      PestanaBarraJefe.cajas,
+      antes: (prueba) async {
+        final b = prueba.barra;
+        laDeMarta = b.cajasGuardadas.firstWhere((c) => c.operadorNombre == 'Marta');
+        for (final (tipo, monto, motivo) in [
+          (TipoMovimientoDeCaja.cambio, 5000.0, 'Se quedó sin billetes chicos'),
+          (TipoMovimientoDeCaja.retiro, 25000.0, 'Mucho efectivo en la caja'),
+        ]) {
+          await b.anotarMovimientoDeCaja(
+            MovimientoDeCaja.nuevo(
+              eventoId: laDeMarta.eventoId,
+              cajaBarraId: laDeMarta.id,
+              tipo: tipo,
+              monto: monto,
+              motivo: motivo,
+              ahora: DateTime.utc(2026, 12, 5, 2),
+            ),
+            quien: 'Romi',
+          );
+        }
+      },
+    );
+    await tester.tap(find.byKey(Key('jefe_caja_${laDeMarta.id}')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Jefe_9_caja_con_retiros_pc.png');
+    await tester.ensureVisible(find.byKey(const Key('jefe_caja_sacar_efectivo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('jefe_caja_sacar_efectivo')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('mov_monto')), '20000');
+    await tester.tap(find.byKey(const Key('mov_rapido_0')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Jefe_10_sacar_efectivo_pc.png');
+    expect(marta, isNotNull);
+  });
+
   testWidgets('CAJAS y las ventas de una caja en la PC', (tester) async {
     final (clave, marta) = await montar(tester, const Size(1280, 860), PestanaBarraJefe.cajas);
     expect(tester.takeException(), isNull);

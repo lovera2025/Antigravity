@@ -6,6 +6,9 @@ int centavos(double pesos) => (pesos * 100).round();
 
 double deCentavos(int c) => c / 100;
 
+/// "+$ 5.000" o "-$ 25.000": lo que dio o sacó la encargada de una caja.
+String masOMenos(double monto) => '${centavos(monto) < 0 ? '-' : '+'}${pesos(monto.abs())}';
+
 /// "$ 7.000", "$ 3.999,99", "$ -500": sin decimales si no hay centavos, que es lo que
 /// entra en un renglón de 58 mm. No depende del idioma del equipo.
 String pesos(double monto) {
