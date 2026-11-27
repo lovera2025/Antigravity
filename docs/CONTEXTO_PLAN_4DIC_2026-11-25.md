@@ -27,6 +27,12 @@ El detalle de cada cosa está en los bloques que siguen, en este orden.
    nueva (`tool/copiar_base_solo_lectura.py`). Marcaba sin descuento a 10 (las 6 mesas adicionales que el programa
    tilda solo y 4 casos de sillas probados) y dejaba **4 dudosos con descuento** (uno de la fiesta ya aceptada y
    tres de dos de las pendientes): los decide el jefe. La guía con nombres: `build/revisar_lugares_2026-11-27.md`.
+   **Las 9 instituciones revisadas una por una (20:40, pedido del usuario: "revisá las 9, porque dijiste cuatro"),**
+   con `tool/lugares_de_todas_las_fiestas_test.dart` (el cálculo del programa, `LugaresAlSorteo.vigente`, sobre una
+   copia de la base; dice quién tiene hoy más que al sorteo): **una** aceptada el 27-nov y corregida (7 pagan sin
+   descuento, 1 dudoso); **cuatro** con la foto tomada en el sorteo (en tres hay familias que agregaron después y ya
+   pagan sin descuento solas: 2, 3 y 1; en la otra, nadie); y **cuatro** con la lista sin aceptar (lo de arriba). El
+   detalle con nombres quedó al final de `build/revisar_lugares_2026-11-27.md`.
 2. **El arreglo de fondo, decidido para ESTA versión** ("no da para estar revisando todas las listas todo el tiempo",
    "poné algo más que sea verificable, más confiable"), sin programar:
    - **un registro en la nube de cada vez que cambia la cantidad de mesas adicionales o de sillas de una ficha**
