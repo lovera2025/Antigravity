@@ -103,7 +103,24 @@ nube, ese solo alumno y ese solo dato**: en `_lugares` del renglón del sorteo, 
 (el largo no cambia, todo lo demás igual, el alumno aparece una vez), la escritura atada a la huella del texto, y
 comprobado después. No tenía entradas vendidas. La corrección y su vuelta atrás, en
 `build/correccion_lugares_2026-11-27.md` (fuera de git; lleva ids).
-**Lo que dejó a la vista, sin decidir (preguntarle cuando termine lo del 4-dic):**
+**DECIDIDO por el usuario el 27-nov (20 hs): "hay que solucionar y llevarlo junto con la versión completa que
+estamos haciendo".** Va en esta versión, sin programar todavía. Lo que propongo (decírselo antes de programar):
+- **En REVISAR LA LISTA, lo que está "para revisar" no se acepta sin elegir**: cada renglón en duda pide "Lo tenía al
+  sorteo" o "Lo agregó después"; hoy viene sin tildar y ACEPTAR lo toma como "lo tenía" (así se escaparon las sillas).
+- **Corregir una familia de una lista ya aceptada**, en modo jefe, con internet y por el mismo camino
+  (`SorteosMesasRepository.completarLugares`), dejando dicho quién y cuándo.
+- Ver si conviene **anotar la huella al cargar** una mesa o sillas con el sorteo hecho (sin columnas nuevas en
+  `contratos_alumnos`).
+
+**La revisión de todas las fiestas (27-nov, 20 hs; solo lectura, mi cuenta con la regla del programa; el detalle con
+nombres en `build/revisar_lugares_2026-11-27.md`, fuera de git, mandado al usuario):**
+- **Una sola fiesta se aceptó tarde** (sorteada el 10-nov, aceptada hoy): ahí **5 familias quedaron con descuento sin
+  prueba** de que lo tuvieran al sorteo (3 con sillas, 2 con la mesa adicional). El usuario tiene que decir cuáles lo
+  agregaron después; esas se corrigen en la nube como la de hoy.
+- **4 fiestas siguen con la lista sin aceptar**: 16 familias en duda (3, 3, 6 y 4) que van a aparecer para revisar.
+- **4 fiestas sorteadas con la versión nueva** tienen la foto tomada en el sorteo: nada que revisar.
+
+**Lo que dejó a la vista (ya decidido arriba):**
 - que el jefe pueda **corregir una familia de una lista ya aceptada** (hoy hace falta tocar la nube a mano);
 - que **lo que se carga después del sorteo deje huella** (hoy las sillas sin pago anterior quedan "para revisar" y es
   fácil aceptarlas sin tildar);
