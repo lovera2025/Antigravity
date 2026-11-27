@@ -310,3 +310,27 @@ test/celular_tu_tele_test.dart
     unawaited(canal.ready.catchError((Object _) {}));
 
 ---
+R53 LA FIESTA sin línea para la que no se prepara
+lib/features/tele/pantalla_tele.dart
+test/pantalla_tele_test.dart
+            detalle: como[e.id]?.texto(ahora) ?? PrepararLasFiestas.sinPreparar(e, lista, ahora),
+            detalle: como[e.id]?.texto(ahora),
+---
+R54 la que no se prepara dice que se está preparando
+lib/features/tele/preparar_las_fiestas.dart
+test/preparar_las_fiestas_test.dart
+    if (cuales(eventos, ahora).any((f) => f.id == e.id)) {
+    if (eventos.isNotEmpty) {
+---
+R55 la Tele 1 no vuelve a abrir sola lo que contesta la búsqueda
+lib/features/tele/busqueda_de_la_tele.dart
+test/cliente_de_la_tele_test.dart
+    _reabrir = Timer(esperaParaReabrir, () async {
+    _reabrir = Timer(const Duration(days: 1), () async {
+---
+R56 la Tele 1 cambia de red y no vuelve a abrir lo que contesta
+lib/features/tele/busqueda_de_la_tele.dart
+test/cliente_de_la_tele_test.dart
+    if (!await _abrir()) _seMurio(null);
+    return;
+---

@@ -1,0 +1,18 @@
+N1 una tabla que la nube no tiene se toma por una nube caída
+lib/core/services/sync_engine.dart
+test/nube_sin_las_tablas_del_stock_test.dart
+    if (codigo.startsWith('PGRST00')) return true;
+    if (codigo.startsWith('PGRST')) return true;
+---
+N2 la tabla que falta corta la bajada (el error sale de la tabla)
+lib/core/services/sync_engine.dart
+test/nube_sin_las_tablas_del_stock_test.dart
+      debugPrint('  ⚠️ Error pull $table: $e');
+      debugPrint('  ⚠️ Error pull $table: $e'); rethrow;
+---
+N3 "Lista sin internet" pide también el stock
+lib/core/services/sync_engine.dart
+test/nube_sin_las_tablas_del_stock_test.dart
+    // Sin esto la tablet que vende sin internet le daría el descuento a todo.
+    'barra_stock_barras',
+---

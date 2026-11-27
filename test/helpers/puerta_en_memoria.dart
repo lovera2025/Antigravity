@@ -132,6 +132,12 @@ class SinInternetEnMemoria {
   var alumnosBajados = 0;
   DateTime ahora = ahoraDePrueba;
 
+  /// La hora de verdad, para las ventanas y la app de prueba (26-nov-2026): con
+  /// fiestas de hoy y [ahoraDePrueba] (el 12-dic), "preparar las fiestas" las
+  /// daba por pasadas y LA FIESTA de la tele salía sin la línea de cada escuela.
+  DateTime Function()? reloj;
+  DateTime _ahora() => reloj?.call() ?? ahora;
+
   AccesosPuerta get accesos => AccesosPuerta(
         bajarLista: (_) async {
           listasBajadas++;
@@ -155,7 +161,7 @@ class SinInternetEnMemoria {
         contarSillasSinSubir: (_) async => sillasSinSubir,
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,
-        ahora: () => ahora,
+        ahora: _ahora,
       );
 
   // ── Las fiestas de la tele (25-nov-2026): todas listas sin internet ──────
@@ -199,7 +205,7 @@ class SinInternetEnMemoria {
         fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,
-        ahora: () => ahora,
+        ahora: _ahora,
       );
 }
 

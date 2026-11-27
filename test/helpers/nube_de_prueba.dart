@@ -30,6 +30,10 @@ class NubeDePrueba {
   /// "MÉTODO tabla" → el código con que la nube lo rechaza.
   final fallan = <String, int>{};
 
+  /// Tablas que la nube no tiene (su SQL no se corrió): contesta lo que contesta
+  /// PostgREST, un 404 con `PGRST205`, a cualquier pedido.
+  final faltan = <String>{};
+
   /// Sin red: cada pedido falla antes de llegar.
   var caida = false;
 
@@ -45,6 +49,21 @@ class NubeDePrueba {
         if (freno != null) await freno.future;
         final antes = alPedir[tabla];
         if (antes != null) await antes();
+
+        if (faltan.contains(tabla)) {
+          return http.Response(
+            jsonEncode({
+              'code': 'PGRST205',
+              'message': "Could not find the table 'public.$tabla' in the "
+                  'schema cache',
+              'details': null,
+              'hint': null,
+            }),
+            404,
+            headers: {'content-type': 'application/json'},
+            request: req,
+          );
+        }
 
         final codigo = fallan[pedido];
         if (codigo != null) {

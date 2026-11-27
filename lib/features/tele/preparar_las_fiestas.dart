@@ -74,6 +74,19 @@ class PrepararLasFiestas extends ChangeNotifier {
     ).take(hasta).toList();
   }
 
+  /// La línea de LA FIESTA de una que todavía no tiene cómo quedó (26-nov-2026:
+  /// salía sin ninguna). LA FIESTA lista todas las que vienen; se preparan solo
+  /// [cuales].
+  static String sinPreparar(Evento e, List<Evento> eventos, DateTime ahora) {
+    if (cuales(eventos, ahora).any((f) => f.id == e.id)) {
+      return 'Preparándose para trabajar sin internet…';
+    }
+    final tope = DateTime(ahora.year, ahora.month, ahora.day + dias + 1);
+    return e.fechaEvento.isBefore(tope)
+        ? 'Todavía no se prepara: primero las $hasta que vienen antes'
+        : 'Se prepara sola cuando falte un mes';
+  }
+
   void _poner(String id, ComoQuedoLaFiesta c) {
     _como[id] = c;
     if (!_cerrado) notifyListeners();

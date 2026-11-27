@@ -230,6 +230,70 @@ void main() {
       expect(central.escuelaDeTele(2), otra);
       responde.cerrar();
     });
+
+    // 26-nov-2026: un cambio de wifi mata el socket que contesta "acá estoy" sin
+    // que nadie lo cierre. La Tele 1 dejaba de contestar hasta reiniciarla.
+    ClienteDeLaTele laTele2QueBusca(int puertoDeBusqueda) {
+      final cliente = ClienteDeLaTele(
+        eventoId: otra,
+        numero: 2,
+        busca: BuscaCentral(
+          eventoId: otra,
+          puerto: puertoDeBusqueda,
+          cada: const Duration(milliseconds: 100),
+          destinos: () async => [InternetAddress.loopbackIPv4],
+        ),
+        alRecibirBienvenidas: (_) {},
+        alRecibirFilas: (_) async {},
+      );
+      clientes.add(cliente);
+      cliente.arrancar();
+      return cliente;
+    }
+
+    test('a la Tele 1 se le muere lo que contesta la búsqueda: vuelve a contestar sola', () async {
+      const puertoDeBusqueda = 28781;
+      final responde = RespondeLaTele1(
+        puertoCentral: puerto,
+        conoce: central.conoce,
+        esperaParaReabrir: const Duration(milliseconds: 100),
+      );
+      addTearDown(responde.cerrar);
+      expect(
+        await responde.escuchar(puerto: puertoDeBusqueda, en: InternetAddress.loopbackIPv4),
+        isTrue,
+      );
+      // La Tele 1 cambia de wifi: el socket se muere.
+      responde.matarElSocketParaPrueba();
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      // Una Tele 2 que llega ahora (o vuelve de otro wifi) la encuentra igual.
+      final cliente = laTele2QueBusca(puertoDeBusqueda);
+      await hasta(() => cliente.estado == EstadoDeLaSegunda.conectada);
+    });
+
+    test('la Tele 1 cambia de red: se vuelve a abrir lo que contesta; apagada, no', () async {
+      const puertoDeBusqueda = 28783;
+      final responde = RespondeLaTele1(
+        puertoCentral: puerto,
+        conoce: central.conoce,
+        esperaParaReabrir: const Duration(milliseconds: 100),
+      );
+      expect(
+        await responde.escuchar(puerto: puertoDeBusqueda, en: InternetAddress.loopbackIPv4),
+        isTrue,
+      );
+      await responde.reabrir();
+      final cliente = laTele2QueBusca(puertoDeBusqueda);
+      await hasta(() => cliente.estado == EstadoDeLaSegunda.conectada);
+      cliente.dispose();
+      clientes.remove(cliente);
+      // Apagada a propósito: no se vuelve a abrir sola.
+      responde.cerrar();
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      final otro = laTele2QueBusca(puertoDeBusqueda);
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      expect(otro.estado, isNot(EstadoDeLaSegunda.conectada), reason: 'apagada es apagada');
+    });
   });
 
   test('se corta la Tele 1: sigue con lo que tenía, y al volver se reengancha', () async {
