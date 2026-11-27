@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
+import 'package:arguello_events/features/barra/cuentas/cuenta_del_proveedor.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_local.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
@@ -157,5 +158,54 @@ void main() {
       expect(salieron, isEmpty);
       expect(red.aviso.escrituras.value, 2, reason: 'cuenta como algo que escribió este equipo');
     });
+  });
+
+  test('lo que dice PRECIOS de un trago es lo mismo que cuenta GANANCIA (una sola cuenta)', () {
+    final noche = DateTime.utc(2026, 12, 5, 2);
+    final caja = CajaBarra.abrir(eventoId: _fiesta, numeroCaja: 1, ahora: noche);
+    RecetaBarra lleva(String id, int cc) => RecetaBarra.para(
+          eventoId: _fiesta,
+          productoId: _fernetConCoca,
+          ingredienteId: id,
+          cantidad: cc,
+          unidad: UnidadDeReceta.cc,
+          ahora: noche,
+        );
+    final recetas = [lleva(_fernet, 200), lleva(_coca, 500)];
+    final listas = <String, double?>{_fernet: 11740, _coca: 3000};
+    final contenidos = <String, int?>{_fernet: 750, _coca: 2250};
+    final venta = VentaBarra.nueva(
+      cajaBarraId: caja.id,
+      eventoId: _fiesta,
+      numero: 1,
+      renglones: const [RenglonVenta(productoId: _fernetConCoca, nombre: 'Fernet con coca', precio: 10000, cantidad: 1)],
+      medio: MedioBarra.efectivo,
+      efectivo: 10000,
+      ahora: noche,
+    );
+    final cuenta = CuentaDelProveedor.de([
+      FiestaParaLaGanancia(
+        eventoId: _fiesta,
+        nombre: 'TÉCNICA',
+        fecha: DateTime(2026, 12, 4),
+        cajas: [caja],
+        ventas: [venta],
+        precios: [PrecioBarra.para(eventoId: _fiesta, productoId: _fernetConCoca, precio: 10000, ahora: noche)],
+        listas: listas,
+        recetas: recetas,
+        contenidos: contenidos,
+      ),
+    ]);
+    final trago = cuenta.productos.firstWhere((p) => p.productoId == _fernetConCoca);
+    final dePrecios = costoDeUnTrago(recetas, lista: (id) => listas[id], contenidoCc: (id) => contenidos[id]);
+    expect(dePrecios.centavos, 379733);
+    expect(dePrecios.centavos, trago.lista, reason: 'PRECIOS y GANANCIA dicen lo mismo');
+    final sinCoca = costoDeUnTrago(
+      recetas,
+      lista: (id) => id == _coca ? null : listas[id],
+      contenidoCc: (id) => contenidos[id],
+    );
+    expect(sinCoca.centavos, isNull, reason: 'sin la lista de algo que lleva, no se sabe');
+    expect(sinCoca.faltan, [_coca]);
   });
 }

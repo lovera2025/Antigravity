@@ -1,0 +1,84 @@
+el trago por cc no divide por lo que trae la botella
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+    porUno += r.unidad == UnidadDeReceta.cc ? r.cantidad * c / cc! : r.cantidad * c.toDouble();
+    porUno += r.cantidad * c.toDouble();
+---
+el trago sin la lista de un ingrediente igual dice cuanto cuesta
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+      faltan.add(r.ingredienteId);
+
+---
+el precio de lista guardado no sube
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+        unawaited(subir('barra_costos', guardado.id));
+
+---
+un precio de lista nuevo no cuenta como cambio
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+    if (b == null) return l != null || t != null;
+    if (b == null) return false;
+---
+las botellas de los tragos quedan en la lista de lo que se vende
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+            if (f.va || !botellas.contains(f.producto.id)) ...[
+            if (true) ...[
+---
+el trago con receta deja escribir su precio de lista
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                trago: _ingredientesDe(f.producto.id).isNotEmpty ? _costoDe(f.producto.id) : null,
+                trago: null,
+---
+sacar un ingrediente guardado no lo apaga
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                                    i.activo = false;
+
+---
+copiar de otra fiesta no trae el precio de lista
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+          f.lista.text = PesosConCentavosFormatter.escribir(costo.precioLista);
+
+---
+copiar de otra fiesta no trae cuanto lleva la receta
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+            ..cantidad.text = r.cantidad.toString();
+            ..cantidad.text = '';
+---
+sin la llave: la encargada guarda un precio de lista
+lib/features/barra/central/barra_con_la_red.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+    _tieneQue(ReglasDeLaBarra.veElCostoYLaGanancia, 'El precio de lista lo pone el jefe');
+
+---
+sin la llave: la encargada guarda una receta
+lib/features/barra/central/barra_con_la_red.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+    _tieneQue(ReglasDeLaBarra.veElCostoYLaGanancia, 'Las recetas las pone el jefe');
+
+---
+el precio de lista no se encola para subir
+lib/features/barra/datos/barra_local.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+      await _guardar(txn, 'barra_costos', sellado.id, sellado.toMap());
+      await txn.insert('barra_costos', sellado.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+---
+la receta no se encola para subir
+lib/features/barra/datos/barra_local.dart
+test/precio_de_lista_y_recetas_datos_test.dart
+      await _guardar(txn, 'barra_recetas', sellado.id, sellado.toMap());
+      await txn.insert('barra_recetas', sellado.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+---
+el precio de lista pierde los centavos
+lib/features/barra/widgets/pesos_enteros_formatter.dart
+test/barra_jefe_pantalla_test.dart
+    final c = decimales.isEmpty ? 0 : int.parse(decimales.padRight(2, '0').substring(0, 2));
+    const c = 0;
+---

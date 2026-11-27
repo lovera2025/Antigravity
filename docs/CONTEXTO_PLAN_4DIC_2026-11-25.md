@@ -63,8 +63,8 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   bloque **LAS BOTELLAS DE LOS TRAGOS**; COPIAR DE OTRA FIESTA trae lista y recetas. Lee `listaDelProveedorProvider`
   (solo PRECIOS del jefe y GANANCIA). 5 pruebas nuevas en `test/barra_jefe_pantalla_test.dart` (42 en verde) y la
   muestra `Jefe_2b_precios_con_lista_pc.png` (`tool/barra_jefe_muestra_test.dart`).
-- **Falta de PRECIOS:** que `costoDeUnTrago` y `CuentaDelProveedor` den lo mismo (una prueba que las compare) y sus
-  roturas a propósito.
+- PRECIOS cerrado: una prueba compara `costoDeUnTrago` con `CuentaDelProveedor` (dan lo mismo), y las roturas
+  `tool/roturas_precios_con_lista.txt` (**14 de 14 atrapadas**).
 
 **Lo que falta, en orden:**
 1. **Programar lo de la maqueta aprobada (forma A):** PRECIOS con el precio de lista y la receta (guardar `CostoBarra` y
