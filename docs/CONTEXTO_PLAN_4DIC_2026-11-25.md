@@ -94,6 +94,21 @@ del sorteo. **5 de las 9 fiestas con precios están igual.** Los precios cargado
 $15.000, anticipada $10.000 hasta el 30-nov, lugares al 50 % ($7.500). Quedó por saber qué versión tiene cada PC y
 en qué pantalla ve "15.000" en una y "10 mil" en otra.
 
+**Cómo siguió (27-nov, 19:49 a 19:56):** el usuario aceptó la lista de esa fiesta, y a un alumno las **2 sillas
+cargadas hoy** le quedaron con descuento: en la lista vinieron "para revisar", sin tildar (para las sillas el programa
+no tiene huella de cuándo se cargaron: solo mira si hay un pago de sillas anterior al sorteo o el reparto elegido
+antes, `lugares_al_sorteo.dart`), y se aceptó así. **Una lista aceptada no se vuelve a abrir desde el programa**
+(`RevisionDeLugares`: "ya tiene los lugares"). Con su OK ("Se cargaron hoy", "Sí, aplicala") se corrigió **en la
+nube, ese solo alumno y ese solo dato**: en `_lugares` del renglón del sorteo, de `"1,2"` a `"1,0"`. Simulacro antes
+(el largo no cambia, todo lo demás igual, el alumno aparece una vez), la escritura atada a la huella del texto, y
+comprobado después. No tenía entradas vendidas. La corrección y su vuelta atrás, en
+`build/correccion_lugares_2026-11-27.md` (fuera de git; lleva ids).
+**Lo que dejó a la vista, sin decidir (preguntarle cuando termine lo del 4-dic):**
+- que el jefe pueda **corregir una familia de una lista ya aceptada** (hoy hace falta tocar la nube a mano);
+- que **lo que se carga después del sorteo deje huella** (hoy las sillas sin pago anterior quedan "para revisar" y es
+  fácil aceptarlas sin tildar);
+- **4 fiestas más siguen sorteadas con la lista sin aceptar**: ahí todo va con descuento.
+
 **La maqueta de antes (superada):** la notebook del jefe queda toda la noche con la central prendida (pedido del 27-nov
 a la noche): la notebook del jefe queda toda la noche con la central prendida y la pantalla abierta, y cualquiera
 podía mirar las cajas. Maqueta: `docs/maqueta_notebook_bloqueada_2026-11-27.html` (`preview_start` con `maquetas`).
