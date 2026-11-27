@@ -2,7 +2,70 @@
 
 ## Para retomar en otro chat
 
-### LEER PRIMERO: dónde quedó el 28-nov (las pruebas a fondo; chat "sigamos, con lo que habíamos quedado")
+### LEER PRIMERO (lo último): 27-nov a la tarde, chat "decime bien qué falta" — el repaso y la revisión de los roles
+
+**Ojo con las fechas:** lo que más abajo dice "28-nov" se hizo el **27-nov** (git lo fecha el 27; ese chat iba un día
+adelantado). La fiesta es el **viernes 4-dic**.
+
+**Plan aprobado de esta vuelta** (con lo que falta, en orden, y lo que depende del usuario):
+`C:\Users\lover\.claude\plans\bueno-decime-bien-que-dazzling-biscuit-of-e4f64a94-3528-405d-9a24-a49ca2cb1830.md`.
+Recomendación: **publicar a más tardar el martes 1 o miércoles 2-dic**; si el lunes a la noche no cerró la página de
+la encargada, quedan afuera primero Noche y Blanco en lo que falte y el plano a todo lo ancho.
+
+**Lo que se repasó (27-nov):** repo limpio y subido; la 6.9.4 instalada en esta PC (base v82); en la nube faltan las
+5 tablas de la v83 y la v84 (los dos SQL sin correr); fotos de la mora: la última es "antes de 6.9.4" (faltan las
+"después" de la 6.9.3 y la 6.9.4). `flutter analyze`: **0 errores en `lib/` y `test/`** (los 52 que marca son de
+`build/cdp_head.dart` y `tool/_tmp_espindola_audit.dart`, fuera de git). **La suite entera: 6.712 en verde y 1 falla,
+la de siempre** (LA ALFONSINA; registros en `build/suite_27nov/`). Huella "antes" en `build/huella_antes_27nov.txt`.
+
+**Hecho y guardado (`0a523e9`):** **leer** el precio de lista y la ganancia también mira el rol, sin pedir ninguna
+clave: `BarraConLaRed.costos()`, `listaDelProveedorProvider` y `gananciaDelJefeProvider` dan vacío a quien no es el
+jefe (también en la web). **El provider no tira un error:** Riverpod 3 reintenta solo al que falla y la pantalla queda
+cargando. Prueba `test/precio_de_lista_solo_lo_lee_el_jefe_test.dart` (lee `lib/` y falla si otra pantalla lee
+`.costos(`); 3 roturas al final de `tool/roturas_ganancia.txt`. Las pruebas de la barra: 909 en verde.
+
+**Decidido por el usuario el 27-nov (no volver a preguntar):**
+- **El recargo por transferencia no cuenta como vendido**: GANANCIA queda como está.
+- **La comprobación del rol no pide la clave de nuevo**: es por dentro; quien ya entró no ve ningún cartel más.
+- **Sin señal se sigue trabajando.** Con señal, sin stock no se vende. **Sin señal y con el stock en 0, avisa en rojo
+  ("Sin señal: no sé si repusieron") y deja vender**; lo vendido de más queda en negativo y **se descuenta solo de lo
+  que se reponga** (la cuenta ya lo hace: `StockPorBarra.queda` puede dar negativo). Falta mostrarlo: "Se vendieron
+  5 sin stock" a la encargada y al jefe, "24 que traés − 5 ya vendidas = quedan 19" al repositor; la cajera, solo
+  "Sin stock". La misma línea tranquila, con "al día hasta las 23:40", en el repositor y la página de la encargada.
+- **El repositor:** el botón "Voy en camino" a la barra que elija, y **todo lo que carga se ve al toque** en VENDER,
+  LAS CAJAS y la encargada (por el wifi del salón, sin internet).
+- **La tele se prueba de nuevo entera en el sandbox** (ahora y después del plano a todo lo ancho), y la barra rol por
+  rol (cajera, encargada, repositor, jefe).
+
+**La revisión independiente de los roles (27-nov): 12 hallazgos.** Los dos primeros, **confirmados leyendo el código
+y sin arreglar todavía**:
+1. **La conexión con la central queda a nombre de quien usó antes la tablet** (`central_barra_provider.dart`:
+   `arrancar` solo la rehace si cambia el nombre de la caja, y `arrancarSiNoHay` no hace nada si ya hay una de esa
+   fiesta). Una cajera sale, la encargada entra en esa tablet a LAS CAJAS: lo que acepta, anula o saca lo rechaza la
+   central (la sigue viendo como la cajera). Arreglo pensado: el cliente recuerda de quién es la credencial y se
+   rehace si cambió la persona.
+2. **Los rechazos de la central no se ven en ninguna pantalla** (`CentralBarra.rechazos`,
+   `ClienteDeLaCentral.rechazadas` y `problema` no los lee nadie): con el PIN que la notebook no reconoce, VENDER dice
+   "Buscando la central…" toda la noche. Arreglo pensado: la línea de VENDER y LAS CAJAS dice el problema del PIN y
+   cuántas cosas no aceptó la central.
+Los demás (sin verificar por mí; **4, 6 y 8 son decisiones del usuario**): 3) MODO JEFE entra con el PIN maestro de
+cada aparato (2026 de fábrica: cambiarlo en todos); 4) la encargada cambia el cambio inicial de **su propia** caja
+sin motivo ni rastro (`vender_screen.dart`, y `reglas_de_la_barra_test.dart:113` lo avala); 5) el OK del cierre no
+tiene segunda llave en `BarraConLaRed` (que la encargada no apruebe su caja depende de `ok_del_cierre.dart:264`);
+6) el jefe en una tablet (no en la notebook) no se conecta a la central; 7) un retiro hecho con la caja abierta que
+llega después del cierre se rechaza para siempre ("La caja ya cerró") y dos pruebas se contradicen; 8) la encargada
+ve TIENE QUE HABER de su propia caja antes de contar; 9) bordes de `porQueNoSeGuarda` (caja que llega nueva y ya
+cerrada; el cambio de la cajera sin mirar si vendió; OK con `caja == null`); 10) el PIN de la encargada en la tablet
+de la cajera se valida por nombre; 11) una fila nueva con otro `device_id` se acepta de cualquier rol; 12) la nube
+no tiene llave (límite conocido). El informe entero se pegó en el chat; no quedó en un archivo.
+
+**Lo que sigue, en orden:** arreglar 1 y 2 con sus pruebas y roturas; preguntarle 4, 6 y 8; las 16 listas de
+roturas sobre lo último; el recorrido por rol y la tele en el sandbox; y después el plan (Noche y Blanco, repositor,
+página de la encargada, plano a todo lo ancho, publicar).
+
+---
+
+### Dónde quedó el "28-nov" (en realidad 27-nov; las pruebas a fondo; chat "sigamos, con lo que habíamos quedado")
 
 **El plan para el 4-dic va por ~76 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
 `C:\Users\lover\.claude\plans\sigamos-con-lo-que-glimmering-church-of-6c79e454-a838-433a-885a-f9d233311434.md`. El
