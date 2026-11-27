@@ -109,6 +109,38 @@ class BarraNube implements BarraDelJefe {
   }
 
   @override
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien}) async {
+    final sellado = receta.sellado(hechoPor: quien, deviceId: await _equipo(), ahora: _reloj());
+    await _supabase.from('barra_recetas').upsert(sellado.toMap());
+    return sellado;
+  }
+
+  /// Sin la tabla en la nube (su SQL todavía no se corrió), ninguno: GANANCIA dice que
+  /// falta el precio de lista.
+  @override
+  Future<List<CostoBarra>> costos(String eventoId) async {
+    try {
+      final filas = await _todas(() => _supabase
+          .from('barra_costos')
+          .select()
+          .eq('evento_id', eventoId)
+          .order('producto_id', ascending: true)
+          .order('id', ascending: true));
+      return [for (final f in filas) CostoBarra.fromMap(f)];
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01' || e.code == 'PGRST205') return const [];
+      rethrow;
+    }
+  }
+
+  @override
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) async {
+    final sellado = costo.sellado(hechoPor: quien, deviceId: await _equipo(), ahora: _reloj());
+    await _supabase.from('barra_costos').upsert(sellado.toMap());
+    return sellado;
+  }
+
+  @override
   Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async {
     final sellado = precio.sellado(
       hechoPor: quien,

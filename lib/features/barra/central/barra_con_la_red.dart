@@ -221,6 +221,23 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return _escribio(await _jefe.guardarPrecio(precio, quien: quien));
   }
 
+  /// La receta de un trago y el precio de lista: **solo el jefe** (audio 77). No salen a
+  /// la red del salón: van por la nube, como los precios.
+  @override
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.veElCostoYLaGanancia, 'Las recetas las pone el jefe');
+    return _escribio(await _jefe.guardarReceta(receta, quien: quien));
+  }
+
+  @override
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.veElCostoYLaGanancia, 'El precio de lista lo pone el jefe');
+    return _escribio(await _jefe.guardarCosto(costo, quien: quien));
+  }
+
+  @override
+  Future<List<CostoBarra>> costos(String eventoId) => _jefe.costos(eventoId);
+
   @override
   Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {
     _tieneQue(ReglasDeLaBarra.cambiaCatalogoYPrecios, 'El recargo lo cambia el jefe');

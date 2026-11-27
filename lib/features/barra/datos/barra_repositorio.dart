@@ -1,6 +1,7 @@
 import '../cuentas/dia_de_operacion.dart';
 import 'anulacion_barra.dart';
 import 'caja_barra.dart';
+import 'costo_barra.dart';
 import 'movimiento_de_caja.dart';
 import 'paso_del_cierre.dart';
 import 'precio_barra.dart';
@@ -13,6 +14,7 @@ import 'venta_barra.dart';
 export '../cuentas/dia_de_operacion.dart' show DiaDeOperacion;
 export 'anulacion_barra.dart';
 export 'caja_barra.dart';
+export 'costo_barra.dart';
 export 'movimiento_de_caja.dart';
 export 'paso_del_cierre.dart';
 export 'precio_barra.dart';
@@ -48,6 +50,18 @@ abstract interface class BarraDelJefe {
   /// Las cuentas del stock reciben las ventas por `RecetasDeLaBarra.paraElStock`: el
   /// Speed de cada vodka baja del stock del Speed.
   Future<List<RecetaBarra>> recetas(String eventoId);
+
+  /// Guarda un ingrediente de la receta de un trago (id fijo por fiesta, trago e
+  /// ingrediente). **Sacarlo es guardarlo con `activo: false`**: no se borra.
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien});
+
+  /// El precio de lista de cada producto en la fiesta (`barra_costos`, v84): lo que le
+  /// cobra el proveedor. **Solo del jefe** (`ReglasDeLaBarra.veElCostoYLaGanancia`):
+  /// ninguna pantalla de la cajera, la encargada o el repositor lo lee, y no baja a una
+  /// tablet.
+  Future<List<CostoBarra>> costos(String eventoId);
+
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien});
 
   Future<List<CajaBarra>> cajas(String eventoId);
 

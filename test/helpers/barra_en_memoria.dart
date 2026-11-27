@@ -73,6 +73,31 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
       ];
 
   @override
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien}) async {
+    final sellado = receta.sellado(hechoPor: quien, deviceId: equipo, ahora: reloj());
+    recetasGuardadas
+      ..removeWhere((r) => r.id == receta.id)
+      ..add(sellado);
+    return sellado;
+  }
+
+  /// El precio de lista de cada producto (v84).
+  final costosGuardados = <CostoBarra>[];
+
+  @override
+  Future<List<CostoBarra>> costos(String eventoId) async =>
+      [for (final c in costosGuardados) if (c.eventoId == eventoId) c];
+
+  @override
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) async {
+    final sellado = costo.sellado(hechoPor: quien, deviceId: equipo, ahora: reloj());
+    costosGuardados
+      ..removeWhere((c) => c.id == costo.id)
+      ..add(sellado);
+    return sellado;
+  }
+
+  @override
   Future<Set<String>> fiestasConPrecio() async =>
       {for (final p in preciosGuardados) if (p.activo) p.eventoId};
 

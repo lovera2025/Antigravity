@@ -346,6 +346,16 @@ class _LoQueSubio implements BarraDelJefe {
   Future<List<RecetaBarra>> recetas(String eventoId) => b.recetas(eventoId);
 
   @override
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien}) =>
+      b.guardarReceta(receta, quien: quien);
+
+  @override
+  Future<List<CostoBarra>> costos(String eventoId) => b.costos(eventoId);
+
+  @override
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) => b.guardarCosto(costo, quien: quien);
+
+  @override
   Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) =>
       b.guardarPrecio(precio, quien: quien);
 

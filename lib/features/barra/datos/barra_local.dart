@@ -128,6 +128,49 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
       ];
 
   @override
+  Future<RecetaBarra> guardarReceta(RecetaBarra receta, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final sellado = receta.sellado(
+        hechoPor: quien,
+        deviceId: equipo,
+        createdAt: await _nacio(txn, 'barra_recetas', receta.id),
+        ahora: _reloj(),
+      );
+      await _guardar(txn, 'barra_recetas', sellado.id, sellado.toMap());
+      return sellado;
+    });
+  }
+
+  @override
+  Future<List<CostoBarra>> costos(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_costos',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'producto_id',
+        ))
+          CostoBarra.fromMap(f),
+      ];
+
+  @override
+  Future<CostoBarra> guardarCosto(CostoBarra costo, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final sellado = costo.sellado(
+        hechoPor: quien,
+        deviceId: equipo,
+        createdAt: await _nacio(txn, 'barra_costos', costo.id),
+        ahora: _reloj(),
+      );
+      await _guardar(txn, 'barra_costos', sellado.id, sellado.toMap());
+      return sellado;
+    });
+  }
+
+  @override
   Future<Set<String>> fiestasConPrecio() async => {
         for (final f in await _leer(
           'barra_precios',
