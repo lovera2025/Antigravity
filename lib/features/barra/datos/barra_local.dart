@@ -117,6 +117,17 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
       ];
 
   @override
+  Future<List<RecetaBarra>> recetas(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_recetas',
+          where: 'evento_id = ? AND activo = 1',
+          whereArgs: [eventoId],
+          orderBy: 'producto_id, ingrediente_id',
+        ))
+          RecetaBarra.fromMap(f),
+      ];
+
+  @override
   Future<Set<String>> fiestasConPrecio() async => {
         for (final f in await _leer(
           'barra_precios',

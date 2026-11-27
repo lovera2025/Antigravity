@@ -5,6 +5,7 @@ import '../../common/widgets/operational_sync_coordinator.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pedido_de_cierre.dart';
+import '../cuentas/recetas_de_la_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/impresora_bluetooth.dart';
@@ -126,7 +127,11 @@ class CajasDeLaFiesta {
     this.nombres = const {},
     this.categorias = const {},
     this.sinOk = const {},
+    this.recetas = RecetasDeLaBarra.ninguna,
   });
+
+  /// Las recetas de los tragos (v84): el Speed de cada vodka baja del stock del Speed.
+  final RecetasDeLaBarra recetas;
 
   final _noches = <DiaDeOperacion, NocheDeLaBarra>{};
 
@@ -140,7 +145,8 @@ class CajasDeLaFiesta {
     final stock = StockDeLaBarra.deLaNoche(
       eventoId: eventoId,
       precios: precios,
-      ventas: ventas,
+      // Con lo que va entero adentro de los tragos (el Speed del vodka).
+      ventas: recetas.paraElStock(ventas),
       anulaciones: anulaciones,
       cajas: porDia,
       dia: dia,
@@ -189,6 +195,7 @@ final cajasDelJefeProvider =
   try {
     sinOk = PedidoDeCierre.cerraronSinOk(await barra.pasosDelCierre(eventoId));
   } catch (_) {}
+  final recetas = RecetasDeLaBarra.de(await barra.recetas(eventoId), eventoId: eventoId);
   return CajasDeLaFiesta(
     eventoId: eventoId,
     porDia: CajasPorDia.de(cajas),
@@ -199,5 +206,6 @@ final cajasDelJefeProvider =
     nombres: {for (final p in productos) p.id: p.nombre},
     categorias: {for (final p in productos) p.id: p.categoria},
     sinOk: sinOk,
+    recetas: recetas,
   );
 });

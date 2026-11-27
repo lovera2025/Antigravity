@@ -130,3 +130,33 @@ test/recetas_de_la_barra_test.dart
             parte = (vendidas * r.cantidad * l / trae).round();
             parte = (vendidas * r.cantidad * l / 1000).round();
 ---
+VENDER no descuenta el Speed de los vodkas vendidos
+lib/features/barra/widgets/vender_screen.dart
+test/recetas_en_la_barra_test.dart
+        ventas: recetas.paraElStock(ventas),
+        ventas: ventas,
+---
+CAJAS no descuenta el Speed de los vodkas vendidos
+lib/features/barra/jefe/barra_jefe_providers.dart
+test/recetas_en_la_barra_test.dart
+      ventas: recetas.paraElStock(ventas),
+      ventas: ventas,
+---
+VENDER no dice cuántos vodkas quedan
+lib/features/barra/widgets/vender_screen.dart
+test/recetas_en_la_barra_test.dart
+    if (_recetas.enteros(productoId).isNotEmpty) {
+    if (false) {
+---
+la cuenta no se lleva el Speed de los vodkas
+lib/features/barra/widgets/vender_screen.dart
+test/recetas_en_la_barra_test.dart
+        (s, r) => s + (_recetas.loQueBaja(r.productoId, r.cantidad)[productoId] ?? 0),
+        (s, r) => s + (r.productoId == productoId ? r.cantidad : 0),
+---
+VENDER no lee las recetas
+lib/features/barra/widgets/vender_screen.dart
+test/recetas_en_la_barra_test.dart
+      _recetas = recetas;
+      _recetas = RecetasDeLaBarra.ninguna;
+---

@@ -235,6 +235,9 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   Future<Set<String>> fiestasConPrecio() => _caja.fiestasConPrecio();
 
   @override
+  Future<List<RecetaBarra>> recetas(String eventoId) => _caja.recetas(eventoId);
+
+  @override
   Future<RecargoBarra?> recargo(String eventoId) => _caja.recargo(eventoId);
 
   @override

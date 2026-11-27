@@ -60,6 +60,15 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
           if (p.eventoId == eventoId && (conBajas || p.activo)) p,
       ];
 
+  /// Las recetas de los tragos (v84).
+  final recetasGuardadas = <RecetaBarra>[];
+
+  @override
+  Future<List<RecetaBarra>> recetas(String eventoId) async => [
+        for (final r in recetasGuardadas)
+          if (r.eventoId == eventoId && r.activo) r,
+      ];
+
   @override
   Future<Set<String>> fiestasConPrecio() async =>
       {for (final p in preciosGuardados) if (p.activo) p.eventoId};

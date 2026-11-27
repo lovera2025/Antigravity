@@ -90,6 +90,24 @@ class BarraNube implements BarraDelJefe {
     return [for (final f in filas) PrecioBarra.fromMap(f)];
   }
 
+  /// Sin la tabla en la nube (su SQL todavía no se corrió), ninguna receta: el stock
+  /// sigue como antes, sin el Speed de los vodkas.
+  @override
+  Future<List<RecetaBarra>> recetas(String eventoId) async {
+    try {
+      final filas = await _todas(() => _supabase
+          .from('barra_recetas')
+          .select()
+          .eq('evento_id', eventoId)
+          .eq('activo', true)
+          .order('id', ascending: true));
+      return [for (final f in filas) RecetaBarra.fromMap(f)];
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01' || e.code == 'PGRST205') return const [];
+      rethrow;
+    }
+  }
+
   @override
   Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async {
     final sellado = precio.sellado(

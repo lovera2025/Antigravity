@@ -4,6 +4,7 @@ import 'caja_barra.dart';
 import 'paso_del_cierre.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
+import 'receta_barra.dart';
 import 'recargo_barra.dart';
 import 'vale_barra.dart';
 import 'venta_barra.dart';
@@ -14,6 +15,7 @@ export 'caja_barra.dart';
 export 'paso_del_cierre.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
+export 'receta_barra.dart';
 export 'recargo_barra.dart';
 export 'vale_barra.dart';
 export 'venta_barra.dart';
@@ -39,6 +41,11 @@ abstract interface class BarraDelJefe {
   Future<RecargoBarra?> recargo(String eventoId);
 
   Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien});
+
+  /// Las recetas activas de los tragos de la fiesta (`barra_recetas`, v84; sin plata).
+  /// Las cuentas del stock reciben las ventas por `RecetasDeLaBarra.paraElStock`: el
+  /// Speed de cada vodka baja del stock del Speed.
+  Future<List<RecetaBarra>> recetas(String eventoId);
 
   Future<List<CajaBarra>> cajas(String eventoId);
 
@@ -84,6 +91,11 @@ abstract interface class BarraDeLaCaja {
   /// El recargo que puso el jefe para la fiesta: cada cobro arranca con ese. Null si
   /// no lo puso (arranca con el último que usó el equipo).
   Future<RecargoBarra?> recargo(String eventoId);
+
+  /// Las recetas activas de los tragos de la fiesta (`barra_recetas`, v84; sin plata).
+  /// Las cuentas del stock reciben las ventas por `RecetasDeLaBarra.paraElStock`: el
+  /// Speed de cada vodka baja del stock del Speed.
+  Future<List<RecetaBarra>> recetas(String eventoId);
 
   /// Las cajas abiertas de la fiesta que conoce este equipo, de cualquier operador:
   /// para avisar si el número elegido ya lo tiene otra.

@@ -98,6 +98,14 @@
     igual.** **Falta de la v84:**
     leer y guardar en `BarraDelJefe`/`BarraLocal`/`BarraNube`, y `barra_caja_movimientos` en `tablasDeLaRed` con
     su regla en `porQueNoSeGuarda` (va con RETIRO).
+  - **El Speed del vodka en VENDER y CAJAS (26-nov, noche):** `recetas(evento)` en `BarraDelJefe` y `BarraDeLaCaja`
+    (`BarraLocal`, `BarraNube` —sin la tabla en la nube devuelve ninguna—, `BarraConLaRed`, `BarraEnMemoria` y la
+    ventana de prueba); `CajasDeLaFiesta.recetas` y VENDER pasan las ventas por `paraElStock`; en VENDER el vodka
+    dice "Quedan N" por su Speed (`alcanzaPara`) y la cuenta se lleva el Speed de cada vodka (`_enLaCuenta`).
+    `test/recetas_en_la_barra_test.dart` (5, con una que lee el código: **toda cuenta del stock pasa por
+    `paraElStock`**, y otra que ninguna pantalla de la cajera, la encargada o el repositor nombre el costo).
+    Roturas 5 de 5 (al final de `tool/roturas_precio_de_lista.txt`). **"Sin stock no se vende" sigue como antes
+    (pregunta y deja VENDER IGUAL)**: el freno de verdad va con el stock por barra en VENDER.
   - **Lo que sigue, en orden:** (1) la **v84** con tres tablas: `barra_costos` (con `contenido_cc`), `barra_recetas`
     y `barra_caja_movimientos` (retiro · cambio · ajuste_cambio, solo se agregan filas; borrador del modelo
     `MovimientoDeCaja` en el scratchpad de este chat: rehacerlo si se perdió) + las listas de `sync_engine.dart`

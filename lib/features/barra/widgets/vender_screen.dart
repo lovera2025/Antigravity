@@ -14,6 +14,7 @@ import '../cuentas/cobro_barra.dart';
 import '../cuentas/cuenta_barra.dart';
 import '../cuentas/dia_de_operacion.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/recetas_de_la_barra.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
@@ -79,6 +80,9 @@ class _Vender extends ConsumerStatefulWidget {
 class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   List<ProductoEnVenta> _productos = const [];
   Map<String, StockDeProducto> _stock = const {};
+
+  /// Las recetas de los tragos de la fiesta (v84): el Speed de cada vodka baja del stock.
+  RecetasDeLaBarra _recetas = RecetasDeLaBarra.ninguna;
   bool _cargando = true;
 
   /// Si esta caja ya vendió algo: con eso la cajera ya no pone el cambio.
@@ -143,14 +147,17 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     final ventas = await barra.ventas(widget.fiesta.id);
     final anulaciones = await barra.anulaciones(widget.fiesta.id);
     final cajas = await barra.cajas(widget.fiesta.id);
+    final recetas = RecetasDeLaBarra.de(await barra.recetas(widget.fiesta.id), eventoId: widget.fiesta.id);
     if (!mounted) return;
     setState(() {
+      _recetas = recetas;
       _productos = productosParaVender(productos, precios, eventoId: widget.fiesta.id);
       _vendioAlgo = ventas.any((v) => v.cajaBarraId == widget.caja.id);
       _stock = StockDeLaBarra.deLaNoche(
         eventoId: widget.fiesta.id,
         precios: precios,
-        ventas: ventas,
+        // Con lo que va entero adentro de los tragos (el Speed del vodka).
+        ventas: recetas.paraElStock(ventas),
         anulaciones: anulaciones,
         // La caja de esta pantalla también, por si todavía no está entre las leídas.
         cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
@@ -168,10 +175,25 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   /// Lo que queda de un producto: lo cargado por el jefe, menos lo vendido por todas
   /// las cajas y lo que ya está en esta cuenta. Null: no se controla.
   int? _quedan(String productoId) {
+    // Un trago con algo entero (el vodka con su Speed): alcanza para lo que dé eso.
+    if (_recetas.enteros(productoId).isNotEmpty) {
+      return _recetas.alcanzaPara(productoId, _quedanDe);
+    }
+    return _quedanDe(productoId);
+  }
+
+  int? _quedanDe(String productoId) {
     final s = _stock[productoId];
     if (s == null || !s.controla) return null;
-    return s.queda! - _cuenta.cantidadDe(productoId);
+    return s.queda! - _enLaCuenta(productoId);
   }
+
+  /// Lo que se lleva de [productoId] esta cuenta: él mismo y lo que va entero adentro de
+  /// los tragos (dos vodkas en la cuenta son dos Speed).
+  int _enLaCuenta(String productoId) => _cuenta.renglones.fold(
+        0,
+        (s, r) => s + (_recetas.loQueBaja(r.productoId, r.cantidad)[productoId] ?? 0),
+      );
 
   /// Suma uno. Sin stock, pregunta antes (una vez por producto y por cuenta): el
   /// stock avisa, pero lo cargado puede estar corto o sin internet otra caja ya vendió.
