@@ -28,6 +28,11 @@ receta, GANANCIA con "Para el proveedor", y los estilos Noche y Blanco mejorados
   se sabe y la ganancia queda sin saber, con aviso.
 - La receta, la lista, las botellas y GANANCIA **solo las ve el jefe**. La receta (sin plata) viaja a la tablet para
   descontar el Speed; la lista no baja nunca a una tablet.
+- **La receta no se muestra en ningún lado salvo PRECIOS del jefe, y ahí va plegada** ("RECETA ▸ 2 ingredientes", se
+  abre al tocarla): pedido del usuario el 26-nov, "no creo apropiado" que se vea al vender. En VENDER el trago es un
+  producto más (el vodka dice "Quedan N" sin decir por qué); el vale, el ticket, VENTAS y el cierre no la nombran (la
+  venta se guarda igual: el Speed se descuenta solo en la cuenta del stock); el repositor ve el Speed con su número,
+  sin explicar que baja con los vodkas, y no ve nada de los tragos. La maqueta ya está así.
 
 **Hecho esta noche, cada paso con pruebas, roturas a propósito y commit:**
 1. `ed21ab9` — la maqueta y las decisiones.
