@@ -1,0 +1,299 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La barra: los tragos con receta y los estilos Noche y Blanco</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#ecebf5;--panel:#fbfaff;--linea:#b9bbd0;--tinta:#1d1d2b;--tinta2:#5d6078;--primario:#5a5e9c;--ok:#11733a;--cuerpo:'Outfit',system-ui,sans-serif}
+@media (prefers-color-scheme: dark){:root{--bg:#1b1b26;--panel:#262636;--linea:#4a4c66;--tinta:#eceaf6;--tinta2:#aeb0c4;--primario:#9a9ee6;--ok:#6fe39b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;padding:18px 16px 56px}
+h1{font-size:26px;margin:0}h2{font-size:21px;margin:0}h3{font-size:16px;margin:0}p{margin:0}
+.wrap{max-width:1200px;margin:0 auto;display:grid;gap:20px}
+.sub{color:var(--tinta2);font-size:14.5px;max-width:940px}
+.caja{background:var(--panel);border:1.5px solid var(--linea);border-radius:18px;padding:16px;display:grid;gap:12px}
+.etiqueta{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--tinta2)}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.06em;background:var(--primario);color:#fff;border-radius:999px;padding:2px 8px;vertical-align:middle}
+.cuenta{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.paso{border:1.5px solid var(--linea);border-radius:14px;padding:12px;display:grid;gap:6px}
+.paso b.num{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--primario);color:#fff;font-size:13px;margin-right:6px}
+.regla{border-left:5px solid var(--primario);padding:8px 12px;background:color-mix(in srgb,var(--primario) 8%,transparent);border-radius:8px}
+.gris{color:var(--tinta2)}.chica{font-size:13px}.der{text-align:right}.fuerte{font-weight:800}
+/* ===== la PC del jefe ===== */
+.pc{border-radius:14px;overflow:hidden;border:1.5px solid var(--linea);background:#fff;color:#1b1b22}
+.pc .barra{background:#2b2d42;color:#fff;padding:9px 14px;display:flex;gap:18px;align-items:center;font-weight:700;font-size:14px;flex-wrap:wrap}
+.pc .barra .pest{opacity:.65;font-weight:600}.pc .barra .pest.on{opacity:1;border-bottom:3px solid #d4af37;padding-bottom:2px}
+.pc .cuerpo{padding:14px;display:grid;gap:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#5d6078;text-align:left;padding:7px 8px;border-bottom:2px solid #dcdbe6;white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid #ecebf2;vertical-align:top}
+tr.grupo td{background:#f4f3f9;font-weight:800;font-size:12px;letter-spacing:.06em;color:#5d6078}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.n{text-align:right}
+.inp{display:inline-block;min-width:74px;border:1.5px solid #c9c8d6;border-radius:7px;padding:3px 8px;background:#fff;text-align:right;font-variant-numeric:tabular-nums}
+.inp.vacio{color:#a3a2b3}
+.receta{background:#fbf7e9;border:1.5px solid #e6cf7d;border-radius:12px;padding:10px 12px;display:grid;gap:8px}
+.ing{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center}
+.boton{display:inline-block;border-radius:9px;padding:7px 12px;font-weight:800;font-size:13px;letter-spacing:.04em;border:1.5px solid #2b2d42;color:#2b2d42}
+.boton.lleno{background:#2b2d42;color:#fff}
+.tres{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.num{border-radius:12px;padding:10px 12px;background:#f4f3f9}
+.num .v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.num.verde{background:#e3f6ea}.num.verde .v{color:#11733a}
+tfoot td{font-weight:800;border-top:2px solid #dcdbe6;border-bottom:none}
+.nota{font-size:12.5px;color:#5d6078}
+/* ===== los aparatos ===== */
+.fila{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+.rol{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--tinta2);margin-bottom:6px}
+.tel{border-radius:30px;padding:10px;background:#000;border:1px solid #333}
+.pant{border-radius:22px;min-height:590px;padding:14px 13px 13px;display:flex;flex-direction:column;gap:11px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top .t{font-weight:800;letter-spacing:.04em;font-size:15px}
+.chip{font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px}
+.estado{border-radius:11px;padding:7px 11px;font-weight:700;font-size:13px;display:flex;gap:8px;align-items:center}
+.estado i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.grilla{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border-radius:14px;padding:10px;display:grid;gap:3px;min-height:86px;align-content:space-between;position:relative;overflow:hidden}
+.tile .nom{font-weight:800;font-size:14.5px;line-height:1.15}
+.tile .pre{font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
+.tile .q{font-size:11.5px;font-weight:700}
+.tile.apag{opacity:.45}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px}
+.ticket{border-radius:14px;padding:10px 12px;display:grid;gap:3px;font-size:13.5px}
+.ticket .r{display:flex;justify-content:space-between}
+.grande{border-radius:16px;padding:16px;font-weight:800;font-size:22px;letter-spacing:.05em;text-align:center}
+.tarjeta{border-radius:14px;padding:10px 12px 10px 15px;display:grid;gap:3px;position:relative;overflow:hidden}
+.tarjeta::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px}
+.tarjeta .r{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tarjeta .n{font-weight:800;font-size:15.5px}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.plata{font-weight:800;font-size:19px;font-variant-numeric:tabular-nums}
+.mini{font-size:12.5px;opacity:.8}
+.alerta{border-radius:14px;padding:11px 12px 11px 15px;display:grid;gap:7px;position:relative;overflow:hidden}
+.alerta::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px}
+.alerta b{font-size:15.5px}
+.accion{border-radius:11px;padding:10px;font-weight:800;text-align:center;letter-spacing:.04em}
+.prod{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid}
+.prod .cant{font-weight:800;font-size:20px;font-variant-numeric:tabular-nums}
+.abajo{margin-top:auto;display:grid;gap:8px}
+
+/* ===== NOCHE (mejorada) ===== */
+.N .pant{background:radial-gradient(120% 55% at 0 0,#2b2412 0,#0e0d11 58%);color:#f4f1ea}
+.N .chip{background:#26231b;color:#e5c968;border:1px solid #4a3f1d}
+.N .estado.ok{background:rgba(89,211,138,.12);color:#6fe39b}.N .estado.ok i{background:#6fe39b}
+.N .tile{background:#18171c;border:1px solid #2c2a31}.N .tile::before{background:#3a3742}
+.N .tile.poco::before{background:#f2b84b}.N .tile.sin::before{background:#ff8f82}
+.N .tile .nom{color:#f4f1ea}.N .tile .pre{color:#e5c968}.N .tile .q{color:#b9b4a8}.N .tile.poco .q{color:#f2b84b}.N .tile.sin .q{color:#ff8f82}
+.N .ticket{background:#18171c;border:1px solid #2c2a31}
+.N .grande{background:linear-gradient(180deg,#e2c15a,#c9a32f);color:#15120a;box-shadow:0 6px 18px rgba(212,175,55,.25)}
+.N .tarjeta{background:#18171c;border:1px solid #2c2a31}.N .tarjeta::before{background:#3a3742}
+.N .tarjeta.ab::before{background:#59d38a}.N .tarjeta.ok::before{background:#e5c968}
+.N .pill.ab{background:rgba(89,211,138,.15);color:#6fe39b}.N .pill.ok{background:rgba(229,201,104,.2);color:#e5c968}
+.N .pill.ce{background:#2a2830;color:#c9c4ba}.N .pill.poco{background:rgba(242,184,75,.16);color:#f2b84b}.N .pill.sin{background:rgba(255,143,130,.16);color:#ff8f82}
+.N .alerta{background:#1d1a12;border:1px solid #4a3f1d}.N .alerta::before{background:#e5c968}
+.N .accion{background:#e5c968;color:#15120a}
+.N .prod{border-color:#2a2830}.N .poco{color:#f2b84b}.N .sin{color:#ff8f82}
+
+/* ===== BLANCO (mejorado) ===== */
+.B .pant{background:#f4f3ef;color:#15141a}
+.B .chip{background:#fff;color:#15141a;border:1.5px solid #d9d6cd}
+.B .estado.ok{background:#e1f5e8;color:#11733a}.B .estado.ok i{background:#11733a}
+.B .tile{background:#fff;border:1px solid #e2dfd6;box-shadow:0 1px 3px rgba(0,0,0,.05)}.B .tile::before{background:#d9d6cd}
+.B .tile.poco::before{background:#d99a1e}.B .tile.sin::before{background:#c2362b}
+.B .tile .nom{color:#15141a}.B .tile .pre{color:#15141a}.B .tile .q{color:#6b6960}.B .tile.poco .q{color:#8a5a00}.B .tile.sin .q{color:#b3261e}
+.B .ticket{background:#fff;border:1px solid #e2dfd6}
+.B .grande{background:#15141a;color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.B .tarjeta{background:#fff;border:1px solid #e2dfd6;box-shadow:0 1px 3px rgba(0,0,0,.05)}.B .tarjeta::before{background:#d9d6cd}
+.B .tarjeta.ab::before{background:#1f9d55}.B .tarjeta.ok::before{background:#d99a1e}
+.B .pill.ab{background:#e1f5e8;color:#11733a}.B .pill.ok{background:#fff1c7;color:#7a5a00}
+.B .pill.ce{background:#ecebe6;color:#55534c}.B .pill.poco{background:#fff1c7;color:#7a5a00}.B .pill.sin{background:#ffe2de;color:#a3241a}
+.B .alerta{background:#fffaeb;border:1px solid #f0d98e}.B .alerta::before{background:#d99a1e}
+.B .accion{background:#15141a;color:#fff}
+.B .prod{border-color:#e6e3da}.B .poco{color:#8a5a00}.B .sin{color:#b3261e}
+.decidir{border:2px solid var(--primario);border-radius:14px;padding:12px 14px;background:var(--panel);display:grid;gap:8px}
+.decidir ol,.lista{margin:0;padding-left:20px;display:grid;gap:4px}
+</style></head><body><div class="wrap">
+
+<div>
+  <h1>La barra: los tragos con receta, y los estilos Noche y Blanco</h1>
+  <p class="sub">Con lo que mandó el jefe por WhatsApp el 26-nov. Los precios son inventados, salvo la botella de fernet. Lo marcado con
+  <span class="tag">NUEVO</span> no está hoy en la app.</p>
+</div>
+
+<!-- ============ 1. CÓMO LO ENTENDÍ ============ -->
+<div class="caja">
+  <div class="etiqueta">1 · ASÍ LO ENTENDÍ: UNA NOCHE, DE PUNTA A PUNTA</div>
+  <div class="regla"><b>La receta sirve para calcular, no para contar.</b> Lo que se sirve en cc (fernet, coca, vodka) <b>no se cuenta en la barra</b>:
+  sale de los tragos vendidos. Lo que va entero (el Speed) <b>baja de su stock como si se vendiera suelto</b>: sin Speed en esa barra, el vodka no
+  se vende. Nadie ve botellas empezadas.</div>
+  <div class="cuenta">
+    <div class="paso"><span><b class="num">1</b><b>Antes de la fiesta, el jefe en PRECIOS</b></span>
+      <span>Fernet: botella de 750 cc, lista <b>$11.740</b>. Coca: botella de 2,25 L, lista $3.000.</span>
+      <span>"Fernet con coca" a $10.000, con su receta: <b>200 cc de fernet + 500 cc de coca</b> (el resto, hielo).</span>
+      <span class="gris chica">El programa le dice: cuesta $3.797 · ganás $6.203 por trago.</span></div>
+    <div class="paso"><span><b class="num">2</b><b>Esa noche</b></span>
+      <span>La cajera vende Fernet con coca como cualquier cosa. No ve costos ni botellas.</span>
+      <span>Cada vodka, además, baja <b>un Speed</b> del stock de esa barra.</span></div>
+    <div class="paso"><span><b class="num">3</b><b>El martes, en GANANCIA (solo el jefe)</b></span>
+      <span>40 Fernet con coca vendidos (sin los anulados) = 8.000 cc de fernet = <b>10,67 botellas</b>.</span>
+      <span>Se vendió <b>$400.000</b> · le debo <b>$151.893</b> · ganancia <b>$248.107</b>.</span>
+      <span class="gris chica">Le debo = 10,67 botellas de fernet ($125.227) + 8,89 de coca ($26.667).</span></div>
+  </div>
+</div>
+
+<!-- ============ 2. PRECIOS DEL JEFE ============ -->
+<div class="caja">
+  <div class="etiqueta">2 · PRECIOS DEL JEFE, EN LA PC (EN MODO JEFE) · TÉCNICA PINAROLI, VIE 4/12</div>
+  <div class="pc">
+    <div class="barra"><span>BARRA</span><span class="pest">CATÁLOGO</span><span class="pest on">PRECIOS</span><span class="pest">CAJAS</span><span class="pest">GANANCIA <span class="tag">NUEVO</span></span></div>
+    <div class="cuerpo">
+      <table>
+        <thead><tr><th>Producto</th><th class="n">Precio de venta</th><th class="n">Stock</th><th class="n">Lista <span class="tag">NUEVO</span></th><th class="n">Trae <span class="tag">NUEVO</span></th><th>Gana por unidad</th></tr></thead>
+        <tbody>
+          <tr class="grupo"><td colspan="6">CERVEZAS Y SIN ALCOHOL</td></tr>
+          <tr><td>Cerveza lata</td><td class="n"><span class="inp">$3.000</span></td><td class="n"><span class="inp">200</span></td><td class="n"><span class="inp">$1.500</span></td><td class="n gris">—</td><td class="gris">$1.500</td></tr>
+          <tr><td>Agua 500</td><td class="n"><span class="inp">$2.000</span></td><td class="n"><span class="inp">100</span></td><td class="n"><span class="inp">$600</span></td><td class="n gris">—</td><td class="gris">$1.400</td></tr>
+          <tr><td>Speed 250 <span class="gris chica">· también va en el vodka</span></td><td class="n"><span class="inp">$3.500</span></td><td class="n"><span class="inp">150</span></td><td class="n"><span class="inp">$1.200</span></td><td class="n gris">lata</td><td class="gris">$2.300</td></tr>
+          <tr class="grupo"><td colspan="6">TRAGOS</td></tr>
+          <tr><td><b>Fernet con coca</b> <span class="gris chica">· con receta</span></td><td class="n"><span class="inp">$10.000</span></td><td class="n gris">no lleva</td><td class="n gris">$3.797</td><td class="n gris">1 L</td><td class="gris">$6.203</td></tr>
+          <tr><td colspan="6">
+            <div class="receta">
+              <div class="r" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>RECETA DE FERNET CON COCA <span class="tag">NUEVO</span></b><span class="gris chica">"Más o menos, para calcularle"</span></div>
+              <div class="ing"><span>Fernet 750 cc</span><span class="inp">200 cc</span><span class="gris chica">$3.130,67</span></div>
+              <div class="ing"><span>Coca-Cola 2,25 L</span><span class="inp">500 cc</span><span class="gris chica">$666,67</span></div>
+              <div class="ing"><span class="gris">El resto, hielo</span><span class="gris chica">no se cuenta</span><span></span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="boton">+ AGREGAR INGREDIENTE</span><span><b>Cuesta $3.797,33 · ganás $6.202,67 por trago</b></span></div>
+            </div></td></tr>
+          <tr><td><b>Vodka con Speed</b> <span class="gris chica">· con receta</span></td><td class="n"><span class="inp">$10.000</span></td><td class="n gris">por el Speed</td><td class="n gris">$5.200</td><td class="n gris">1 L</td><td class="gris">$4.800</td></tr>
+          <tr><td colspan="6"><div class="receta">
+              <b>RECETA DE VODKA CON SPEED</b>
+              <div class="ing"><span>Vodka 1 L</span><span class="inp">500 cc</span><span class="gris chica">$4.000</span></div>
+              <div class="ing"><span>Speed 250</span><span class="inp">1 lata</span><span class="gris chica">$1.200 · baja del stock del Speed</span></div>
+              <div class="ing"><span class="gris">El resto, hielo</span><span class="gris chica">no se cuenta</span><span></span></div>
+            </div></td></tr>
+          <tr class="grupo"><td colspan="6">PARA LOS TRAGOS <span class="tag">NUEVO</span> · no se venden solas ni se cuentan en la barra</td></tr>
+          <tr><td>Fernet 750 cc</td><td class="n gris">—</td><td class="n gris">—</td><td class="n"><span class="inp">$11.740</span></td><td class="n"><span class="inp">750 cc</span></td><td class="gris">—</td></tr>
+          <tr><td>Coca-Cola 2,25 L</td><td class="n gris">—</td><td class="n gris">—</td><td class="n"><span class="inp">$3.000</span></td><td class="n"><span class="inp">2.250 cc</span></td><td class="gris">—</td></tr>
+          <tr><td>Vodka 1 L</td><td class="n gris">—</td><td class="n gris">—</td><td class="n"><span class="inp">$8.000</span></td><td class="n"><span class="inp">1.000 cc</span></td><td class="gris">—</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="boton">COPIAR DE OTRA FIESTA</span><span class="boton lleno">GUARDAR</span></div>
+      <p class="nota">COPIAR DE OTRA FIESTA trae también la lista y las recetas. La encargada ve esta pantalla sin las columnas Lista, Trae ni Gana,
+      sin las recetas y sin poder guardar. La cajera y el repositor no la ven.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 3. GANANCIA ============ -->
+<div class="caja">
+  <div class="etiqueta">3 · GANANCIA, SOLO EL JEFE · RINDE DEL VIE 4 AL LUN 7/12</div>
+  <div class="pc">
+    <div class="barra"><span>BARRA</span><span class="pest">CATÁLOGO</span><span class="pest">PRECIOS</span><span class="pest">CAJAS</span><span class="pest on">GANANCIA</span></div>
+    <div class="cuerpo">
+      <div class="gris chica">Desde vie 4/12 hasta lun 7/12 · 4 fiestas tildadas</div>
+      <div class="tres">
+        <div class="num"><div class="gris chica">Se vendió (a mi precio)</div><div class="v">$1.540.000</div></div>
+        <div class="num"><div class="gris chica">Le debo al proveedor</div><div class="v">$670.993</div></div>
+        <div class="num verde"><div class="gris chica">Ganancia</div><div class="v">$869.007</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Producto</th><th class="n">Vendidas</th><th class="n">Perdidas</th><th class="n">Precio de lista</th><th class="n">Le debo</th><th class="n">Se vendió</th><th class="n">Ganancia</th></tr></thead>
+        <tbody>
+          <tr><td>Cerveza lata</td><td class="n">180</td><td class="n">3</td><td class="n">$1.500</td><td class="n">$274.500</td><td class="n">$540.000</td><td class="n">$265.500</td></tr>
+          <tr><td>Agua 500</td><td class="n">70</td><td class="n">1</td><td class="n">$600</td><td class="n">$42.600</td><td class="n">$140.000</td><td class="n">$97.400</td></tr>
+          <tr><td>Speed 250</td><td class="n">60</td><td class="n">0</td><td class="n">$1.200</td><td class="n">$72.000</td><td class="n">$210.000</td><td class="n">$138.000</td></tr>
+          <tr><td>Fernet con coca <span class="gris chica">· por receta</span></td><td class="n">40</td><td class="n gris">—</td><td class="n">$3.797</td><td class="n">$151.893</td><td class="n">$400.000</td><td class="n">$248.107</td></tr>
+          <tr><td>Vodka con Speed <span class="gris chica">· por receta</span></td><td class="n">25</td><td class="n gris">—</td><td class="n">$5.200</td><td class="n">$130.000</td><td class="n">$250.000</td><td class="n">$120.000</td></tr>
+        </tbody>
+        <tfoot><tr><td>Total</td><td></td><td></td><td></td><td class="n">$670.993</td><td class="n">$1.540.000</td><td class="n">$869.007</td></tr></tfoot>
+      </table>
+      <h3>PARA EL PROVEEDOR <span class="tag">NUEVO</span> <span class="gris chica" style="font-weight:500">· lo mismo, contado por botella y por lata</span></h3>
+      <table>
+        <thead><tr><th>De la lista</th><th class="n">Se usaron</th><th class="n">Lista</th><th class="n">Le debo</th><th>De dónde sale</th></tr></thead>
+        <tbody>
+          <tr><td>Cerveza lata</td><td class="n">183 latas</td><td class="n">$1.500</td><td class="n">$274.500</td><td class="gris chica">180 vendidas + 3 perdidas</td></tr>
+          <tr><td>Agua 500</td><td class="n">71</td><td class="n">$600</td><td class="n">$42.600</td><td class="gris chica">70 vendidas + 1 perdida</td></tr>
+          <tr><td>Speed 250</td><td class="n">85 latas</td><td class="n">$1.200</td><td class="n">$102.000</td><td class="gris chica">60 sueltos + 25 en los vodkas</td></tr>
+          <tr><td>Fernet 750 cc</td><td class="n">10,67 botellas</td><td class="n">$11.740</td><td class="n">$125.227</td><td class="gris chica">40 tragos × 200 cc (calculado)</td></tr>
+          <tr><td>Coca-Cola 2,25 L</td><td class="n">8,89 botellas</td><td class="n">$3.000</td><td class="n">$26.667</td><td class="gris chica">40 tragos × 500 cc (calculado)</td></tr>
+          <tr><td>Vodka 1 L</td><td class="n">12,5 botellas</td><td class="n">$8.000</td><td class="n">$100.000</td><td class="gris chica">25 tragos × 500 cc (calculado)</td></tr>
+        </tbody>
+        <tfoot><tr><td>Total</td><td></td><td></td><td class="n">$670.993</td><td></td></tr></tfoot>
+      </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="boton">VER POR FIESTA</span><span class="boton lleno">IMPRIMIR</span></div>
+      <p class="nota">Las botellas son un cálculo con la receta: "más o menos". Las latas y lo demás es lo que se vendió de verdad, más lo que el
+      repositor anotó como perdido. Si falta la lista de algo, no entra en "Le debo" y arriba dice "Faltan N sin precio de lista".</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4. NOCHE Y BLANCO ============ -->
+<div class="caja">
+  <div class="etiqueta">4 · LOS DOS ESTILOS, MEJORADOS · CADA APARATO ELIGE EL SUYO</div>
+  <p class="sub">Los mismos dos de VENDER hoy, ahora en todas las pantallas de la barra. Lo mejor: una franja de color en cada tarjeta que dice su
+  estado (y además la palabra), los números grandes a la derecha, dónde estoy siempre arriba en una pastilla, y el botón principal abajo a
+  todo lo ancho, donde llega el pulgar. En VENDER, el trago con Speed dice cuántos quedan; el Fernet con coca no lleva número.</p>
+  <template id="contenido">
+    <div class="fila">
+      <div>
+        <div class="rol">LA CAJERA · VENDER (TABLET)</div>
+        <div class="tel"><div class="pant">
+          <div class="top"><span class="t">VENDER</span><span class="chip">Caja 3 · Barra 1 · Romina</span></div>
+          <div class="estado ok"><i></i>Conectada a la Barra 1 · Todo subido</div>
+          <div class="grilla">
+            <div class="tile poco"><span class="nom">Cerveza lata</span><span class="pre">$3.000</span><span class="q">QUEDAN 18 · QUEDA POCO</span></div>
+            <div class="tile"><span class="nom">Fernet con coca</span><span class="pre">$10.000</span><span class="q">&nbsp;</span></div>
+            <div class="tile"><span class="nom">Vodka con Speed</span><span class="pre">$10.000</span><span class="q">QUEDAN 31</span></div>
+            <div class="tile"><span class="nom">Speed 250</span><span class="pre">$3.500</span><span class="q">QUEDAN 31</span></div>
+            <div class="tile sin apag"><span class="nom">Agua 500</span><span class="pre">$2.000</span><span class="q">SIN STOCK</span></div>
+            <div class="tile"><span class="nom">Silla</span><span class="pre">$5.000</span><span class="q">&nbsp;</span></div>
+          </div>
+          <div class="ticket"><div class="r"><span>2 × Fernet con coca</span><span>$20.000</span></div><div class="r"><span>1 × Cerveza lata</span><span>$3.000</span></div><div class="r fuerte"><span>Total</span><span>$23.000</span></div></div>
+          <div class="abajo"><div class="grande">COBRAR $23.000</div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="rol">LA ENCARGADA · LAS CAJAS (IPHONE)</div>
+        <div class="tel"><div class="pant">
+          <div class="top"><span class="t">LAS CAJAS</span><span class="chip">vie 4/12 · 23:40</span></div>
+          <div class="alerta"><b>La Caja 2 pide el OK</b><span class="mini">Contó $380.500 · tenía que haber $381.000 · falta $500</span><div class="accion">VER Y DAR EL OK</div></div>
+          <div class="tarjeta ab"><div class="r"><span class="n">Caja 1 · Barra 1</span><span class="pill ab">ABIERTA</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$412.000</span></div></div>
+          <div class="tarjeta ok"><div class="r"><span class="n">Caja 2 · Barra 1</span><span class="pill ok">PIDE EL OK</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$381.000</span></div></div>
+          <div class="tarjeta"><div class="r"><span class="n">Caja 7 · Barra 2</span><span class="pill ce">CERRADA</span></div><div class="r"><span class="mini">Efectivo</span><span class="plata">$295.000</span></div></div>
+          <div class="abajo"><div class="accion">VER CATÁLOGO Y PRECIOS</div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="rol">EL REPOSITOR · STOCK (CELULAR)</div>
+        <div class="tel"><div class="pant">
+          <div class="top"><span class="t">STOCK</span><span class="chip">Barra 1 · vie 4/12</span></div>
+          <div class="alerta"><b>Barra 2: Cerveza, quedan 12</b><span class="mini">El aviso es 40. Hay 180 en el depósito.</span><div class="accion">VOY EN CAMINO</div></div>
+          <div>
+            <div class="prod"><span>Cerveza lata<br><span class="pill poco">QUEDA POCO</span></span><span class="cant poco">18</span></div>
+            <div class="prod"><span>Speed 250<br><span class="mini">baja también con cada vodka</span></span><span class="cant">31</span></div>
+            <div class="prod"><span>Agua 500<br><span class="pill sin">SIN STOCK</span></span><span class="cant sin">0</span></div>
+          </div>
+          <span class="mini">El fernet, la coca y el vodka de los tragos no se cuentan acá.</span>
+          <div class="abajo"><div class="grande">REPONER</div></div>
+        </div></div>
+      </div>
+    </div>
+  </template>
+  <div class="cab"><h2>Noche</h2><span class="sub">Negro y dorado, como VENDER hoy, más prolijo.</span></div>
+  <div class="N aqui"></div>
+  <div class="cab"><h2>Blanco</h2><span class="sub">Claro, con tarjetas blancas: se lee mejor con luz de salón o al aire libre.</span></div>
+  <div class="B aqui"></div>
+</div>
+
+<div class="decidir">
+  <b>LO QUE DECIDÍ YO (decime si algo no va)</b>
+  <ol>
+    <li>Las botellas (fernet, coca, vodka) <b>no se cuentan</b> en la barra: se calculan con los tragos vendidos, solo para GANANCIA.</li>
+    <li>Lo que va entero en un trago (el Speed) <b>baja de su stock</b>. Si no, al contar faltarían Speed y se pagarían dos veces.</li>
+    <li>Cambiar una receta cambia la cuenta de lo ya vendido esa fiesta: la receta se carga antes de abrir.</li>
+    <li>Cada aparato elige Noche o Blanco, como hoy en VENDER, y vale para todas sus pantallas de la barra.</li>
+  </ol>
+</div>
+
+<script>
+const t = document.getElementById('contenido');
+document.querySelectorAll('.aqui').forEach(a => a.appendChild(t.content.cloneNode(true)));
+</script>
+</div></body></html>

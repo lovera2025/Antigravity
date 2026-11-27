@@ -53,6 +53,21 @@
   prueba de la encargada en la notebook (PRENDER LA CENTRAL sí; CATÁLOGO y PRECIOS solo mirando; nunca GANANCIA), y
   con sus respuestas a las maquetas, las pantallas (PRECIOS con la Lista y SUMAR LO QUE QUEDÓ, la pestaña GANANCIA y
   su papel A4); después, el repositor, RETIRO y el cambio.
+- **Las respuestas a las maquetas y los tragos con receta (26-nov, 22:30; chat "¿En qué quedamos?", que sigue; el
+  chat "Planes para barra" ya no se usa).** Plan aprobado:
+  `C:\Users\lover\.claude\plans\en-que-quedamos-resilient-river-of-eeea9ef1-6b33-47bb-97b6-06dbde9b3e95.md`.
+  - Columnas de GANANCIA: **así**. **Ningún botón** de "traer lo que quedó" (sale TRAER / SUMAR LO QUE QUEDÓ).
+    Estilo: **cada aparato elige Noche o Blanco**, mejorados, en todas las pantallas de la barra.
+  - **Los tragos llevan receta** (el jefe por WhatsApp): trago de 1 L, receta editable; Fernet con coca = 200 cc de
+    fernet + 500 cc de coca + hielo; vodka = 500 cc de vodka + 1 Speed de 250 cc + hielo; lista por botella. "Más o
+    menos, para calcularle". El usuario aclaró: **las botellas se calculan con los tragos vendidos** (40 × 200 cc ÷
+    750 = 10,67) y **no se muestra en la barra cuántas botellas quedan** ("es raro"); lo demás lo decido yo.
+  - Decidido: fernet, coca y vodka (en cc) **no tienen stock en la barra**, solo lista y cuánto trae; entran en
+    GANANCIA y en "Para el proveedor". **Lo que va entero (el Speed) baja de su stock** como si se vendiera suelto
+    (si no, al contar faltarían y se pagarían dos veces); sin Speed, el vodka no se vende. `StockPorBarra` no cambia:
+    recibe las ventas con el ingrediente entero adentro. La receta va por fiesta en PRECIOS (`barra_recetas`, v84).
+  - Maqueta mandada: `docs/maqueta_recetas_y_estilos_2026-11-27.html` (PRECIOS con recetas, GANANCIA con "Para el
+    proveedor", Noche y Blanco en VENDER, LAS CAJAS y STOCK). Las pantallas esperan su OK; los datos y la cuenta no.
 - El plan para el 4-dic va por **~57 %** (sin el plano impreso). Orden: el repositor, RETIRO y el cambio (v84), sin
   stock no se vende → el precio de lista y PROVEEDOR → la página de la encargada → la noche simulada y la tercera
   revisión → las pantallas en la app de verdad y la tele con el APK → la v83/v84 sobre una copia, los SQL y publicar
