@@ -36,6 +36,70 @@ import '../test/helpers/operadores_en_memoria.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
+/// Lo que cobra el proveedor y cómo se prepara cada trago, como lo cargaría el jefe: las
+/// latas y botellas con su precio de lista; los tragos, con su receta (nunca un precio de
+/// lista escrito a mano). Devuelve el id del Fernet con coca.
+Future<String> listaYRecetas(BarraEnPrueba prueba) async {
+  final b = prueba.barra;
+  final ahora = DateTime(2026, 11, 20);
+  final fiesta = BarraEnPrueba.id(1);
+  ProductoBarra de(String nombre) => b.productosGuardados.firstWhere((p) => p.nombre == nombre);
+  ProductoBarra botella(String nombre) => b.producto(nombre, categoria: 'Para los tragos');
+  final fernet = botella('Fernet 750');
+  final coca = botella('Coca-Cola 2,25');
+  final gin = botella('Gin 750');
+  final tonica = botella('Agua tónica 1,5');
+  final ron = botella('Ron 750');
+  final campari = botella('Campari 750');
+  final naranja = botella('Jugo de naranja 1 L');
+  final vodka = botella('Vodka 1 L');
+  final speed = botella('Speed 250');
+  for (final (id, lista, cc) in [
+    (de('Cerveza tirada').id, 1500.0, null),
+    (de('Quilmes lata').id, 1500.0, null),
+    (de('Coca-Cola').id, 900.0, null),
+    (de('Agua sin gas').id, 600.0, null),
+    (de('Champán').id, 14000.0, null),
+    (de('Silla extra').id, 0.0, null),
+    (fernet.id, 11740.0, 750),
+    (coca.id, 3000.0, 2250),
+    (gin.id, 9000.0, 750),
+    (tonica.id, 2500.0, 1500),
+    (ron.id, 8000.0, 750),
+    (campari.id, 12000.0, 750),
+    (naranja.id, 1500.0, 1000),
+    (vodka.id, 8000.0, 1000),
+    (speed.id, 1200.0, null),
+  ]) {
+    await b.guardarCosto(
+      CostoBarra.para(eventoId: fiesta, productoId: id, precioLista: lista, contenidoCc: cc, ahora: ahora),
+      quien: 'Jefe',
+    );
+  }
+  for (final (trago, lleva) in [
+    ('Fernet con coca', [(fernet.id, 200, UnidadDeReceta.cc), (coca.id, 500, UnidadDeReceta.cc)]),
+    ('Gin tonic', [(gin.id, 100, UnidadDeReceta.cc), (tonica.id, 300, UnidadDeReceta.cc)]),
+    ('Mojito', [(ron.id, 100, UnidadDeReceta.cc)]),
+    ('Campari con naranja', [(campari.id, 100, UnidadDeReceta.cc), (naranja.id, 300, UnidadDeReceta.cc)]),
+    ('Speed con vodka', [(vodka.id, 500, UnidadDeReceta.cc), (speed.id, 1, UnidadDeReceta.unidad)]),
+  ]) {
+    for (final (id, cantidad, unidad) in lleva) {
+      await b.guardarReceta(
+        RecetaBarra.para(
+          eventoId: fiesta,
+          productoId: de(trago).id,
+          ingredienteId: id,
+          cantidad: cantidad,
+          unidad: unidad,
+          ahora: ahora,
+        ),
+        quien: 'Jefe',
+      );
+    }
+  }
+  return de('Fernet con coca').id;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final carpeta = _salida.isNotEmpty ? _salida : Directory.systemTemp.createTempSync('jefe_muestra').path;
@@ -121,99 +185,28 @@ void main() {
     await guardar(tester, clave, 'Jefe_2_precios_pc.png');
   });
 
-  testWidgets('PRECIOS con el precio de lista, una receta abierta y las botellas', (tester) async {
+  testWidgets('PRECIOS con el precio de lista, y la ventanita de cómo se prepara un trago', (tester) async {
     late String fernetConCoca;
     final (clave, _) = await montar(
       tester,
-      const Size(1400, 1500),
+      const Size(1400, 1100),
       PestanaBarraJefe.precios,
-      antes: (prueba) async {
-        final b = prueba.barra;
-        final ahora = DateTime(2026, 11, 20);
-        ProductoBarra de(String nombre) => b.productosGuardados.firstWhere((p) => p.nombre == nombre);
-        fernetConCoca = de('Fernet con coca').id;
-        final botellaFernet = b.producto('Fernet 750', categoria: 'Botellas');
-        final botellaCoca = b.producto('Coca-Cola 2,25', categoria: 'Botellas');
-        for (final (id, lista, cc) in [
-          (de('Cerveza tirada').id, 1500.0, null),
-          (de('Quilmes lata').id, 1500.0, null),
-          (de('Coca-Cola').id, 900.0, null),
-          (de('Champán').id, 14000.0, null),
-          (de('Silla extra').id, 0.0, null),
-          (botellaFernet.id, 11740.0, 750),
-          (botellaCoca.id, 3000.0, 2250),
-        ]) {
-          await b.guardarCosto(
-            CostoBarra.para(eventoId: BarraEnPrueba.id(1), productoId: id, precioLista: lista, contenidoCc: cc, ahora: ahora),
-            quien: 'Jefe',
-          );
-        }
-        for (final (id, cc) in [(botellaFernet.id, 200), (botellaCoca.id, 500)]) {
-          await b.guardarReceta(
-            RecetaBarra.para(
-              eventoId: BarraEnPrueba.id(1),
-              productoId: fernetConCoca,
-              ingredienteId: id,
-              cantidad: cc,
-              unidad: UnidadDeReceta.cc,
-              ahora: ahora,
-            ),
-            quien: 'Jefe',
-          );
-        }
-      },
+      antes: (prueba) async => fernetConCoca = await listaYRecetas(prueba),
     );
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Jefe_2b_precios_con_lista_pc.png');
     await tester.tap(find.byKey(Key('jefe_receta_$fernetConCoca')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await guardar(tester, clave, 'Jefe_2b_precios_con_lista_pc.png');
+    await guardar(tester, clave, 'Jefe_2c_como_se_prepara_pc.png');
   });
 
   testWidgets('GANANCIA en la PC, con la ganancia de cada producto abierta', (tester) async {
     final (clave, _) = await montar(
       tester,
-      const Size(1280, 1300),
+      const Size(1280, 1500),
       PestanaBarraJefe.ganancia,
-      antes: (prueba) async {
-        final b = prueba.barra;
-        final ahora = DateTime(2026, 11, 20);
-        ProductoBarra de(String nombre) => b.productosGuardados.firstWhere((p) => p.nombre == nombre);
-        final fernetConCoca = de('Fernet con coca').id;
-        final botellaFernet = b.producto('Fernet 750', categoria: 'Botellas');
-        final botellaCoca = b.producto('Coca-Cola 2,25', categoria: 'Botellas');
-        for (final (id, lista, cc) in [
-          (de('Cerveza tirada').id, 1500.0, null),
-          (de('Quilmes lata').id, 1500.0, null),
-          (de('Coca-Cola').id, 900.0, null),
-          (de('Gin tonic').id, 2400.0, null),
-          (de('Mojito').id, 2100.0, null),
-          (de('Campari con naranja').id, 2200.0, null),
-          (de('Speed con vodka').id, 2600.0, null),
-          (de('Agua sin gas').id, 600.0, null),
-          (de('Champán').id, 14000.0, null),
-          (de('Silla extra').id, 0.0, null),
-          (botellaFernet.id, 11740.0, 750),
-          (botellaCoca.id, 3000.0, 2250),
-        ]) {
-          await b.guardarCosto(
-            CostoBarra.para(eventoId: BarraEnPrueba.id(1), productoId: id, precioLista: lista, contenidoCc: cc, ahora: ahora),
-            quien: 'Jefe',
-          );
-        }
-        for (final (id, cc) in [(botellaFernet.id, 200), (botellaCoca.id, 500)]) {
-          await b.guardarReceta(
-            RecetaBarra.para(
-              eventoId: BarraEnPrueba.id(1),
-              productoId: fernetConCoca,
-              ingredienteId: id,
-              cantidad: cc,
-              unidad: UnidadDeReceta.cc,
-              ahora: ahora,
-            ),
-            quien: 'Jefe',
-          );
-        }
-      },
+      antes: (prueba) async => listaYRecetas(prueba),
     );
     await tester.tap(find.byKey(const Key('jefe_ganancia_por_producto')));
     await tester.pumpAndSettle();

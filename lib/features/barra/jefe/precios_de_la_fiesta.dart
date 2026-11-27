@@ -159,8 +159,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
   /// Lo que lleva cada trago, como lo está escribiendo el jefe (por el id del trago).
   final _recetas = <String, List<_Ingrediente>>{};
 
-  /// Los tragos con la receta abierta: viene plegada (pedido del usuario, 26-nov).
-  final _abiertas = <String>{};
+
   double _recargo = 0;
   bool _guardando = false;
 
@@ -582,11 +581,10 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
                 esJefe: esJefe,
                 conCosto: veCosto,
                 trago: _ingredientesDe(f.producto.id).isNotEmpty ? _costoDe(f.producto.id) : null,
+                debajoDelNombre: veCosto && _esTrago(f) ? _lineaDeLaReceta(f, esJefe) : null,
                 onCambio: () => setState(() {}),
               ),
-              if (veCosto && _esTrago(f)) _receta(f, esJefe),
             ],
-          if (veCosto && botellas.isNotEmpty) _lasBotellas(botellas, esJefe),
         ],
       ];
       final papel = Column(
@@ -720,38 +718,78 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     );
   }
 
-  /// La receta de un trago: plegada ("RECETA ▸ 2 ingredientes"), y al tocarla, lo que
-  /// lleva. Solo en PRECIOS del jefe (pedido del usuario, 26-nov: no se ve al vender).
-  Widget _receta(_Fila trago, bool esJefe) {
+  /// "200 cc Fernet 750 + 500 cc Coca-Cola 2,25": cómo se prepara un trago, en una línea
+  /// chica debajo de su nombre (pedido del usuario, 27-nov: "como mucho un pequeño
+  /// subtexto"). Solo en PRECIOS del jefe.
+  String _comoSePrepara(String tragoId) => [
+        for (final i in _ingredientesDe(tragoId))
+          if (i.ingredienteId != null && (i.cantidadNum ?? 0) > 0)
+            '${i.cantidadNum} ${i.unidad == UnidadDeReceta.cc ? 'cc' : (i.cantidadNum == 1 ? 'unidad de' : 'unidades de')} '
+                '${_filaDe(i.ingredienteId!)?.producto.nombre ?? ''}',
+      ].join(' + ');
+
+  /// La línea chica debajo del nombre del trago: tocándola se abre cómo se prepara.
+  Widget _lineaDeLaReceta(_Fila trago, bool esJefe) {
     final id = trago.producto.id;
-    final ingredientes = _ingredientesDe(id);
-    final abierta = _abiertas.contains(id);
-    final cuantos = ingredientes.where((i) => i.ingredienteId != null).length;
-    final boton = TextButton(
+    final texto = _comoSePrepara(id);
+    return InkWell(
       key: Key('jefe_receta_$id'),
-      onPressed: () => setState(() => abierta ? _abiertas.remove(id) : _abiertas.add(id)),
-      style: TextButton.styleFrom(
-        backgroundColor: const Color(0xFF221F17),
-        foregroundColor: TemaBarra.dorado,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('RECETA', style: TextStyle(fontWeight: FontWeight.w800)),
-          Icon(abierta ? Icons.expand_more : Icons.chevron_right, size: 20),
-          if (!abierta)
-            Text(
-              cuantos == 0 ? 'sin ingredientes' : (cuantos == 1 ? '1 ingrediente' : '$cuantos ingredientes'),
-              key: Key('jefe_receta_cuantos_$id'),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+      onTap: () => _abrirReceta(trago, esJefe),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                texto.isEmpty ? 'Agregar cómo se prepara' : texto,
+                key: Key('jefe_receta_texto_$id'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: texto.isEmpty ? TemaBarra.dorado : const Color(0xFFA7A29A),
+                ),
+              ),
             ),
-        ],
+            const SizedBox(width: 4),
+            const Icon(Icons.edit_outlined, size: 14, color: Color(0xFFA7A29A)),
+          ],
+        ),
       ),
     );
-    if (!abierta) {
-      return Padding(padding: const EdgeInsets.fromLTRB(60, 0, 4, 8), child: Align(alignment: Alignment.centerLeft, child: boton));
-    }
+  }
+
+  /// La ventanita de cómo se prepara un trago: lo que lleva y, de cada cosa, su precio de
+  /// lista (y cuánto trae la botella). Lo que se escribe acá se guarda con GUARDAR CAMBIOS,
+  /// junto con lo demás de PRECIOS.
+  Future<void> _abrirReceta(_Fila trago, bool esJefe) => showDialog<void>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setVentana) {
+            void cambio(VoidCallback fn) {
+              setState(fn);
+              setVentana(() {});
+            }
+
+            return AlertDialog(
+              title: Text('${trago.producto.nombre} · cómo se prepara'),
+              content: SizedBox(width: 620, child: SingleChildScrollView(child: _receta(trago, esJefe, cambio))),
+              actions: [
+                FilledButton(
+                  key: const Key('jefe_receta_listo'),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('LISTO'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+  Widget _receta(_Fila trago, bool esJefe, void Function(VoidCallback) cambio) {
+    final id = trago.producto.id;
+    final ingredientes = _ingredientesDe(id);
     final opciones = [
       for (final f in _filas)
         if (f.producto.id != id) f.producto,
@@ -762,180 +800,131 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     final resumen = costo.centavos == null
         ? (faltan.isEmpty
             ? 'Elegí lo que lleva y cuánto.'
-            : 'Falta el precio de lista de ${faltan.join(', ')} (o cuánto trae la botella).')
+            : 'Falta el precio de lista de ${faltan.join(', ')}.')
         : 'Cuesta ${_pesosRedondos(costo.centavos!)}'
             '${precio == null ? '' : ' · ganás ${_pesosRedondos(precio * 100 - costo.centavos!)} por trago'}';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(60, 0, 4, 10),
-      child: DecoratedBox(
-        key: Key('jefe_receta_abierta_$id'),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1913),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF4A3F1C)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    Widget plata(Key key, TextEditingController c, {required bool pesos, String? sufijo}) => SizedBox(
+          width: pesos ? 130 : 100,
+          child: TextField(
+            key: key,
+            controller: c,
+            enabled: esJefe,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.right,
+            inputFormatters: [pesos ? const PesosConCentavosFormatter() : const PesosEnterosFormatter()],
+            decoration: InputDecoration(isDense: true, prefixText: pesos ? '\$ ' : null, suffixText: sufijo),
+            onChanged: (_) => cambio(() {}),
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (n, i) in ingredientes.indexed) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              boton,
-              const SizedBox(height: 6),
-              for (final (n, i) in ingredientes.indexed)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          key: Key('jefe_ingrediente_${id}_$n'),
-                          initialValue: i.ingredienteId,
-                          isExpanded: true,
-                          hint: const Text('Elegí qué lleva'),
-                          decoration: const InputDecoration(isDense: true),
-                          items: [
-                            for (final o in opciones) DropdownMenuItem(value: o.id, child: Text(o.nombre)),
-                          ],
-                          onChanged: esJefe ? (v) => setState(() => i.ingredienteId = v) : null,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 110,
-                        child: TextField(
-                          key: Key('jefe_cantidad_${id}_$n'),
-                          controller: i.cantidad,
-                          enabled: esJefe,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.right,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: InputDecoration(
-                            isDense: true,
-                            suffixText: i.unidad == UnidadDeReceta.cc ? 'cc' : 'u.',
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      SegmentedButton<UnidadDeReceta>(
-                        key: Key('jefe_unidad_${id}_$n'),
-                        showSelectedIcon: false,
-                        segments: const [
-                          ButtonSegment(value: UnidadDeReceta.cc, label: Text('cc')),
-                          ButtonSegment(value: UnidadDeReceta.unidad, label: Text('entero')),
-                        ],
-                        selected: {i.unidad},
-                        onSelectionChanged: esJefe ? (v) => setState(() => i.unidad = v.first) : null,
-                      ),
-                      IconButton(
-                        key: Key('jefe_sacar_${id}_$n'),
-                        tooltip: 'Sacar de la receta',
-                        onPressed: esJefe
-                            ? () => setState(() {
-                                  if (i.base == null) {
-                                    _recetas[id]?.remove(i);
-                                    i.dispose();
-                                  } else {
-                                    i.activo = false;
-                                  }
-                                })
-                            : null,
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
+              SizedBox(
+                width: 210,
+                child: DropdownButtonFormField<String>(
+                  key: Key('jefe_ingrediente_${id}_$n'),
+                  initialValue: i.ingredienteId,
+                  isExpanded: true,
+                  hint: const Text('Elegí qué lleva'),
+                  decoration: const InputDecoration(isDense: true),
+                  items: [
+                    for (final o in opciones) DropdownMenuItem(value: o.id, child: Text(o.nombre)),
+                  ],
+                  onChanged: esJefe ? (v) => cambio(() => i.ingredienteId = v) : null,
                 ),
-              const Text(
-                'Lo que no va en la receta (el hielo) no se cuenta. Es "más o menos, para calcularle".',
-                style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
               ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 12,
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  key: Key('jefe_cantidad_${id}_$n'),
+                  controller: i.cantidad,
+                  enabled: esJefe,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.right,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(isDense: true, suffixText: i.unidad == UnidadDeReceta.cc ? 'cc' : 'u.'),
+                  onChanged: (_) => cambio(() {}),
+                ),
+              ),
+              SegmentedButton<UnidadDeReceta>(
+                key: Key('jefe_unidad_${id}_$n'),
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: UnidadDeReceta.cc, label: Text('cc')),
+                  ButtonSegment(value: UnidadDeReceta.unidad, label: Text('entero')),
+                ],
+                selected: {i.unidad},
+                onSelectionChanged: esJefe ? (v) => cambio(() => i.unidad = v.first) : null,
+              ),
+              IconButton(
+                key: Key('jefe_sacar_${id}_$n'),
+                tooltip: 'Sacar',
+                onPressed: esJefe
+                    ? () => cambio(() {
+                          if (i.base == null) {
+                            _recetas[id]?.remove(i);
+                          } else {
+                            i.activo = false;
+                          }
+                        })
+                    : null,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          // De lo que lleva: lo que cobra el proveedor (y cuánto trae la botella), acá mismo.
+          if (i.ingredienteId case final ing? when _filaDe(ing) != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 0, 12),
+              child: Wrap(
+                spacing: 8,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  OutlinedButton.icon(
-                    key: Key('jefe_agregar_ingrediente_$id'),
-                    onPressed: esJefe ? () => setState(() => (_recetas[id] ??= []).add(_Ingrediente(null))) : null,
-                    icon: const Icon(Icons.add),
-                    label: const Text('AGREGAR INGREDIENTE'),
-                  ),
                   Text(
-                    resumen,
-                    key: Key('jefe_receta_cuesta_$id'),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: costo.centavos == null ? const Color(0xFFF2D77C) : const Color(0xFFF3EFE4),
-                    ),
+                    i.unidad == UnidadDeReceta.cc ? 'Precio de lista de la botella' : 'Precio de lista de cada una',
+                    style: const TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
                   ),
+                  plata(Key('jefe_botella_lista_$ing'), _filaDe(ing)!.lista, pesos: true),
+                  if (i.unidad == UnidadDeReceta.cc) ...[
+                    const Text('trae', style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A))),
+                    plata(Key('jefe_botella_trae_$ing'), _filaDe(ing)!.trae, pesos: false, sufijo: 'cc'),
+                  ],
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// LAS BOTELLAS DE LOS TRAGOS: lo que va por cc en alguna receta. No se venden solas
-  /// ni se cuentan en la barra; con su precio de lista y cuánto trae, GANANCIA calcula
-  /// cuántas botellas se usaron.
-  Widget _lasBotellas(Set<String> botellas, bool esJefe) {
-    final filas = [for (final f in _filas) if (botellas.contains(f.producto.id)) f];
-    Widget casilla(Key key, TextEditingController c, {required bool plata}) => TextField(
-          key: key,
-          controller: c,
-          enabled: esJefe,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.right,
-          inputFormatters: [plata ? const PesosConCentavosFormatter() : const PesosEnterosFormatter()],
-          decoration: InputDecoration(
-            isDense: true,
-            prefixText: plata ? '\$ ' : null,
-            suffixText: plata ? null : 'cc',
-          ),
-          onChanged: (_) => setState(() {}),
-        );
-    const estilo = TextStyle(fontSize: 12, letterSpacing: .8, fontWeight: FontWeight.w700, color: Color(0xFFA7A29A));
-    return Padding(
-      key: const Key('jefe_botellas'),
-      padding: const EdgeInsets.only(top: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'LAS BOTELLAS DE LOS TRAGOS · no se venden solas ni se cuentan en la barra',
-            style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: .6),
-          ),
-          const SizedBox(height: 8),
-          const Row(
-            children: [
-              Expanded(child: Text('BOTELLA', style: estilo)),
-              SizedBox(width: 170, child: Text('PRECIO DE LISTA · la botella', style: estilo)),
-              SizedBox(width: 12),
-              SizedBox(width: 120, child: Text('TRAE', style: estilo)),
-            ],
-          ),
-          for (final f in filas)
-            DecoratedBox(
-              decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF2A2830)))),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(f.producto.nombre, style: const TextStyle(fontWeight: FontWeight.w600))),
-                    SizedBox(width: 170, child: casilla(Key('jefe_botella_lista_${f.producto.id}'), f.lista, plata: true)),
-                    const SizedBox(width: 12),
-                    SizedBox(width: 120, child: casilla(Key('jefe_botella_trae_${f.producto.id}'), f.trae, plata: false)),
-                  ],
-                ),
+            )
+          else
+            const SizedBox(height: 10),
+        ],
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              key: Key('jefe_agregar_ingrediente_$id'),
+              onPressed: esJefe ? () => cambio(() => (_recetas[id] ??= []).add(_Ingrediente(null))) : null,
+              icon: const Icon(Icons.add),
+              label: const Text('AGREGAR'),
+            ),
+            Text(
+              resumen,
+              key: Key('jefe_receta_cuesta_$id'),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: costo.centavos == null ? const Color(0xFFF2D77C) : const Color(0xFFF3EFE4),
               ),
             ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1046,6 +1035,9 @@ class _FilaDePrecio extends StatelessWidget {
   /// Con el precio de lista y lo que se gana: solo el jefe.
   final bool conCosto;
 
+  /// Debajo del nombre de un trago: cómo se prepara, en chico.
+  final Widget? debajoDelNombre;
+
   const _FilaDePrecio({
     required this.fila,
     required this.imagen,
@@ -1054,6 +1046,7 @@ class _FilaDePrecio extends StatelessWidget {
     required this.onCambio,
     this.trago,
     this.conCosto = true,
+    this.debajoDelNombre,
   });
 
   @override
@@ -1089,11 +1082,18 @@ class _FilaDePrecio extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            f.producto.nombre,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                f.producto.nombre,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              ?debajoDelNombre,
+            ],
           ),
         ),
       ],
@@ -1124,16 +1124,14 @@ class _FilaDePrecio extends StatelessWidget {
     final t = trago;
     final listaEnCentavos = t != null ? t.centavos : (f.listaNum == null ? null : centavos(f.listaNum!));
     final Widget lista = t != null
-        ? Column(
+        ? Tooltip(
             key: Key('jefe_lista_de_la_receta_$id'),
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                t.centavos == null ? '—' : _pesosRedondos(t.centavos!),
-                style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFA7A29A)),
-              ),
-              const Text('sale de la receta', style: TextStyle(fontSize: 11.5, color: Color(0xFFA7A29A))),
-            ],
+            message: 'Sale de cómo se prepara',
+            child: Text(
+              t.centavos == null ? '—' : _pesosRedondos(t.centavos!),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFA7A29A)),
+            ),
           )
         : TextField(
             key: Key('jefe_lista_$id'),
@@ -1146,7 +1144,6 @@ class _FilaDePrecio extends StatelessWidget {
               isDense: true,
               prefixText: '\$ ',
               labelText: angosto ? 'Precio de lista' : null,
-              hintText: 'falta',
             ),
             onChanged: (_) => onCambio(),
           );

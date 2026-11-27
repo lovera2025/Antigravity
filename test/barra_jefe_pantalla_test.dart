@@ -309,18 +309,17 @@ void main() {
       expect(prueba.barra.costosGuardados.single.precioLista, closeTo(1333.33, 0.001));
     });
 
-    testWidgets('un trago: la receta viene plegada, se arma con el catálogo y sus botellas van aparte', (tester) async {
+    testWidgets('un trago: debajo del nombre, en chico, cómo se prepara; se arma en su ventanita', (tester) async {
       final botellaFernet = prueba.barra.producto('Fernet 750', categoria: 'Botellas');
       final coca = prueba.barra.producto('Coca-Cola 2,25', categoria: 'Botellas');
-      // Alta, para que la receta y las botellas estén las dos armadas a la vez.
-      await abrir(tester, pestana: PestanaBarraJefe.precios, tamano: const Size(1400, 2400));
-      final receta = find.byKey(Key('jefe_receta_${fernet.id}'));
-      expect(texto(tester, 'jefe_receta_cuantos_${fernet.id}'), 'sin ingredientes');
-      expect(find.byKey(Key('jefe_receta_abierta_${fernet.id}')), findsNothing, reason: 'viene plegada');
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      expect(texto(tester, 'jefe_receta_texto_${fernet.id}'), 'Agregar cómo se prepara');
       expect(find.byKey(Key('jefe_lista_${fernet.id}')), findsOneWidget,
           reason: 'sin receta todavía, su precio de lista se escribe (no dice "\$ 0")');
+      expect(find.byKey(Key('jefe_receta_texto_${cerveza.id}')), findsNothing, reason: 'una cerveza no es un trago');
 
-      await tocar(tester, receta);
+      await tocar(tester, find.byKey(Key('jefe_receta_${fernet.id}')));
+      expect(find.text('Fernet con Coca · cómo se prepara'), findsOneWidget, reason: 'en su ventanita, no en la lista');
       Future<void> agregar(int n, String nombre, String cc) async {
         await tocar(tester, find.byKey(Key('jefe_agregar_ingrediente_${fernet.id}')));
         await tocar(tester, find.byKey(Key('jefe_ingrediente_${fernet.id}_$n')));
@@ -329,21 +328,24 @@ void main() {
       }
 
       await agregar(0, 'Fernet 750', '200');
-      expect(find.byKey(Key('jefe_lista_de_la_receta_${fernet.id}')), findsOneWidget,
-          reason: 'con receta, sale de la receta y no se escribe');
       await agregar(1, 'Coca-Cola 2,25', '500');
-      // Las botellas salen de la lista y van a su bloque, con el precio de lista y lo que traen.
-      expect(find.byKey(const Key('jefe_botellas')), findsOneWidget);
-      expect(find.byKey(Key('jefe_va_${botellaFernet.id}')), findsNothing, reason: 'no se vende sola');
+      // De cada botella, ahí mismo: lo que cobra el proveedor y cuánto trae.
       await escribir(tester, find.byKey(Key('jefe_botella_lista_${botellaFernet.id}')), '11740');
       await escribir(tester, find.byKey(Key('jefe_botella_trae_${botellaFernet.id}')), '750');
       expect(texto(tester, 'jefe_receta_cuesta_${fernet.id}'), contains('Falta el precio de lista de Coca-Cola 2,25'));
       await escribir(tester, find.byKey(Key('jefe_botella_lista_${coca.id}')), '3000');
       await escribir(tester, find.byKey(Key('jefe_botella_trae_${coca.id}')), '2250');
+      expect(texto(tester, 'jefe_receta_cuesta_${fernet.id}'), r'Cuesta $ 3.797');
+      await tocar(tester, find.byKey(const Key('jefe_receta_listo')));
+
+      // En la lista: el trago, con la línea chica; las botellas no (no se venden solas).
+      expect(texto(tester, 'jefe_receta_texto_${fernet.id}'), '200 cc Fernet 750 + 500 cc Coca-Cola 2,25');
+      expect(find.byKey(Key('jefe_lista_de_la_receta_${fernet.id}')), findsOneWidget, reason: 'con receta no se escribe');
+      expect(find.byKey(Key('jefe_va_${botellaFernet.id}')), findsNothing, reason: 'la botella no se vende sola');
+      expect(find.byKey(Key('jefe_ingrediente_${fernet.id}_0')), findsNothing, reason: 'nada de la receta en la lista');
       await tocar(tester, find.byKey(Key('jefe_va_${fernet.id}')));
       await escribir(tester, find.byKey(Key('jefe_precio_${fernet.id}')), '10000');
       // 200 cc de 11.740 / 750 + 500 cc de 3.000 / 2.250 = 3.797,33: "más o menos".
-      expect(texto(tester, 'jefe_receta_cuesta_${fernet.id}'), r'Cuesta $ 3.797 · ganás $ 6.203 por trago');
       expect(texto(tester, 'jefe_gano_${fernet.id}'), r'$ 6.203');
 
       await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
@@ -378,9 +380,11 @@ void main() {
         );
       }
       await abrir(tester, pestana: PestanaBarraJefe.precios);
-      expect(texto(tester, 'jefe_receta_cuantos_${fernet.id}'), '2 ingredientes');
+      expect(texto(tester, 'jefe_receta_texto_${fernet.id}'), '200 cc Fernet 750 + 500 cc Coca-Cola 2,25');
       await tocar(tester, find.byKey(Key('jefe_receta_${fernet.id}')));
       await tocar(tester, find.byKey(Key('jefe_sacar_${fernet.id}_1')));
+      await tocar(tester, find.byKey(const Key('jefe_receta_listo')));
+      expect(texto(tester, 'jefe_receta_texto_${fernet.id}'), '200 cc Fernet 750');
       await tocar(tester, find.byKey(const Key('jefe_precios_guardar')));
       expect(prueba.barra.recetasGuardadas, hasLength(2), reason: 'nada se borra');
       expect((await prueba.barra.recetas(pinaroli.id)).single.ingredienteId, botellaFernet.id);

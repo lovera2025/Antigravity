@@ -2,9 +2,9 @@
 
 ## Para retomar en otro chat
 
-### LEER PRIMERO: dónde quedó el 27-nov (chat "sigamos")
+### LEER PRIMERO: dónde quedó el 27-nov a la noche (chat "sigamos"; se sigue en otro chat)
 
-**El plan para el 4-dic va por ~72 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
+**El plan para el 4-dic va por ~73 %** (sin el plano impreso). **Nada publicado.** Plan de esta vuelta:
 `C:\Users\lover\.claude\plans\sigamos-peaceful-harp-of-314d8c5f-dfb0-4642-a1b4-8e6c4ea26b76.md`.
 
 **La maqueta de recetas y estilos no lo convenció** (27-nov): tiene que notarse qué es el **precio de lista** y qué es
@@ -90,11 +90,30 @@ caja**, y **siempre con motivo, desde su sesión de encargada** (no con su PIN e
   sin esas columnas, sin recetas ni botellas, y sin leerlas). Pruebas: la encargada sin GANANCIA, PRECIOS sin modo jefe
   (con `lecturasDeCostos` = 0) y la regla para cada rol; 2 roturas más en `tool/roturas_precios_con_lista.txt` (16 de 16).
 
+- **Cómo se ve un trago en PRECIOS (decidido el 27-nov, a la noche; no volver a preguntar).** La receta abierta en
+  el medio de la lista le pareció rara ("pensaba que iba a estar el precio del trago en sí; como mucho un pequeño
+  subtexto de cómo preparar"). Se le ofrecieron dos formas y pidió la que yo recomendara, pensando en que sea fácil
+  para la cajera, la encargada y el repositor, y que lo delicado y el cálculo queden en modo jefe y sean sencillos.
+  Se eligió **la A con la receta en chico**: el trago es un renglón más (precio de venta, precio de lista **calculado**
+  por las botellas, gano); **debajo del nombre, una línea chica** "200 cc Fernet 750 + 500 cc Coca-Cola 2,25" (o
+  "Agregar cómo se prepara"), y **tocándola se abre una ventanita** ("Fernet con coca · cómo se prepara") con lo que
+  lleva y, de cada cosa, su precio de lista y cuánto trae la botella. **En la lista no hay receta abierta ni bloque de
+  botellas**, y no quedan textos de más ("sale de la receta", "falta", "más o menos"). Las botellas que no se venden
+  solas no aparecen en la lista. Para la cajera, la encargada y el repositor no cambia nada (no ven recetas ni costos);
+  cada vodka sigue descontando su Speed del stock. Código: `_lineaDeLaReceta`, `_abrirReceta` y `_receta` en
+  `jefe/precios_de_la_fiesta.dart`. Pruebas en `test/barra_jefe_pantalla_test.dart` (47 en verde); roturas
+  `tool/roturas_precios_con_lista.txt` (**17 de 17**). Muestras rehechas como serían de verdad (cada trago con su receta,
+  ninguno con un precio de lista inventado; `listaYRecetas` en `tool/barra_jefe_muestra_test.dart`):
+  `Jefe_2b_precios_con_lista_pc.png`, `Jefe_2c_como_se_prepara_pc.png`, `Jefe_8_ganancia_pc.png` en
+  `build/capturas_4dic/`.
+
 **Lo que falta, en orden:**
-1. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
+1. **Que mire las capturas** (`build/capturas_4dic/`: `Jefe_2b` PRECIOS, `Jefe_2c` cómo se prepara, `Jefe_8` GANANCIA,
+   `Jefe_9` una caja con retiros, `Jefe_10` SACAR EFECTIVO) y diga si va así. **Correr la suite entera**
+   (`bash tool/suite_por_tandas.sh`): la última, 6.698 y 1 falla (la de siempre), fue antes de la receta en chico;
+   después solo se corrieron las pruebas de PRECIOS y GANANCIA.
+2. **Noche y Blanco en todas las pantallas de la barra** (`DisenioBarra`; hoy solo VENDER elige; BARRA del jefe, LAS
    CAJAS, VENTAS y cerrar caja van siempre en Noche): cada aparato elige el suyo y vale para todas sus pantallas.
-2. Que mire las capturas que se le mandaron el 27-nov (`build/capturas_4dic/`: PRECIOS, GANANCIA, la caja con
-   retiros y el cartel de SACAR EFECTIVO). La suite entera sobre todo lo de hoy: **6.698 y 1 falla, la de siempre**.
 3. Desde el punto 3 de "Lo que falta" de abajo (el repositor, "¿Volvió el vale?", sin stock no se vende, el aviso del
    PIN maestro), y lo demás en el mismo orden. **Con el repositor, GANANCIA tiene que leer el stock por barra** (hoy lo
    perdido da 0).

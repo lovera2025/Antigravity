@@ -37,7 +37,7 @@ test/barra_jefe_pantalla_test.dart
 sacar un ingrediente guardado no lo apaga
 lib/features/barra/jefe/precios_de_la_fiesta.dart
 test/barra_jefe_pantalla_test.dart
-                                    i.activo = false;
+                            i.activo = false;
 
 ---
 copiar de otra fiesta no trae el precio de lista
@@ -93,4 +93,10 @@ lib/features/barra/jefe/precios_de_la_fiesta.dart
 test/barra_jefe_pantalla_test.dart
               if (conCosto) ...[
               if (true) ...[
+---
+la linea chica de como se prepara no aparece debajo del trago
+lib/features/barra/jefe/precios_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                debajoDelNombre: veCosto && _esTrago(f) ? _lineaDeLaReceta(f, esJefe) : null,
+                debajoDelNombre: null,
 ---

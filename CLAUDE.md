@@ -805,6 +805,11 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
   (`CuentaDelProveedor.paraElProveedor`); lo que va entero (el Speed del vodka) **baja de su stock**. Toda cuenta del
   stock de la barra recibe las ventas por `RecetasDeLaBarra.paraElStock`; las cuentas de la plata, no. El precio de
   lista (`barra_costos`) es solo del jefe y **no baja a una tablet** (`SyncEngine.bajaLoDelJefe`).
+- **En PRECIOS, un trago es un renglón más** (27-nov, noche): su precio de lista sale de las botellas, y **cómo se
+  prepara va en una línea chica debajo del nombre**; tocándola se abre su ventanita (`_abrirReceta`). Nunca la receta
+  abierta en la lista ni un bloque de botellas ("como mucho un pequeño subtexto", el usuario). **El precio de lista, lo
+  que se gana, las recetas y GANANCIA son solo del jefe en modo jefe** (`veElCostoYLaGanancia`): sin modo jefe, PRECIOS
+  ni los lee.
 - **"Precio de lista · lo que me cobra el proveedor" y "Le debo al proveedor"**, siempre esas palabras, en pantalla y
   en papel (27-nov: la primera maqueta no lo convenció por eso y por lo repetido). Nunca "lista" sola ni "costo".
 - **Los retiros y el cambio de la encargada** (`barra_caja_movimientos`, `MovimientoDeCaja`; 27-nov): los anota la
@@ -874,9 +879,9 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
 **Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (27-nov:
-~72 %, nada publicado; la maqueta rehecha, `docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`, se aprobó con
-la forma A de GANANCIA y ya están PRECIOS con el precio de lista, GANANCIA y SACAR EFECTIVO · DAR CAMBIO; ahí está lo
-hecho con sus commits y lo que falta, en orden).
+~73 %, nada publicado; la maqueta rehecha, `docs/maqueta_barra_proveedor_y_retiros_2026-11-27.html`, se aprobó con
+la forma A de GANANCIA y ya están PRECIOS con el precio de lista, GANANCIA y SACAR EFECTIVO · DAR CAMBIO; sigue Noche y
+Blanco; ahí está lo hecho con sus commits y lo que falta, en orden).
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo
