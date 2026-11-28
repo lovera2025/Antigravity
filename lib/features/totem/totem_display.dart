@@ -444,6 +444,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
             _handleConfigUpdated(TotemConfig.fromJson(data));
           }
           return null;
+        case 'ficha_cambio':
+          // Cambió cómo nombran a alguien (el locutor): la ficha de nuevo, ya.
+          if (avisoEsDeEsteEvento(call.arguments, _eventoId) && !_pausado && mounted) {
+            _pedirFicha();
+          }
+          return null;
         case 'tiempos_totem':
           if (call.arguments is String) {
             final data = jsonDecode(call.arguments as String);

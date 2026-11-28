@@ -100,9 +100,12 @@ class FichaTotem {
       // Sin las adicionales "a confirmar" (16-nov-2026): el tótem enciende
       // solo las mesas pagas, y nadie en el salón se entera.
       final mesa = g.mesaConfirmada;
+      // Cómo lo nombran (el locutor, 28-nov-2026): **solo si se cambió**; si no, lo
+      // cargado, como siempre (nunca "de corrido").
+      final comoSeLlama = titular.nombrado ?? titular.nombre;
       personas[titular.id] = PersonaFicha(
         id: titular.id,
-        nombre: titular.nombre,
+        nombre: comoSeLlama,
         familia: titular.id,
         esAlumno: true,
         mesa: mesa,
@@ -112,12 +115,12 @@ class FichaTotem {
       for (final a in g.acompanantes) {
         personas[a.id] = PersonaFicha(
           id: a.id,
-          nombre: a.nombre,
+          nombre: a.nombrado ?? a.nombre,
           familia: titular.id,
           esAlumno: false,
           mesa: a.mesa == null ? null : mesa,
           sillas: a.mesa == null ? null : g.sillas,
-          titular: titular.nombre,
+          titular: comoSeLlama,
         );
       }
     }

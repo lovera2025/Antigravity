@@ -1,3 +1,4 @@
+import '../../../models/como_lo_nombran.dart';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -256,6 +257,10 @@ Future<FichaTotem> armarFichaTotem(
   /// Quienes se sientan en las mesas reservadas para quien no es alumno (los
   /// profes, 6.5.0): el tótem los saluda con su mesa, como a un alumno.
   Future<List<ReservadoPuerta>> Function(String eventoId)? leerReservados,
+
+  /// Cómo los nombran (el locutor, 28-nov-2026): el tótem saluda con lo cambiado, solo
+  /// si se cambió.
+  Future<Map<String, ComoLoNombran>> Function(String eventoId)? leerNombres,
 }) async {
   final evento = await leerEvento(eventoId);
   if (evento?.modalidad != 'masivo') return FichaTotem.particular(eventoId);
@@ -272,6 +277,12 @@ Future<FichaTotem> armarFichaTotem(
   } catch (e) {
     debugPrint('La ficha del tótem va sin las mesas reservadas: $e');
   }
+  var nombres = const <String, ComoLoNombran>{};
+  try {
+    nombres = await leerNombres?.call(eventoId) ?? const {};
+  } catch (e) {
+    debugPrint('La ficha del tótem va sin cómo los nombran: $e');
+  }
   return FichaTotem.desdePuerta(
     eventoId,
     PuertaDelEvento.masivo(
@@ -281,6 +292,7 @@ Future<FichaTotem> armarFichaTotem(
       pagos: a.pagos,
       invitados: const [],
       reservados: reservados,
+      nombres: nombres,
     ),
     plano: plano,
   ).conTiempos(leerTiempos?.call(eventoId));

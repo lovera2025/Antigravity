@@ -12,6 +12,9 @@ import 'dart:io' show Platform;
 import 'dart:convert';
 
 import 'core/services/instalacion_id.dart';
+import 'core/services/kiosk_launcher.dart';
+import 'features/totem/services/totem_sigue_los_nombres.dart';
+import 'features/recepcion/repositories/como_lo_nombran_repository.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/sesion_sin_internet.dart';
 import 'features/caja_sesiones/providers/app_role_provider.dart';
@@ -579,6 +582,11 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     // para leer la lista de la nube: la ventana del tótem no tiene usuario.
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      // Lo que cambian en "Cómo lo nombran" le llega al tótem al instante.
+      TotemSigueLosNombres(
+        cambios: ref.read(comoLoNombranRepositoryProvider).cambios,
+        avisar: KioskLauncher.notifyFichaCambio,
+      ).arrancar();
       PuenteFichaTotem.atenderEnLaVentanaPrincipal(
         (eventoId) => armarFichaTotem(
           eventoId,
@@ -597,6 +605,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
           ),
           // Los segundos de la llegada cambiados a mano esa noche.
           leerTiempos: (id) => ref.read(tiemposAManoProvider(id)),
+          // Cómo los nombran (el locutor): el tótem saluda con lo cambiado.
+          leerNombres: (id) => ref.read(comoLoNombranRepositoryProvider).delEvento(id),
         ),
         lista: (eventoId) => armarListaDeLaPc(
           eventoId,

@@ -31,9 +31,15 @@ cosas"). ~95 %, nada publicado.
   ("el locutor"); `codigoLocutorProvider` y `EstadoCentral.codigoLocutor/locutores/enlaceLocutor` en
   `central_provider.dart`; `ClienteLocutor` y `PantallaLocutor` (`recepcion/central/`); `?locutor` en
   `lib/puesto_main.dart` antes del cliente de la puerta (`LocutorApp`).
-- Falta, en orden: pruebas de `ClienteLocutor` y `PantallaLocutor`; **SUMAR AL LOCUTOR** en CELULARES
-  (`widgets/sumar_celular.dart`, solo masivo) y en el menú de la tele; el tótem con lo nombrado (punto 4 de "Etapa D"
-  abajo); sync y SQL (punto 5); `test/puesto_sin_internet_test.dart` con la rama `?locutor`; capturas.
+- Después (commits `e2b…` y el de esta línea): pruebas de `ClienteLocutor` (7) y `PantallaLocutor` (5; CAMBIADOS
+  va primero: en un celular angosto no entraba); **SUMAR AL LOCUTOR** en Recepción → CELULARES (solo masivo: su QR,
+  "No puede ingresar a nadie ni cambiar nada", conectado, cambiar su código) y su QR en SUMAR UN CELULAR de la tele;
+  **el tótem saluda con lo nombrado** (`FichaTotem.desdePuerta` con `nombrado ?? nombre`, también "acompaña a";
+  `armarFichaTotem(leerNombres:)`; `KioskLauncher.notifyFichaCambio` → `ficha_cambio` en `totem_display.dart`;
+  `TotemSigueLosNombres`, que arranca en AuthWrapper), con `test/totem_nombrado_test.dart` (4).
+- **Falta:** sync y SQL (punto 5 de "Etapa D": las listas de `sync_engine.dart`, el SQL nuevo sin correr, "Todo
+  subido" con los nombres, la migración 82 → 85 sobre una copia, y que `TotemSigueLosNombres` escuche también lo que
+  baja de otra PC); `test/puesto_sin_internet_test.dart` con `?locutor`; capturas; roturas del locutor.
 
 ### ANTES: 28-nov a la noche, chat "donde nos quedamos… hacé todo, el mouse al final"
 

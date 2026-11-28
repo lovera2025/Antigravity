@@ -341,6 +341,10 @@ class KioskLauncher {
         jsonEncode({'evento': eventoId, 'tiempos': tiempos}),
       );
 
+  /// Cambió cómo nombran a alguien de [eventoId] (el locutor, 28-nov-2026): el tótem
+  /// vuelve a pedir la ficha y saluda con lo cambiado.
+  static Future<void> notifyFichaCambio(String eventoId) => _invocar('ficha_cambio', eventoId);
+
   static bool get isTotemActive => _totemWindowId != null;
 
   /// Evento que el tótem está proyectando, o `null` si no hay ventana abierta.
