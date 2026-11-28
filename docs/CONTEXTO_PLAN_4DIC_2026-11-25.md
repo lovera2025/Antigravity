@@ -27,6 +27,22 @@ solo su PIN, retoma sola).
    roturas (499 casos; al cortar iban 63). El resumen queda en `..\arguello_events_pruebas\build_pruebas\resumen.txt`
    ("nombre: N de M"; cada log en esa carpeta). Una "ATENCION" = falta una prueba. Al terminar: `git worktree remove
    ..\arguello_events_pruebas`.
+   **Terminaron (28-nov, noche): 479 de 499 atrapadas. Los 20 que no, ninguno es una regla sin vigilar:**
+   - **16 "NO SE APLICO"** (el texto a romper ya no está tal cual, porque el código cambió en las etapas A y B): listas
+     viejas. Poner al día el texto de cada caso y volver a correr esa lista: `roturas_6.9.3` (9 y 59),
+     `roturas_barra_por_noche` ("el Quedan de VENDER"), `roturas_permisos_barra` ("la lista de la encargada guarda"),
+     `roturas_precio_de_lista` (G4, G6, G12 y seis de recetas/VENDER: el stock pasó a `ventasAnuladasConElVale`),
+     `roturas_recorrido_28nov` (los dos del trago con receta) y `roturas_retiros` ("retiro sobre una caja cerrada").
+   - **3 "ATENCION" de `roturas_permisos_barra` en LAS CAJAS y el PIN:** dos son de la lista vieja: en la etapa B el
+     botón CATÁLOGO Y PRECIOS pasó a `if (veCatalogo && CortesPantalla.esCelular(ancho))` / `else if (veCatalogo)`
+     (`las_cajas_screen.dart:67-94`), y el texto `              if (veCatalogo)` ahora cae en el de
+     `AvisoDeVendidoSinStock` (línea 117), no en el botón; el test (`encargada_de_barra_test.dart:409`) sí lo mira.
+     Cambiar el texto a `else if (veCatalogo)`. El tercero ("su propia caja no se la aprueba la encargada con su PIN",
+     `pin_de_la_encargada.dart:34`): desde el 27-nov la encargada cierra su caja sola y la prueba ya no llega a ese
+     camino; ver si sigue haciendo falta y, si sí, una prueba que lo recorra.
+   - **1 "ATENCION" de `roturas_precios_con_lista`** ("sin modo jefe PRECIOS lee el precio de lista"): la segunda
+     llave (`listaDelProveedorProvider` vacío a quien no es el jefe, 27-nov) tapa la rotura de la primera. Para
+     vigilarla, una prueba que reemplace ese provider con datos y vea que PRECIOS sin modo jefe no lo mira.
 3. **Terminar la etapa D (el locutor)**: lo que falta, abajo en "Etapa D".
 4. Etapa E (el plano ancho en la tele y Noche y Blanco) y la F con él (mouse, nube, publicar).
 
