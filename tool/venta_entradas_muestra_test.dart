@@ -172,6 +172,9 @@ void alumnoDeMuestra(
   }
 }
 
+/// La muestra del renglón que queda en VENDER después de cerrar el aviso.
+const _nombreDelRenglon = 'Entradas_61_renglon_agregaron_despues.png';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final carpeta = _salida.isNotEmpty
@@ -218,6 +221,9 @@ void main() {
     bool asentar = true,
     DateTime? hoy,
     bool conAnticipada = true,
+    // El aviso de quienes agregaron después del sorteo, que sale al entrar a
+    // VENDER (27-nov-2026): se cierra con su botón, salvo para su muestra.
+    bool dejarElAviso = false,
   }) async {
     await letras();
     tester.view.physicalSize = tamano;
@@ -280,6 +286,11 @@ void main() {
     ));
     if (asentar) {
       await tester.pumpAndSettle();
+      final entendido = find.byKey(const Key('agregaron_entendido'));
+      if (!dejarElAviso && entendido.evaluate().isNotEmpty) {
+        await tester.tap(entendido);
+        await tester.pumpAndSettle();
+      }
     } else {
       // La entrega relee cada 15 s: sin pumpAndSettle.
       for (var i = 0; i < 6; i++) {
@@ -403,10 +414,26 @@ void main() {
 
   /// Al sorteo CABRAL tenía la mesa y 2 sillas (la tercera la agregó después), y
   /// BENÍTEZ ya tenía su mesa adicional.
-  final fotoDeLaMuestra = FotoDeLosLugares.anotada({
-    _conSillas: const LugaresCargados(1, 2),
-    _conMesa: const LugaresCargados(2, 0),
-  });
+  final fotoDeLaMuestra = FotoDeLosLugares.anotada(
+    {
+      _conSillas: const LugaresCargados(1, 2),
+      _conMesa: const LugaresCargados(2, 0),
+    },
+    // 12/11/2026 21:40 en Argentina: el aviso de VENDER dice el día del sorteo.
+    sorteoEl: DateTime.utc(2026, 11, 13, 0, 40),
+  );
+
+  /// Vuelve al principio de VENDER. La lista arma solo lo que está cerca de lo
+  /// que se ve: con la tarjeta larga, la línea de arriba puede no estar armada y
+  /// `ensureVisible` no la encuentra (pasó al sumar el renglón de quienes
+  /// agregaron después del sorteo, 27-nov-2026).
+  Future<void> alPrincipio(WidgetTester tester) async {
+    final lista = find
+        .descendant(of: find.byType(VenderEntradasScreen), matching: find.byType(Scrollable))
+        .first;
+    tester.state<ScrollableState>(lista).position.jumpTo(0);
+    await tester.pump();
+  }
 
   Future<void> elegir(WidgetTester tester, String id, {String? filtro}) async {
     if (filtro != null) await tocar(tester, filtro);
@@ -434,6 +461,38 @@ void main() {
       await guardar(tester, clave, nombre);
     });
   }
+
+  // 27-nov-2026: el aviso de quienes agregaron después del sorteo, al entrar.
+  for (final (nombre, tamano) in [
+    ('Entradas_60_aviso_agregaron_despues.png', const Size(1100, 900)),
+    ('Entradas_60b_aviso_agregaron_despues_celular.png', const Size(390, 1250)),
+  ]) {
+    testWidgets('VENDER · $nombre', (tester) async {
+      final (clave, _, _, _) = await montar(
+        tester,
+        tamano: tamano,
+        preparar: unaFiestaConDeTodo,
+        extra: [fotoDeLosLugaresProvider.overrideWithValue((_) async => fotoDeLaMuestra)],
+        pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+        dejarElAviso: true,
+      );
+      expect(find.byKey(const Key('agregaron_entendido')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'nada se desborda');
+      await guardar(tester, clave, nombre);
+    });
+  }
+
+  testWidgets('VENDER · $_nombreDelRenglon', (tester) async {
+    final (clave, _, _, _) = await montar(
+      tester,
+      tamano: const Size(1100, 700),
+      preparar: unaFiestaConDeTodo,
+      extra: [fotoDeLosLugaresProvider.overrideWithValue((_) async => fotoDeLaMuestra)],
+      pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
+    );
+    expect(find.byKey(const Key('vender_agregaron')), findsOneWidget);
+    await guardar(tester, clave, _nombreDelRenglon);
+  });
 
   testWidgets('VENDER · una familia que debe', (tester) async {
     final (clave, _, _, _) = await montar(
@@ -492,7 +551,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('entrega_confirmar_pulseras')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+    await alPrincipio(tester);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await guardar(tester, clave, 'Entradas_4g_vender_pulseras_entregadas.png');
@@ -1341,7 +1400,7 @@ void main() {
           pantalla: VenderEntradasScreen(evento: fiestaDeLaEntrega),
         );
         await elegir(tester, id, filtro: filtro);
-        await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+        await alPrincipio(tester);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'nada se desborda');
         await guardar(tester, clave, 'Entradas_32_$caso$sufijo.png');
@@ -1367,7 +1426,7 @@ void main() {
         );
         await elegir(tester, NocheDeLaVenta.acosta);
         await llenarParte(tester, parte, numero: numero);
-        await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+        await alPrincipio(tester);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'nada se desborda');
         await guardar(tester, clave, 'Entradas_33_formulario_${parte.clave}$sufijo.png');
@@ -1396,7 +1455,7 @@ void main() {
       // El aviso verde se va: queda lo que se ve en la tarjeta.
       ScaffoldMessenger.of(tester.element(find.byType(VenderEntradasScreen)))
           .removeCurrentSnackBar();
-      await tester.ensureVisible(find.byKey(const Key('vender_linea_texto')));
+      await alPrincipio(tester);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'nada se desborda');
       await guardar(tester, clave, 'Entradas_34_todo_entregado$sufijo.png');

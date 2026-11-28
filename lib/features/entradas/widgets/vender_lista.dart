@@ -10,6 +10,17 @@ import '../../eventos/services/salon_mesas.dart';
 import '../cuentas/lugares_de_la_familia.dart';
 import 'vender_a_pagar.dart';
 
+/// "5° A · mesa 12-13", o "sin mesa": cómo se reconoce a una familia en VENDER
+/// (su renglón y el aviso de quienes agregaron después del sorteo).
+String divisionYMesaDe(ContratoAlumno alumno) {
+  final division = (alumno.cursoDivision ?? '').trim();
+  final mesa = SalonMesas.textoMesasPuerta(alumno);
+  return [
+    if (division.isNotEmpty) division,
+    mesa == null ? 'sin mesa' : 'mesa $mesa',
+  ].join(' · ');
+}
+
 /// Un alumno de la fiesta en VENDER, con todo lo que se ve de él ya contado
 /// (se arma una vez por lectura, no en cada dibujo).
 ///
@@ -39,14 +50,7 @@ class AlumnoDeVender {
   String get id => alumno.id;
 
   /// "5° A · mesa 12-13", o "sin mesa".
-  String get divisionYMesa {
-    final division = (alumno.cursoDivision ?? '').trim();
-    final mesa = SalonMesas.textoMesasPuerta(alumno);
-    return [
-      if (division.isNotEmpty) division,
-      mesa == null ? 'sin mesa' : 'mesa $mesa',
-    ].join(' · ');
-  }
+  String get divisionYMesa => divisionYMesaDe(alumno);
 
   /// El estado, en el chip de su renglón: "Pagó todo", "Debe $ 70.000",
   /// "Revisar la cuenta", "✓ Retiró".

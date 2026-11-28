@@ -22,6 +22,7 @@ import '../../eventos/repositories/entradas_entregas_repository.dart';
 import '../../eventos/repositories/entradas_retiro_repository.dart';
 import '../../eventos/repositories/entregar_parte_de_la_app.dart';
 import '../../eventos/repositories/sorteos_mesas_repository.dart';
+import '../../eventos/services/agregaron_despues.dart';
 import '../../eventos/services/entrega_por_partes.dart';
 import '../../eventos/services/entregar_parte.dart';
 import '../../eventos/services/lugares_pagos.dart';
@@ -40,6 +41,7 @@ import '../providers/entradas_providers.dart';
 import '../services/en_caja.dart';
 import '../services/nombre_de_la_fiesta.dart';
 import 'abrir_caja_entradas_dialog.dart';
+import 'agregaron_despues_dialog.dart';
 import 'cerrar_caja_entradas_screen.dart';
 import 'rendir_entradas_dialog.dart';
 import 'vender_a_pagar.dart';
@@ -148,6 +150,16 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
 
   /// Pulseras y generales de toda la fiesta.
   ResumenPorPartes? _resumen;
+
+  /// Las familias que cargaron una mesa adicional o sillas después del sorteo:
+  /// pagan sin descuento. El programa lo sabe solo (lo de hoy contra lo anotado
+  /// al sortear) y acá **solo se avisa** (27-nov-2026).
+  AgregaronDespues _agregaron = AgregaronDespues.nadie;
+
+  /// La primera lectura ya pasó: el aviso de quienes agregaron después sale
+  /// **una vez, al entrar**. Si después baja otra familia, cambia el número del
+  /// renglón de arriba: no salta una ventana en medio de una venta.
+  bool _yaEntro = false;
 
   // Lo que se está por vender.
   bool _aUnaFamilia = true;
@@ -366,6 +378,8 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       // Lo que cada familia tenía al sorteo: el descuento es solo para eso.
       // Solo se lee: la venta no escribe el registro.
       final foto = await ref.read(fotoDeLosLugaresProvider)(id);
+      // Quién agregó después del sorteo: sin las bajas, como la lista.
+      final agregaron = AgregaronDespues.de(foto: foto, alumnos: alumnos);
       final info = <String, AlumnoDeVender>{};
       for (final a in alumnos) {
         final deuda = deudas[a.id]!;
@@ -429,22 +443,34 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
         _sinSubir = sinSubir;
         _info = info;
         _resumen = resumen;
+        _agregaron = agregaron;
         _cargando = false;
         _errorCarga = null;
         _proponerNumero();
       });
       _despuesDeLeer(deudas);
       _completarLasFilas();
+      final puede = ref.read(puedeVenderEntradasProvider);
+      // Al entrar, **una vez**: el aviso de quienes agregaron después del
+      // sorteo. No cuando se llega para una familia puntual (desde la entrega).
+      final avisa =
+          !_yaEntro && widget.familiaId == null && agregaron.hay && puede;
+      _yaEntro = true;
       // Sin caja abierta, VENDER la pide **una vez**. Sin precio no: no hay
       // nada que cobrar (lo sin cargo se entrega igual).
-      if (caja == null &&
+      final pideCaja = caja == null &&
           (config?.tienePrecio ?? false) &&
-          ref.read(puedeVenderEntradasProvider) &&
+          puede &&
           !_cajaPreguntada &&
           !_pidiendoCaja &&
-          !_cerrandoCaja) {
-        _cajaPreguntada = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _pedirCaja());
+          !_cerrandoCaja;
+      // Anotado ya: una relectura que llegue con el aviso abierto no la pide
+      // encima.
+      if (pideCaja) _cajaPreguntada = true;
+      if (avisa || pideCaja) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _alEntrar(avisar: avisa, pedirCaja: pideCaja),
+        );
       }
     } catch (_) {
       if (!mounted) return;
@@ -570,6 +596,29 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
       _caja = caja;
       _proponerNumero();
     });
+  }
+
+  /// Lo que sale solo al entrar, **de a una ventana**: primero el aviso de
+  /// quienes agregaron después del sorteo y, recién cuando se cierra, la caja.
+  /// Las dos a la vez quedaban una encima de la otra.
+  Future<void> _alEntrar({required bool avisar, required bool pedirCaja}) async {
+    if (avisar) await _verQuienesAgregaron();
+    if (pedirCaja) await _pedirCaja();
+  }
+
+  /// El aviso de quienes agregaron después del sorteo (al entrar, y con VER).
+  /// **Solo avisa**: no guarda nada.
+  Future<void> _verQuienesAgregaron() async {
+    if (!mounted || !_agregaron.hay) return;
+    await avisarQuienesAgregaronDespues(
+      context,
+      agregaron: _agregaron,
+      fiesta: _fiesta,
+      faltan: {
+        for (final f in _agregaron.familias)
+          if (_info[f.id] != null) f.id: _info[f.id]!.lugares.faltanSinDescuento,
+      },
+    );
   }
 
   // ── Lo que se está por vender ────────────────────────────────────────────
@@ -1325,6 +1374,23 @@ class _VenderEntradasScreenState extends ConsumerState<VenderEntradasScreen> {
               AvisoParaRendirEnVender(
                 personas: _paraRendir!.personas,
                 alRendir: _ocupado ? null : _rendir,
+              ),
+            // Quiénes agregaron después del sorteo: el aviso de la entrada, a
+            // mano para volver a mirarlo.
+            if (_agregaron.hay)
+              RenglonAgregaronDespues(
+                familias: _agregaron.familias.length,
+                alVer: _ocupado ? null : _verQuienesAgregaron,
+              ),
+            // No tiene que pasar (todos los equipos anotan al sortear). Si pasa,
+            // quien vende lo sabe: hasta hoy quedaba en silencio.
+            if (_agregaron.sinAnotar)
+              const _AvisoEnLinea(
+                clave: 'vender_sin_anotar',
+                texto: 'No está anotado lo que tenía cada familia al sorteo',
+                detalle: 'Por eso hoy todo sale con descuento, también lo que se '
+                    'agregó después. Avisale al jefe: lo anota en ENTRADAS → '
+                    'PRECIOS, en modo jefe.',
               ),
             if (!_tienePrecio)
               const _AvisoEnLinea(

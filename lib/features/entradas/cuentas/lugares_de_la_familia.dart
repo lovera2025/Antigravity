@@ -219,13 +219,18 @@ class LugaresDeLaFamilia {
     );
   }
 
+  /// Las de lo que agregó después del sorteo que todavía no compró, **pagas o
+  /// no**: lo que le falta comprar sin descuento. En 0, ya compró todo lo suyo
+  /// (el aviso de VENDER la muestra apagada, 27-nov-2026).
+  int get faltanSinDescuento =>
+      max(0, sinDescuento - sueltasCompradas - compradasDeMas);
+
   /// Las que se le habilitarían si pagara lo que falta: las "a confirmar".
   /// Lo que ya compró antes de pagar (la 6.9.x lo vendía igual) no se cuenta
   /// dos veces: si ya lo compró, pagarlo no le habilita nada más.
   int get esperanElPago =>
       (max(0, leCorresponden - compradas) - _quedanPagas) +
-      (max(0, sinDescuento - sueltasCompradas - compradasDeMas) -
-          _quedanPagasSinDescuento);
+      (faltanSinDescuento - _quedanPagasSinDescuento);
 
   /// Qué espera el pago, o null si nada (o si ya lo compró).
   String? get textoAConfirmar => esperanElPago <= 0

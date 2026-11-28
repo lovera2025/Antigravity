@@ -1,0 +1,90 @@
+el aviso lista lo cargado despues del sorteo, no lo que ya tenia
+lib/features/eventos/services/agregaron_despues.dart
+test/agregaron_despues_test.dart
+            if (!c.alSorteo) c,
+            if (c.alSorteo) c,
+---
+las entradas del aviso son las que se compran (los VIP de mas ocupan lugares)
+lib/features/eventos/services/agregaron_despues.dart
+test/agregaron_despues_test.dart
+          entradas: despues.fold(0, (s, c) => s + c.entradas),
+          entradas: despues.fold(0, (s, c) => s + c.lugares),
+---
+la fiesta sorteada sin anotar lo dice
+lib/features/eventos/services/agregaron_despues.dart
+test/agregaron_despues_test.dart
+  bool get sinAnotar => estado == EstadoDeLosLugares.sinAnotar;
+  bool get sinAnotar => false;
+---
+cuenta las mesas de mas y las sillas de mas por separado
+lib/features/eventos/services/agregaron_despues.dart
+test/agregaron_despues_test.dart
+          sillas: despues.where((c) => !c.esMesa).length,
+          sillas: despues.length,
+---
+el aviso sale al entrar a VENDER
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+          !_yaEntro && widget.familiaId == null && agregaron.hay && puede;
+          false;
+---
+el aviso no sale cuando se llega para una familia puntual
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+          !_yaEntro && widget.familiaId == null && agregaron.hay && puede;
+          !_yaEntro && agregaron.hay && puede;
+---
+el aviso no sale sin el permiso de vender
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+          !_yaEntro && widget.familiaId == null && agregaron.hay && puede;
+          !_yaEntro && widget.familiaId == null && agregaron.hay;
+---
+el aviso sale una sola vez: lo que baja despues no lo repite
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+      _yaEntro = true;
+
+---
+primero el aviso y recien despues la caja, nunca una sobre la otra
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+    if (avisar) await _verQuienesAgregaron();
+    if (avisar) unawaited(_verQuienesAgregaron());
+---
+el renglon de quienes agregaron queda en VENDER
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+            if (_agregaron.hay)
+            if (_agregaron.sinAnotar && _agregaron.hay)
+---
+VENDER dice cuando la fiesta no tiene anotado lo del sorteo
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/vender_entradas_pantalla_test.dart
+            if (_agregaron.sinAnotar)
+            if (_agregaron.sinAnotar && _agregaron.hay)
+---
+el aviso se cierra solo con su boton
+lib/features/entradas/widgets/agregaron_despues_dialog.dart
+test/vender_entradas_pantalla_test.dart
+      barrierDismissible: false,
+      barrierDismissible: true,
+---
+la familia que ya compro lo suyo va apagada
+lib/features/entradas/widgets/agregaron_despues_dialog.dart
+test/vender_entradas_pantalla_test.dart
+  bool _yaCompro(AgregoDespues f) => f.entradas > 0 && faltan[f.id] == 0;
+  bool _yaCompro(AgregoDespues f) => false;
+---
+lo que falta comprar sin descuento descuenta lo ya comprado
+lib/features/entradas/cuentas/lugares_de_la_familia.dart
+test/vender_entradas_pantalla_test.dart
+      max(0, sinDescuento - sueltasCompradas - compradasDeMas);
+      max(0, sinDescuento);
+---
+la ventana de prueba: al entrar a VENDER sale el aviso antes que la caja
+lib/features/entradas/widgets/vender_entradas_screen.dart
+test/venta_entradas_prueba_test.dart
+          !_yaEntro && widget.familiaId == null && agregaron.hay && puede;
+          false;
+---

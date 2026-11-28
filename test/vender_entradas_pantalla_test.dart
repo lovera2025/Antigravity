@@ -36,6 +36,7 @@ import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/entrega_entradas.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 import 'helpers/entradas_en_memoria.dart';
 import 'helpers/entrega_en_memoria.dart';
@@ -137,6 +138,9 @@ class _Montada {
 /// [pagaLaMesa]: PÉREZ ya pagó su mesa adicional (si no, la debe: no retira lo
 /// sin cargo y lo de su mesa no se le vende). [foto]: lo que cada familia tenía
 /// al sorteo. [preparar]: alumnos o pagos de más.
+///
+/// Si al entrar sale el aviso de quienes agregaron después del sorteo, se cierra
+/// con su botón (como hace quien vende), salvo con [dejarElAviso].
 Future<_Montada> _montar(
   WidgetTester tester, {
   bool vende = true,
@@ -153,6 +157,7 @@ Future<_Montada> _montar(
   void Function(EntregaEnMemoria)? preparar,
   Future<void> Function(EntradasEnMemoria)? ventasDeAntes,
   String? familiaId,
+  bool dejarElAviso = false,
   Size tamano = const Size(1100, 1500),
 }) async {
   SharedPreferences.setMockInitialValues({});
@@ -223,6 +228,11 @@ Future<_Montada> _montar(
   ));
   await tester.tap(find.text('ir a vender'));
   await tester.pumpAndSettle();
+  final entendido = find.byKey(const Key('agregaron_entendido'));
+  if (!dejarElAviso && entendido.evaluate().isNotEmpty) {
+    await tester.tap(entendido);
+    await tester.pumpAndSettle();
+  }
   return _Montada(e, entradas, comprobantes, c);
 }
 
@@ -1709,6 +1719,273 @@ void main() {
       await tester.tap(find.byKey(const Key('abrir_caja_volver')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('vender_ventas')), findsNothing);
+    });
+  });
+
+  // ── Quiénes agregaron después del sorteo (27-nov-2026) ─────────────────────
+  //
+  // Pedido del usuario: nada de "revisar la lista". El programa sabe solo quién
+  // cargó una mesa adicional o sillas después del sorteo (lo de hoy contra lo
+  // anotado al sortear) y, al entrar a VENDER, avisa con una ventana de un solo
+  // botón. Con descuento va solo lo que la familia ya tenía cargado al sorteo.
+  group('el aviso de quienes agregaron después del sorteo', () {
+    // 12/11/2026 21:40 en Argentina.
+    final sorteoEl = DateTime.utc(2026, 11, 13, 0, 40);
+
+    /// Al sorteo PÉREZ tenía solo la mesa del contrato: la adicional es de después.
+    FotoDeLosLugares sinLaDePerez() => FotoDeLosLugares.anotada(
+          {_perez: LugaresCargados.soloElContrato},
+          sorteoEl: sorteoEl,
+        );
+
+    /// SILLAS, CON TRES: no figura en lo anotado, así que sus 3 sillas son de
+    /// después.
+    void conTresSillas(EntregaEnMemoria e) => _sumar(
+          e,
+          id: _sillas,
+          nombre: 'SILLAS, CON TRES',
+          mesas: const [40],
+          sillas: 3,
+          sillasPagas: 3,
+        );
+
+    Finder enElAviso(Finder f) =>
+        find.descendant(of: find.byType(AlertDialog), matching: f);
+
+    testWidgets('sale al entrar, con cada familia y lo que agregó, sin plata y con un '
+        'solo botón', (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: sinLaDePerez(),
+        preparar: conTresSillas,
+        dejarElAviso: true,
+      );
+      expect(enElAviso(find.text('Agregaron después del sorteo')), findsOneWidget);
+      expect(_texto(tester, 'agregaron_cuantas'), endsWith('· 2 familias'));
+      expect(
+        _texto(tester, 'agregaron_intro'),
+        'El sorteo fue el 12/11/2026. Lo que cargaron después paga la entrada al '
+        'precio del día, sin descuento. Lo que ya tenían cargado ese día sigue con '
+        'descuento.',
+      );
+      expect(_texto(tester, 'agregaron_que_$_perez'), '1 mesa adicional · 8 entradas');
+      expect(_texto(tester, 'agregaron_que_$_sillas'), '3 sillas extra · 3 entradas');
+      // LÓPEZ y GÓMEZ no agregaron nada: no figuran.
+      expect(find.byKey(const Key('agregaron_$_lopez')), findsNothing);
+      expect(find.byKey(const Key('agregaron_$_gomez')), findsNothing);
+      // Sin plata: la familia puede estar mirando.
+      for (final t in tester.widgetList<Text>(enElAviso(find.byType(Text)))) {
+        final texto = t.data ?? t.textSpan?.toPlainText() ?? '';
+        expect(texto, isNot(contains(r'$')), reason: texto);
+      }
+      // Un solo botón: no se tilda ni se acepta nada.
+      expect(
+        enElAviso(find.byWidgetPredicate((w) => w is ButtonStyleButton)),
+        findsOneWidget,
+      );
+      expect(enElAviso(find.byType(Checkbox)), findsNothing);
+      expect(find.text('ENTENDIDO'), findsOneWidget);
+    });
+
+    testWidgets('ENTENDIDO lo cierra y queda el renglón de arriba; VER lo abre de nuevo',
+        (tester) async {
+      final m = await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: sinLaDePerez(),
+        preparar: conTresSillas,
+        dejarElAviso: true,
+      );
+      // Tocar afuera no lo cierra: se cierra con su botón, que es lo único que
+      // hay que tocar.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('agregaron_entendido')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('agregaron_entendido')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_texto(tester, 'vender_agregaron_texto'),
+          'Agregaron después del sorteo: 2 familias · sin descuento');
+      // Solo avisó: no escribió nada.
+      expect(m.entradas.escrituras, 0);
+
+      await _tocar(tester, 'vender_agregaron_ver');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('agregaron_$_perez')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('agregaron_entendido')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('sin caja abierta: primero el aviso y, recién al cerrarlo, la caja',
+        (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        conCaja: false,
+        foto: sinLaDePerez(),
+        dejarElAviso: true,
+      );
+      expect(find.byKey(const Key('agregaron_entendido')), findsOneWidget);
+      expect(find.byKey(const Key('abrir_caja_abrir')), findsNothing,
+          reason: 'las dos ventanas no salen una encima de la otra');
+      await tester.tap(find.byKey(const Key('agregaron_entendido')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('agregaron_entendido')), findsNothing);
+      expect(find.byKey(const Key('abrir_caja_abrir')), findsOneWidget);
+    });
+
+    testWidgets('si nadie agregó después, no sale ni queda el renglón', (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        // PÉREZ ya tenía su mesa adicional al sorteo.
+        foto: FotoDeLosLugares.anotada(
+          {_perez: const LugaresCargados(2, 0)},
+          sorteoEl: sorteoEl,
+        ),
+        dejarElAviso: true,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('vender_agregaron')), findsNothing);
+      expect(find.byKey(const Key('vender_sin_anotar')), findsNothing);
+    });
+
+    testWidgets('cuando se llega para una familia (desde la entrega) no sale; el renglón, '
+        'sí', (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: sinLaDePerez(),
+        familiaId: _perez,
+        dejarElAviso: true,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('vender_familia_elegida')), findsOneWidget);
+      expect(_texto(tester, 'vender_agregaron_texto'),
+          'Agregaron después del sorteo: 1 familia · sin descuento');
+    });
+
+    testWidgets('si baja otra familia con VENDER abierto no salta otra ventana: cambia el '
+        'renglón', (tester) async {
+      final m = await _montar(tester, pagaLaMesa: true, foto: sinLaDePerez());
+      expect(_texto(tester, 'vender_agregaron_texto'),
+          'Agregaron después del sorteo: 1 familia · sin descuento');
+      conTresSillas(m.e);
+      m.e.motor.bajo.add({'contratos_alumnos'});
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_texto(tester, 'vender_agregaron_texto'),
+          'Agregaron después del sorteo: 2 familias · sin descuento');
+    });
+
+    testWidgets('entró sin nadie y después baja alguien que agregó: tampoco salta, y '
+        'aparece el renglón', (tester) async {
+      final m = await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: FotoDeLosLugares.anotada(
+          {_perez: const LugaresCargados(2, 0)},
+          sorteoEl: sorteoEl,
+        ),
+      );
+      expect(find.byKey(const Key('vender_agregaron')), findsNothing);
+      conTresSillas(m.e);
+      m.e.motor.bajo.add({'contratos_alumnos'});
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_texto(tester, 'vender_agregaron_texto'),
+          'Agregaron después del sorteo: 1 familia · sin descuento');
+    });
+
+    testWidgets('la que ya compró lo suyo va apagada: "ya las compró"', (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        foto: sinLaDePerez(),
+        preparar: conTresSillas,
+        dejarElAviso: true,
+        ventasDeAntes: (en) async {
+          await en.vender(
+            caja: en.listaCajas.first,
+            contratoAlumnoId: _perez,
+            compradorNombre: 'PÉREZ, MARTA',
+            renglones: [
+              RenglonEntradas.suelta(
+                nombre: 'Entrada general',
+                precioLista: 10000,
+                cantidad: 8,
+              ),
+            ],
+            medio: MedioBarra.efectivo,
+            efectivo: 80000,
+            quien: 'Carla',
+          );
+        },
+      );
+      expect(_texto(tester, 'agregaron_que_$_perez'),
+          '1 mesa adicional · 8 entradas · ya las compró');
+      expect(tester.widget<Opacity>(find.byKey(const Key('agregaron_$_perez'))).opacity,
+          lessThan(1));
+      expect(_texto(tester, 'agregaron_que_$_sillas'), '3 sillas extra · 3 entradas');
+      expect(tester.widget<Opacity>(find.byKey(const Key('agregaron_$_sillas'))).opacity, 1);
+    });
+
+    testWidgets('la fiesta sorteada sin anotar: no hay a quién avisar, y VENDER lo dice',
+        (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        preparar: (e) => e.sorteos.registros.add(SorteoMesasRegistro(
+          id: 's',
+          eventoId: idFiestaEntrega,
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: const {_perez: '12, 13'},
+          hechoPor: 'Jefe',
+          createdAt: sorteoEl,
+        )),
+        dejarElAviso: true,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('vender_agregaron')), findsNothing);
+      expect(_texto(tester, 'vender_sin_anotar'),
+          'No está anotado lo que tenía cada familia al sorteo');
+    });
+
+    testWidgets('con lo anotado en el renglón del sorteo (como en la app), sale solo',
+        (tester) async {
+      await _montar(
+        tester,
+        pagaLaMesa: true,
+        // El sorteo anotó que nadie tenía nada más que su mesa: la adicional de
+        // PÉREZ es de después.
+        preparar: (e) => e.sorteos.registros.add(SorteoMesasRegistro(
+          id: 's',
+          eventoId: idFiestaEntrega,
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: const {_perez: '12'},
+          lugares: const {},
+          hechoPor: 'Jefe',
+          createdAt: sorteoEl,
+        )),
+        dejarElAviso: true,
+      );
+      expect(_texto(tester, 'agregaron_que_$_perez'), '1 mesa adicional · 8 entradas');
+      expect(_texto(tester, 'agregaron_intro'), startsWith('El sorteo fue el 12/11/2026. '));
+    });
+
+    testWidgets('sin el permiso de vender no sale', (tester) async {
+      await _montar(
+        tester,
+        vende: false,
+        conCaja: false,
+        pagaLaMesa: true,
+        foto: sinLaDePerez(),
+        dejarElAviso: true,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('vender_sin_permiso')), findsOneWidget);
     });
   });
 

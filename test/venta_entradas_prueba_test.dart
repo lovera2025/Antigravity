@@ -151,9 +151,21 @@ void main() {
     return venta;
   }
 
+  /// El aviso de quienes agregaron después del sorteo (27-nov-2026), que sale al
+  /// entrar a VENDER: en la noche de la ventana, FERREYRA cargó su silla después.
+  /// Se cierra con su único botón.
+  Future<void> cerrarElAviso(WidgetTester tester) async {
+    expect(find.byKey(Key('agregaron_${NocheDeLaVenta.ferreyra}')), findsOneWidget);
+    await tocar(tester, 'agregaron_entendido');
+    expect(find.byKey(const Key('agregaron_entendido')), findsNothing);
+  }
+
   /// Desde el inicio de Carla: VENDER y abrir la caja con $ 5.000 de cambio.
   Future<void> entrarAVender(WidgetTester tester) async {
     await tocar(tester, 'vender_$idFiestaEntrega');
+    // Primero el aviso y, recién al cerrarlo, la caja: nunca una sobre la otra.
+    expect(find.text('Abrir la caja de entradas'), findsNothing);
+    await cerrarElAviso(tester);
     expect(find.text('Abrir la caja de entradas'), findsOneWidget);
     await poner(tester, 'abrir_caja_cambio', '5000');
     await tocar(tester, 'abrir_caja_abrir');
@@ -417,6 +429,7 @@ void main() {
     // (20-nov-2026: "Todo subido" es que no queda nada, no solo las ventas).
     await tocar(tester, 'vender_$idFiestaEntrega');
     await asentar(tester);
+    await cerrarElAviso(tester);
     expect(
       texto(tester, 'vender_linea_texto'),
       'Caja abierta · Carla · Sin internet · 1 venta y 1 cambio por subir',
@@ -785,6 +798,7 @@ void main() {
       });
       await asentar(tester);
       await tocar(tester, 'vender_$idFiestaEntrega');
+      await cerrarElAviso(tester);
       expect(find.text('Abrir la caja de entradas'), findsNothing, reason: 'la retoma');
 
       await elegir(tester, _benitez, filtro: 'vender_filtro_debe');
@@ -1153,6 +1167,8 @@ void main() {
       await cerrarPantalla(tester, VenderEntradasScreen);
       // El jefe, en la PC y sin saber nada, le rinde lo mismo con su caja.
       await tocar(tester, 'entradas_vender');
+      // Al jefe también le sale, en su VENDER.
+      await cerrarElAviso(tester);
       expect(find.text('Abrir la caja de entradas'), findsOneWidget);
       await poner(tester, 'abrir_caja_cambio', '0');
       await tocar(tester, 'abrir_caja_abrir');

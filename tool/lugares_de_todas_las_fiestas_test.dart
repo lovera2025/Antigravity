@@ -18,6 +18,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:arguello_events/features/eventos/services/agregaron_despues.dart';
 import 'package:arguello_events/features/eventos/services/lugares_al_sorteo.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
@@ -53,27 +54,24 @@ void main() {
         for (final r in await db.query('contratos_alumnos', where: 'evento_id = ?', whereArgs: [id]))
           ContratoAlumno.fromJson(Map<String, dynamic>.from(r)),
       ]..sort((a, b) => a.nombreAlumno.compareTo(b.nombreAlumno));
-      final conMas = <Map<String, dynamic>>[];
-      var conAlgoHoy = 0;
-      for (final a in alumnos) {
-        final hoy = LugaresCargados.de(a);
-        if (hoy.tieneAdicionales) conAlgoHoy++;
-        if (foto.estado != EstadoDeLosLugares.anotados) continue;
-        final al = foto.de(a.id) ?? const LugaresCargados(1, 0);
-        final mesasDeMas = hoy.mesas - al.mesas;
-        final sillasDeMas = hoy.sillas - al.sillas;
-        if (mesasDeMas > 0 || sillasDeMas > 0) {
-          conMas.add({
-            'alumno': a.id,
-            'nombre': a.nombreAlumno.trim(),
-            'mesas_hoy': a.numeroMesa,
-            'al_sorteo': al.texto,
-            'hoy': hoy.texto,
-            'mesas_de_mas': mesasDeMas > 0 ? mesasDeMas : 0,
-            'sillas_de_mas': sillasDeMas > 0 ? sillasDeMas : 0,
-          });
-        }
-      }
+      final conAlgoHoy =
+          alumnos.where((a) => LugaresCargados.de(a).tieneAdicionales).length;
+      // La misma cuenta que el aviso de VENDER (`AgregaronDespues`), acá con
+      // las bajas también, marcadas: VENDER no las lista (no se les vende).
+      final conMas = [
+        for (final f in AgregaronDespues.de(foto: foto, alumnos: alumnos).familias)
+          {
+            'alumno': f.id,
+            'nombre': f.alumno.nombreAlumno.trim(),
+            'baja': f.alumno.esBajaTemporal,
+            'mesas_hoy': f.alumno.numeroMesa,
+            'al_sorteo': (foto.de(f.id) ?? LugaresCargados.soloElContrato).texto,
+            'hoy': LugaresCargados.de(f.alumno).texto,
+            'mesas_de_mas': f.mesas,
+            'sillas_de_mas': f.sillas,
+            'entradas_sin_descuento': f.entradas,
+          },
+      ];
       fiestas.add({
         'evento': id,
         'nombre': '${e['nombre'] ?? id}',
