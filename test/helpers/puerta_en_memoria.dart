@@ -25,6 +25,7 @@ import 'package:arguello_events/features/recepcion/central/central_provider.dart
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/sin_internet_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/repositories/como_lo_nombran_repository.dart';
 import 'package:arguello_events/features/recepcion/repositories/sillas_puerta_repository.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart'
     show PlanListaPuerta;
@@ -36,6 +37,7 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/como_lo_nombran.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/totem_config.dart';
@@ -60,12 +62,17 @@ ContratoAlumno alumnoDePrueba(
   // La escuela: otra que la de siempre, para la tele con dos escuelas
   // (25-nov-2026).
   String evento = eventoMasivo,
+  // Para el locutor (v85): la institución y cuántos acompañantes tiene (con los sin
+  // nombre en la lista).
+  String? institucion,
+  int? cantidad,
 }) =>
     ContratoAlumno(
       id: id,
       eventoId: evento,
       nombreAlumno: nombre,
-      cantidadAcompanantes: acomp.length,
+      institucion: institucion,
+      cantidadAcompanantes: cantidad ?? acomp.length,
       nombresAcompanantes: acomp,
       montoTotalPactado: 300000,
       saldoDeudor: 0,
@@ -597,6 +604,48 @@ class MotorDePrueba implements SyncEngine {
       super.noSuchMethod(invocation);
 }
 
+/// **Cómo lo nombran** (v85), en memoria: el repositorio sin base.
+class ComoLoNombranEnMemoria extends ComoLoNombranRepository {
+  ComoLoNombranEnMemoria([Iterable<ComoLoNombran> filas = const []])
+      : filas = {for (final f in filas) f.contratoAlumnoId: f};
+
+  /// Por id de contrato.
+  final Map<String, ComoLoNombran> filas;
+  final _avisos = StreamController<String>.broadcast();
+
+  /// Cuántas veces se guardó (para ver que un pedido repetido no guarda dos veces).
+  var guardados = 0;
+
+  /// Si se pone, guardar falla (la base que no anda).
+  Object? falla;
+
+  @override
+  Stream<String> get cambios => _avisos.stream;
+
+  @override
+  Future<Map<String, ComoLoNombran>> delEvento(String eventoId) async => {
+        for (final f in filas.values)
+          if (f.eventoId == eventoId) f.contratoAlumnoId: f,
+      };
+
+  @override
+  Future<ComoLoNombran?> deAlumno(String contratoAlumnoId) async => filas[contratoAlumnoId];
+
+  @override
+  Future<int> sinSubir(String eventoId) async => 0;
+
+  @override
+  Future<void> guardar(ComoLoNombran fila) async {
+    if (falla != null) throw falla!;
+    filas[fila.contratoAlumnoId] = fila;
+    guardados++;
+    _avisos.add(fila.eventoId);
+  }
+
+  /// La oficina (otra PC) lo cambió y bajó: sin avisar por [cambios].
+  void bajoDeOtraPc(ComoLoNombran fila) => filas[fila.contratoAlumnoId] = fila;
+}
+
 /// Todo lo que rodea al panel en una prueba.
 class PuertaEnMemoria {
   PuertaEnMemoria(
@@ -608,7 +657,9 @@ class PuertaEnMemoria {
     ArmadoSalon? plano,
     Map<String, ArmadoSalon> planosDe = const {},
     Map<String, List<Map<String, dynamic>>>? pagos,
+    List<ComoLoNombran> nombres = const [],
   })  : contratos = ContratosEnMemoria(supabase, alumnos, pagos: pagos),
+        comoLoNombran = ComoLoNombranEnMemoria(nombres),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
         sillas = SillasEnMemoria(repartos),
         sillasPuerta = SillasPuertaEnMemoria(sillasDeLaNoche),
@@ -620,6 +671,9 @@ class PuertaEnMemoria {
 
   /// Las sillas sumadas esa noche en la puerta.
   final SillasPuertaEnMemoria sillasPuerta;
+
+  /// Cómo nombra el locutor a cada familia (v85).
+  final ComoLoNombranEnMemoria comoLoNombran;
 
   /// La barra de la fiesta como la ve esta PC: de ahí salen los vales anulados.
   final barra = BarraEnMemoria();
@@ -706,6 +760,7 @@ class PuertaEnMemoria {
           contratosRepositoryProvider.overrideWithValue(contratos),
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
           sillasPuertaRepositoryProvider.overrideWithValue(sillasPuerta),
+          comoLoNombranRepositoryProvider.overrideWithValue(comoLoNombran),
           barraDelJefeProvider.overrideWithValue(barra),
           planosEventoRepositoryProvider.overrideWithValue(planos),
           syncEngineProvider.overrideWithValue(motor),

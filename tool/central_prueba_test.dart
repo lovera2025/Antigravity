@@ -12,6 +12,7 @@
 // está en el chat como "Pato": a los 30 s escribe a todos, y contesta "recibido"
 // a quien le escriba. Dos celulares en el mismo navegador: uno en 127.0.0.1 y
 // otro en localhost (cada dirección guarda lo suyo).
+import 'package:arguello_events/models/como_lo_nombran.dart';
 import 'dart:io';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
@@ -61,6 +62,20 @@ class _PcDePrueba implements PuertaDeEstaPc {
   /// Las sillas de la noche que se sumaron desde los celulares.
   final sillas = <SillaPuerta>[];
 
+  /// Cómo nombra el locutor a cada familia (v85).
+  final nombres = <String, ComoLoNombran>{};
+
+  @override
+  Future<ComoLoNombran?> nombresDe(String contratoId) async => nombres[contratoId];
+
+  @override
+  Future<void> guardarNombres(ComoLoNombran fila) async {
+    nombres[fila.contratoAlumnoId] = fila;
+    // ignore: avoid_print
+    print('NOMBRÓ ${fila.alumno ?? '(como en la lista)'} (${fila.cambiadoPor})');
+    alCambiar?.call();
+  }
+
   /// Los que se sientan en la mesa reservada del plano (los profes, 6.5.0).
   List<ReservadoPuerta> reservados = const [];
 
@@ -69,6 +84,7 @@ class _PcDePrueba implements PuertaDeEstaPc {
         invitados: filas.values.toList(),
         sillasPuerta: sillas,
         reservados: reservados,
+        nombres: nombres,
       );
 
   @override

@@ -1,3 +1,5 @@
+import '../services/como_lo_nombran.dart';
+import 'hoja_como_lo_nombran.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -546,6 +548,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
                     g.reservadaPara ?? 'acompañante',
                     style: _letra(size: 12, color: _suave),
                   ),
+                  if (a.nombrado != null) _loNombran(a.id, a.nombrado!),
                 ],
               ),
             ),
@@ -567,7 +570,12 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           Text(partes.join(' · '), style: _letra(size: 12, color: _suave)),
       ];
     }
+    final sinNombreNombrados = [
+      for (final l in g.nombres?.lugares ?? const <LugarParaNombrar>[])
+        if (l.sinNombre && g.nombres!.porLugar[l.lugar] != null) g.nombres!.porLugar[l.lugar]!,
+    ];
     return [
+      if (t.nombrado != null) _loNombran(t.id, t.nombrado!),
       Wrap(
         spacing: 6,
         runSpacing: 2,
@@ -634,8 +642,29 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
             style: _letra(size: 12, color: _suave),
           ),
         ),
+      if (sinNombreNombrados.isNotEmpty) _loNombran('sin_nombre_${g.contratoId}', sinNombreNombrados.join(' · ')),
     ];
   }
+
+  /// "Lo nombran: «Juani 'el Tano' Pérez»" (el locutor, v85): solo si se cambió.
+  Widget _loNombran(String id, String nombre) => Padding(
+        key: ValueKey('lo_nombran_$id'),
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          children: [
+            Icon(Icons.record_voice_over_outlined, size: 13, color: _ambar),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                'Lo nombran: «$nombre»',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                style: _letra(size: 12, color: _ambar),
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _punto() => Text('·', style: _letra(size: 12, color: _suave));
 
@@ -741,7 +770,10 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     // La suelta (6.5.0): para la familia de un alumno, también en el tope.
     final suelta = g.contratoId != null && p.sorteado;
     final verPlano = salon != null && salon.tieneMesaDe(g);
-    if (!sumar && !suelta && !verPlano) return const [];
+    // CÓMO LO NOMBRAN (el locutor, v85): en un masivo, en la familia de un alumno,
+    // también antes del sorteo.
+    final nombrar = p.masivo && g.contratoId != null && g.nombres != null;
+    if (!sumar && !suelta && !verPlano && !nombrar) return const [];
     return [
       Padding(
         padding: const EdgeInsets.only(top: 6),
@@ -752,10 +784,39 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
             if (sumar) _botonSumar(g, p),
             if (suelta) _botonSuelta(g, p),
             if (verPlano) _botonPlano(g, p, salon),
+            if (nombrar) _botonNombrar(g, p),
           ],
         ),
       ),
     ];
+  }
+
+  /// CÓMO LO NOMBRAN (el locutor, v85).
+  Widget _botonNombrar(GrupoPuerta g, PuertaDelEvento p) => OutlinedButton.icon(
+        key: ValueKey('como_lo_nombran_${g.contratoId}'),
+        onPressed: () => _comoLoNombran(g, p),
+        icon: const Icon(Icons.record_voice_over_outlined, size: 16),
+        label: Text('CÓMO LO NOMBRAN', style: _letra(size: 12, negrita: true)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _texto,
+          side: BorderSide(color: _borde),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          visualDensity: VisualDensity.compact,
+        ),
+      );
+
+  /// CÓMO LO NOMBRAN: la hoja y el candado. Lo que dice al guardar depende de dónde
+  /// quedó (en la notebook de los celulares el locutor ya lo ve).
+  Future<void> _comoLoNombran(GrupoPuerta g, PuertaDelEvento p) async {
+    final acciones = ref.read(accionesPuertaProvider);
+    final texto = await HojaComoLoNombran.abrir(
+      context,
+      nombres: g.nombres!,
+      porQueNo: acciones.porQueNoNombra,
+      guardar: (datos, id) => acciones.nombrar(widget.eventoId, p, g, datos, id: id),
+    );
+    if (texto == null || !mounted) return;
+    setState(() => _aviso = _Aviso(texto, bien: true));
   }
 
   /// SILLA SUELTA (6.5.0): una silla que no va a ninguna mesa, sin tope.

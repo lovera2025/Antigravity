@@ -1,3 +1,5 @@
+import '../../../models/como_lo_nombran.dart';
+import 'como_lo_nombran.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
@@ -103,6 +105,7 @@ class PuertaDelEvento {
     List<SillaPuerta> sillasPuerta = const [],
     ValesAnulados valesAnulados = ValesAnulados.ninguno,
     List<ReservadoPuerta> reservados = const [],
+    Map<String, ComoLoNombran> nombres = const {},
   }) {
     final filaPorId = {for (final i in invitados) i.id: i};
     final activos = alumnos.where((a) => !a.esBajaTemporal).toList();
@@ -124,6 +127,10 @@ class PuertaDelEvento {
       if (filas == null || filas.isEmpty) continue;
       final titular = filas.firstWhere((f) => f.esAlumno);
       final conNombre = filas.where((f) => !f.esAlumno).length;
+      // Cómo lo nombra el locutor (v85): lo que cambió la recepcionista, cruzado con lo
+      // que dice hoy la lista. `nombre` sigue siendo lo cargado.
+      final familia = NombresDeLaFamilia.delAlumno(a, nombres[a.id]);
+      final acompFilas = filas.where((f) => !f.esAlumno).toList();
       final musica = a.musicaElegida?.trim() ?? '';
       final suyas = sillasPorAlumno[a.id] ?? const <SillaPuerta>[];
       final aConfirmar = AdicionalesDeLaFamilia.aConfirmar(
@@ -153,15 +160,18 @@ class PuertaDelEvento {
           },
           // Sin sortear nadie tiene mesa, así que tampoco sillas: no hace
           // falta preguntar si se sorteó para esconderlas.
-          titular: PersonaPuerta._deAlumno(titular, filaPorId[titular.id]),
+          titular: PersonaPuerta._deAlumno(titular, filaPorId[titular.id], nombrado: familia.alumno),
           acompanantes: [
-            for (final f in filas.where((f) => !f.esAlumno))
+            for (final (k, f) in acompFilas.indexed)
               PersonaPuerta._deAlumno(
                 f,
                 filaPorId[f.id],
                 acompanaA: titular.nombre,
+                nombrado: familia.porLugar[k + 1],
               ),
           ],
+          institucion: (a.institucion?.trim().isNotEmpty ?? false) ? a.institucion!.trim() : null,
+          nombres: familia,
           division: (a.cursoDivision?.trim().isNotEmpty ?? false)
               ? a.cursoDivision!.trim()
               : null,
@@ -428,6 +438,13 @@ class GrupoPuerta {
   /// recepcionista. Null en una fila cargada a mano o de una central vieja.
   final int? principal;
 
+  /// La institución del alumno (para el locutor). Null en lo cargado a mano.
+  final String? institucion;
+
+  /// **Cómo lo nombra el locutor** (v85): lo cambiado, cruzado con la lista, con su
+  /// firma. Solo en una familia de alumno; null en lo demás y en una central vieja.
+  final NombresDeLaFamilia? nombres;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -446,6 +463,8 @@ class GrupoPuerta {
     this.mesasAConfirmar = const {},
     this.adicionalesSinMesa = 0,
     this.principal,
+    this.institucion,
+    this.nombres,
   });
 
   /// Las mesas de la familia que se muestran como suyas: sin las "a
@@ -490,6 +509,8 @@ class GrupoPuerta {
           'aConfirmar': [...mesasAConfirmar]..sort(),
         if (adicionalesSinMesa > 0) 'adicionalesSinMesa': adicionalesSinMesa,
         if (principal != null) 'principal': principal,
+        if (institucion != null) 'institucion': institucion,
+        if (nombres != null) 'nombres': nombres!.toJson(),
       };
 
   factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
@@ -508,6 +529,9 @@ class GrupoPuerta {
       },
       adicionalesSinMesa: sinMesa is int ? sinMesa : 0,
       principal: json['principal'] is int ? json['principal'] as int : null,
+      // Lo del locutor (v85) se lee si viene: una central más vieja no lo manda.
+      institucion: json['institucion'] is String ? json['institucion'] as String : null,
+      nombres: NombresDeLaFamilia.fromJson(json['nombres']),
       titular: PersonaPuerta._fromJson(
         json['titular'] as Map<String, dynamic>,
         eventoId,
@@ -568,8 +592,13 @@ class PersonaPuerta {
   /// existir todavía (antes del sorteo): se crea al ingresar.
   final Invitado? fila;
 
+  /// **Cómo lo nombra el locutor**, solo si la recepcionista lo cambió (v85). [nombre]
+  /// sigue siendo lo cargado: es el que va a la lista de la puerta.
+  final String? nombrado;
+
   final Set<int> _mesas;
   final String _buscable;
+  final String? _buscableNombrado;
 
   PersonaPuerta._({
     required this.id,
@@ -579,8 +608,10 @@ class PersonaPuerta {
     required this.esAlumno,
     required this.fila,
     this.acompanaA,
+    this.nombrado,
   })  : _mesas = MesasExtraUtils.numerosMesaDesdeTexto(mesa),
-        _buscable = normalizarPuerta(nombre);
+        _buscable = normalizarPuerta(nombre),
+        _buscableNombrado = nombrado == null ? null : normalizarPuerta(nombrado);
 
   factory PersonaPuerta._deFila(Invitado i) {
     final mesa = i.numeroMesa?.trim() ?? '';
@@ -598,6 +629,7 @@ class PersonaPuerta {
     FilaPuerta f,
     Invitado? fila, {
     String? acompanaA,
+    String? nombrado,
   }) =>
       PersonaPuerta._(
         id: f.id,
@@ -607,6 +639,7 @@ class PersonaPuerta {
         esAlumno: f.esAlumno,
         fila: fila,
         acompanaA: acompanaA,
+        nombrado: nombrado,
       );
 
   /// Quien se sienta en una mesa reservada del plano (un profe): su mesa es
@@ -629,6 +662,7 @@ class PersonaPuerta {
         'mesa': mesa,
         'esAlumno': esAlumno,
         'acompanaA': acompanaA,
+        if (nombrado != null) 'nombrado': nombrado,
         'fila': fila == null
             ? null
             : {
@@ -651,6 +685,7 @@ class PersonaPuerta {
       mesa: mesa,
       esAlumno: json['esAlumno'] as bool,
       acompanaA: json['acompanaA'] as String?,
+      nombrado: json['nombrado'] is String ? json['nombrado'] as String : null,
       fila: fila == null
           ? null
           : Invitado(
@@ -736,7 +771,11 @@ class ConsultaPuerta {
   static final _soloCifras = RegExp(r'^\d+$');
 
   bool _coincidePalabra(PersonaPuerta p, String palabra) {
-    if (!_soloCifras.hasMatch(palabra)) return p._buscable.contains(palabra);
+    // Por lo cargado o por cómo lo nombran (v85): "tano" encuentra a quien el locutor
+    // nombra "Juani 'el Tano' Pérez".
+    if (!_soloCifras.hasMatch(palabra)) {
+      return p._buscable.contains(palabra) || (p._buscableNombrado?.contains(palabra) ?? false);
+    }
     // `tryParse`: con 19 cifras o más (un código de barras, un dedo apoyado)
     // `int.parse` tira, y esto corre al dibujar: la lista quedaba en gris.
     final numero = int.tryParse(palabra);

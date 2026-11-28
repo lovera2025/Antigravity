@@ -11,6 +11,7 @@ import '../../plano/modelo/armado_salon.dart';
 import '../../totem/services/tiempos_a_mano.dart';
 import '../chat/chat_del_puesto.dart';
 import '../chat/mensaje_de_puesto.dart';
+import '../services/como_lo_nombran.dart';
 import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
@@ -424,8 +425,40 @@ class ClienteCentral extends ChangeNotifier {
       _pedir(QuePide.quitarSilla, grupo.titular.id, silla: datos);
 
   /// Cuántas sillas se tocaron acá y la central todavía no contestó.
-  int get sillasPorMandar =>
-      _pendientes.where((p) => !p.pedido.que.esIngreso).length;
+  int get sillasPorMandar => _pendientes
+      .where((p) => p.pedido.que == QuePide.sumarSilla || p.pedido.que == QuePide.quitarSilla)
+      .length;
+
+  /// Los pedidos de **cómo lo nombran** (v85) que esperan respuesta: no se guardan para
+  /// mandar después (un nombre que llega tarde ya no sirve), se esperan acá.
+  final _nombrar = <String, Completer<Map<String, Object?>?>>{};
+
+  /// **Cambia cómo nombra el locutor a la familia de [grupo]** (v85). Solo con la
+  /// central: sin conexión devuelve null enseguida. Espera la respuesta (hasta
+  /// [espera]); si se corta o no llega, null. [id] repetido es el mismo pedido (la
+  /// central no lo hace dos veces).
+  Future<Map<String, Object?>?> nombrar(
+    GrupoPuerta grupo,
+    DatosNombres datos, {
+    required String id,
+    Duration espera = const Duration(seconds: 8),
+  }) async {
+    if (_estado != EstadoDelPuesto.conectado || _canal == null) return null;
+    final listo = _nombrar[id] ?? Completer<Map<String, Object?>?>();
+    _nombrar[id] = listo;
+    _mandar(PedidoPuerta(
+      id: id,
+      que: QuePide.nombrar,
+      personaId: grupo.titular.id,
+      nombres: datos,
+      evento: eventoId,
+    ).toJson());
+    try {
+      return await listo.future.timeout(espera, onTimeout: () => null);
+    } finally {
+      _nombrar.remove(id);
+    }
+  }
 
   /// Cambia los segundos de la llegada de esa noche. Solo con la central: un
   /// cambio de segundos que llega tarde ya no sirve. Devuelve si se mandó.
@@ -573,6 +606,10 @@ class ClienteCentral extends ChangeNotifier {
     _canal = null;
     _latidos?.cancel();
     _enCamino.clear();
+    // Un "cómo lo nombran" que esperaba: sin respuesta.
+    for (final c in _nombrar.values) {
+      if (!c.isCompleted) c.complete(null);
+    }
     switch (codigoDeCierre) {
       case 4001:
         _poner(EstadoDelPuesto.codigoMal);
@@ -717,6 +754,12 @@ class ClienteCentral extends ChangeNotifier {
 
   Future<void> _recibirRespuesta(Map<String, dynamic> m) async {
     final id = m['id'];
+    // La de un "cómo lo nombran" se atiende antes: no va a la lista de pendientes.
+    final nombrar = _nombrar[id];
+    if (nombrar != null) {
+      if (!nombrar.isCompleted) nombrar.complete(Map<String, Object?>.from(m));
+      return;
+    }
     final i = _pendientes.indexWhere((p) => p.pedido.id == id);
     if (i < 0) return;
     if (m['ok'] != true) {

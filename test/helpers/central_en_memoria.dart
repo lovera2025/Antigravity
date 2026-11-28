@@ -1,6 +1,7 @@
 // La base de la notebook central, en memoria: las filas de la puerta y lo que
 // se le pidió. La usan `test/central_puerta_test.dart` y
 // `test/cliente_central_test.dart`.
+import 'package:arguello_events/models/como_lo_nombran.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
@@ -24,6 +25,25 @@ Invitado filaDePrueba(String id, String nombre, {bool adentro = false}) =>
 
 class PcEnMemoria implements PuertaDeEstaPc {
   final filas = <String, Invitado>{};
+
+  /// Cómo nombra el locutor a cada familia (v85), por contrato.
+  final nombres = <String, ComoLoNombran>{};
+  var nombresGuardados = 0;
+
+  @override
+  Future<ComoLoNombran?> nombresDe(String contratoId) async {
+    if (falla) throw StateError('la base no anda');
+    return nombres[contratoId];
+  }
+
+  @override
+  Future<void> guardarNombres(ComoLoNombran fila) async {
+    await Future<void>.delayed(demora);
+    if (falla) throw StateError('la base no anda');
+    nombres[fila.contratoAlumnoId] = fila;
+    nombresGuardados++;
+    alCambiar?.call();
+  }
 
   /// Cada ingreso, con si se saludó en el tótem.
   final ingresos = <(String, bool)>[];

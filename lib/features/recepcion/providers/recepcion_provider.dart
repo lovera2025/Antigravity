@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/invitado.dart';
 import '../../../models/evento.dart';
+import '../../../models/como_lo_nombran.dart';
 import '../../../models/silla_puerta.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -17,6 +18,7 @@ import '../../eventos/services/pagos_por_contrato.dart';
 import '../../barra/providers/barra_del_jefe_provider.dart';
 import '../services/vales_anulados.dart';
 import '../repositories/invitados_repository.dart';
+import '../repositories/como_lo_nombran_repository.dart';
 import '../repositories/sillas_puerta_repository.dart';
 import '../repositories/supabase_invitados_repository.dart';
 import '../services/puerta_del_evento.dart';
@@ -289,6 +291,51 @@ final sillasPuertaDelEventoProvider = StreamProvider.autoDispose
   return controller.stream;
 });
 
+/// **Cómo nombra el locutor** a cada familia del evento (v85, `como_lo_nombran`), de la
+/// base de esta PC, por id de contrato. Se vuelve a leer cuando esta PC guarda
+/// ([ComoLoNombranRepository.cambios]) y cuando baja de otra PC. Mismo molde que
+/// [sillasPuertaDelEventoProvider].
+final comoLoNombranDelEventoProvider = StreamProvider.autoDispose
+    .family<Map<String, ComoLoNombran>, String>((ref, eventoId) {
+  final repo = ref.watch(comoLoNombranRepositoryProvider);
+  final motor = ref.watch(syncEngineProvider);
+
+  late final StreamController<Map<String, ComoLoNombran>> controller;
+  StreamSubscription<Set<String>>? bajadas;
+  StreamSubscription<String>? propias;
+  var cadena = Future<void>.value();
+
+  void leer() {
+    cadena = cadena.then((_) async {
+      if (controller.isClosed) return;
+      try {
+        final leidas = await repo.delEvento(eventoId);
+        if (!controller.isClosed) controller.add(leidas);
+      } catch (e, st) {
+        if (!controller.isClosed) controller.addError(e, st);
+      }
+    });
+  }
+
+  controller = StreamController<Map<String, ComoLoNombran>>(
+    onListen: () {
+      bajadas = motor.cambiosBajadosStream.listen((tablas) {
+        if (tablas.contains('como_lo_nombran')) leer();
+      });
+      propias = repo.cambios.listen((evento) {
+        if (evento == eventoId) leer();
+      });
+      leer();
+    },
+    onCancel: () async {
+      await bajadas?.cancel();
+      await propias?.cancel();
+    },
+  );
+  ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
 /// Lo que bajó y cambia qué vales anuló la barra.
 const _tablasDeLaBarra = {'barra_cajas', 'barra_ventas', 'barra_anulaciones'};
 
@@ -362,6 +409,7 @@ final puertaDelEventoProvider = Provider.autoDispose
     return AsyncValue.error(invitados.error!, invitados.stackTrace!);
   }
   final sillas = ref.watch(sillasPuertaDelEventoProvider(eventoId));
+  final nombres = ref.watch(comoLoNombranDelEventoProvider(eventoId));
   // Lo de la barra no frena la lista: mientras se lee, ninguno anulado.
   final anulados =
       ref.watch(valesAnuladosDelEventoProvider(eventoId)).value ??
@@ -371,6 +419,14 @@ final puertaDelEventoProvider = Provider.autoDispose
   if (a == null || i == null) return const AsyncValue.loading();
   if (sillas.isLoading && !sillas.hasValue && !sillas.hasError) {
     return const AsyncValue.loading();
+  }
+  // Cómo lo nombran (v85): se espera la primera lectura; si falla, la lista sigue sin
+  // los nombres (nunca se traba la puerta por esto).
+  if (nombres.isLoading && !nombres.hasValue && !nombres.hasError) {
+    return const AsyncValue.loading();
+  }
+  if (nombres.hasError) {
+    debugPrint('Recepción: no se pudo leer cómo los nombra el locutor: ${nombres.error}');
   }
   // Si no se pudieron leer las sillas de la noche, la puerta sigue andando sin
   // sus líneas: dejar a la recepcionista sin la lista entera sería peor. Sumar
@@ -390,6 +446,7 @@ final puertaDelEventoProvider = Provider.autoDispose
       // Las mesas reservadas no frenan la lista: mientras se leen, sin ellas.
       reservados:
           ref.watch(reservadosDeLaPuertaProvider(eventoId)).value ?? const [],
+      nombres: nombres.value ?? const {},
     ),
   );
 });

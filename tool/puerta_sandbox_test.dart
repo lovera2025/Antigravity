@@ -56,6 +56,7 @@ import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.
 import 'package:arguello_events/features/recepcion/providers/acciones_puerta_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/repositories/como_lo_nombran_repository.dart';
 import 'package:arguello_events/features/recepcion/repositories/sillas_puerta_repository.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/features/recepcion/services/sillas_de_la_puerta.dart';
@@ -111,6 +112,7 @@ void main() {
       contratosRepositoryProvider.overrideWithValue(puerta.contratos),
       sillasRepartoRepositoryProvider.overrideWithValue(puerta.sillas),
       sillasPuertaRepositoryProvider.overrideWithValue(puerta.sillasPuerta),
+      comoLoNombranRepositoryProvider.overrideWithValue(puerta.comoLoNombran),
       barraDelJefeProvider.overrideWithValue(puerta.barra),
       syncEngineProvider.overrideWithValue(puerta.motor),
       connectivityServiceProvider.overrideWithValue(puerta.conexion),

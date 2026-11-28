@@ -1,3 +1,5 @@
+import '../repositories/como_lo_nombran_repository.dart';
+import '../../../models/como_lo_nombran.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -38,9 +40,18 @@ class PuertaDeEstaPcConBase implements PuertaDeEstaPc {
     this._sillas, {
     required Future<void> Function(String eventoId, TiemposAMano t, int? tele)
         ponerTiempos,
-  }) : _ponerTiempos = ponerTiempos;
+    ComoLoNombranRepository? nombres,
+  })  : _ponerTiempos = ponerTiempos,
+        _nombres = nombres ?? ComoLoNombranRepository();
   final InvitadosRepository _invitados;
   final SillasPuertaRepository _sillas;
+  final ComoLoNombranRepository _nombres;
+
+  @override
+  Future<ComoLoNombran?> nombresDe(String contratoId) => _nombres.deAlumno(contratoId);
+
+  @override
+  Future<void> guardarNombres(ComoLoNombran fila) => _nombres.guardar(fila);
   final Future<void> Function(String eventoId, TiemposAMano t, int? tele)
       _ponerTiempos;
 
@@ -270,6 +281,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   PuertaDeEstaPc _pc() => PuertaDeEstaPcConBase(
         ref.read(invitadosRepositoryProvider),
         ref.read(sillasPuertaRepositoryProvider),
+        nombres: ref.read(comoLoNombranRepositoryProvider),
         // Cada recepcionista controla su tele (24-nov-2026): los segundos de
         // la Tele 2 van a la Tele 2; los de la Tele 1 (o de la notebook), acá.
         // "Las dos": a las dos.

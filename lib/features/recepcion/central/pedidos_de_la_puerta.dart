@@ -1,3 +1,5 @@
+import '../../../models/como_lo_nombran.dart';
+import '../services/como_lo_nombran.dart';
 import '../../../models/invitado.dart';
 import '../../../models/silla_puerta.dart';
 import '../../totem/services/tiempos_a_mano.dart';
@@ -30,7 +32,11 @@ enum QuePide {
   deshacer,
   sumarSilla,
   quitarSilla,
-  tiemposTotem;
+  tiemposTotem,
+
+  /// **Cómo lo nombra el locutor** (v85, 28-nov-2026): la recepcionista cambia cómo
+  /// nombrar al egresado y a sus acompañantes. Por el mismo candado.
+  nombrar;
 
   /// Ingresar o deshacer: lo que cambia si una persona está adentro.
   bool get esIngreso => this == ingresar || this == deshacer;
@@ -121,6 +127,9 @@ class PedidoPuerta {
   /// En [QuePide.tiemposTotem].
   final TiemposAMano? tiempos;
 
+  /// En [QuePide.nombrar]: cómo nombrarlos y la firma de lo que se veía.
+  final DatosNombres? nombres;
+
   /// La tele de quien lo pide (la tele es el tótem, 24-nov-2026): en qué tele
   /// se saluda un ingreso, y a qué tele van los segundos. [kLasDosTeles] es las
   /// dos; null, un celular o una PC sin "Tu tele": como hasta ahora.
@@ -141,6 +150,7 @@ class PedidoPuerta {
     this.tiempos,
     this.tele,
     this.evento,
+    this.nombres,
   });
 
   /// El mismo, diciendo cuánto hace que se tocó.
@@ -153,6 +163,7 @@ class PedidoPuerta {
         tiempos: tiempos,
         tele: tele,
         evento: evento,
+        nombres: nombres,
       );
 
   /// El mismo, para la tele que eligió el celular al mandarlo.
@@ -165,6 +176,7 @@ class PedidoPuerta {
         tiempos: tiempos,
         tele: tele,
         evento: evento,
+        nombres: nombres,
       );
 
   /// El mismo, de la escuela [evento].
@@ -177,6 +189,7 @@ class PedidoPuerta {
         tiempos: tiempos,
         tele: tele,
         evento: evento,
+        nombres: nombres,
       );
 
   Map<String, Object?> toJson() => {
@@ -189,6 +202,7 @@ class PedidoPuerta {
         if (tiempos != null) 'tiempos': tiempos!.toJson(),
         if (tele != null) 'tele': tele,
         if (evento != null) 'evento': evento,
+        if (nombres != null) 'nombres': nombres!.toJson(),
       };
 
   /// Null si no es un pedido que se entienda: de la red puede llegar
@@ -214,6 +228,8 @@ class PedidoPuerta {
       return null;
     }
     if (sinPersona && tiempos == null) return null;
+    final nombres = DatosNombres.fromJson(json['nombres']);
+    if (quePide == QuePide.nombrar && nombres == null) return null;
     final tele = json['tele'];
     final evento = json['evento'];
     return PedidoPuerta(
@@ -226,6 +242,7 @@ class PedidoPuerta {
       tele: tele is int && esTeleValida(tele) ? tele : null,
       // Con forma de id: de la red puede llegar cualquier cosa.
       evento: evento is String && evento.length == 36 ? evento : null,
+      nombres: quePide == QuePide.nombrar ? nombres : null,
     );
   }
 }
@@ -306,7 +323,7 @@ bool seSaludaEnLaTele(
   return tele == null || tele == kLasDosTeles || tele == miTele;
 }
 
-enum QueHaceLaCentral { ingresar, deshacer, sumarSilla, quitarSilla, tiempos, nada }
+enum QueHaceLaCentral { ingresar, deshacer, sumarSilla, quitarSilla, tiempos, nombrar, nada }
 
 /// Lo que sale de un pedido.
 class DecisionPedido {
@@ -369,7 +386,8 @@ DecisionPedido decidirPedido({
     case QuePide.sumarSilla:
     case QuePide.quitarSilla:
     case QuePide.tiemposTotem:
-      // Van por [decidirSilla] y por los segundos: acá no llegan.
+    case QuePide.nombrar:
+      // Van por [decidirSilla], los segundos y [decidirNombres]: acá no llegan.
       return const DecisionPedido._(QueHaceLaCentral.nada);
   }
 }
@@ -490,8 +508,77 @@ DecisionSilla decidirSilla({
     case QuePide.ingresar:
     case QuePide.deshacer:
     case QuePide.tiemposTotem:
+    case QuePide.nombrar:
       return const DecisionSilla._nada('No se entendió el pedido.');
   }
+}
+
+/// Lo que sale de un pedido de **cómo lo nombran** (v85).
+class DecisionNombres {
+  final QueHaceLaCentral hace;
+
+  /// La fila que se guarda (solo con [QueHaceLaCentral.nombrar]).
+  final ComoLoNombran? fila;
+
+  /// Cómo quedan (o cómo están, si hubo conflicto o no cambió nada), ya cruzado.
+  final NombresDeLaFamilia? nombres;
+
+  /// Si otro lo cambió mientras se editaba: se muestra lo de ahora y no se guarda.
+  final bool conflicto;
+  final String? aviso;
+
+  const DecisionNombres._(this.hace, {this.fila, this.nombres, this.conflicto = false, this.aviso});
+
+  bool get haceAlgo => hace != QueHaceLaCentral.nada;
+}
+
+/// **Qué hacer con un pedido de cómo lo nombran.** [grupo] es la familia de la lista
+/// que ve Recepción; [filaAhora], la fila de `como_lo_nombran` **como está en la base en
+/// este momento** (otro celular o la oficina pudo cambiarla recién). Si lo pedido ya es
+/// lo que hay, "Quedó así." (aguanta reintentos); si la firma de lo que veía quien lo
+/// pide no es la de ahora, conflicto: se le muestra lo de ahora y no se guarda.
+DecisionNombres decidirNombres({
+  required PedidoPuerta pedido,
+  required GrupoPuerta? grupo,
+  required ComoLoNombran? filaAhora,
+  required String eventoId,
+  required String por,
+  required DateTime ahora,
+}) {
+  if (grupo == null) {
+    return const DecisionNombres._(QueHaceLaCentral.nada, aviso: 'Esa familia ya no está en la lista de la puerta.');
+  }
+  final contratoId = grupo.contratoId;
+  final antes = grupo.nombres;
+  final datos = pedido.nombres;
+  if (contratoId == null || antes == null || datos == null) {
+    return const DecisionNombres._(
+      QueHaceLaCentral.nada,
+      aviso: 'Solo se cambia cómo nombran a los egresados y sus acompañantes.',
+    );
+  }
+  final deAhora = antes.conFila(filaAhora);
+  final nueva = deAhora.filaCon(
+    datos,
+    eventoId: eventoId,
+    contratoId: contratoId,
+    por: por,
+    ahora: ahora,
+    createdAt: filaAhora?.createdAt,
+  );
+  if (nueva == null) {
+    return DecisionNombres._(QueHaceLaCentral.nada, nombres: deAhora, aviso: 'Quedó así.');
+  }
+  if (datos.antes != deAhora.firma) {
+    final quien = deAhora.cambiadoPor;
+    final cuando = deAhora.cambiadoAt == null ? null : DateTime.tryParse(deAhora.cambiadoAt!);
+    final aviso = quien == null
+        ? 'La lista de esta familia cambió recién: mirá cómo quedó.'
+        : '$quien lo cambió recién${cuando == null ? '' : ' (${horaCorta(cuando)})'}: mirá cómo quedó. '
+            'Volvé a tocar GUARDAR para dejar lo tuyo.';
+    return DecisionNombres._(QueHaceLaCentral.nada, nombres: deAhora, conflicto: true, aviso: aviso);
+  }
+  return DecisionNombres._(QueHaceLaCentral.nombrar, fila: nueva, nombres: deAhora.conFila(nueva));
 }
 
 /// Lo que se dice cuando una silla se sumó o se quitó: "Silla sumada a la mesa

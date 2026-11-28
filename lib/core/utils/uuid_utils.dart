@@ -164,6 +164,10 @@ class UuidUtils {
   ) =>
       _uuidDe('entradas_entregas_copia_v1|$contratoAlumnoId|$parte|$accion|$momento');
 
+  /// La fila de `como_lo_nombran` de un alumno (v85, el locutor): una por alumno.
+  static String comoLoNombranId(String contratoAlumnoId) =>
+      _uuidDe('como_lo_nombran_v1|$contratoAlumnoId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

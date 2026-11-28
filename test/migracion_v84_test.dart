@@ -344,8 +344,9 @@ void main() {
     }
     // Se crea al abrir, en una base nueva y al migrar.
     expect('await crearTablasV84(db);'.allMatches(fuente), hasLength(3));
-    // Y la app va por la 84.
-    expect(fuente, contains('static const int _version = 84;'));
+    // Y la app va por la 84 o una después (la v85, el locutor, 28-nov-2026).
+    final version = int.parse(RegExp(r'static const int _version = (\d+);').firstMatch(fuente)!.group(1)!);
+    expect(version, greaterThanOrEqualTo(84));
   });
 
   group('la copia antes de migrar', () {
@@ -355,8 +356,7 @@ void main() {
       final fotoOriginal = await foto(original);
       await original.close();
 
-      // Sin versión fija: la de la app.
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 84);
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v84.db'));
       final abierta = await factory.openDatabase(copia.path);
@@ -367,7 +367,7 @@ void main() {
 
     test('una base en 80 también se copia, una sola vez', () async {
       await crearBase(80);
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 84);
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v84.db'));
       expect(File('${copia.parent.path}${Platform.pathSeparator}antes_de_v83.db').existsSync(), isFalse);
@@ -377,7 +377,7 @@ void main() {
       await crearBase(82);
       final db = await abrirEnVersion(84);
       await db.close();
-      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory), isNull);
+      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 84), isNull);
     });
   });
 }

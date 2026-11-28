@@ -9,6 +9,7 @@ import '../central/central_provider.dart';
 import '../central/cliente_central.dart';
 import '../central/pedidos_de_la_puerta.dart';
 import '../repositories/invitados_repository.dart';
+import '../services/como_lo_nombran.dart';
 import '../services/puerta_del_evento.dart';
 
 /// Lo que el panel de la puerta (`PanelPuerta`) hace con una persona, y lo que
@@ -68,6 +69,68 @@ abstract class AccionesPuerta {
   /// Quién queda anotado en la silla: el nombre del celular, o quien opera la
   /// PC.
   String get quienSoy;
+
+  /// **Cómo lo nombra el locutor** (v85): por qué no se puede cambiar desde acá ahora
+  /// (null: se puede). En el celular, sin conexión con la central.
+  String? get porQueNoNombra;
+
+  /// Cambia cómo nombra el locutor a la familia de [grupo], por el mismo candado.
+  /// [id]: el del pedido; repetirlo (reintentar) no lo hace dos veces.
+  Future<ResultadoNombres> nombrar(
+    String eventoId,
+    PuertaDelEvento puerta,
+    GrupoPuerta grupo,
+    DatosNombres datos, {
+    required String id,
+  });
+}
+
+/// Lo que pasó al guardar cómo lo nombran, en palabras.
+class ResultadoNombres {
+  final bool hecho;
+  final String texto;
+
+  /// Otro lo cambió mientras se editaba: [nombres] es cómo está ahora.
+  final bool conflicto;
+
+  /// No llegó la respuesta (se cortó o tardó): se puede reintentar con el mismo id.
+  final bool sinRespuesta;
+
+  /// Cómo quedó, o cómo está.
+  final NombresDeLaFamilia? nombres;
+
+  const ResultadoNombres({
+    required this.hecho,
+    required this.texto,
+    this.conflicto = false,
+    this.sinRespuesta = false,
+    this.nombres,
+  });
+
+  /// De la respuesta del candado. [guardado]: el texto si se guardó (depende de dónde).
+  factory ResultadoNombres.deRespuesta(Map<String, Object?>? r, {required String guardado}) {
+    if (r == null) {
+      return const ResultadoNombres(
+        hecho: false,
+        sinRespuesta: true,
+        texto: 'No llegó la respuesta de la PC: probá de nuevo.',
+      );
+    }
+    if (r['ok'] != true) {
+      return const ResultadoNombres(hecho: false, texto: 'No se pudo guardar en la PC. Probá de nuevo.');
+    }
+    final nombres = NombresDeLaFamilia.fromJson(r['nombres']);
+    final aviso = r['aviso'];
+    if (r['hizo'] == QueHaceLaCentral.nombrar.name) {
+      return ResultadoNombres(hecho: true, texto: guardado, nombres: nombres);
+    }
+    return ResultadoNombres(
+      hecho: r['conflicto'] != true && aviso == 'Quedó así.',
+      conflicto: r['conflicto'] == true,
+      texto: aviso is String ? aviso : 'No se hizo nada.',
+      nombres: nombres,
+    );
+  }
 }
 
 /// Lo que pasó al sumar o quitar una silla, en palabras.
@@ -134,13 +197,43 @@ class AccionesDeEstaPc implements AccionesPuerta {
     this._quien, {
     required ResolverDeEstaPc resolver,
     required String Function() quienOpera,
+    bool Function(String eventoId)? centralPrendida,
   })  : _resolver = resolver,
-        _quienOpera = quienOpera;
+        _quienOpera = quienOpera,
+        _centralPrendida = centralPrendida ?? ((_) => false);
 
   final InvitadosRepository _invitados;
   final String? Function(String personaId) _quien;
   final ResolverDeEstaPc _resolver;
   final String Function() _quienOpera;
+  final bool Function(String eventoId) _centralPrendida;
+
+  @override
+  String? get porQueNoNombra => null;
+
+  @override
+  Future<ResultadoNombres> nombrar(
+    String eventoId,
+    PuertaDelEvento puerta,
+    GrupoPuerta grupo,
+    DatosNombres datos, {
+    required String id,
+  }) async {
+    final respuesta = await _resolver(
+      eventoId,
+      PedidoPuerta(id: id, que: QuePide.nombrar, personaId: grupo.titular.id, nombres: datos),
+      puesto: quienSoy,
+      puerta: puerta,
+    );
+    // Lo que se dice depende de dónde quedó: con la central de los celulares prendida
+    // acá, el locutor ya lo ve; si no, está en esta PC y le llega cuando suba.
+    return ResultadoNombres.deRespuesta(
+      respuesta,
+      guardado: _centralPrendida(eventoId)
+          ? 'Guardado: el locutor ya lo ve.'
+          : 'Guardado en esta PC. El locutor lo ve desde la notebook de los celulares, cuando le llegue.',
+    );
+  }
 
   @override
   Future<void> ingresar(String eventoId, PersonaPuerta persona) =>
@@ -256,6 +349,24 @@ class AccionesDelCelular implements AccionesPuerta {
   @override
   String get quienSoy => _cliente.nombre ?? 'Celular';
 
+  @override
+  String? get porQueNoNombra => _cliente.estado == EstadoDelPuesto.conectado
+      ? null
+      : 'Sin conexión con la central: se cambia con el celular conectado.';
+
+  @override
+  Future<ResultadoNombres> nombrar(
+    String eventoId,
+    PuertaDelEvento puerta,
+    GrupoPuerta grupo,
+    DatosNombres datos, {
+    required String id,
+  }) async =>
+      ResultadoNombres.deRespuesta(
+        await _cliente.nombrar(grupo, datos, id: id),
+        guardado: 'Guardado: el locutor ya lo ve.',
+      );
+
   /// La central contesta después: lo que hizo llega por [hechos] y lo que no
   /// pudo, por [avisos].
   ResultadoSilla get _mandado => _cliente.estado == EstadoDelPuesto.conectado
@@ -318,5 +429,9 @@ final accionesPuertaProvider = Provider<AccionesPuerta>((ref) {
     central.quienMarco,
     resolver: central.resolverDeEstaPc,
     quienOpera: () => quienOperaEnEstaPc(ref),
+    centralPrendida: (eventoId) {
+      final e = ref.read(centralDeLaPuertaProvider);
+      return e.prendida && e.eventoId == eventoId;
+    },
   );
 });

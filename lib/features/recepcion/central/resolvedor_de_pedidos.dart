@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../models/como_lo_nombran.dart';
 import '../../../models/invitado.dart';
 import '../../../models/silla_puerta.dart';
 import '../../totem/services/tiempos_a_mano.dart';
@@ -52,6 +53,13 @@ abstract class PuertaDeEstaPc {
     TiemposAMano tiempos, {
     int? tele,
   });
+
+  /// **Cómo lo nombra el locutor** (v85): la fila de un alumno, como está ahora en la
+  /// base.
+  Future<ComoLoNombran?> nombresDe(String contratoId);
+
+  /// La guarda (con la cola de subida).
+  Future<void> guardarNombres(ComoLoNombran fila);
 }
 
 /// **Un solo candado para la PC y los celulares** (6.4.0): todo lo que se pide
@@ -68,7 +76,10 @@ class ResolvedorDePedidos {
     required PuertaDeEstaPc pc,
     DateTime Function()? ahora,
   })  : _pc = pc,
+        _ahora = ahora ?? DateTime.now,
         marcas = MarcasDeLaNoche(ahora: ahora);
+
+  final DateTime Function() _ahora;
 
   final String eventoId;
   final PuertaDeEstaPc _pc;
@@ -121,6 +132,11 @@ class ResolvedorDePedidos {
     if (pedido.que.esIngreso) {
       if (lista == null) return _noSePudo(pedido);
       final r = await _ingreso(pedido, puesto, lista);
+      if (r == null) return _noSePudo(pedido);
+      respuesta = r;
+    } else if (pedido.que == QuePide.nombrar) {
+      if (lista == null) return _noSePudo(pedido);
+      final r = await _nombrar(pedido, puesto, lista);
       if (r == null) return _noSePudo(pedido);
       respuesta = r;
     } else if (pedido.que == QuePide.tiemposTotem) {
@@ -196,6 +212,7 @@ class ResolvedorDePedidos {
         case QueHaceLaCentral.sumarSilla:
         case QueHaceLaCentral.quitarSilla:
         case QueHaceLaCentral.tiempos:
+        case QueHaceLaCentral.nombrar:
         case QueHaceLaCentral.nada:
           break;
       }
@@ -250,6 +267,7 @@ class ResolvedorDePedidos {
         case QueHaceLaCentral.ingresar:
         case QueHaceLaCentral.deshacer:
         case QueHaceLaCentral.tiempos:
+        case QueHaceLaCentral.nombrar:
         case QueHaceLaCentral.nada:
           break;
       }
@@ -261,6 +279,39 @@ class ResolvedorDePedidos {
       );
     } catch (e) {
       debugPrint('Puerta, silla ${pedido.id}: $e');
+      return null;
+    }
+  }
+
+  /// **Cómo lo nombran** (v85): lee la fila de la base en este momento, decide
+  /// ([decidirNombres]) y guarda. La respuesta lleva cómo quedó (o cómo está, si hubo
+  /// conflicto) para que el celular lo muestre. Null si la base falló: no se guarda ni
+  /// queda en la memoria de respuestas, y se puede reintentar.
+  Future<Map<String, Object?>?> _nombrar(
+    PedidoPuerta pedido,
+    String puesto,
+    PuertaDelEvento lista,
+  ) async {
+    final grupo = lista.grupos.where((g) => g.titular.id == pedido.personaId).firstOrNull;
+    try {
+      final contratoId = grupo?.contratoId;
+      final filaAhora = contratoId == null ? null : await _pc.nombresDe(contratoId);
+      final decision = decidirNombres(
+        pedido: pedido,
+        grupo: grupo,
+        filaAhora: filaAhora,
+        eventoId: eventoId,
+        por: puesto,
+        ahora: _ahora(),
+      );
+      if (decision.hace == QueHaceLaCentral.nombrar) await _pc.guardarNombres(decision.fila!);
+      return {
+        ..._respuesta(pedido, decision.hace, aviso: decision.aviso),
+        if (decision.nombres != null) 'nombres': decision.nombres!.toJson(),
+        if (decision.conflicto) 'conflicto': true,
+      };
+    } catch (e) {
+      debugPrint('Puerta, cómo lo nombran ${pedido.id}: $e');
       return null;
     }
   }

@@ -1,3 +1,4 @@
+import 'package:arguello_events/models/como_lo_nombran.dart';
 import 'dart:io';
 
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
@@ -22,6 +23,13 @@ const _codigo = '4821';
 /// La base de la tele, con las dos escuelas.
 class _Base implements PuertaDeEstaPc {
   final filas = <String, Invitado>{};
+
+  // Cómo lo nombran (v85): esta prueba no lo usa.
+  @override
+  Future<ComoLoNombran?> nombresDe(String contratoId) async => null;
+
+  @override
+  Future<void> guardarNombres(ComoLoNombran fila) async {}
   final ingresos = <(String evento, String id)>[];
   void Function()? alCambiar;
 

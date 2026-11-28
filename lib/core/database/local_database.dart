@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 84;
+  static const int _version = 85;
 
   /// Las ventanas de prueba (`tool/*_prueba.dart`) la cierran al arrancar
   /// (6.9.0, etapa 7): si algún camino que no se reemplazó en memoria quiere
@@ -175,6 +175,11 @@ class LocalDatabase {
       await crearTablasV84(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v84 sin crear: $e');
+    }
+    try {
+      await crearTablasV85(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v85 sin crear: $e');
     }
     return db;
   }
@@ -768,6 +773,7 @@ class LocalDatabase {
     await crearTablasV82(db);
     await crearTablasV83(db);
     await crearTablasV84(db);
+    await crearTablasV85(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1536,6 +1542,33 @@ class LocalDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_barra_caja_movimientos_caja ON barra_caja_movimientos(caja_barra_id)',
+    );
+  }
+
+  /// La tabla de la v85 (28-nov-2026): **cómo nombra el locutor** a cada egresado y a
+  /// sus acompañantes (`ComoLoNombran`). Una fila por alumno con id fijo, nunca se borra.
+  /// **Aparte de `contratos_alumnos` e `invitados`**: la ficha de la oficina no cambia.
+  /// Solo `CREATE ... IF NOT EXISTS`; una versión anterior no la conoce.
+  static Future<void> crearTablasV85(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS como_lo_nombran (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        contrato_alumno_id TEXT NOT NULL,
+        alumno TEXT,
+        alumno_cargado TEXT,
+        acompanantes TEXT NOT NULL DEFAULT '[]',
+        cambiado_por TEXT,
+        cambiado_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_como_lo_nombran_evento ON como_lo_nombran(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_como_lo_nombran_contrato ON como_lo_nombran(contrato_alumno_id)',
     );
   }
 
@@ -3878,6 +3911,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v84 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v84: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 84, la tabla de la v85 no aparece.
+    if (oldVersion < 85 && newVersion >= 85) {
+      debugPrint('  🔧 v85: cómo nombra el locutor a cada egresado');
+      try {
+        await crearTablasV85(db);
+        debugPrint('✅ Migración v85 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v85: $e');
       }
     }
   }
