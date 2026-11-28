@@ -31,7 +31,7 @@ cosas"). ~95 %, nada publicado.
   ("el locutor"); `codigoLocutorProvider` y `EstadoCentral.codigoLocutor/locutores/enlaceLocutor` en
   `central_provider.dart`; `ClienteLocutor` y `PantallaLocutor` (`recepcion/central/`); `?locutor` en
   `lib/puesto_main.dart` antes del cliente de la puerta (`LocutorApp`).
-- Después (commits `e2b…` y el de esta línea): pruebas de `ClienteLocutor` (7) y `PantallaLocutor` (5; CAMBIADOS
+- Después (commits `9878972` y `296bc9c`): pruebas de `ClienteLocutor` (7) y `PantallaLocutor` (5; CAMBIADOS
   va primero: en un celular angosto no entraba); **SUMAR AL LOCUTOR** en Recepción → CELULARES (solo masivo: su QR,
   "No puede ingresar a nadie ni cambiar nada", conectado, cambiar su código) y su QR en SUMAR UN CELULAR de la tele;
   **el tótem saluda con lo nombrado** (`FichaTotem.desdePuerta` con `nombrado ?? nombre`, también "acompaña a";

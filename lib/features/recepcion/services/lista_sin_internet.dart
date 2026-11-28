@@ -47,6 +47,10 @@ class DatosSinInternet {
   /// subido" con sillas esperando (revisión del 13-nov).
   final int sillasSinSubir;
 
+  /// Cómo lo nombran (el locutor, v85), cambiado en esta PC y sin subir: lo de la noche
+  /// sin internet tiene que subir antes de cerrar.
+  final int nombresSinSubir;
+
   const DatosSinInternet({
     required this.hayInternet,
     this.alDia,
@@ -57,6 +61,7 @@ class DatosSinInternet {
     this.aparienciaGuardada,
     this.sinSubir = 0,
     this.sillasSinSubir = 0,
+    this.nombresSinSubir = 0,
   });
 
   DatosSinInternet copyWith({
@@ -72,6 +77,7 @@ class DatosSinInternet {
     bool sinApariencia = false,
     int? sinSubir,
     int? sillasSinSubir,
+    int? nombresSinSubir,
   }) =>
       DatosSinInternet(
         hayInternet: hayInternet ?? this.hayInternet,
@@ -86,6 +92,7 @@ class DatosSinInternet {
             : (aparienciaGuardada ?? this.aparienciaGuardada),
         sinSubir: sinSubir ?? this.sinSubir,
         sillasSinSubir: sillasSinSubir ?? this.sillasSinSubir,
+        nombresSinSubir: nombresSinSubir ?? this.nombresSinSubir,
       );
 }
 
@@ -169,6 +176,12 @@ class EstadoSinInternet {
           '${miles(d.sillasSinSubir)}, '
               '${d.hayInternet ? 'subiendo' : 'se suben solas al volver'}',
         ),
+      if (d.nombresSinSubir > 0)
+        (
+          'Nombres sin subir',
+          '${miles(d.nombresSinSubir)}, '
+              '${d.hayInternet ? 'subiendo' : 'se suben solos al volver'}',
+        ),
     ];
     final espera = _loQueEsperaSubir(d);
     EstadoSinInternet es(TipoSinInternet t, String texto) =>
@@ -237,7 +250,10 @@ class EstadoSinInternet {
         d.sinSubir == 1 ? '1 ingreso' : '${miles(d.sinSubir)} ingresos',
       if (d.sillasSinSubir > 0)
         d.sillasSinSubir == 1 ? '1 silla' : '${miles(d.sillasSinSubir)} sillas',
+      if (d.nombresSinSubir > 0)
+        d.nombresSinSubir == 1 ? '1 nombre' : '${miles(d.nombresSinSubir)} nombres',
     ];
+    if (partes.length > 2) return '${partes.sublist(0, partes.length - 1).join(', ')} y ${partes.last}';
     return partes.isEmpty ? null : partes.join(' y ');
   }
 
@@ -304,6 +320,9 @@ class AccesosPuerta {
   /// Cuántas sillas de la noche esperan subir. Sin esto, ninguna.
   final Future<int> Function(String eventoId) contarSillasSinSubir;
 
+  /// Cuántos "cómo lo nombran" esperan subir. Sin esto, ninguno.
+  final Future<int> Function(String eventoId) contarNombresSinSubir;
+
   /// La apariencia del tótem (25-nov-2026): con internet, la lee de la nube y
   /// la deja en la PC; sin internet, mira si está. True: guardada; false: no
   /// se pudo; null: el evento va con la de siempre (o no se sabe). Sin esto,
@@ -323,6 +342,7 @@ class AccesosPuerta {
     required this.fondoGuardado,
     required this.contarSinSubir,
     this.contarSillasSinSubir = _ningunaSilla,
+    this.contarNombresSinSubir = _ningunaSilla,
     this.guardarApariencia = _sinApariencia,
     this.aparienciaGuardada = _sinApariencia,
     this.leerAlDia = AlDiaDeLaPuerta.leer,
@@ -565,9 +585,10 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     try {
       final n = await accesos.contarSinSubir(eventoId);
       final sillas = await accesos.contarSillasSinSubir(eventoId);
+      final nombres = await accesos.contarNombresSinSubir(eventoId);
       if (!_cerrada &&
-          (n != _datos.sinSubir || sillas != _datos.sillasSinSubir)) {
-        _poner(_datos.copyWith(sinSubir: n, sillasSinSubir: sillas));
+          (n != _datos.sinSubir || sillas != _datos.sillasSinSubir || nombres != _datos.nombresSinSubir)) {
+        _poner(_datos.copyWith(sinSubir: n, sillasSinSubir: sillas, nombresSinSubir: nombres));
       }
     } catch (e) {
       debugPrint('No se pudo contar lo que espera subir: $e');

@@ -94,6 +94,25 @@ void main() {
       expect(sinSillas.detalle.any((r) => r.$1 == 'Sillas sin subir'), isFalse);
     });
 
+    // El locutor (v85, 28-nov-2026): lo nombrado sin internet tiene que subir antes de
+    // cerrar, y la línea no puede decir "Todo subido" mientras tanto.
+    test('los nombres del locutor que esperan subir también se dicen', () {
+      DatosSinInternet con({int ingresos = 0, int sillas = 0, int nombres = 0}) => DatosSinInternet(
+            hayInternet: true,
+            alDia: _alDia,
+            fotoGuardada: true,
+            sinSubir: ingresos,
+            sillasSinSubir: sillas,
+            nombresSinSubir: nombres,
+          );
+      expect(_estado(con(nombres: 1)).texto, endsWith('· 1 nombre subiendo'));
+      expect(_estado(con(nombres: 2)).texto, isNot(contains('Todo subido')));
+      expect(_estado(con(ingresos: 3, sillas: 2, nombres: 4)).texto,
+          endsWith('· 3 ingresos, 2 sillas y 4 nombres subiendo'));
+      expect(_detalle(_estado(con(nombres: 2)), 'Nombres sin subir'), '2, subiendo');
+      expect(_estado(con()).texto, endsWith('· Todo subido'));
+    });
+
     test('un evento sin foto también está listo', () {
       final e = _estado(DatosSinInternet(hayInternet: true, alDia: _alDia));
       expect(e.tipo, TipoSinInternet.lista);

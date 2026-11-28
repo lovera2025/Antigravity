@@ -13,6 +13,7 @@ import 'dart:convert';
 
 import 'core/services/instalacion_id.dart';
 import 'core/services/kiosk_launcher.dart';
+import 'core/services/sync_engine.dart' show syncEngineProvider;
 import 'features/totem/services/totem_sigue_los_nombres.dart';
 import 'features/recepcion/repositories/como_lo_nombran_repository.dart';
 import 'features/auth/login_screen.dart';
@@ -586,6 +587,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
       TotemSigueLosNombres(
         cambios: ref.read(comoLoNombranRepositoryProvider).cambios,
         avisar: KioskLauncher.notifyFichaCambio,
+        // Y lo que se nombró en otra PC, cuando baja.
+        bajados: ref.read(syncEngineProvider).cambiosBajadosStream,
       ).arrancar();
       PuenteFichaTotem.atenderEnLaVentanaPrincipal(
         (eventoId) => armarFichaTotem(

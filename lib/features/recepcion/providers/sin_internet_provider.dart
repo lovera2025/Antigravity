@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/como_lo_nombran_repository.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../main.dart' show supabaseProvider;
@@ -38,6 +39,8 @@ final accesosPuertaProvider = Provider<AccesosPuerta>((ref) {
     // Las sillas de la noche también esperan subir: sin contarlas, la línea
     // decía "Todo subido" con sillas en la cola.
     contarSillasSinSubir: sillas.sinSubir,
+    // Cómo lo nombran (el locutor, v85): también espera subir.
+    contarNombresSinSubir: ref.read(comoLoNombranRepositoryProvider).sinSubir,
     // La apariencia del tótem, guardada en el equipo (25-nov-2026).
     guardarApariencia: apariencia.guardar,
     aparienciaGuardada: AparienciaEnLaPc.estaGuardada,

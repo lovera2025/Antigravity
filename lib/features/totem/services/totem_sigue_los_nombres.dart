@@ -11,8 +11,13 @@ class TotemSigueLosNombres {
   TotemSigueLosNombres({
     required this.cambios,
     required this.avisar,
+    this.bajados,
     this.espera = const Duration(milliseconds: 300),
   });
+
+  /// Las tablas de cada bajada (`SyncEngine.cambiosBajadosStream`): lo nombrado en otra
+  /// PC. No dice de qué fiesta: el aviso va sin evento y el tótem lo toma como suyo.
+  final Stream<Set<String>>? bajados;
 
   /// El evento de cada cambio.
   final Stream<String> cambios;
@@ -20,15 +25,21 @@ class TotemSigueLosNombres {
   final Duration espera;
 
   StreamSubscription<String>? _escucha;
+  StreamSubscription<Set<String>>? _escuchaBajados;
   final _pendientes = <String, Timer>{};
 
   void arrancar() {
-    _escucha ??= cambios.listen((eventoId) {
-      _pendientes[eventoId]?.cancel();
-      _pendientes[eventoId] = Timer(espera, () {
-        _pendientes.remove(eventoId);
-        unawaited(avisar(eventoId).catchError((Object _) {}));
-      });
+    _escucha ??= cambios.listen(_juntar);
+    _escuchaBajados ??= bajados?.listen((tablas) {
+      if (tablas.contains('como_lo_nombran')) _juntar('');
+    });
+  }
+
+  void _juntar(String eventoId) {
+    _pendientes[eventoId]?.cancel();
+    _pendientes[eventoId] = Timer(espera, () {
+      _pendientes.remove(eventoId);
+      unawaited(avisar(eventoId).catchError((Object _) {}));
     });
   }
 
@@ -39,5 +50,7 @@ class TotemSigueLosNombres {
     _pendientes.clear();
     await _escucha?.cancel();
     _escucha = null;
+    await _escuchaBajados?.cancel();
+    _escuchaBajados = null;
   }
 }

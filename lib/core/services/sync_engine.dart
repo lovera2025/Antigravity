@@ -446,6 +446,7 @@ class SyncEngine {
     'barra_ventas': 'updated_at',
     'barra_anulaciones': 'updated_at',
     'sillas_puerta': 'updated_at',
+    'como_lo_nombran': 'updated_at',
     'barra_vales': 'updated_at',
     'barra_recargos': 'updated_at',
     'barra_cierres': 'updated_at',
@@ -1641,6 +1642,9 @@ class SyncEngine {
     // Las sillas que se suman la noche de la fiesta (v78): con dos notebooks en
     // el salón, la otra tiene que ver en segundos que esa mesa ya está en el tope.
     'sillas_puerta',
+    // Cómo lo nombran (v85, el locutor): con dos notebooks, lo que nombra una le llega
+    // a la otra, y al tótem, en segundos.
+    'como_lo_nombran',
     // Los vales que salieron de cada venta, y sus copias (v78): el jefe mira en
     // vivo quién reimprimió qué.
     'barra_vales',
@@ -2079,6 +2083,7 @@ class SyncEngine {
     if (table == 'mora_congelada') return 4;
       // Cuelga del alumno: el contrato sube antes.
       if (table == 'sillas_puerta') return 4;
+      if (table == 'como_lo_nombran') return 4;
       if (table == 'sorteos_mesas') return 2;
       // Cuelgan del evento, como el registro del sorteo.
       if (table == 'planos_evento' || table == 'mesas_movimientos') return 2;
@@ -2494,6 +2499,7 @@ class SyncEngine {
       _pullTable(db, 'barra_ventas', 'updated_at'),
       _pullTable(db, 'barra_anulaciones', 'updated_at'),
       _pullTable(db, 'sillas_puerta', 'updated_at'),
+      _pullTable(db, 'como_lo_nombran', 'updated_at'),
       _pullTable(db, 'barra_vales', 'updated_at'),
       _pullTable(db, 'barra_recargos', 'updated_at'),
       _pullTable(db, 'barra_cierres', 'updated_at'),
@@ -3023,6 +3029,8 @@ class SyncEngine {
     // Las sillas que ya se sumaron esa noche (v78): si la notebook se reinicia
     // sin internet, tiene que saber cuáles mesas ya están en el tope.
     'sillas_puerta',
+    // Cómo lo nombran (v85): lo que se nombró en la oficina, para la noche sin internet.
+    'como_lo_nombran',
     // La venta de entradas (v80, 6.9.0): la tablet que se prepara en la oficina
     // vende sin internet con el precio y lo vendido (los números de las
     // anticipadas ya vendidas no se repiten). Sin el SQL de la v80 en la nube,
@@ -3565,6 +3573,19 @@ class SyncEngine {
       ],
       // La v78: las 13 columnas de `SillaPuerta.toMap()`. Una que falte vuelve a
       // su default en cada pull: una silla quitada volvería a estar vigente.
+      // La v85: las 10 columnas de `ComoLoNombran.toMap()`.
+      'como_lo_nombran': [
+        'id',
+        'evento_id',
+        'contrato_alumno_id',
+        'alumno',
+        'alumno_cargado',
+        'acompanantes',
+        'cambiado_por',
+        'cambiado_at',
+        'created_at',
+        'updated_at',
+      ],
       'sillas_puerta': [
         'id',
         'evento_id',
@@ -4080,6 +4101,8 @@ class SyncEngine {
     'barra_anulaciones': 'solo se agregan filas, una por venta, con id fijo',
     'sillas_puerta':
         'solo se agregan filas: quitar una silla le pone quitada_at, la fila no se saca',
+    'como_lo_nombran':
+        'una fila por alumno con id fijo: volver a como estaba la reescribe vacía, no se borra',
     'barra_vales': 'solo se agregan filas: cada papel que salió, y cada copia, es otra',
     'barra_recargos':
         'una fila por fiesta, con id fijo: cambiar el recargo la actualiza, no se borra',

@@ -73,6 +73,24 @@ void main() {
     await cambios.close();
   });
 
+  test('lo nombrado en otra PC, al bajar, también avisa (sin fiesta: el tótem lo toma como suyo)', () async {
+    final bajados = StreamController<Set<String>>();
+    final avisados = <String>[];
+    final sigue = TotemSigueLosNombres(
+      cambios: const Stream.empty(),
+      bajados: bajados.stream,
+      avisar: (id) async => avisados.add(id),
+      espera: const Duration(milliseconds: 30),
+    )..arrancar();
+    bajados
+      ..add({'pagos_contrato_alumno'})
+      ..add({'como_lo_nombran', 'invitados'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(avisados, ['']);
+    await sigue.parar();
+    await bajados.close();
+  });
+
   test('la ventana del tótem atiende "ficha_cambio": solo su fiesta, no pausada, y pide la ficha', () {
     final codigo = File('lib/features/totem/totem_display.dart').readAsStringSync();
     final i = codigo.indexOf("case 'ficha_cambio':");
