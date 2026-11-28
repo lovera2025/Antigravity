@@ -239,6 +239,9 @@ sorteo** (cuándo se pagó no importa).
   Técnica (lista ya aceptada) también queda sin comprobar. **"Sin descuento" vale solo para los que no se pueden
   comprobar**: el SQL se rehace con esta lista, no con la regla a ciegas. **Un pago posterior al sorteo no prueba
   que se cargó después.** El detalle con nombres: `build/lugares_27nov/dudosos_revisados_28nov.md`, fuera de git.
+  **Los dos sin comprobar van sin descuento** (el usuario: "para los dudosos sería sin descuento"). `tildar.json`
+  ya quedó rehecho (13 sin descuento, 3 con descuento); `anotar_lugares.sql` es del 27-nov y se rehace sobre una
+  copia nueva. El de la Técnica se corrige en la nube. Las dos cosas, con su OK en el momento.
 
 #### Etapa 2 — La notebook de la barra y lo de la revisión de los roles (commit `fb78d95`)
 - **La vista simple, probada** (`test/notebook_de_la_barra_a_la_vista_test.dart`, 26; `tool/roturas_notebook_a_la_vista.txt`,
