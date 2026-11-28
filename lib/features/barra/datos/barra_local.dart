@@ -780,6 +780,27 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
   }
 
   @override
+  Future<bool> guardarDeLaPagina(String tabla, Map<String, Object?> fila) async {
+    if (!tablasDeLaPagina.contains(tabla)) return false;
+    final id = fila['id'];
+    if (id is! String || id.length != 36) return false;
+    final db = await _abrir();
+    return db.transaction((txn) async {
+      final ya = await txn.query(tabla, columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
+      // En estas tablas solo se agregan filas: la que ya está queda como está.
+      if (ya.isNotEmpty) return false;
+      final columnas = await _columnasDe(txn, tabla);
+      final limpia = <String, dynamic>{
+        for (final e in fila.entries)
+          if (columnas.contains(e.key)) e.key: e.value,
+      };
+      // Con la cola: el iPhone no tiene cola, la sube esta notebook.
+      await _guardar(txn, tabla, id, limpia);
+      return true;
+    });
+  }
+
+  @override
   Future<Map<String, List<Map<String, Object?>>>> filasDeLaFiesta(String eventoId) async => {
         for (final tabla in tablasDeLaRed)
           tabla: [

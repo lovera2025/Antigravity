@@ -30,6 +30,13 @@ const kMirarPedidosDeCierre = Duration(seconds: 3);
 const kMiradasPorPregunta = 5;
 const kMirarPedidosDeCierreEnLaWeb = Duration(seconds: 30);
 
+/// Cada cuánto mira este aparato si alguna caja pide cerrar: 3 s en la PC y la tablet,
+/// 30 s en la web. **La página del iPhone (28-nov-2026) lo pone en 3 s**: lo que mira está
+/// en su memoria y le llega al toque por el wifi de la notebook.
+final cadaCuantoMirarPedidosDeCierreProvider = Provider<Duration>(
+  (ref) => ref.watch(enLaWebProvider) ? kMirarPedidosDeCierreEnLaWeb : kMirarPedidosDeCierre,
+);
+
 /// El sonido del aviso "una caja pide cerrar". Los tests lo reemplazan.
 final sonarPedidoDeCierreProvider = Provider<void Function()>((ref) {
   return () {
@@ -229,10 +236,7 @@ class _AvisoDePedidosDeCierreState extends ConsumerState<AvisoDePedidosDeCierre>
   void initState() {
     super.initState();
     unawaited(_mirar());
-    _reloj = Timer.periodic(
-      ref.read(enLaWebProvider) ? kMirarPedidosDeCierreEnLaWeb : kMirarPedidosDeCierre,
-      (_) => _mirar(),
-    );
+    _reloj = Timer.periodic(ref.read(cadaCuantoMirarPedidosDeCierreProvider), (_) => _mirar());
   }
 
   @override

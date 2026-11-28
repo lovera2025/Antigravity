@@ -28,6 +28,27 @@ const tablasDeLaRed = [
   'barra_stock_movimientos',
 ];
 
+/// **Lo que puede escribir la página del iPhone** (28-nov-2026): la encargada anula, da
+/// el OK de un cierre y anota retiros y cambio; el repositor anota lo del stock. Solo
+/// filas nuevas de estas tablas, donde nunca se edita una fila. Ni una caja, ni una venta,
+/// ni el reparto del jefe.
+const tablasDeLaPagina = {
+  'barra_anulaciones',
+  'barra_cierres',
+  'barra_caja_movimientos',
+  'barra_stock_movimientos',
+};
+
+/// Lo que la página necesita además de [tablasDeLaRed] para mostrar LAS CAJAS y STOCK, y
+/// que la central le manda solo a ella al entrar: el catálogo, los precios con el stock
+/// del jefe, las recetas y el recargo. **Nunca el precio de lista** (`barra_costos`).
+const tablasDelCatalogoDeLaPagina = [
+  'barra_productos',
+  'barra_precios',
+  'barra_recetas',
+  'barra_recargos',
+];
+
 /// Lo que la central y las cajas necesitan de la base del equipo. La implementan
 /// `BarraLocal` (la base de la PC o la tablet) y, en las pruebas, la barra en memoria.
 abstract interface class BarraDeLaRed {
@@ -35,6 +56,12 @@ abstract interface class BarraDeLaRed {
   /// guarda si este equipo tiene esa fila sin subir (lo suyo manda) ni si la que ya hay
   /// es más nueva. True si cambió algo.
   Future<bool> guardarDeOtroEquipo(String tabla, Map<String, Object?> fila);
+
+  /// **Guarda [fila] de [tabla] que hizo la página del iPhone** (28-nov-2026) **y la
+  /// encola para subir**: el iPhone no tiene base ni cola, así que la sube esta notebook.
+  /// Solo las tablas de [tablasDeLaPagina], y solo filas nuevas (en esas tablas solo se
+  /// agregan filas): una que ya está no se toca. True si la guardó.
+  Future<bool> guardarDeLaPagina(String tabla, Map<String, Object?> fila);
 
   /// Todo lo de la fiesta que tiene este equipo, de todas las cajas: lo que se manda al
   /// conectarse.

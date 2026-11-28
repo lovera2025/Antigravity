@@ -48,6 +48,8 @@ Name: "desktopicon"; Description: "Crear acceso directo Junior Eventos en el esc
 [InstallDelete]
 ; La página del celular se reemplaza entera: que no queden archivos de otra versión.
 Type: filesandordirs; Name: "{app}\puesto"
+; La página del iPhone de la barra, igual.
+Type: filesandordirs; Name: "{app}\barra_pagina"
 
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,6 +63,13 @@ Source: "..\build\puesto\*"; DestDir: "{app}\puesto"; Excludes: "*.symbols"; Fla
 Source: "..\build\puesto\assets\FontManifest.json"; DestDir: "{app}\puesto\assets"; Flags: ignoreversion
 Source: "..\build\puesto\assets\fonts\MaterialIcons-Regular.otf"; DestDir: "{app}\puesto\assets\fonts"; Flags: ignoreversion
 Source: "..\build\puesto\assets\assets\fonts\Roboto-Regular.ttf"; DestDir: "{app}\puesto\assets\assets\fonts"; Flags: ignoreversion
+; La página del iPhone de la encargada y del repositor de barra (28-nov-2026; build_installer.ps1 la arma en
+; build\barra_pagina). La central de la barra la busca en "barra_pagina" al lado del programa
+; (paginaDeLaBarraProvider). Con el mismo freno: las tres con su nombre.
+Source: "..\build\barra_pagina\*"; DestDir: "{app}\barra_pagina"; Excludes: "*.symbols"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\build\barra_pagina\assets\FontManifest.json"; DestDir: "{app}\barra_pagina\assets"; Flags: ignoreversion
+Source: "..\build\barra_pagina\assets\fonts\MaterialIcons-Regular.otf"; DestDir: "{app}\barra_pagina\assets\fonts"; Flags: ignoreversion
+Source: "..\build\barra_pagina\assets\assets\fonts\Roboto-Regular.ttf"; DestDir: "{app}\barra_pagina\assets\assets\fonts"; Flags: ignoreversion
 
 [Icons]
 ; Icono del acceso = app .exe (recursos) — coherente con el instalador (mismo app_icon en el build).

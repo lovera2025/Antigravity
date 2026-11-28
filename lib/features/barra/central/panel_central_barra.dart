@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
@@ -189,12 +190,65 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
                 const SizedBox(height: 8),
                 _Rechazos(estado.rechazos),
               ],
+              if (estado.enlaceDeLaPagina != null) ...[
+                const SizedBox(height: 10),
+                _ParaElIphone(estado),
+              ],
               const SizedBox(height: 6),
               const _EstaNotebook(),
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// **Para el iPhone de la encargada y del repositor** (28-nov-2026): el QR de la página
+/// que sirve esta notebook por el wifi, y quiénes la tienen abierta.
+class _ParaElIphone extends StatelessWidget {
+  final EstadoCentralBarra estado;
+  const _ParaElIphone(this.estado);
+
+  @override
+  Widget build(BuildContext context) {
+    final enlace = estado.enlaceDeLaPagina!;
+    final abiertas = [for (final p in estado.paginas) if (p.conectada) p.nombre];
+    return Wrap(
+      key: const Key('central_barra_para_el_iphone'),
+      spacing: 14,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+          child: QrImageView(data: enlace, version: QrVersions.auto, size: 120, padding: EdgeInsets.zero),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('PARA EL IPHONE DE LA ENCARGADA Y DEL REPOSITOR',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+              const SizedBox(height: 4),
+              Text(
+                'Con el teléfono en el wifi de esta barra, la cámara al QR (o escribir $enlace en Safari). '
+                'Entra solo con su PIN, sin internet.',
+                key: const Key('central_barra_enlace_de_la_pagina'),
+                style: const TextStyle(fontSize: 13, color: Color(0xFFC9C4BA)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                abiertas.isEmpty ? 'Nadie la tiene abierta.' : 'La tienen abierta: ${abiertas.join(', ')}.',
+                key: const Key('central_barra_paginas'),
+                style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -44,6 +44,12 @@
       "port": 8800
     },
     {
+      "name": "barra-pagina-prueba",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["test", "tool/barra_pagina_servidor_test.dart", "--timeout=none", "--dart-define=minutos=40"],
+      "port": 8810
+    },
+    {
       "name": "maquetas",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8796", "--bind", "127.0.0.1", "--directory", "docs"],

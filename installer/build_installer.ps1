@@ -56,6 +56,26 @@ if ($faltan) {
     Write-Error "La página del celular quedó incompleta en build\puesto. Falta: $($faltan -join ', '). No se arma el instalador."
 }
 
+# La página del iPhone de la encargada y del repositor de barra (lib/barra_pagina_main.dart,
+# 28-nov-2026). La sirve la notebook de la barra por el wifi, sin internet: sin CDN. El
+# instalador la deja en {app}\barra_pagina. Dos `flutter build web` seguidos pueden dejar
+# el segundo sin "assets": se borra antes lo que dejó el primero.
+$barraPagina = Join-Path $root "build\barra_pagina"
+Remove-Item -Recurse -Force (Join-Path $root ".dart_tool\flutter_build") -ErrorAction SilentlyContinue
+Write-Host ">> flutter build web -t lib/barra_pagina_main.dart --no-web-resources-cdn" -ForegroundColor Cyan
+flutter build web --release -t lib/barra_pagina_main.dart --no-web-resources-cdn -o "$barraPagina"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$faltanBarra = @(
+    "assets\FontManifest.json",
+    "assets\fonts\MaterialIcons-Regular.otf",
+    "assets\assets\fonts\Roboto-Regular.ttf",
+    "main.dart.js",
+    "index.html"
+) | Where-Object { -not (Test-Path (Join-Path $barraPagina $_)) }
+if ($faltanBarra) {
+    Write-Error "La página del iPhone de la barra quedó incompleta en build\barra_pagina. Falta: $($faltanBarra -join ', '). No se arma el instalador."
+}
+
 $iscc = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"

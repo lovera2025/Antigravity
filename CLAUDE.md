@@ -835,6 +835,14 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
   solo las del vale de vuelta (`ventasAnuladasConElVale`)**, y GANANCIA lo entregado sin el vale como perdido.
   `test/volvio_el_vale_test.dart` falla si una cuenta del stock usa `ventasAnuladas(`. Una versión anterior lee la
   marca como parte del motivo y devuelve el stock: no anular "sin el vale" hasta que todos tengan la versión.
+- **La página del iPhone de la encargada y del repositor** (28-nov, sin publicar; detalle en "Etapa B" del CONTEXTO del
+  4-dic): la sirve la central de la barra (`/pagina` y los archivos de `{app}\barra_pagina`, `ServirArchivos`), se entra
+  **solo con el PIN** (no viaja; `QuienEsQuienEnLaBarra.paraLaPagina`) y vuelve sola con la ficha de la noche. **No es
+  una caja.** Lo que anota (`tablasDeLaPagina`) lo guarda la notebook **con su cola** (`guardarDeLaPagina`) y recién
+  ahí la página lo da por hecho. Nunca le llega el precio de lista. Es `lib/barra_pagina_main.dart` con las mismas
+  pantallas (`LasCajasScreen`, `StockDeLasBarrasScreen`) y `BarraDeLaPagina` en memoria; **un texto de esas pantallas
+  que hable de "la web" o "internet" mira `enLaPaginaDeLaBarraProvider`**. Un símbolo fuera de Roboto en esas
+  pantallas necesita una letra que venga con la app (sin internet no hay respaldo; la página usa Outfit).
 
 **La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
 foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta

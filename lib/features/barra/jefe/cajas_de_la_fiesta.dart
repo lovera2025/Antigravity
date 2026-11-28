@@ -338,8 +338,9 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           context,
           titulo: 'Anular la N° ${_numero(x.venta)} · ${pesos(x.venta.cobrado)}',
           explicacion: 'La venta no se borra: queda ANULADA con tu nombre y el motivo, y deja de '
-              'contar en la caja. No se puede deshacer. La tablet se entera con '
-              'internet.${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
+              'contar en la caja. No se puede deshacer. '
+              '${ref.read(enLaPaginaDeLaBarraProvider) ? 'La tablet se entera al momento por el wifi.' : 'La tablet se entera con internet.'}'
+              '${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
           preguntaPorElVale: AnulacionBarra.preguntaPorElVale(x.venta),
         );
         if (pedido == null || !mounted) return;
@@ -1057,13 +1058,16 @@ class _EnVivo extends ConsumerWidget {
     // momento, haya internet o no.
     final conCentral = !enLaWeb &&
         ref.watch(centralDeLaBarraProvider.select((e) => e.prendida && e.eventoId == eventoId));
+    final enLaPagina = ref.watch(enLaPaginaDeLaBarraProvider);
     return Row(
       children: [
         const Icon(Icons.circle, size: 10, color: Color(0xFF59D38A)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            enLaWeb
+            enLaPagina
+                ? 'Al día con la notebook de la barra: cada venta llega al momento por el wifi, sin internet.'
+                : enLaWeb
                 ? 'Se pone al día cada 30 segundos con lo que las cajas subieron; deslizá hacia '
                     'abajo para ponerla al día ahora. Sin internet, cada tablet guarda lo suyo y lo '
                     'sube al volver.'

@@ -19,7 +19,7 @@ void main() {
     final orden = armar
         .split('\n')
         .map((l) => l.trim())
-        .singleWhere((l) => l.startsWith('flutter build web'));
+        .singleWhere((l) => l.startsWith('flutter build web') && l.contains('puesto_main'));
     expect(orden, contains('-t lib/puesto_main.dart'));
     expect(orden, contains('--no-web-resources-cdn'));
     expect(orden, contains(r'-o "$puesto"'));

@@ -30,6 +30,50 @@ la página del repositor y el locutor.
   nube; las de antes que anulaban ahora contestan SÍ; la encargada anulando en su propia tablet. Las 77 de la barra: 1.433 en verde. Roturas (22 de 22 atrapadas; dos destaparon pruebas que faltaban):
   `tool/roturas_volvio_el_vale.txt`.
 
+#### Etapa B — La encargada (y el repositor) en su iPhone, por el wifi de la notebook (~91 %)
+El usuario preguntó en el medio "¿cómo entra la encargada con el iPhone?": se le contestó el QR de la notebook, solo
+su PIN, y que retoma sola.
+- **La notebook sirve la página** (`CentralBarra`, mismo puerto 8797…: el cortafuegos ya estaba): los archivos de
+  `{app}\barra_pagina` (`paginaDeLaBarraProvider`; en desarrollo `build\barra_pagina`) con la función común
+  `ServirArchivos` (`lib/core/red/servir_archivos.dart`, que ahora usa también la puerta), y el WebSocket `/pagina`.
+- **Solo el PIN, que no viaja:** la página firma el reto con las dos llaves del PIN (operador y maestro); la central
+  prueba el maestro y `QuienEsQuienEnLaBarra.paraLaPagina()` (encargadas y repositores activos). Freno: 5 PIN malos por
+  minuto y dirección (`kIntentosDeLaPagina`, cierra 4029). La central firma de vuelta (una notebook de afuera no se
+  hace pasar). Una cajera no entra (4006).
+- **La ficha de la noche** (`LlaveDeLaBarra.deLaFicha`): se saca de la llave del PIN, del número de ficha y del
+  teléfono; ninguno de los dos lados la manda. El navegador guarda la ficha, no el PIN. Atada al teléfono; vive en
+  la memoria de la central: si la notebook se reinicia, pide el PIN (4008).
+- **La página no es una caja** (`CentralBarra.paginas`, `PaginaConectada`): no suma en "cajas conectadas"; el panel de
+  la notebook dice quién la tiene abierta, con el QR (`_ParaElIphone`, `EstadoCentralBarra.enlaceDeLaPagina`).
+- **Lo que anota la página** (`tablasDeLaPagina`: anulaciones, pasos del cierre, retiros y cambio, movimientos del
+  stock; solo filas nuevas): la central mira `ReglasDeLaBarra` con el rol de la página, que la fila sea de su teléfono
+  y de la fiesta, y la guarda **con la cola de subida** (`BarraDeLaRed.guardarDeLaPagina`, en `BarraLocal` con
+  `_guardar`), la reparte a las cajas y a la otra barra, llama a `alGuardarDeLaPagina` (la notebook la sube ya) y
+  contesta `respuesta` ok o el motivo. **La página no da nada por hecho hasta la respuesta**
+  (`ClienteDeLaPagina.escribir`; sin conexión, `SinConexionConLaNotebook`).
+- **Lo que recibe**: todo lo de la red y el catálogo (`tablasDelCatalogoDeLaPagina`: productos, precios, recetas,
+  recargo; `catalogoParaLaPagina`) y la fiesta sin PIN ni observaciones (`fiestaParaLaPagina`). **Nunca el precio de
+  lista.** Va con la hora de la notebook (`ClienteDeLaPagina.ahora`).
+- **La página** (`lib/barra_pagina_main.dart`, `lib/features/barra/pagina/`): `PaginaDeLaBarraApp` → PIN →
+  `LasCajasScreen` (encargada y jefe) o `StockDeLasBarrasScreen` (repositor), las mismas de la app, con
+  `BarraDeLaPagina` en memoria y sus providers reemplazados (`enLaWebProvider` true, `enLaPaginaDeLaBarraProvider` true,
+  el OK cada 3 s con `cadaCuantoMirarPedidosDeCierreProvider`, el sonido por Web Audio que se habilita con ENTRAR).
+  Arriba, la franja "Romi · Barra 1 · conectada" (o en rojo "Sin conexión… Reconectando") y SALIR. Vuelve a
+  conectarse sola al desbloquear el iPhone (`alVolverALaVista`). Sin internet: Outfit de respaldo (la flecha "→" salía
+  como cuadradito con Roboto sola).
+- **LAS CAJAS en un celular**: STOCK y PRECIOS son solo íconos (el título salía "LAS CAJ…").
+- **El instalador** la arma (`build_installer.ps1`, borrando antes `.dart_tool\flutter_build`) y la deja en
+  `{app}\barra_pagina` con las tres líneas con nombre (`test/instalador_barra_pagina_test.dart`). Compila: 5,1 MB.
+- Pruebas: `test/pagina_de_la_barra_test.dart` (23, la central de verdad en loopback, una tablet y la página),
+  `test/pagina_de_la_barra_pantalla_test.dart` (4, la pantalla entera contra la central), 2 en
+  `barra_repositorios_test` (la base con la cola), el instalador; las centrales y la encargada: 222 en verde.
+  Roturas: `tool/roturas_pagina_de_la_barra.txt` (22 de 22; una destapó que a la base le faltaba el caso de una venta nueva).
+- **Probado en el navegador como iPhone** (`preview_start` con `barra-pagina-prueba`, `tool/barra_pagina_servidor_test.dart`:
+  una notebook en memoria en 127.0.0.1:8810 y una tablet que vende sola y pide cerrar a los 2 minutos): Romi entra con
+  7777, ve las ventas llegar, recarga y entra sola, VER → el OK con los números → ACEPTAR Y CERRAR llega a la notebook
+  y queda en su cola; SALIR y Nico 5555 ve STOCK con lo que queda en la Barra 1.
+- **Falta con aparatos:** un iPhone de verdad en el router de la barra (que no se vaya a los datos).
+
 ### Cómo quedó el 28-nov a la tarde (chat "sigamos en donde estuvimos"; frenado a pedido del usuario al cerrar la etapa 3)
 
 **El plan del 4-dic va por ~84 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Publicar: martes 1 o

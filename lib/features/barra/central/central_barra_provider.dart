@@ -16,7 +16,9 @@ import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../recepcion/central/direcciones_red.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
+import '../pagina/catalogo_de_la_pagina.dart';
 import '../providers/barra_del_jefe_provider.dart';
+import '../providers/barra_providers.dart' show eventosDeLaBarraProvider, subirDeLaBarraProvider;
 import '../services/barras_del_salon.dart';
 import 'barra_con_la_red.dart';
 import 'buscar_central.dart';
@@ -36,6 +38,19 @@ final redDeLaBarraHabilitadaProvider = Provider<bool>((ref) => !kIsWeb);
 /// En la tablet se pregunta por `Platform`, no por `defaultTargetPlatform`
 /// (en `flutter test` ese dice siempre Android).
 final centralSePrendeAcaProvider = Provider<bool>((ref) => !kIsWeb && !Platform.isAndroid);
+
+/// **La página del iPhone de la encargada y del repositor** (28-nov-2026): la carpeta
+/// `barra_pagina` al lado del programa, que deja el instalador. Null si no está (la
+/// central sigue andando para las tablets, sin la página). Los tests la reemplazan.
+final paginaDeLaBarraProvider = Provider<Directory?>((ref) {
+  try {
+    if (kIsWeb || Platform.isAndroid) return null;
+    final carpeta = Directory('${File(Platform.resolvedExecutable).parent.path}${Platform.pathSeparator}barra_pagina');
+    return carpeta.existsSync() ? carpeta : null;
+  } catch (_) {
+    return null;
+  }
+});
 
 /// Lo que guarda la central y el cliente: la barra de este equipo. Los tests la reemplazan.
 final barraDeLaRedProvider = Provider<BarraDeLaRed>((ref) => ref.watch(barraDeEsteEquipoProvider));
@@ -96,6 +111,19 @@ class QuienEsQuienDeLaApp implements QuienEsQuienEnLaBarra {
       if ((await _ref.read(permisosOperadorRepositoryProvider).de(op.id)).encargadaBarra) return true;
     }
     return false;
+  }
+
+  @override
+  Future<List<PersonaDeLaBarra>> paraLaPagina() async {
+    final lista = <PersonaDeLaBarra>[];
+    for (final op in await _ref.read(operadoresCajaRepositoryProvider).listar(soloActivos: true)) {
+      if (esOperadorModoJefeId(op.id) || op.pin.trim().isEmpty) continue;
+      final rol = ReglasDeLaBarra.dePermisos(await _ref.read(permisosOperadorRepositoryProvider).de(op.id));
+      if (rol == RolEnLaBarra.encargada || rol == RolEnLaBarra.repositor) {
+        lista.add(PersonaDeLaBarra(id: op.id, nombre: op.nombre, pin: op.pin, rol: rol));
+      }
+    }
+    return lista;
   }
 }
 
@@ -246,7 +274,19 @@ class EstadoCentralBarra {
     this.contestaBusqueda = false,
     this.error,
     this.rechazos = const [],
+    this.paginas = const [],
+    this.hayPagina = false,
   });
+
+  /// Los teléfonos con la página de la barra abierta (la encargada, el repositor).
+  final List<PaginaConectada> paginas;
+
+  /// Si esta notebook tiene la página del iPhone para servir.
+  final bool hayPagina;
+
+  /// Lo que va en el QR de la página del iPhone: `http://192.168.0.10:8797/`. Null sin
+  /// página o sin router.
+  String? get enlaceDeLaPagina => !hayPagina || direccion == null ? null : 'http://$direccion/';
 
   bool get prendida => puerto != null;
 
@@ -268,6 +308,7 @@ class EstadoCentralBarra {
     List<CajaConectada>? cajas,
     List<EngancheConOtra>? otras,
     List<RechazoDeLaCentral>? rechazos,
+    List<PaginaConectada>? paginas,
   }) =>
       EstadoCentralBarra(
         eventoId: eventoId,
@@ -279,6 +320,8 @@ class EstadoCentralBarra {
         contestaBusqueda: contestaBusqueda,
         error: error,
         rechazos: rechazos ?? this.rechazos,
+        paginas: paginas ?? this.paginas,
+        hayPagina: hayPagina,
       );
 }
 
@@ -294,6 +337,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   StreamSubscription<List<CajaConectada>>? _cajas;
   StreamSubscription<void>? _puente;
   StreamSubscription<void>? _rechazos;
+  StreamSubscription<List<PaginaConectada>>? _paginas;
 
   /// Si la notebook cambia de red, vuelve a abrir lo que contesta la búsqueda y relee
   /// sus direcciones, sin apagar la central (26-nov-2026).
@@ -344,12 +388,23 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     }
     await _soltar();
     if (deLaBarra != null) unawaited(ref.read(barraDelEquipoProvider).guardar(deLaBarra));
+    final pagina = ref.read(paginaDeLaBarraProvider);
     final central = CentralBarra(
       eventoId: eventoId,
       barra: ref.read(barraDeLaRedProvider),
       quienEsQuien: ref.read(quienEsQuienEnLaBarraProvider),
       barraDelSalon: deLaBarra,
       alGuardar: () => ref.read(operationalSyncRevisionProvider.notifier).bump(),
+      // La página del iPhone (28-nov-2026): la sirve esta central, con lo que necesita.
+      paginaDeLaBarra: pagina,
+      fiestaParaLaPagina: () async {
+        final eventos = await ref.read(eventosDeLaBarraProvider.future);
+        final evento = eventos.where((e) => e.id == eventoId).firstOrNull;
+        return evento == null ? null : fiestaParaLaPagina(evento);
+      },
+      catalogoParaLaPagina: () => catalogoParaLaPagina(ref.read(barraDelJefeProvider), eventoId),
+      // Lo que anotó la página lo sube esta notebook enseguida.
+      alGuardarDeLaPagina: (tabla, id) => unawaited(ref.read(subirDeLaBarraProvider)(tabla, id)),
     );
     final int puerto;
     try {
@@ -397,6 +452,10 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
         state = state.con(rechazos: List.unmodifiable(central.rechazos));
       }
     });
+    // Los teléfonos con la página abierta: a la vista en el panel de la notebook.
+    _paginas = central.cambiosDePaginas.listen((paginas) {
+      if (identical(_central, central) && state.prendida) state = state.con(paginas: paginas);
+    });
     // Si la notebook cambia de red: lo que contesta la búsqueda se vuelve a abrir, las
     // direcciones que muestra CAJAS se releen y el enganche busca de nuevo (26-nov-2026:
     // hasta ahí había que apagar y prender la central).
@@ -437,6 +496,8 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
       otras: central.otras,
       contestaBusqueda: contesta,
       rechazos: List.unmodifiable(central.rechazos),
+      paginas: central.paginas,
+      hayPagina: pagina != null,
     );
   }
 
@@ -502,6 +563,8 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     _puente = null;
     await _rechazos?.cancel();
     _rechazos = null;
+    await _paginas?.cancel();
+    _paginas = null;
     await central?.cerrar();
   }
 }

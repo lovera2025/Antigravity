@@ -393,6 +393,9 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
       _red.filasDeLaFiesta(eventoId);
 
   @override
+  Future<bool> guardarDeLaPagina(String tabla, Map<String, Object?> fila) => _red.guardarDeLaPagina(tabla, fila);
+
+  @override
   Future<Map<String, Object?>?> filaDeLaRed(String tabla, String id) => _red.filaDeLaRed(tabla, id);
 
   @override

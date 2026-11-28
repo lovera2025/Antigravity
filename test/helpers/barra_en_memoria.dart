@@ -464,6 +464,31 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return true;
   }
 
+  /// Lo que guardó la página del iPhone (con la cola: queda en [otrosSinSubir]).
+  var deLaPagina = 0;
+
+  @override
+  Future<bool> guardarDeLaPagina(String tabla, Map<String, Object?> fila) async {
+    if (!tablasDeLaPagina.contains(tabla)) return false;
+    final id = fila['id'];
+    if (id is! String || id.length != 36) return false;
+    if (_filaDe(tabla, id) != null) return false;
+    final m = Map<String, dynamic>.from(fila);
+    switch (tabla) {
+      case 'barra_anulaciones':
+        anulacionesGuardadas.add(AnulacionBarra.fromMap(m));
+      case 'barra_cierres':
+        pasosGuardados.add(PasoDelCierre.fromMap(m));
+      case 'barra_caja_movimientos':
+        movimientosDeCajaGuardados.add(MovimientoDeCaja.fromMap(m));
+      case 'barra_stock_movimientos':
+        movimientosGuardados.add(MovimientoDeStock.fromMap(m));
+    }
+    otrosSinSubir.add(id);
+    deLaPagina++;
+    return true;
+  }
+
   @override
   Future<Map<String, List<Map<String, Object?>>>> filasDeLaFiesta(String eventoId) async => {
         'barra_cajas': [for (final c in cajasGuardadas) if (c.eventoId == eventoId) c.toMap()],
@@ -716,4 +741,10 @@ class QuienEsQuienEnMemoria implements QuienEsQuienEnLaBarra {
   @override
   Future<bool> esEncargada(String nombre) async => personas.values
       .any((p) => p.rol == RolEnLaBarra.encargada && p.nombre.trim().toLowerCase() == nombre.trim().toLowerCase());
+
+  @override
+  Future<List<PersonaDeLaBarra>> paraLaPagina() async => [
+        for (final p in personas.values)
+          if (p.rol == RolEnLaBarra.encargada || p.rol == RolEnLaBarra.repositor) p,
+      ];
 }

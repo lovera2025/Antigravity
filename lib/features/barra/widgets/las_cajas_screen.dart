@@ -61,8 +61,19 @@ class LasCajasScreen extends ConsumerWidget {
               ],
             ),
             actions: [
-              // El stock de cada barra: la encargada lo mira, lo anota el repositor.
-              if (veCatalogo)
+              // El stock de cada barra: la encargada lo mira, lo anota el repositor. **En un
+              // celular, solo el ícono** (28-nov-2026: en el iPhone de la encargada el
+              // título quedaba "LAS CAJ…").
+              if (veCatalogo && CortesPantalla.esCelular(ancho))
+                IconButton(
+                  key: const Key('las_cajas_stock'),
+                  tooltip: 'STOCK',
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => StockDeLasBarrasScreen(fiesta: fiesta),
+                  )),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                )
+              else if (veCatalogo)
                 TextButton.icon(
                   key: const Key('las_cajas_stock'),
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
@@ -71,7 +82,16 @@ class LasCajasScreen extends ConsumerWidget {
                   icon: const Icon(Icons.inventory_2_outlined),
                   label: const Text('STOCK'),
                 ),
-              if (veCatalogo)
+              if (veCatalogo && CortesPantalla.esCelular(ancho))
+                IconButton(
+                  key: const Key('las_cajas_catalogo_precios'),
+                  tooltip: 'CATÁLOGO Y PRECIOS',
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => CatalogoYPreciosScreen(fiesta: fiesta),
+                  )),
+                  icon: const Icon(Icons.list_alt_outlined),
+                )
+              else if (veCatalogo)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: TextButton.icon(
@@ -80,7 +100,7 @@ class LasCajasScreen extends ConsumerWidget {
                       builder: (_) => CatalogoYPreciosScreen(fiesta: fiesta),
                     )),
                     icon: const Icon(Icons.list_alt_outlined),
-                    label: Text(CortesPantalla.esCelular(ancho) ? 'PRECIOS' : 'CATÁLOGO Y PRECIOS'),
+                    label: const Text('CATÁLOGO Y PRECIOS'),
                   ),
                 ),
             ],

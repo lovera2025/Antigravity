@@ -55,6 +55,11 @@ abstract interface class QuienEsQuienEnLaBarra {
   /// Si [nombre] es el de una encargada de barra activa (el OK que se da en la tablet de
   /// la cajera lo firma con su nombre).
   Future<bool> esEncargada(String nombre);
+
+  /// **Quienes entran a la página del iPhone con solo su PIN** (28-nov-2026): las
+  /// encargadas y los repositores de barra activos. La página no sabe quién es cada uno:
+  /// la central prueba el PIN contra cada uno (y contra el maestro).
+  Future<List<PersonaDeLaBarra>> paraLaPagina();
 }
 
 /// Las cuentas de la llave: puras.
@@ -66,6 +71,13 @@ abstract final class LlaveDeLaBarra {
   /// Lo que firma un lado ([lado]: `caja` o `central`) sobre el número [reto] del otro.
   static String firma(List<int> llave, {required String lado, required String reto, required String evento, required String equipo}) =>
       Hmac(sha256, llave).convert(utf8.encode('$lado|$reto|$evento|$equipo')).toString();
+
+  /// **La ficha de la noche** de la página del iPhone (28-nov-2026): una llave sacada de
+  /// la del PIN, del número de ficha y del teléfono. La central y la página la sacan cada
+  /// una por su lado: no viaja. Con ella el iPhone vuelve a entrar sin el PIN mientras la
+  /// central siga prendida.
+  static List<int> deLaFicha(List<int> llave, {required String ficha, required String equipo}) =>
+      Hmac(sha256, llave).convert(utf8.encode('ficha|$ficha|$equipo')).bytes;
 
   /// Compara dos firmas sin cortar en la primera diferencia.
   static bool iguales(String a, String b) {

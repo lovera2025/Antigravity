@@ -1,0 +1,132 @@
+sin freno de intentos
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+  void _fallo(String ip) => (_intentos[ip] ??= []).add(_ahora());
+  void _fallo(String ip) {}
+---
+la ficha sirve en otro telefono
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+        if (f == null || f.equipo != conexion.equipo || !firmo(json['prueba'], f.secreto)) {
+        if (f == null || !firmo(json['prueba'], f.secreto)) {
+---
+la pagina cuenta como caja
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+      _anotarPagina(conexion, conectada: true);
+      _anotar(conexion, conectada: true);
+---
+la pagina anota a nombre de otro telefono
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    if (laFila['device_id'] != de.equipo) {
+    if (false) {
+---
+la pagina anota de otra fiesta
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    if (!filaDeLaFiesta(tabla, laFila, eventoId)) {
+    if (false) {
+---
+la pagina anota sin mirar quien es
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+      final motivo = await _porQueNo(de, rol, tabla, laFila, yaEsta, const {});
+      const String? motivo = null;
+---
+lo de la pagina no llega a las cajas
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    _mandarATodas(filas, menos: de);
+    // sin repartir
+---
+lo de la pagina no se sube enseguida
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    alGuardarDeLaPagina?.call(tabla, id);
+    // sin subir
+---
+la central guarda lo de la pagina sin la cola
+lib/features/barra/datos/barra_local.dart
+test/barra_repositorios_test.dart
+      await _guardar(txn, tabla, id, limpia);
+      await txn.insert(tabla, limpia);
+---
+la base guarda cualquier tabla de la pagina
+lib/features/barra/datos/barra_local.dart
+test/barra_repositorios_test.dart
+    if (!tablasDeLaPagina.contains(tabla)) return false;
+    if (!tablasDelCatalogoDeLaPagina.contains(tabla) && !tablasDeLaRed.contains(tabla)) return false;
+---
+la base pisa lo que ya estaba
+lib/features/barra/datos/barra_local.dart
+test/barra_repositorios_test.dart
+      if (ya.isNotEmpty) return false;
+      if (false) return false;
+---
+la pagina le cree a cualquier notebook
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    if (rol == null || esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+    if (rol == null) {
+---
+la pagina da por hecho sin respuesta
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    if (!conectada) throw const SinConexionConLaNotebook();
+    if (!conectada) return barra.poner(tabla, fila);
+---
+la pagina no vuelve sola con la ficha
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+      _mandar({'t': 'soy', 'quien': 'ficha', 'ficha': ficha.id, 'prueba': firmar(ficha.secreto)});
+      _mandar({'t': 'soy', 'quien': 'ficha', 'ficha': ficha.id, 'prueba': 'x'});
+---
+la pagina guarda el PIN
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    _pin = p;
+    _pin = p; unawaited(_guardado.guardar('pin', p));
+---
+el precio de lista llega a la pagina
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+          for (final t in tablasDelCatalogoDeLaPagina) t: catalogo[t] ?? const <Map<String, Object?>>[],
+          for (final t in tablasDelCatalogoDeLaPagina) t: catalogo[t] ?? const <Map<String, Object?>>[], 'barra_costos': [{'precio_lista': 1234.56}],
+---
+el catalogo no llega a la pagina
+lib/features/barra/pagina/barra_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+  static final _tablas = {...tablasDeLaRed, ...tablasDelCatalogoDeLaPagina};
+  static final _tablas = {...tablasDeLaRed};
+---
+el repositor no entra
+lib/features/barra/pagina/pagina_de_la_barra.dart
+test/pagina_de_la_barra_pantalla_test.dart
+            child: esRepositor
+            child: false
+---
+la pagina dice cada 30 segundos
+lib/features/barra/pagina/pagina_de_la_barra.dart
+test/pagina_de_la_barra_pantalla_test.dart
+      enLaPaginaDeLaBarraProvider.overrideWithValue(true),
+
+---
+la central no sirve la pagina
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+          await ServirArchivos.servir(pedido, paginaDeLaBarra);
+          await ServirArchivos.servir(pedido, null);
+---
+se sale de la carpeta de la pagina
+lib/core/red/servir_archivos.dart
+test/pagina_de_la_barra_test.dart test/central_puerta_test.dart
+      (p) => p != '.' && p != '..' && !p.contains('/') && !p.contains(r'\') && !p.contains(':'),
+      (p) => true,
+---
+la puerta deja de servir su pagina
+lib/features/recepcion/central/central_puerta.dart
+test/central_puerta_test.dart
+  Future<void> _servirArchivo(HttpRequest pedido) => ServirArchivos.servir(pedido, paginaDelCelular);
+  Future<void> _servirArchivo(HttpRequest pedido) => ServirArchivos.servir(pedido, null);
+---

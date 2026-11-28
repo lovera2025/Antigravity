@@ -583,6 +583,37 @@ void main() {
     });
   });
 
+  // 28-nov-2026: la página del iPhone no tiene cola; lo que anota lo sube la notebook.
+  group('lo que anota la página del iPhone', () {
+    test('se guarda en la notebook con la cola de subida, una sola vez', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      final a = AnulacionBarra.de(venta,
+          motivo: 'se la tomó', valeVolvio: false, hechoPor: 'Romi', deviceId: 'pagina-romi', ahora: reloj);
+      expect(await barra.guardarDeLaPagina('barra_anulaciones', a.toMap()), isTrue);
+      expect((await encolado('barra_anulaciones')).single['registro_id'], a.id, reason: 'la sube la notebook');
+      final leida = (await barra.anulaciones(_evento)).single;
+      expect(leida.deviceId, 'pagina-romi');
+      expect(leida.valeVolvio, isFalse);
+      // De nuevo (la página la volvió a mandar): queda como está.
+      final otra = {...a.toMap(), 'motivo': 'otra cosa'};
+      expect(await barra.guardarDeLaPagina('barra_anulaciones', otra), isFalse);
+      expect((await barra.anulaciones(_evento)).single.motivo, a.motivo);
+    });
+
+    test('solo las tablas de la página: una venta o una caja, no', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      final antes = (await db.query('barra_ventas')).single;
+      expect(await barra.guardarDeLaPagina('barra_ventas', {...venta.toMap(), 'total': 1}), isFalse);
+      expect((await db.query('barra_ventas')).single, antes);
+      // Ni una venta nueva: la página no vende.
+      final nueva = {...venta.toMap(), 'id': '00000000-0000-4000-8000-0000000000aa', 'numero': 99};
+      expect(await barra.guardarDeLaPagina('barra_ventas', nueva), isFalse);
+      expect(await db.query('barra_ventas'), hasLength(1));
+      expect([for (final f in await encolado('barra_ventas')) f['registro_id']], [venta.id],
+          reason: 'en la cola, solo la venta de esta caja');
+    });
+  });
+
   group('anular', () {
     test('anular agrega una fila y no toca la venta', () async {
       final venta = await venderUnaCerveza(await abrirLaDeMarta());

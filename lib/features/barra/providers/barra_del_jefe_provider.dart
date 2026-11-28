@@ -14,6 +14,12 @@ import '../datos/barra_repositorio.dart';
 /// (`kIsWeb` no se puede), y el arnés `tool/barra_web_prueba.dart` también.
 final enLaWebProvider = Provider<bool>((ref) => kIsWeb);
 
+/// **La página del iPhone de la barra** (28-nov-2026): corre en el navegador (sin
+/// impresora: [enLaWebProvider] en true), pero lo de las cajas le llega al momento por el
+/// wifi de la notebook, no de la nube. Lo pone en true solo esa página, para que lo que
+/// dice la pantalla sea cierto.
+final enLaPaginaDeLaBarraProvider = Provider<bool>((ref) => false);
+
 /// La hora de este equipo para la barra: con ella se sabe **la noche de hoy** (el día de
 /// operación, `cuentas/dia_de_operacion.dart`), qué fiestas siguen a la vista y si la
 /// central vuelve sola. Las ventanas de prueba la adelantan para vender pasada la

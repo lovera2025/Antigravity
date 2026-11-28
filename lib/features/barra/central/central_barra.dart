@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../../core/red/servir_archivos.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import 'buscar_central.dart';
@@ -71,6 +72,50 @@ class CajaConectada {
 /// Lo que se le agrega al id de la notebook para su enganche con otra central.
 const kSufijoDelEnganche = '-central';
 
+/// Cuántos PIN equivocados por minuto acepta la página del iPhone desde una misma
+/// dirección antes de frenar (como la página de la puerta).
+const kIntentosDeLaPagina = 5;
+
+/// Un iPhone (o un celular) con la página de la barra abierta (28-nov-2026): la
+/// encargada o el repositor. **No es una caja**: no suma en las cajas conectadas.
+@immutable
+class PaginaConectada {
+  final String equipo;
+
+  /// Quién entró: "Romi", "Nico", "Jefe".
+  final String nombre;
+  final RolEnLaBarra rol;
+  final bool conectada;
+  final DateTime ultimaVez;
+
+  const PaginaConectada({
+    required this.equipo,
+    required this.nombre,
+    required this.rol,
+    required this.conectada,
+    required this.ultimaVez,
+  });
+}
+
+/// La ficha de la noche de una página: con ella el teléfono vuelve a entrar sin el PIN
+/// (se bloqueó, se cerró Safari) mientras esta central siga prendida. Vive solo en la
+/// memoria: si la notebook se reinicia, se pide el PIN de nuevo.
+class _FichaDeLaNoche {
+  final List<int> secreto;
+  final String equipo;
+  final RolEnLaBarra rol;
+  final String nombre;
+  final String? operadorId;
+
+  _FichaDeLaNoche({
+    required this.secreto,
+    required this.equipo,
+    required this.rol,
+    required this.nombre,
+    required this.operadorId,
+  });
+}
+
 /// Cómo está el enganche de esta central con la de la otra barra (25-nov-2026).
 @immutable
 class EngancheConOtra {
@@ -127,6 +172,10 @@ class CentralBarra {
     this.barraDelSalon,
     DateTime Function()? ahora,
     this.esperaDelPin = const Duration(seconds: 10),
+    this.paginaDeLaBarra,
+    this.fiestaParaLaPagina,
+    this.catalogoParaLaPagina,
+    this.alGuardarDeLaPagina,
   })  : _barra = barra,
         _quienEsQuien = quienEsQuien,
         _ahora = ahora ?? DateTime.now;
@@ -136,6 +185,39 @@ class CentralBarra {
 
   /// Cuánto espera que un aparato que se conecta pruebe su PIN.
   final Duration esperaDelPin;
+
+  /// **La página del iPhone de la encargada y del repositor** (28-nov-2026): la carpeta
+  /// que sirve esta central por el wifi (`{app}\barra_pagina`). Null: no se sirve.
+  final Directory? paginaDeLaBarra;
+
+  /// La fiesta, para la página: `{'titulo': 'TÉCNICA PINAROLI', 'evento': {…}}` (el
+  /// evento sin PIN ni observaciones). El título va antes del PIN; el evento, al entrar.
+  final Future<Map<String, Object?>?> Function()? fiestaParaLaPagina;
+
+  /// Lo que la página necesita además de lo que viaja por la red (el catálogo, los
+  /// precios, las recetas y el recargo, [tablasDelCatalogoDeLaPagina]), sacado de la base
+  /// de esta notebook. **Nunca el precio de lista.**
+  final Future<Map<String, List<Map<String, Object?>>>> Function()? catalogoParaLaPagina;
+
+  /// Se guardó algo que hizo la página (con la cola): la notebook lo sube enseguida.
+  final void Function(String tabla, String id)? alGuardarDeLaPagina;
+
+  final _fichas = <String, _FichaDeLaNoche>{};
+  final _intentos = <String, List<DateTime>>{};
+  final _paginas = <String, PaginaConectada>{};
+  final _cambiosDePaginas = StreamController<List<PaginaConectada>>.broadcast();
+
+  /// Los teléfonos con la página abierta esta noche: primero los conectados.
+  List<PaginaConectada> get paginas {
+    final lista = _paginas.values.toList()
+      ..sort((a, b) {
+        if (a.conectada != b.conectada) return a.conectada ? -1 : 1;
+        return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+      });
+    return lista;
+  }
+
+  Stream<List<PaginaConectada>> get cambiosDePaginas => _cambiosDePaginas.stream;
 
   /// Lo que llegó por el wifi y no se guardó, con el motivo (los últimos 200): para que el
   /// jefe lo vea y para las pruebas.
@@ -299,13 +381,24 @@ class CentralBarra {
     _servidor = null;
     await _cambiosDeCajas.close();
     await _cambiosDeRechazos.close();
+    await _cambiosDePaginas.close();
   }
 
   // ── Lo que llega por la red ───────────────────────────────────────────────
 
   Future<void> _atender(HttpRequest pedido) async {
     try {
-      if (pedido.uri.path != '/barra' || !WebSocketTransformer.isUpgradeRequest(pedido)) {
+      final esSocket = WebSocketTransformer.isUpgradeRequest(pedido);
+      if (pedido.uri.path == '/pagina' && esSocket) {
+        await _conectarPagina(pedido);
+        return;
+      }
+      if (pedido.uri.path != '/barra' || !esSocket) {
+        // La página del iPhone (28-nov-2026): los archivos, sin salir de su carpeta.
+        if (!esSocket && (pedido.method == 'GET' || pedido.method == 'HEAD') && paginaDeLaBarra != null) {
+          await ServirArchivos.servir(pedido, paginaDeLaBarra);
+          return;
+        }
         pedido.response.statusCode = HttpStatus.notFound;
         await pedido.response.close();
         return;
@@ -440,7 +533,267 @@ class CentralBarra {
 
   void _seFue(_Conexion conexion) {
     if (!_conexiones.remove(conexion)) return;
+    if (conexion.esPagina) {
+      _anotarPagina(conexion, conectada: false);
+      return;
+    }
     _anotar(conexion, conectada: false);
+  }
+
+  // ── La página del iPhone (28-nov-2026) ───────────────────────────────────
+
+  /// Si [ip] se equivocó de PIN [kIntentosDeLaPagina] veces en el último minuto.
+  bool _frenada(String ip) {
+    final lista = _intentos[ip];
+    if (lista == null) return false;
+    final hace = _ahora().subtract(const Duration(minutes: 1));
+    lista.removeWhere((t) => t.isBefore(hace));
+    return lista.length >= kIntentosDeLaPagina;
+  }
+
+  void _fallo(String ip) => (_intentos[ip] ??= []).add(_ahora());
+
+  /// `/pagina?equipo=<id del teléfono>&r=<reto de la página>`: la página del iPhone.
+  /// Entra **solo con el PIN** (la central lo prueba contra el maestro y cada encargada
+  /// y repositor, sin que viaje) o con su ficha de la noche.
+  Future<void> _conectarPagina(HttpRequest pedido) async {
+    final ip = pedido.connectionInfo?.remoteAddress.address ?? '';
+    final datos = pedido.uri.queryParameters;
+    final ws = await WebSocketTransformer.upgrade(pedido);
+    if (_frenada(ip)) {
+      ws.add(jsonEncode({'t': 'espera'}));
+      await ws.close(4029, 'demasiados intentos');
+      return;
+    }
+    final equipo = datos['equipo']?.trim() ?? '';
+    final retoDeLaPagina = datos['r']?.trim() ?? '';
+    if (equipo.length < 8 || equipo.length > 64 || retoDeLaPagina.length < 16 || retoDeLaPagina.length > 64) {
+      ws.add(jsonEncode({'t': 'faltanDatos'}));
+      await ws.close(4002, 'faltan datos');
+      return;
+    }
+    ws.pingInterval = const Duration(seconds: 5);
+    final conexion = _Conexion(ws, equipo, 'Página', esPagina: true);
+    final reto = LlaveDeLaBarra.reto();
+    ws.listen(
+      (mensaje) {
+        if (conexion.rol == null) {
+          unawaited(_probarLaPagina(conexion, mensaje, reto: reto, retoDeLaPagina: retoDeLaPagina, ip: ip));
+        } else {
+          _mensajeDeLaPagina(conexion, mensaje);
+        }
+      },
+      onDone: () => _seFue(conexion),
+      onError: (Object _) => _seFue(conexion),
+      cancelOnError: true,
+    );
+    Map<String, Object?>? fiesta;
+    try {
+      fiesta = await fiestaParaLaPagina?.call();
+    } catch (_) {}
+    conexion.fiesta = fiesta?['evento'];
+    ws.add(jsonEncode({'t': 'reto', 'n': reto, 'evento': eventoId, 'fiesta': fiesta?['titulo'], 'barra': barraDelSalon}));
+    Timer(esperaDelPin, () {
+      if (conexion.rol == null) unawaited(conexion.cerrar(4005, 'sin PIN'));
+    });
+  }
+
+  Future<void> _probarLaPagina(
+    _Conexion conexion,
+    dynamic mensaje, {
+    required String reto,
+    required String retoDeLaPagina,
+    required String ip,
+  }) async {
+    if (conexion.probando || conexion.rol != null) return;
+    conexion.probando = true;
+    try {
+      final Object? json = mensaje is String && mensaje.length < 4096 ? jsonDecode(mensaje) : null;
+      if (json is! Map || json['t'] != 'soy') {
+        await conexion.cerrar(4005, 'sin PIN');
+        return;
+      }
+      String firmaCon(List<int> llave) =>
+          LlaveDeLaBarra.firma(llave, lado: 'caja', reto: reto, evento: eventoId, equipo: conexion.equipo);
+      bool firmo(Object? prueba, List<int> llave) => prueba is String && LlaveDeLaBarra.iguales(prueba, firmaCon(llave));
+
+      List<int>? llave;
+      RolEnLaBarra? rol;
+      String? nombre, operadorId, quien;
+      String? fichaNueva;
+      if (json['quien'] == 'pin') {
+        final maestro = await _quienEsQuien.pinMaestro();
+        if (maestro != null && maestro.isNotEmpty && firmo(json['maestro'], LlaveDeLaBarra.deMaestro(maestro))) {
+          llave = LlaveDeLaBarra.deMaestro(maestro);
+          rol = RolEnLaBarra.jefe;
+          nombre = 'Jefe';
+          quien = 'maestro';
+        } else {
+          for (final p in await _quienEsQuien.paraLaPagina()) {
+            final l = LlaveDeLaBarra.deOperador(p.pin);
+            if (p.rol != null && firmo(json['operador'], l)) {
+              llave = l;
+              rol = p.rol;
+              nombre = p.nombre;
+              operadorId = p.id;
+              quien = 'operador';
+              break;
+            }
+          }
+        }
+        if (llave == null || rol == null) {
+          _fallo(ip);
+          await conexion.cerrar(4006, 'PIN no reconocido');
+          return;
+        }
+        fichaNueva = LlaveDeLaBarra.reto();
+        _fichas[fichaNueva] = _FichaDeLaNoche(
+          secreto: LlaveDeLaBarra.deLaFicha(llave, ficha: fichaNueva, equipo: conexion.equipo),
+          equipo: conexion.equipo,
+          rol: rol,
+          nombre: nombre!,
+          operadorId: operadorId,
+        );
+      } else if (json['quien'] == 'ficha') {
+        final f = _fichas[json['ficha']];
+        if (f == null || f.equipo != conexion.equipo || !firmo(json['prueba'], f.secreto)) {
+          _fallo(ip);
+          await conexion.cerrar(4008, 'ficha vencida');
+          return;
+        }
+        llave = f.secreto;
+        rol = f.rol;
+        nombre = f.nombre;
+        operadorId = f.operadorId;
+        quien = 'ficha';
+      } else {
+        await conexion.cerrar(4005, 'sin PIN');
+        return;
+      }
+      conexion.rol = rol;
+      conexion.operadorId = operadorId;
+      conexion.persona = nombre;
+      for (final vieja in _conexiones.where((c) => c.equipo == conexion.equipo).toList()) {
+        _conexiones.remove(vieja);
+        unawaited(vieja.cerrar(4003, 'reemplazada'));
+      }
+      _conexiones.add(conexion);
+      _anotarPagina(conexion, conectada: true);
+      conexion.mandar(jsonEncode({
+        't': 'adelante',
+        'rol': rol.name,
+        'nombre': nombre,
+        'operador': operadorId,
+        'quien': quien,
+        'ficha': ?fichaNueva,
+        'hora': _ahora().toUtc().toIso8601String(),
+        'prueba': LlaveDeLaBarra.firma(llave,
+            lado: 'central', reto: retoDeLaPagina, evento: eventoId, equipo: conexion.equipo),
+      }));
+      final todo = await _encolar(() => _barra.filasDeLaFiesta(eventoId));
+      final catalogo = await catalogoParaLaPagina?.call() ?? const <String, List<Map<String, Object?>>>{};
+      conexion.mandar(jsonEncode({
+        't': 'catalogo',
+        'evento': conexion.fiesta,
+        'filas': {
+          for (final t in tablasDelCatalogoDeLaPagina) t: catalogo[t] ?? const <Map<String, Object?>>[],
+        },
+      }));
+      conexion.mandar(jsonEncode({'t': 'filas', 'filas': todo}));
+    } catch (e) {
+      debugPrint('Central de la barra: no se pudo probar el PIN de la página: $e');
+      await conexion.cerrar(4006, 'PIN no reconocido');
+    } finally {
+      conexion.probando = false;
+    }
+  }
+
+  void _anotarPagina(_Conexion c, {required bool conectada}) {
+    final rol = c.rol;
+    if (rol == null) return;
+    _paginas[c.equipo] = PaginaConectada(
+      equipo: c.equipo,
+      nombre: c.persona ?? 'Página',
+      rol: rol,
+      conectada: conectada,
+      ultimaVez: _ahora(),
+    );
+    if (!_cambiosDePaginas.isClosed) _cambiosDePaginas.add(paginas);
+  }
+
+  void _mensajeDeLaPagina(_Conexion conexion, dynamic mensaje) {
+    if (mensaje is! String || mensaje.length > 256 * 1024) return;
+    final Object? json;
+    try {
+      json = jsonDecode(mensaje);
+    } catch (_) {
+      return;
+    }
+    if (json is! Map<String, dynamic>) return;
+    switch (json['t']) {
+      case 'hola':
+        _anotarPagina(conexion, conectada: _conexiones.contains(conexion));
+        conexion.mandar(jsonEncode({'t': 'hola', 'hora': _ahora().toUtc().toIso8601String()}));
+      case 'escribe':
+        unawaited(_escribirDeLaPagina(conexion, json['pedido'], json['tabla'], json['fila']));
+    }
+  }
+
+  /// **Lo que escribe la página**: si le toca a quien la usa ([ReglasDeLaBarra]), se
+  /// guarda en esta notebook **con la cola de subida** ([BarraDeLaRed.guardarDeLaPagina]),
+  /// se reparte a las cajas y a la otra barra, y se le contesta "guardada". Si no, se le
+  /// contesta el motivo. La página no da nada por hecho hasta la respuesta.
+  Future<void> _escribirDeLaPagina(_Conexion de, Object? pedido, Object? tabla, Object? fila) async {
+    if (pedido is! String || pedido.isEmpty || pedido.length > 64) return;
+    void responder({String? motivo}) => de.mandar(jsonEncode({
+          't': 'respuesta',
+          'pedido': pedido,
+          'ok': motivo == null,
+          'motivo': ?motivo,
+        }));
+    final rol = de.rol;
+    if (rol == null) return;
+    if (tabla is! String || !tablasDeLaPagina.contains(tabla) || fila is! Map) {
+      responder(motivo: 'Eso no se anota desde la página.');
+      return;
+    }
+    final laFila = Map<String, Object?>.from(fila);
+    final id = laFila['id'];
+    if (id is! String || id.length != 36) {
+      responder(motivo: 'Falta el número de la fila.');
+      return;
+    }
+    if (!filaDeLaFiesta(tabla, laFila, eventoId)) {
+      responder(motivo: 'Es de otra fiesta.');
+      return;
+    }
+    if (laFila['device_id'] != de.equipo) {
+      responder(motivo: 'No es de este teléfono.');
+      return;
+    }
+    final resultado = await _encolar<({bool nueva, String? motivo})>(() async {
+      final yaEsta = await _barra.filaDeLaRed(tabla, id);
+      // Ya está (la página la mandó de nuevo al volver la conexión): queda como está.
+      if (yaEsta != null) return (nueva: false, motivo: null);
+      final motivo = await _porQueNo(de, rol, tabla, laFila, yaEsta, const {});
+      if (motivo != null) return (nueva: false, motivo: motivo);
+      final guardo = await _barra.guardarDeLaPagina(tabla, laFila);
+      return (nueva: guardo, motivo: guardo ? null : 'No se pudo guardar en la notebook.');
+    });
+    if (resultado.motivo != null) {
+      _rechazar(de, tabla, id, resultado.motivo!);
+      responder(motivo: resultado.motivo);
+      return;
+    }
+    responder();
+    if (!resultado.nueva) return;
+    alGuardar?.call();
+    alGuardarDeLaPagina?.call(tabla, id);
+    final filas = {
+      tabla: [laFila],
+    };
+    _mandarATodas(filas, menos: de);
+    _puente?.enviarFilas(filas);
   }
 
   void _anotar(_Conexion c, {required bool conectada, PendientesDeLaBarra? porSubir}) {
@@ -662,13 +1015,22 @@ class RechazoDeLaCentral {
 }
 
 class _Conexion {
-  _Conexion(this.ws, this.equipo, this.nombre, {this.barra, this.esCentral = false});
+  _Conexion(this.ws, this.equipo, this.nombre, {this.barra, this.esCentral = false, this.esPagina = false});
 
   final WebSocket ws;
   final String equipo;
   final String nombre;
   final String? barra;
   final bool esCentral;
+
+  /// La página del iPhone (28-nov-2026): no es una caja.
+  final bool esPagina;
+
+  /// Quién entró en la página.
+  String? persona;
+
+  /// La fiesta que se le manda a la página al entrar.
+  Object? fiesta;
 
   /// Quién puso su PIN en ese aparato. Null: todavía no lo probó (no recibe ni manda).
   RolEnLaBarra? rol;
