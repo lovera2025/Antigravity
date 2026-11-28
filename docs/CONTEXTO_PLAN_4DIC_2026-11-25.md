@@ -231,6 +231,14 @@ sorteo** (cuándo se pagó no importa).
   los dudosos **sin descuento** (rehacer el SQL de `build/lugares_27nov/` sobre una copia nueva con
   `tool/lugares_para_aceptar_test.dart`; simulacro; huella de cada renglón; **mirar antes que ninguna de esas
   familias tenga entradas ya vendidas con descuento**), y correr `supabase/lugares_cambios.sql`.
+- **28-nov (noche): los 16 dudosos de las 4 fiestas, revisados con las copias de la base** (pedido del usuario: "si
+  figuraban antes le corresponde descuento"). Se miró cada ficha en `backups\antes_de_vNN.db` y en los zip del 11, 18
+  y 26-nov, antes y después de cada sorteo; los huecos, con `mora_fotos.contrato_updated_at` y con lo que dio cada
+  sorteo. **3 se cargaron antes del sorteo y van CON descuento aunque se pagaron después; 12 se cargaron después;
+  1 queda sin comprobar.** Dos que la lista del 27-nov tenía con descuento se cargaron después. El dudoso de la
+  Técnica (lista ya aceptada) también queda sin comprobar. **"Sin descuento" vale solo para los que no se pueden
+  comprobar**: el SQL se rehace con esta lista, no con la regla a ciegas. **Un pago posterior al sorteo no prueba
+  que se cargó después.** El detalle con nombres: `build/lugares_27nov/dudosos_revisados_28nov.md`, fuera de git.
 
 #### Etapa 2 — La notebook de la barra y lo de la revisión de los roles (commit `fb78d95`)
 - **La vista simple, probada** (`test/notebook_de_la_barra_a_la_vista_test.dart`, 26; `tool/roturas_notebook_a_la_vista.txt`,
