@@ -5,6 +5,7 @@ import '../../../core/services/instalacion_id.dart';
 import '../../../core/services/pulso_entre_equipos.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../../models/evento.dart';
+import '../cuentas/stock_por_barra.dart';
 import 'barra_repositorio.dart';
 
 /// La barra del jefe en la web del iPhone: lee y escribe **directo en la nube**, sin
@@ -309,6 +310,80 @@ class BarraNube implements BarraDelJefe {
     await _supabase.from('barra_caja_movimientos').upsert(sellado.toMap(), ignoreDuplicates: true);
     await _avisar(const ['barra_caja_movimientos'], origen: equipo);
     return sellado;
+  }
+
+  // ── El stock por barra (v83) ───────────────────────────────────────────────
+
+  /// Sin las tablas en la nube (el SQL de la v83 sin correr): la lista vacía, y el stock
+  /// sigue como antes.
+  Future<List<Map<String, dynamic>>> _delStock(String tabla, String eventoId, {required String orden}) async {
+    try {
+      return await _todas(() => _supabase
+          .from(tabla)
+          .select()
+          .eq('evento_id', eventoId)
+          .order(orden, ascending: true)
+          .order('id', ascending: true));
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01' || e.code == 'PGRST205') return const [];
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<StockEnLaBarra>> repartos(String eventoId) async => [
+        for (final f in await _delStock('barra_stock_barras', eventoId, orden: 'barra')) StockEnLaBarra.fromMap(f),
+      ];
+
+  @override
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien}) async {
+    final equipo = await _equipo();
+    final ya = await _supabase.from('barra_stock_barras').select('created_at').eq('id', reparto.id).maybeSingle();
+    final sellado = reparto.sellado(
+      hechoPor: quien,
+      deviceId: equipo,
+      createdAt: ya?['created_at']?.toString(),
+      ahora: _reloj(),
+    );
+    await _supabase.from('barra_stock_barras').upsert(sellado.toMap());
+    await _avisar(const ['barra_stock_barras'], origen: equipo);
+    return sellado;
+  }
+
+  @override
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId) async => [
+        for (final f in await _delStock('barra_stock_movimientos', eventoId, orden: 'created_at'))
+          MovimientoDeStock.fromMap(f),
+      ];
+
+  /// Solo se agrega: si la fila ya está, queda como está.
+  @override
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) async {
+    final equipo = await _equipo();
+    final sellado = movimiento.selladoPor(quien).conEquipo(equipo);
+    await _supabase.from('barra_stock_movimientos').upsert(sellado.toMap(), ignoreDuplicates: true);
+    await _avisar(const ['barra_stock_movimientos'], origen: equipo);
+    return sellado;
+  }
+
+  @override
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  }) async {
+    final equipo = await _equipo();
+    final aviso = MovimientoDeStock.enCamino(
+      eventoId: eventoId,
+      productoId: productoId,
+      barra: barra,
+      avisosPrevios:
+          StockPorBarra.llegadasDesde(await movimientosDeStock(eventoId), eventoId, barra, productoId, equipo),
+      hechoPor: quien,
+      ahora: _reloj(),
+    );
+    return anotarMovimientoDeStock(aviso, quien: quien);
   }
 
   RealtimeChannel? _canalDelAviso;

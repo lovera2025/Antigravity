@@ -3,11 +3,13 @@ import 'anulacion_barra.dart';
 import 'caja_barra.dart';
 import 'costo_barra.dart';
 import 'movimiento_de_caja.dart';
+import 'movimiento_de_stock.dart';
 import 'paso_del_cierre.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
 import 'receta_barra.dart';
 import 'recargo_barra.dart';
+import 'stock_en_la_barra.dart';
 import 'vale_barra.dart';
 import 'venta_barra.dart';
 
@@ -16,11 +18,13 @@ export 'anulacion_barra.dart';
 export 'caja_barra.dart';
 export 'costo_barra.dart';
 export 'movimiento_de_caja.dart';
+export 'movimiento_de_stock.dart';
 export 'paso_del_cierre.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
 export 'receta_barra.dart';
 export 'recargo_barra.dart';
+export 'stock_en_la_barra.dart';
 export 'vale_barra.dart';
 export 'venta_barra.dart';
 
@@ -100,6 +104,36 @@ abstract interface class BarraDelJefe {
   /// Solo se agregan filas. Sobre una caja ya cerrada no se anota: tira [CajaYaCerrada].
   /// Lo hacen la encargada, desde su sesión (también en su propia caja), y el jefe.
   Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien});
+
+  // ── El stock por barra (v83) ──────────────────────────────────────────────
+
+  /// El reparto del jefe en [eventoId]: con cuánto arranca cada producto en cada barra y
+  /// desde cuánto se avisa (`barra_stock_barras`), también lo sacado del reparto.
+  Future<List<StockEnLaBarra>> repartos(String eventoId);
+
+  /// Guarda con cuánto arranca un producto en una barra. Una fila por fiesta, producto y
+  /// barra (id fijo): guardar de nuevo la reemplaza. **Solo el jefe.** Los límites los
+  /// dice `StockPorBarra.errorDelReparto`.
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien});
+
+  /// Lo que anotó el repositor en [eventoId] (`barra_stock_movimientos`): reposiciones,
+  /// traspasos, faltantes, conteos, entradas y avisos, del más viejo al más nuevo.
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId);
+
+  /// Anota un movimiento del stock, a nombre de [quien] y con este equipo. **Solo se
+  /// agregan filas**: el mismo, anotado dos veces, queda como estaba. Lo hacen el
+  /// repositor y el jefe. Los límites (no más de lo que hay) los dice `StockPorBarra`.
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien});
+
+  /// **"Voy en camino"** a [barra] con [productoId]. Lo arma el repositorio y no la
+  /// pantalla: en el aviso va cuántas veces **este equipo** ya llegó a esa barra con ese
+  /// producto (`avisos_previos`), y contado con otro equipo el aviso nacería ya cumplido.
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  });
 }
 
 /// Lo que hace la cajera, **solo en su equipo** (la tablet o la PC): abrir su caja,
@@ -216,6 +250,13 @@ abstract interface class BarraDeLaCaja {
   /// conoce: con ellos la cajera, al cerrar, ve lo que tenía que haber. La cajera no los
   /// anota (eso es [BarraDelJefe.anotarMovimientoDeCaja]).
   Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId);
+
+  /// El reparto del jefe y lo que anotó el repositor, que este equipo conoce: con eso
+  /// VENDER dice cuántas quedan **en su barra** (`StockPorBarra`). La cajera no los
+  /// escribe.
+  Future<List<StockEnLaBarra>> repartos(String eventoId);
+
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId);
 
   /// Anota un paso del cierre (el pedido de la cajera, que volvió a vender, que cerró
   /// sin esperar; o la respuesta de la encargada desde su equipo). Solo se agregan

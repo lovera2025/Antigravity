@@ -130,6 +130,9 @@ class AppRoleState {
   /// Entró a la barra con el permiso de Encargada de barra (6.4.0): vende con su
   /// caja y además ve LAS CAJAS de la fiesta y anula cualquier venta con motivo.
   bool get esEncargadaDeBarra => esBarra && permisos.encargadaBarra;
+
+  /// Entró por BARRA como repositor: solo el stock, sin caja ni LAS CAJAS.
+  bool get esRepositorDeBarra => esBarra && permisos.repositorBarra;
   bool get tieneSesionCaja =>
       esCaja && sesionActiva != null && sesionActiva!.estaAbierta;
 

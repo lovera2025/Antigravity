@@ -282,6 +282,7 @@ class _FichaOperadorState extends State<_FichaOperador> {
   late bool _vende = widget.permisos.vendeEntradas;
   late bool _barra = widget.permisos.tiene(PermisoOperador.barra);
   late bool _encargada = widget.permisos.encargadaBarra;
+  late bool _repositor = widget.permisos.repositorBarra;
   String? _problema;
   bool _revisando = false;
 
@@ -312,8 +313,10 @@ class _FichaOperadorState extends State<_FichaOperador> {
           cobros: _cobros,
           entradas: _entradas,
           vendeEntradas: _entradas && _vende,
-          barra: _barra,
-          encargadaBarra: _barra && _encargada,
+          // El repositor solo anota el stock: ni cajera ni encargada.
+          barra: _barra && !_repositor,
+          encargadaBarra: _barra && _encargada && !_repositor,
+          repositorBarra: _repositor,
         ),
       ),
     );
@@ -412,10 +415,11 @@ class _FichaOperadorState extends State<_FichaOperador> {
                 titulo: 'Barra',
                 detalle: 'Vende en la barra con su caja.',
                 valor: _barra,
-                // Sin Barra no puede ser encargada.
+                // Sin Barra no puede ser encargada; y quien vende no es repositor.
                 cambiar: (v) {
                   _barra = v;
                   if (!v) _encargada = false;
+                  if (v) _repositor = false;
                 },
               ),
               _casilla(
@@ -427,9 +431,38 @@ class _FichaOperadorState extends State<_FichaOperador> {
                 // Ser encargada lleva Barra.
                 cambiar: (v) {
                   _encargada = v;
-                  if (v) _barra = true;
+                  if (v) {
+                    _barra = true;
+                    _repositor = false;
+                  }
                 },
               ),
+              _casilla(
+                clave: 'permiso_repositor_barra',
+                titulo: 'Repositor de barra',
+                detalle: 'Entra por BARRA con su PIN y ve solo el STOCK: anota lo que lleva a '
+                    'cada barra y lo que falta. No vende, no cierra cajas ni ve plata.',
+                valor: _repositor,
+                // El repositor no es cajera ni encargada.
+                cambiar: (v) {
+                  _repositor = v;
+                  if (v) {
+                    _barra = false;
+                    _encargada = false;
+                  }
+                },
+              ),
+              if (_repositor)
+                const Padding(
+                  key: Key('aviso_repositor_barra'),
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'No lo tildes hasta que todas las PCs y las tablets tengan esta '
+                    'versión: una anterior lo lee como "sin Barra" y, si guarda sus '
+                    'permisos, se lo saca.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
               if (sinNinguno)
                 const Padding(
                   key: Key('aviso_sin_permisos'),

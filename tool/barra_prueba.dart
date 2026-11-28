@@ -398,6 +398,30 @@ class _LoQueSubio implements BarraDelJefe {
   @override
   Future<MovimientoDeCaja> anotarMovimientoDeCaja(MovimientoDeCaja movimiento, {required String quien}) =>
       b.anotarMovimientoDeCaja(movimiento, quien: quien);
+
+  // El stock por barra (v83): también compartido.
+  @override
+  Future<List<StockEnLaBarra>> repartos(String eventoId) => b.repartos(eventoId);
+
+  @override
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien}) =>
+      b.guardarReparto(reparto, quien: quien);
+
+  @override
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId) => b.movimientosDeStock(eventoId);
+
+  @override
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) =>
+      b.anotarMovimientoDeStock(movimiento, quien: quien);
+
+  @override
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  }) =>
+      b.avisarQueVa(eventoId: eventoId, productoId: productoId, barra: barra, quien: quien);
 }
 
 /// La ventana: la cajera a la izquierda y el jefe a la derecha. **Cada lado es su propia

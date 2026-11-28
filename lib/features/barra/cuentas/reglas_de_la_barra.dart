@@ -38,6 +38,8 @@ class NoLeTocaEnLaBarra implements Exception {
 abstract final class ReglasDeLaBarra {
   /// El rol de un operador en la barra según sus permisos. Null: no es de la barra.
   static RolEnLaBarra? dePermisos(PermisosEfectivos p) {
+    // El repositor primero: solo anota el stock, aunque la fila trajera algo más.
+    if (p.repositorBarra) return RolEnLaBarra.repositor;
     if (p.encargadaBarra) return RolEnLaBarra.encargada;
     if (p.barra) return RolEnLaBarra.cajera;
     return null;

@@ -222,6 +222,45 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return _avisar('barra_caja_movimientos', hecho.id, hecho);
   }
 
+  // ── El stock por barra (v83): sale a la red del salón ─────────────────────
+
+  /// **El reparto lo hace el jefe.** Va por la red del salón: las tablets de esa barra
+  /// saben con cuánto arrancan aunque no haya internet.
+  @override
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.reparteElStock, 'El reparto lo hace el jefe');
+    final hecho = await _jefe.guardarReparto(reparto, quien: quien);
+    return _avisar('barra_stock_barras', hecho.id, hecho);
+  }
+
+  /// **El stock lo mueve el repositor** (y el jefe): reponer, pasar de una barra a otra,
+  /// faltantes, contar, entró mercadería. Sale a la red: VENDER, LAS CAJAS y la encargada
+  /// lo ven al toque, sin internet.
+  @override
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) async {
+    _tieneQue(ReglasDeLaBarra.mueveElStock, 'El stock lo mueve el repositor');
+    final hecho = await _jefe.anotarMovimientoDeStock(movimiento, quien: quien);
+    return _avisar('barra_stock_movimientos', hecho.id, hecho);
+  }
+
+  @override
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  }) async {
+    _tieneQue(ReglasDeLaBarra.mueveElStock, 'El stock lo mueve el repositor');
+    final hecho = await _jefe.avisarQueVa(eventoId: eventoId, productoId: productoId, barra: barra, quien: quien);
+    return _avisar('barra_stock_movimientos', hecho.id, hecho);
+  }
+
+  @override
+  Future<List<StockEnLaBarra>> repartos(String eventoId) => _jefe.repartos(eventoId);
+
+  @override
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId) => _jefe.movimientosDeStock(eventoId);
+
   // ── Lo del jefe: el catálogo, los precios y el recargo van por la nube ───────
 
   T _escribio<T>(T hecho) {

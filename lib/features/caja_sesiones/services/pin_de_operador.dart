@@ -30,7 +30,9 @@ String textoDePermisos(PermisosEfectivos p) {
   if (p.ninguno) return 'Sin permisos: no puede entrar';
   return [
     for (final x in p.lista)
-      if (x == PermisoOperador.barra && p.encargadaBarra)
+      if (x == PermisoOperador.barra && p.repositorBarra)
+        nombreDePermiso(PermisoOperador.repositorBarra)
+      else if (x == PermisoOperador.barra && p.encargadaBarra)
         nombreDePermiso(PermisoOperador.encargadaBarra)
       // Quien vende también entrega: se dicen las dos cosas.
       else if (x == PermisoOperador.entradas && p.vendeEntradas)
@@ -46,4 +48,5 @@ String nombreDePermiso(PermisoOperador p) => switch (p) {
       PermisoOperador.barra => 'Barra',
       PermisoOperador.encargadaBarra => 'Encargada de barra',
       PermisoOperador.vendeEntradas => 'Vende entradas',
+      PermisoOperador.repositorBarra => 'Repositor de barra',
     };

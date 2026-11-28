@@ -6,6 +6,7 @@ import '../../../core/database/sync_queue.dart';
 import '../../../core/services/instalacion_id.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../central/filas_de_la_red.dart';
+import '../cuentas/stock_por_barra.dart';
 import 'barra_repositorio.dart';
 
 /// La barra en este equipo — la base de la PC o de la tablet, y la cola de subida.
@@ -641,6 +642,99 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
         ))
           MovimientoDeCaja.fromMap(f),
       ];
+
+  // ── El stock por barra (v83) ───────────────────────────────────────────────
+
+  @override
+  Future<List<StockEnLaBarra>> repartos(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_stock_barras',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'barra, producto_id',
+        ))
+          StockEnLaBarra.fromMap(f),
+      ];
+
+  @override
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final sellado = reparto.sellado(
+        hechoPor: quien,
+        deviceId: equipo,
+        createdAt: await _nacio(txn, 'barra_stock_barras', reparto.id),
+        ahora: _reloj(),
+      );
+      await _guardar(txn, 'barra_stock_barras', sellado.id, sellado.toMap());
+      return sellado;
+    });
+  }
+
+  @override
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_stock_movimientos',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'created_at, id',
+        ))
+          MovimientoDeStock.fromMap(f),
+      ];
+
+  @override
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) => _anotarStock(txn, movimiento, quien: quien, equipo: equipo));
+  }
+
+  /// Solo se agregan filas: el mismo, anotado dos veces, queda como estaba.
+  Future<MovimientoDeStock> _anotarStock(
+    Transaction txn,
+    MovimientoDeStock movimiento, {
+    required String quien,
+    required String? equipo,
+  }) async {
+    final ya = await txn.query('barra_stock_movimientos', where: 'id = ?', whereArgs: [movimiento.id], limit: 1);
+    if (ya.isNotEmpty) return MovimientoDeStock.fromMap(ya.first);
+    final sellado = movimiento.selladoPor(quien).conEquipo(equipo);
+    await _guardar(txn, 'barra_stock_movimientos', sellado.id, sellado.toMap());
+    return sellado;
+  }
+
+  @override
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  }) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      // Lo que este equipo ya llevó ahí, contado en la misma transacción que guarda el
+      // aviso: una reposición no puede meterse en el medio.
+      final suyos = [
+        for (final f in await txn.query(
+          'barra_stock_movimientos',
+          where: 'evento_id = ? AND producto_id = ?',
+          whereArgs: [eventoId, productoId],
+        ))
+          MovimientoDeStock.fromMap(f),
+      ];
+      final aviso = MovimientoDeStock.enCamino(
+        eventoId: eventoId,
+        productoId: productoId,
+        barra: barra,
+        avisosPrevios: StockPorBarra.llegadasDesde(suyos, eventoId, barra, productoId, equipo),
+        hechoPor: quien,
+        ahora: _reloj(),
+      );
+      return _anotarStock(txn, aviso, quien: quien, equipo: equipo);
+    });
+  }
 
   // ── La red del salón (la central de la barra) ─────────────────────────────
 

@@ -480,6 +480,31 @@ class MovimientoDeStock {
     );
   }
 
+  /// El mismo movimiento, a nombre de [quien] (si no traía nombre): lo pone el
+  /// repositorio, con quien está usando el aparato.
+  MovimientoDeStock selladoPor(String quien) => hechoPor != null && hechoPor!.trim().isNotEmpty
+      ? this
+      : MovimientoDeStock(
+          id: id,
+          eventoId: eventoId,
+          productoId: productoId,
+          tipoClave: tipoClave,
+          cantidad: cantidad,
+          desde: desde,
+          hacia: hacia,
+          contadas: contadas,
+          ajuste: ajuste,
+          motivo: motivo,
+          nota: nota,
+          conocido: conocido,
+          avisosPrevios: avisosPrevios,
+          respondeA: respondeA,
+          hechoPor: quien,
+          deviceId: deviceId,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+        );
+
   /// El mismo movimiento, con el equipo que lo anotó: lo pone el repositorio.
   MovimientoDeStock conEquipo(String? equipo) => MovimientoDeStock(
         id: id,

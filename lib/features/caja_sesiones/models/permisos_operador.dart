@@ -11,12 +11,18 @@ import '../../../core/utils/uuid_utils.dart';
 /// **Vende entradas** (6.9.0) es igual con Entradas: quien vende también entrega,
 /// entra por el mismo botón ENTRADAS y en la fila va como `entradas = 2`. Va al
 /// final del enum: lo que ya estaba no cambia de lugar.
+///
+/// **Repositor de barra** (28-nov-2026, para la Técnica del 4-dic) entra por el mismo
+/// botón BARRA, pero **solo anota el stock**: no abre caja, no vende, no ve LAS CAJAS ni
+/// plata. En la fila va como `barra = 3`. Una versión anterior lo lee como "sin Barra":
+/// por eso no se le da a nadie hasta que todos los equipos tengan esta versión.
 enum PermisoOperador {
   cobros('cobros'),
   entradas('entradas'),
   barra('barra'),
   encargadaBarra('encargada_barra'),
-  vendeEntradas('vende_entradas');
+  vendeEntradas('vende_entradas'),
+  repositorBarra('repositor_barra');
 
   const PermisoOperador(this.clave);
 
@@ -45,12 +51,18 @@ class PermisosEfectivos {
   /// Tiene la caja de entradas: vende, y también entrega.
   final bool vendeEntradas;
 
+  /// Repositor de barra: solo el stock. Lleva la puerta de Barra adentro
+  /// (`tiene(barra)`), pero **no es cajera ni encargada**: con esto prendido, [barra] y
+  /// [encargadaBarra] van en false.
+  final bool repositorBarra;
+
   const PermisosEfectivos({
     this.cobros = false,
     this.entradas = false,
     this.barra = false,
     this.encargadaBarra = false,
     this.vendeEntradas = false,
+    this.repositorBarra = false,
   });
 
   /// El operador sin fila.
@@ -62,9 +74,10 @@ class PermisosEfectivos {
   bool tiene(PermisoOperador p) => switch (p) {
         PermisoOperador.cobros => cobros,
         PermisoOperador.entradas => entradas || vendeEntradas,
-        PermisoOperador.barra => barra || encargadaBarra,
+        PermisoOperador.barra => barra || encargadaBarra || repositorBarra,
         PermisoOperador.encargadaBarra => encargadaBarra,
         PermisoOperador.vendeEntradas => vendeEntradas,
+        PermisoOperador.repositorBarra => repositorBarra,
       };
 
   bool get ninguno =>
@@ -76,8 +89,8 @@ class PermisosEfectivos {
   List<PermisoOperador> get lista =>
       [for (final p in PermisoOperador.deEntrada) if (tiene(p)) p];
 
-  /// Lo que va en la columna `barra`: 0 nada, 1 cajera, 2 encargada.
-  int get nivelBarra => encargadaBarra ? 2 : (barra ? 1 : 0);
+  /// Lo que va en la columna `barra`: 0 nada, 1 cajera, 2 encargada, 3 repositor.
+  int get nivelBarra => repositorBarra ? 3 : (encargadaBarra ? 2 : (barra ? 1 : 0));
 
   /// Lo que va en la columna `entradas`: 0 nada, 1 entrega, 2 entrega y vende.
   int get nivelEntradas => vendeEntradas ? 2 : (entradas ? 1 : 0);
@@ -90,7 +103,8 @@ class PermisosEfectivos {
           tiene(PermisoOperador.entradas) &&
       other.vendeEntradas == vendeEntradas &&
       other.tiene(PermisoOperador.barra) == tiene(PermisoOperador.barra) &&
-      other.encargadaBarra == encargadaBarra;
+      other.encargadaBarra == encargadaBarra &&
+      other.repositorBarra == repositorBarra;
 
   @override
   int get hashCode =>
@@ -100,6 +114,7 @@ class PermisosEfectivos {
         vendeEntradas,
         tiene(PermisoOperador.barra),
         encargadaBarra,
+        repositorBarra,
       );
 }
 
@@ -180,6 +195,9 @@ class PermisosOperador {
         // Barra": por eso nadie es encargada hasta que las tres tengan la 6.4.0.
         barra: prendido(barra) || barra == 2,
         encargadaBarra: barra == 2,
+        // 3 repositor (28-nov-2026): solo el stock. Una versión anterior lo lee como
+        // "sin Barra": por eso nadie es repositor hasta que todos los equipos la tengan.
+        repositorBarra: barra == 3,
       ),
       hechoPor: m['hecho_por'] as String?,
       deviceId: m['device_id'] as String?,

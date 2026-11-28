@@ -8,6 +8,7 @@ import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
 import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/stock_por_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
 import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
@@ -337,6 +338,63 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   @override
   Future<List<MovimientoDeCaja>> movimientosDeLaCaja(String cajaId) async =>
       [for (final m in movimientosDeCajaGuardados) if (m.cajaBarraId == cajaId) m];
+
+  // ── El stock por barra (v83) ───────────────────────────────────────────────
+
+  @override
+  Future<List<StockEnLaBarra>> repartos(String eventoId) async =>
+      [for (final r in repartosGuardados) if (r.eventoId == eventoId) r];
+
+  @override
+  Future<StockEnLaBarra> guardarReparto(StockEnLaBarra reparto, {required String quien}) async {
+    final i = repartosGuardados.indexWhere((r) => r.id == reparto.id);
+    final sellado = reparto.sellado(
+      hechoPor: quien,
+      deviceId: equipo,
+      createdAt: i < 0 ? null : repartosGuardados[i].createdAt,
+      ahora: reloj(),
+    );
+    if (i < 0) {
+      repartosGuardados.add(sellado);
+    } else {
+      repartosGuardados[i] = sellado;
+    }
+    otrosSinSubir.add(sellado.id);
+    return sellado;
+  }
+
+  @override
+  Future<List<MovimientoDeStock>> movimientosDeStock(String eventoId) async =>
+      [for (final m in movimientosGuardados) if (m.eventoId == eventoId) m];
+
+  @override
+  Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) async {
+    final ya = movimientosGuardados.where((m) => m.id == movimiento.id).firstOrNull;
+    if (ya != null) return ya;
+    final sellado = movimiento.selladoPor(quien).conEquipo(equipo);
+    movimientosGuardados.add(sellado);
+    otrosSinSubir.add(sellado.id);
+    return sellado;
+  }
+
+  @override
+  Future<MovimientoDeStock> avisarQueVa({
+    required String eventoId,
+    required String productoId,
+    required String barra,
+    required String quien,
+  }) =>
+      anotarMovimientoDeStock(
+        MovimientoDeStock.enCamino(
+          eventoId: eventoId,
+          productoId: productoId,
+          barra: barra,
+          avisosPrevios: StockPorBarra.llegadasDesde(movimientosGuardados, eventoId, barra, productoId, equipo),
+          hechoPor: quien,
+          ahora: reloj(),
+        ),
+        quien: quien,
+      );
 
   // ── La red del salón (`BarraDeLaRed`) ─────────────────────────────────────
 
