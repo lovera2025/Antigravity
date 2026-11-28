@@ -81,8 +81,8 @@ sorteo** (cuándo se pagó no importa).
 - Pruebas: `test/repositor_de_barra_test.dart` (20), `test/stock_de_las_barras_pantalla_test.dart` (21),
   `test/reparto_del_stock_test.dart` (11), `test/vender_con_el_stock_por_barra_test.dart` (24), dos en
   `test/operadores_screen_test.dart`, una en `test/central_barra_provider_test.dart`. Roturas:
-  `tool/roturas_repositor_y_stock.txt` (32 de 32 atrapadas; una no tenia prueba y destapo un error de OPERADORES: al abrir a un repositor "Barra" venia tildada, arreglado). Capturas: `tool/repositor_y_stock_muestra_test.dart` →
-  `build/capturas_stock_28nov/` (6 capturas sacadas; SIN MANDAR al usuario).
+  `tool/roturas_repositor_y_stock.txt` (34 casos; 32 de 32 atrapadas antes del corte, y dos más del aviso de lo vendido sin stock; una no tenia prueba y destapo un error de OPERADORES: al abrir a un repositor "Barra" venia tildada, arreglado). Capturas: `tool/repositor_y_stock_muestra_test.dart` →
+  `build/capturas_stock_28nov/` (6 capturas, mandadas al usuario el 28-nov a la tarde).
 
 **Reglas que dejó la etapa 3 (para lo que se programe después):**
 - **Toda pantalla que diga cuánto queda en una barra sale de `StockPorBarra`** (STOCK, LAS CAJAS) **o de
@@ -101,11 +101,14 @@ sorteo** (cuándo se pagó no importa).
   stock siempre, o solo si el vale volvió?). Hoy una venta anulada devuelve el stock.
 - **LA ENCARGADA ESTÁ ACÁ con el PIN del jefe:** quedó como estaba (solo el PIN de una encargada); cambiarlo toca lo
   que acepta la central. El jefe da el OK desde su aparato.
-- **"Se vendieron N sin stock"** se ve en STOCK ("SIN STOCK · se vendieron 5 de más") y en la cuenta de REPONER;
-  **falta un renglón propio en LAS CAJAS**.
+- **Hecho después del corte (28-nov, tarde):** arriba de las cajas, la encargada (LAS CAJAS) y el jefe (BARRA →
+  CAJAS) ven **"Se vendió sin stock: 5 speed en la Barra 1 · … Se descuenta de lo que se reponga"**
+  (`repositor/aviso_de_vendido_sin_stock.dart`, `vendidoSinStock`; tocarlo abre STOCK; la cajera no lo ve;
+  `test/vendido_sin_stock_en_las_cajas_test.dart`). Y un desborde real: en un celular de 360 de ancho el renglón de
+  STOCK con "SIN STOCK · se vendieron N de más" se salía; ahora baja de renglón (`Wrap`).
 - **Un repositor en una ventana de prueba** (`tool/dos_barras_prueba.dart`) y **el recorrido con el mouse**: esperan
   al usuario (el permiso de pantalla).
-- **La suite entera** (`bash tool/suite_por_tandas.sh`) sobre lo último: NO SE CORRIO (se corto por el limite de uso). Corridas y en verde: las pruebas de la barra, de OPERADORES y de la venta de entradas.
+- **La suite entera** (`bash tool/suite_por_tandas.sh`, 28-nov a la tarde, sobre lo último): **6.891 en verde, ninguna falla** (372 archivos, 10 tandas; registros en build/suite_28nov). flutter analyze, sin nada nuevo en lo tocado.
 - No se probó con tablets ni con el router del salón.
 
 **Lo que falta, en orden (etapas 4 a 8 del plan):**

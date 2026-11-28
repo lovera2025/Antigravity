@@ -920,6 +920,9 @@ lo que falta, en "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`).
   quiera "con señal" reemplaza ese provider.**
 - **Toda pantalla que diga cuánto queda en una barra sale de `StockPorBarra` o de `StockParaVender`**, con las
   palabras de `repositor/texto_del_stock.dart`. Un guardado nuevo del stock va por `BarraConLaRed` (llave y aviso).
+- **Lo vendido con el stock en cero se ve arriba de las cajas**, para la encargada (LAS CAJAS) y el jefe (BARRA →
+  CAJAS): `AvisoDeVendidoSinStock` (`repositor/aviso_de_vendido_sin_stock.dart`); la cajera no lo ve. **Las
+  pantallas del repositor se prueban también a 360 de ancho**: ahí apareció un renglón que se salía.
 - **Los precios (con el stock general) no viajan por el wifi del salón:** el reparto de la Técnica se hace con
   internet, antes. **No tildar "Repositor de barra" ni repartir por barra hasta que todos los equipos tengan la
   versión.**
