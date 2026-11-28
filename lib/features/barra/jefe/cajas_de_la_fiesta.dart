@@ -155,8 +155,12 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     try {
       await hacer();
     } finally {
-      ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
-      if (mounted) setState(() => _ocupado = false);
+      // Desde el iPhone la respuesta puede llegar con la pantalla ya cerrada (SALIR):
+      // ahí no se toca `ref` (28-nov-2026, lo encontró la prueba de pantalla).
+      if (mounted) {
+        ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
+        setState(() => _ocupado = false);
+      }
     }
   }
 
@@ -174,6 +178,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         if (pedido == null || !mounted) return;
         if (_frenaSinModoJefe()) return;
         final MovimientoDeCaja hecho;
+        final subir = ref.read(subirDeLaBarraProvider);
         try {
           hecho = await ref.read(barraDelJefeProvider).anotarMovimientoDeCaja(
                 MovimientoDeCaja.nuevo(
@@ -196,7 +201,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           }
           return;
         }
-        unawaited(ref.read(subirDeLaBarraProvider)('barra_caja_movimientos', hecho.id));
+        unawaited(subir('barra_caja_movimientos', hecho.id));
         if (mounted) {
           setState(() => _avisoPlata = (
                 texto: switch (tipo) {
@@ -360,6 +365,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         if (_frenaSinModoJefe()) return;
         final (:motivo, :valeVolvio) = pedido;
         final AnulacionBarra anulacion;
+        final subir = ref.read(subirDeLaBarraProvider);
         try {
           anulacion = await ref
               .read(barraDelJefeProvider)
@@ -368,7 +374,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           _decir(x.venta, textoDelError(e, 'No se pudo anular. Probá de nuevo.'), error: true);
           return;
         }
-        unawaited(ref.read(subirDeLaBarraProvider)('barra_anulaciones', anulacion.id));
+        unawaited(subir('barra_anulaciones', anulacion.id));
         _decir(
           x.venta,
           anulacion.valeVolvio

@@ -73,8 +73,8 @@ test/pagina_de_la_barra_test.dart
 la pagina da por hecho sin respuesta
 lib/features/barra/pagina/cliente_de_la_pagina.dart
 test/pagina_de_la_barra_test.dart
-    if (!conectada) throw const SinConexionConLaNotebook();
-    if (!conectada) return barra.poner(tabla, fila);
+    if (!conectada) throw SinConexionConLaNotebook();
+    if (!conectada) { barra.poner(tabla, fila); return fila; }
 ---
 la pagina no vuelve sola con la ficha
 lib/features/barra/pagina/cliente_de_la_pagina.dart

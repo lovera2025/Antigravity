@@ -291,7 +291,7 @@ class FranjaDeLaPagina extends StatelessWidget {
           final conectada = cliente.conectada;
           final colores = Theme.of(context).colorScheme;
           final quien = cliente.quien?.nombre ?? '';
-          return Material(
+          final franja = Material(
             color: conectada ? colores.surfaceContainerHighest : colores.errorContainer,
             child: SafeArea(
               bottom: false,
@@ -325,7 +325,7 @@ class FranjaDeLaPagina extends StatelessWidget {
                     ),
                     TextButton(
                       key: const Key('pagina_salir'),
-                      onPressed: () => unawaited(cliente.salir()),
+                      onPressed: () => unawaited(_salir(context)),
                       child: const Text('SALIR'),
                     ),
                   ],
@@ -333,6 +333,66 @@ class FranjaDeLaPagina extends StatelessWidget {
               ),
             ),
           );
+          if (cliente.noSeAnotaron.isEmpty) return franja;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              franja,
+              Material(
+                key: const Key('pagina_no_se_anotaron'),
+                color: colores.error,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: colores.onError),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          cliente.noSeAnotaron.join('\n'),
+                          style: TextStyle(color: colores.onError, fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      TextButton(
+                        key: const Key('pagina_entendido'),
+                        onPressed: cliente.olvidarLoQueNoSeAnoto,
+                        style: TextButton.styleFrom(foregroundColor: colores.onError),
+                        child: const Text('ENTENDIDO'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
         },
       );
+
+  /// SALIR. Con algo por confirmar, avisa antes: saliendo ya no se puede saber si se anotó.
+  Future<void> _salir(BuildContext context) async {
+    if (cliente.porConfirmar > 0) {
+      final salir = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Falta confirmar'),
+          content: Text('${cliente.porConfirmar == 1 ? 'Hay 1 cosa' : 'Hay ${cliente.porConfirmar} cosas'} sin '
+              'confirmar. Si salís ahora, no se va a saber si se anotó. Esperá a que arriba diga "conectada".'),
+          actions: [
+            TextButton(
+              key: const Key('pagina_salir_igual'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('SALIR IGUAL'),
+            ),
+            FilledButton(
+              key: const Key('pagina_esperar'),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('ESPERAR'),
+            ),
+          ],
+        ),
+      );
+      if (salir != true) return;
+    }
+    await cliente.salir();
+  }
 }

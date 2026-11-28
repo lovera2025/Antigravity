@@ -49,8 +49,8 @@ test/dia_de_operacion_test.dart test/barra_por_noche_pantallas_test.dart
 el Quedan de VENDER, solo esta noche
 lib/features/barra/widgets/vender_screen.dart
 test/barra_por_noche_pantallas_test.dart
-        cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
-        cajas: CajasPorDia.de([for (final c in cajas) CajaBarra.fromMap(c.toMap()..['abierta_at'] = widget.caja.abiertaAt)]),
+    final deLaNoche = CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]);
+    final deLaNoche = CajasPorDia.de([for (final c in cajas) CajaBarra.fromMap(c.toMap()..['abierta_at'] = widget.caja.abiertaAt)]);
 ---
 el vale dice la fecha y la hora reales (26-nov)
 lib/features/barra/impresion/modelo_ticket.dart

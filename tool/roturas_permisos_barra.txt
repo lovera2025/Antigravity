@@ -100,12 +100,6 @@ test/barra_jefe_pantalla_test.dart
     if (!esJefe) {
     if (false) {
 ---
-su propia caja no se la aprueba la encargada con su PIN
-lib/features/barra/widgets/pin_de_la_encargada.dart
-test/barra_cerrar_test.dart
-    if (encontrado.operador.id == caja.operadorId) {
-    if (false) {
----
 la encargada vuelve a pedir el OK para su propia caja (27-nov: la cierra sola)
 lib/features/barra/widgets/cerrar_caja_barra_screen.dart
 test/barra_cerrar_test.dart
@@ -127,20 +121,20 @@ test/encargada_de_barra_test.dart
 LAS CAJAS no pregunta la regla para el botón
 lib/features/barra/widgets/las_cajas_screen.dart
 test/encargada_de_barra_test.dart
-              if (veCatalogo)
-              if (true)
+    final veCatalogo = ReglasDeLaBarra.veCatalogoYPrecios(ref.watch(rolEnLaBarraProvider));
+    final veCatalogo = true;
 ---
 la encargada no ve el botón de CATÁLOGO Y PRECIOS
 lib/features/barra/widgets/las_cajas_screen.dart
 test/encargada_de_barra_test.dart
-              if (veCatalogo)
-              if (false)
+    final veCatalogo = ReglasDeLaBarra.veCatalogoYPrecios(ref.watch(rolEnLaBarraProvider));
+    final veCatalogo = false;
 ---
 la lista de la encargada guarda
 lib/features/barra/widgets/catalogo_y_precios_screen.dart
 test/encargada_de_barra_test.dart
-    final recargo = datos.recargo?.pct ?? 0;
-    final recargo = datos.recargo?.pct ?? 0; void guardar() {}
+    final recargo = datos.recargo?.pct;
+    final recargo = datos.recargo?.pct; void guardar() {}
 ---
 la lista no muestra los precios
 lib/features/barra/widgets/catalogo_y_precios_screen.dart

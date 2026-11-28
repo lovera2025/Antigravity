@@ -100,10 +100,12 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
     if (m == null || !mounted) return;
     if (_frenaSinPermiso()) return;
     setState(() => _ocupado = true);
+    // Lo de `ref` antes de esperar: la respuesta puede llegar con la pantalla cerrada.
+    final subir = ref.read(subirDeLaBarraProvider);
     try {
       final guardado = await ref.read(barraDelJefeProvider).anotarMovimientoDeStock(m, quien: _quien);
-      unawaited(ref.read(subirDeLaBarraProvider)('barra_stock_movimientos', guardado.id));
-      ref.invalidate(stockDeLaFiestaProvider(_id));
+      unawaited(subir('barra_stock_movimientos', guardado.id));
+      if (mounted) ref.invalidate(stockDeLaFiestaProvider(_id));
       _decir(hecho(guardado, datos));
     } catch (e) {
       _decir(textoDelError(e, 'No se pudo guardar. Probá de nuevo.'), error: true);
@@ -140,6 +142,7 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
   Future<void> _voyEnCamino(StockDeUnLugar s, StockDeLaFiesta datos) async {
     if (_ocupado || _frenaSinPermiso()) return;
     setState(() => _ocupado = true);
+    final subir = ref.read(subirDeLaBarraProvider);
     try {
       final aviso = await ref.read(barraDelJefeProvider).avisarQueVa(
             eventoId: _id,
@@ -147,8 +150,8 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
             barra: s.lugar,
             quien: _quien,
           );
-      unawaited(ref.read(subirDeLaBarraProvider)('barra_stock_movimientos', aviso.id));
-      ref.invalidate(stockDeLaFiestaProvider(_id));
+      unawaited(subir('barra_stock_movimientos', aviso.id));
+      if (mounted) ref.invalidate(stockDeLaFiestaProvider(_id));
       _decir('Avisado a la ${s.lugar}: vas en camino con ${datos.nombreDe(s.productoId)}.');
     } catch (e) {
       _decir(textoDelError(e, 'No se pudo avisar. Probá de nuevo.'), error: true);

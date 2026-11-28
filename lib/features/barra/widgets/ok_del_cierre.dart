@@ -290,6 +290,7 @@ class _AvisoDePedidosDeCierreState extends ConsumerState<AvisoDePedidosDeCierre>
     });
     try {
       final barra = ref.read(barraDelJefeProvider);
+      final subir = ref.read(subirDeLaBarraProvider);
       final cuentas = await cuentasParaElOk(barra, x.caja);
       if (!mounted) return;
       final respuesta = await mostrarOkDelCierre(context, caja: x.caja, pedido: x.pedido, cuentas: cuentas);
@@ -303,7 +304,7 @@ class _AvisoDePedidosDeCierreState extends ConsumerState<AvisoDePedidosDeCierre>
         hechoPor: quien,
         ahora: DateTime.now(),
       ));
-      unawaited(ref.read(subirDeLaBarraProvider)('barra_cierres', paso.id));
+      unawaited(subir('barra_cierres', paso.id));
       if (!mounted) return;
       setState(() {
         _dicho = respuesta == RespuestaAlCierre.aceptar

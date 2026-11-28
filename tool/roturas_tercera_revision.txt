@@ -1,0 +1,126 @@
+al volver la conexión se reenvía lo por confirmar
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    _mandarLoPorConfirmar();
+
+---
+sin respuesta a tiempo no dice "probá de nuevo": queda por confirmar
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart test/pagina_de_la_barra_pantalla_test.dart
+      throw QuedaPorConfirmar();
+      throw SinConexionConLaNotebook();
+---
+el corte con algo mandado lo deja por confirmar
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+      if (!p.isCompleted) p.completeError(QuedaPorConfirmar());
+      if (!p.isCompleted) p.completeError(SinConexionConLaNotebook());
+---
+lo mandado se guarda para reenviarlo
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart test/pagina_de_la_barra_pantalla_test.dart
+    _porConfirmar[pedido] = (tabla: tabla, fila: fila);
+
+---
+el iPhone se queda con la fila de la notebook
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    return r.fila ?? fila;
+    return fila;
+---
+la notebook contesta la fila como quedó
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    responder(fila: resultado.yaEsta ?? laFila);
+    responder(fila: laFila);
+---
+lo por confirmar que la notebook no guarda se avisa
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart test/pagina_de_la_barra_pantalla_test.dart
+      noSeAnotaron.add('${queEra(mandada.tabla)} no se anotó: $motivo');
+
+---
+la franja roja dice lo que no se anotó
+lib/features/barra/pagina/pagina_de_la_barra.dart
+test/pagina_de_la_barra_pantalla_test.dart
+          if (cliente.noSeAnotaron.isEmpty) return franja;
+          return franja;
+---
+SALIR con algo por confirmar pregunta antes
+lib/features/barra/pagina/pagina_de_la_barra.dart
+test/pagina_de_la_barra_pantalla_test.dart
+    if (cliente.porConfirmar > 0) {
+    if (false) {
+---
+SALIR le avisa a la notebook
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+    if (conectada) _mandar({'t': 'salir'});
+
+---
+la notebook olvida la ficha de quien salió
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+        _fichas.removeWhere((_, f) => f.equipo == conexion.equipo);
+
+---
+al volver se mira si sigue teniendo el permiso
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+            !(await _quienEsQuien.paraLaPagina()).any((p) => p.id == f.operadorId && p.rol == f.rol)) {
+            false) {
+---
+sin permiso cierra con su propio número
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+          await conexion.cerrar(4012, 'sin permiso');
+          await conexion.cerrar(4008, 'sin permiso');
+---
+sin permiso, lo por confirmar se avisa y no se reenvía
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+        _yaNoSeConfirma('no se sabe si se anotó (te sacaron el permiso). Preguntale al jefe.');
+
+---
+los PIN se prueban de a uno por dirección
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+    final ahora = antes.then((_) async {
+    final ahora = Future<void>.value().then((_) async {
+---
+el freno de a uno cierra sin probar
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+      if (_frenada(ip)) {
+      if (false) {
+---
+la tablet con el PIN equivocado cuenta para el freno
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+        _fallo(conexion.ip);
+
+---
+si falla leer la fiesta no dice "PIN no reconocido"
+lib/features/barra/central/central_barra.dart
+test/pagina_de_la_barra_test.dart
+        await conexion.cerrar(4010, 'no se pudo leer');
+        await conexion.cerrar(4006, 'PIN no reconocido');
+---
+entrar no espera a que Safari guarde la ficha
+lib/features/barra/pagina/cliente_de_la_pagina.dart
+test/pagina_de_la_barra_test.dart
+  void _adelante(Map<String, dynamic> json) {
+  Future<void> _adelante(Map<String, dynamic> json) async { await Future<void>.delayed(const Duration(milliseconds: 300));
+---
+LAS CAJAS no toca ref con la pantalla cerrada
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/pagina_de_la_barra_pantalla_test.dart
+        ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
+      } if (true) { ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
+---
+la silla de la noche no es perdida en GANANCIA
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/volvio_el_vale_test.dart
+      if (esSillaDeLaPuerta(r.nombre)) continue;
+
+---

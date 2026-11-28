@@ -34,11 +34,11 @@ test/retiros_de_la_encargada_test.dart
         if (!manejaLaPlataDeLasCajas(rol)) return 'La plata de las cajas la maneja la encargada';
 
 ---
-la central acepta un retiro sobre una caja cerrada
+la central rechaza el retiro que llegó con la caja ya cerrada (tiene que guardarlo)
 lib/features/barra/cuentas/reglas_de_la_barra.dart
 test/retiros_de_la_encargada_test.dart
+        // `cambioDespuesDelCierre`) sin tocar lo anotado al cerrar.
         if (!caja.abierta) return 'La caja ya cerró';
-
 ---
 la central deja cambiar un retiro que ya esta
 lib/features/barra/cuentas/reglas_de_la_barra.dart

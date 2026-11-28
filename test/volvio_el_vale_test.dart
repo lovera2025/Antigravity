@@ -206,6 +206,14 @@ void main() {
   });
 
   group('GANANCIA', () {
+    test('la silla de la noche anulada sin el vale no es perdida: no es bebida ni del proveedor', () {
+      final c = caja();
+      final v = vender(c, [(_speed, 'Speed', 1), (_silla, 'Silla extra', 2)]);
+      final soloSillas = vender(c, [(_silla, 'Silla suelta', 1)]);
+      final perdidas = entregadasSinCobrar([v, soloSillas], [anular(v, volvio: false), anular(soloSillas, volvio: false)]);
+      expect(perdidas, {_speed: 1}, reason: 'las sillas no van a GANANCIA como perdidas');
+    });
+
     test('lo entregado sin el vale es perdido: se le debe al proveedor, no se vendió', () {
       final c = caja();
       final buena = vender(c, [(_speed, 'Speed', 2)], precio: 5000);

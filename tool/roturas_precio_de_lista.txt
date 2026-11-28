@@ -19,8 +19,8 @@ final ventas = [for (final v in f.ventas) if (v.eventoId == f.eventoId) v];
 G4 un conteo de más baja lo que se debe
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/cuenta_del_proveedor_test.dart
-final perdidas = math.max(0, netas);
-final perdidas = netas;
+      final perdidas = math.max(0, netas) + entregado;
+      final perdidas = netas + entregado;
 ---
 G5 no avisa que falta el precio de lista
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
@@ -31,8 +31,8 @@ final falta = false;
 G6 lo vendido en una barra sin reparto no baja lo que quedó
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/cuenta_del_proveedor_test.dart
-final sinDescontar = math.max(0, vendidas - lugares.fold<int>(0, (s, l) => s + l.vendido));
-final sinDescontar = 0;
+          math.max(0, vendidas + entregado - lugares.fold<int>(0, (s, l) => s + l.vendido));
+          0;
 ---
 G7 la fecha mal puesta deja la fiesta en cero
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
@@ -67,8 +67,8 @@ int get ganancia => 0;
 G12 sin reparto no dice lo que quedó
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/cuenta_del_proveedor_test.dart
-: (general == null ? null : math.max(0, general - vendidas));
-: null;
+          : (general == null ? null : math.max(0, general - vendidas - entregado));
+          : null;
 ---
 G13 el precio de lista pierde los centavos
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
@@ -103,8 +103,8 @@ test/recetas_de_la_barra_test.dart
 el fernet en cc se cobra entero, como una botella por trago
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/recetas_de_la_barra_test.dart
-            parte = (vendidas * r.cantidad * l / trae).round();
-            parte = vendidas * l;
+            parte = (servidos * r.cantidad * l / trae).round();
+            parte = servidos * l;
 ---
 el trago se paga como si fuera de stock propio y no por la receta
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
@@ -115,7 +115,7 @@ test/recetas_de_la_barra_test.dart
 Para el proveedor no suma lo que va en los tragos
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/recetas_de_la_barra_test.dart
-            u.enTragos += vendidas * r.cantidad;
+            u.enTragos += servidos * r.cantidad;
             u.enTragos += 0;
 ---
 el costo del trago no divide por lo que trae la botella
@@ -127,8 +127,8 @@ test/recetas_de_la_barra_test.dart
 lo que se debe del fernet no divide por lo que trae la botella
 lib/features/barra/cuentas/cuenta_del_proveedor.dart
 test/recetas_de_la_barra_test.dart
-            parte = (vendidas * r.cantidad * l / trae).round();
-            parte = (vendidas * r.cantidad * l / 1000).round();
+            parte = (servidos * r.cantidad * l / trae).round();
+            parte = (servidos * r.cantidad * l / 1000).round();
 ---
 VENDER no descuenta el Speed de los vodkas vendidos
 lib/features/barra/widgets/vender_screen.dart
@@ -143,20 +143,20 @@ test/recetas_en_la_barra_test.dart
       ventas: ventas,
 ---
 VENDER no dice cuántos vodkas quedan
-lib/features/barra/widgets/vender_screen.dart
+lib/features/barra/cuentas/stock_para_vender.dart
 test/recetas_en_la_barra_test.dart
-    final alcanza = _recetas.alcanzaPara(productoId, _quedanDe);
-    final alcanza = _recetas.alcanzaPara(productoId, (_) => null);
+    final alcanza = recetas.alcanzaPara(productoId, de);
+    final alcanza = recetas.alcanzaPara(productoId, (_) => null);
 ---
 la cuenta no se lleva el Speed de los vodkas
-lib/features/barra/widgets/vender_screen.dart
+lib/features/barra/cuentas/stock_para_vender.dart
 test/recetas_en_la_barra_test.dart
-        (s, r) => s + (_recetas.loQueBaja(r.productoId, r.cantidad)[productoId] ?? 0),
+        (s, r) => s + (recetas.loQueBaja(r.productoId, r.cantidad)[productoId] ?? 0),
         (s, r) => s + (r.productoId == productoId ? r.cantidad : 0),
 ---
 VENDER no lee las recetas
 lib/features/barra/widgets/vender_screen.dart
 test/recetas_en_la_barra_test.dart
-      _recetas = recetas;
-      _recetas = RecetasDeLaBarra.ninguna;
+        recetas: recetas,
+        recetas: RecetasDeLaBarra.ninguna,
 ---

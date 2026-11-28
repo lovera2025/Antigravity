@@ -706,7 +706,8 @@ class CentralBarra {
         if (f.operadorId != null &&
             !(await _quienEsQuien.paraLaPagina()).any((p) => p.id == f.operadorId && p.rol == f.rol)) {
           _fichas.remove(json['ficha']);
-          await conexion.cerrar(4008, 'sin permiso');
+          // Otro número que la ficha vencida: la página dice que le sacaron el permiso.
+          await conexion.cerrar(4012, 'sin permiso');
           return;
         }
         llave = f.secreto;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -79,6 +80,7 @@ void main() {
     bool enLaWeb = false,
     PestanaBarraJefe pestana = PestanaBarraJefe.catalogo,
     String? centralPrendida,
+    List<Override> mas = const [],
   }) async {
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
@@ -92,6 +94,7 @@ void main() {
         enLaWebProvider.overrideWithValue(enLaWeb),
         relojDelJefeProvider.overrideWithValue(() => hoy),
         impresoraDeLaBarraProvider.overrideWithValue(ImpresoraBluetooth(_CanalSinNada())),
+        ...mas,
       ],
       child: MaterialApp(home: BarraJefeScreen(pestanaInicial: pestana)),
     ));
@@ -338,6 +341,23 @@ void main() {
       expect(find.textContaining('1.500'), findsNothing, reason: 'el precio de lista no aparece en ningún lado');
       expect(find.byKey(const Key('jefe_pestana_ganancia')), findsNothing);
       expect(prueba.barra.lecturasDeCostos, 0, reason: 'sin modo jefe, el precio de lista ni se lee');
+    });
+
+    testWidgets('sin modo jefe, PRECIOS ni pide la lista del proveedor (la primera llave, aunque la segunda la '
+        'deje vacía)', (tester) async {
+      prueba.barra.precio(pinaroli.id, cerveza, 4000);
+      var pedidas = 0;
+      await abrir(tester, pestana: PestanaBarraJefe.precios, esJefe: false, mas: [
+        listaDelProveedorProvider.overrideWith((ref, id) async {
+          pedidas++;
+          return ListaDelProveedor(costos: [
+            CostoBarra.para(eventoId: pinaroli.id, productoId: cerveza.id, precioLista: 1500, ahora: DateTime(2026, 11, 1)),
+          ]);
+        }),
+      ]);
+      expect(find.byKey(Key('jefe_precio_${cerveza.id}')), findsOneWidget);
+      expect(pedidas, 0, reason: 'sin modo jefe, PRECIOS no mira la lista del proveedor');
+      expect(find.textContaining('1.500'), findsNothing);
     });
 
     testWidgets('el precio de lista acepta centavos', (tester) async {

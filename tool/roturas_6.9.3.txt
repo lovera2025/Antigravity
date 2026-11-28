@@ -49,8 +49,8 @@ test/precios_de_entradas_test.dart
 9. VENDER frena un número porque ya se entregó sin cargo (un talonario frena al otro)
 lib/features/entradas/widgets/vender_entradas_screen.dart
 test/vender_entradas_pantalla_test.dart test/venta_entradas_prueba_test.dart
-      NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones);
-      {...NumerosDeEntradas.ocupadosDeLaVenta(_ventas, _anulaciones), ...EntregaPorPartes.numerosDeOtros(_todos, _retiros, [for (final l in _renglones.values) ...l], salvo: '')};
+      ocupados: _ocupados,
+      ocupados: {..._ocupados, ...EntregaPorPartes.numerosDeOtros(_todos, _retiros, [for (final l in _renglones.values) ...l], salvo: '')},
 ---
 10. otro archivo escribe la tabla de la entrega por partes
 lib/features/entradas/widgets/vender_gratis.dart
@@ -343,8 +343,8 @@ test/para_rendir_test.dart
 59. el comprobante de una rendición dice "Compra" en vez de "Rinde"
 lib/features/entradas/pdf/comprobante_entradas_pdf.dart
 test/comprobante_rendicion_test.dart
-          dato('Rinde', quienRinde),
-          dato('Compra', quienRinde),
+      pie: ['Rinde: $quienRinde${recibio.isEmpty ? '' : ' · Recibió: $recibio'}'],
+      pie: ['Compra: $quienRinde${recibio.isEmpty ? '' : ' · Recibió: $recibio'}'],
 ---
 60. una ventana de prueba abre ENTRADAS de la fiesta sin reemplazar la constancia
 tool/cierre_sector_prueba.dart

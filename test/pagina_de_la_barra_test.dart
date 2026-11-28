@@ -13,6 +13,7 @@ import 'package:arguello_events/features/barra/central/cliente_de_la_central.dar
 import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
+import 'package:arguello_events/features/barra/datos/aviso_al_anotar.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/pagina/catalogo_de_la_pagina.dart';
 import 'package:arguello_events/features/barra/pagina/cliente_de_la_pagina.dart';
@@ -28,13 +29,19 @@ const _otraFiesta = 'e0000000-0000-4000-8000-000000000002';
 
 /// El navegador del iPhone (lo que guarda la página entre una vez y otra).
 class _Navegador implements GuardadoDelCelular {
+  _Navegador({this.demora = Duration.zero});
+
   final datos = <String, String>{};
+
+  /// Lo que tarda en guardar (Safari no guarda al instante).
+  final Duration demora;
 
   @override
   Future<String?> leer(String clave) async => datos[clave];
 
   @override
   Future<void> guardar(String clave, String? valor) async {
+    if (demora > Duration.zero) await Future<void>.delayed(demora);
     if (valor == null) {
       datos.remove(clave);
     } else {
@@ -52,8 +59,8 @@ Future<void> hasta(bool Function() listo, {String? que, Duration limite = const 
 }
 
 void main() {
-  late QuienEsQuienEnMemoria personas;
-  late BarraEnMemoria notebook;
+  late _QuienQueCuenta personas;
+  late _NotebookQuePuedeFallar notebook;
   late CentralBarra central;
   late int puerto;
   late Directory carpeta;
@@ -82,11 +89,11 @@ void main() {
   setUp(() async {
     subidas.clear();
     mensajesDeLaPagina.clear();
-    personas = QuienEsQuienEnMemoria();
+    personas = _QuienQueCuenta();
     personas.persona('op-marta', 'Marta', pin: '1111', rol: RolEnLaBarra.cajera);
     personas.persona('op-romi', 'Romi', pin: '7777', rol: RolEnLaBarra.encargada);
     personas.persona('op-nico', 'Nico', pin: '5555', rol: RolEnLaBarra.repositor);
-    notebook = BarraEnMemoria()..equipo = 'notebook';
+    notebook = _NotebookQuePuedeFallar()..equipo = 'notebook';
     notebook.reloj = () => DateTime.now().toUtc();
     speed = notebook.producto('Speed', categoria: 'Energizantes');
     notebook.precio(_fiesta, speed, 4000, stock: 48);
@@ -122,9 +129,9 @@ void main() {
 
   /// La página en un iPhone: su navegador y su cliente. Lo que recibe se anota en
   /// [mensajesDeLaPagina] (para mirar que nunca llegue el precio de lista).
-  ClienteDeLaPagina iphone({_Navegador? navegador, WebSocketChannel Function(Uri)? abrir}) {
+  ClienteDeLaPagina iphone({_Navegador? navegador, WebSocketChannel Function(Uri)? abrir, int? por}) {
     final c = ClienteDeLaPagina(
-      servidor: Uri.parse('http://127.0.0.1:$puerto/'),
+      servidor: Uri.parse('http://127.0.0.1:${por ?? puerto}/'),
       guardado: navegador ?? _Navegador(),
       abrir: abrir ?? IOWebSocketChannel.connect,
       escucharTodo: mensajesDeLaPagina.add,
@@ -495,10 +502,347 @@ void main() {
       await escucha.cancel();
     });
   });
+
+  // ── La tercera revisión (28-nov-2026): lo mandado sin respuesta, el PIN, SALIR ──
+
+  Future<MovimientoDeCaja> retiro(ClienteDeLaPagina c, {double monto = 5000}) => c.barra.anotarMovimientoDeCaja(
+        MovimientoDeCaja.nuevo(
+          eventoId: _fiesta,
+          cajaBarraId: cajaDeMarta.id,
+          tipo: TipoMovimientoDeCaja.retiro,
+          monto: monto,
+          motivo: 'para el cambio de la otra',
+          ahora: c.ahora(),
+        ),
+        quien: 'Romi',
+      );
+
+  /// El iPhone de Romi, entrando a la notebook por [puente].
+  Future<ClienteDeLaPagina> romiPor(_Puente puente, {_Navegador? navegador}) async {
+    final c = iphone(por: puente.puerto, navegador: navegador);
+    await c.iniciar();
+    c.entrar('7777');
+    await hasta(() => c.conectada, que: 'Romi conectada');
+    return c;
+  }
+
+  Future<_Puente> unPuente() async {
+    final p = _Puente(puerto);
+    await p.abrir();
+    addTearDown(p.cerrar);
+    return p;
+  }
+
+  bool esRespuesta(String m) => m.contains('"t":"respuesta"');
+
+  group('lo mandado sin respuesta no se anota dos veces', () {
+    test('se corta justo después de mandar un retiro: queda por confirmar, se reenvía con el mismo número y queda '
+        'una sola vez', () async {
+      final tablet = BarraEnMemoria()..equipo = 'tablet-marta';
+      await tabletDeMarta(tablet);
+      final puente = await unPuente();
+      final c = await romiPor(puente);
+      puente.pierdeDeLaNotebook = esRespuesta;
+      final r = _Resultado(retiro(c));
+      await hasta(() => notebook.movimientosDeCajaGuardados.isNotEmpty, que: 'que la notebook lo anote');
+      expect(c.porConfirmar, 1);
+      puente.pierdeDeLaNotebook = (_) => false;
+      await puente.cortar();
+      await hasta(() => r.listo, que: 'que la pantalla se entere');
+      expect(r.error, isA<QuedaPorConfirmar>(), reason: 'no "probá de nuevo"');
+      expect(textoDelError(r.error!, 'No se pudo. Probá de nuevo.'), contains('No lo repitas'));
+      await hasta(() => c.conectada && c.porConfirmar == 0, que: 'que vuelva sola y se confirme');
+      expect(notebook.movimientosDeCajaGuardados, hasLength(1), reason: 'una sola vez');
+      expect(subidas.where((s) => s.startsWith('barra_caja_movimientos')), hasLength(1));
+      expect((await c.barra.movimientosDeCaja(_fiesta)).single.monto, 5000, reason: 'la página lo muestra');
+      await hasta(() => tablet.movimientosDeCajaGuardados.isNotEmpty, que: 'el retiro en la tablet');
+      expect(tablet.movimientosDeCajaGuardados, hasLength(1));
+      expect(c.noSeAnotaron, isEmpty);
+    });
+
+    test('si nunca le llegó a la notebook, al volver se anota, una vez', () async {
+      final puente = await unPuente();
+      final c = await romiPor(puente);
+      puente.pierdeDelTelefono = (m) => m.contains('"t":"escribe"');
+      final r = _Resultado(retiro(c));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(notebook.movimientosDeCajaGuardados, isEmpty);
+      puente.pierdeDelTelefono = (_) => false;
+      await puente.cortar();
+      await hasta(() => r.listo);
+      expect(r.error, isA<QuedaPorConfirmar>());
+      await hasta(() => c.conectada && c.porConfirmar == 0, que: 'que se confirme al volver');
+      expect(notebook.movimientosDeCajaGuardados, hasLength(1));
+      expect(await c.barra.movimientosDeCaja(_fiesta), hasLength(1));
+    });
+
+    test('la respuesta que llega tarde también lo confirma', () async {
+      final puente = await unPuente();
+      final c = await romiPor(puente);
+      puente.retiene = esRespuesta;
+      await expectLater(retiro(c), throwsA(isA<QuedaPorConfirmar>()));
+      expect(c.porConfirmar, 1);
+      expect(await c.barra.movimientosDeCaja(_fiesta), isEmpty, reason: 'nada "hecho" sin respuesta');
+      puente.retiene = (_) => false;
+      puente.retenidos.forEach(puente.alTelefono);
+      await hasta(() => c.porConfirmar == 0, que: 'que la respuesta tardía lo confirme');
+      expect(await c.barra.movimientosDeCaja(_fiesta), hasLength(1));
+      expect(notebook.movimientosDeCajaGuardados, hasLength(1));
+    });
+
+    test('lo por confirmar que al final la notebook no guarda: la franja lo dice hasta que lo lean', () async {
+      final puente = await unPuente();
+      final c = await romiPor(puente);
+      puente.retiene = esRespuesta;
+      await expectLater(retiro(c), throwsA(isA<QuedaPorConfirmar>()));
+      final pedido = (jsonDecode(puente.retenidos.single) as Map)['pedido'];
+      puente.alTelefono(jsonEncode({'t': 'respuesta', 'pedido': pedido, 'ok': false, 'motivo': 'La caja ya se cerró'}));
+      await hasta(() => c.noSeAnotaron.isNotEmpty, que: 'que lo avise');
+      expect(c.noSeAnotaron.single, 'Un retiro o cambio de caja no se anotó: La caja ya se cerró');
+      expect(c.porConfirmar, 0);
+      expect(await c.barra.movimientosDeCaja(_fiesta), isEmpty);
+      c.olvidarLoQueNoSeAnoto();
+      expect(c.noSeAnotaron, isEmpty);
+    });
+
+    test('la respuesta trae la fila como quedó: si la venta ya la anuló la notebook, vale la de la notebook', () async {
+      final puente = await unPuente();
+      final c = await romiPor(puente);
+      final venta = (await c.barra.ventas(_fiesta)).single;
+      // La página todavía no se enteró de la anulación del jefe.
+      puente.pierdeDeLaNotebook = (m) => m.contains('"t":"filas"');
+      final delJefe = await notebook.anular(venta, motivo: 'la anuló el jefe', quien: 'Jefe');
+      final a = await c.barra.anular(venta, motivo: 'otra cosa', quien: 'Romi', valeVolvio: false);
+      expect(a.id, delJefe.id);
+      expect(a.hechoPor, 'Jefe', reason: 'la del iPhone no pisa la de la notebook');
+      expect(a.deviceId, 'notebook');
+      expect(a.valeVolvio, isTrue);
+      expect((await c.barra.anulaciones(_fiesta)).single.hechoPor, 'Jefe');
+      expect(notebook.anulacionesGuardadas, hasLength(1));
+    });
+  });
+
+  group('el PIN, de a uno por dirección', () {
+    test('muchos PIN equivocados a la vez desde el iPhone: se prueban de a uno y a los cinco frena', () async {
+      personas.demora = const Duration(milliseconds: 80);
+      final todos = [for (var i = 0; i < 10; i++) iphone()];
+      for (final c in todos) {
+        await c.iniciar();
+      }
+      for (var i = 0; i < todos.length; i++) {
+        todos[i].entrar('90${i.toString().padLeft(2, '0')}');
+      }
+      await hasta(() => todos.every((c) => c.estado == EstadoDeLaPagina.pidePin),
+          que: 'que todos vuelvan a pedir el PIN', limite: const Duration(seconds: 10));
+      expect(personas.pruebasDeLaPagina, kIntentosDeLaPagina, reason: 'los demás ni se probaron');
+      expect(todos.where((c) => (c.problema ?? '').contains('Demasiados intentos')),
+          hasLength(todos.length - kIntentosDeLaPagina));
+      expect(todos.every((c) => c.quien == null), isTrue);
+    });
+
+    test('las tablets también: muchos PIN equivocados a la vez se prueban de a uno, y frena', () async {
+      personas.demora = const Duration(milliseconds: 80);
+      final malas = [
+        for (var i = 0; i < 8; i++)
+          ClienteDeLaCentral(
+            credencial: () async => CredencialDeLaBarra.operador('op-marta', '0000'),
+            eventoId: _fiesta,
+            equipo: 'tablet-mala-$i',
+            nombreCaja: 'Caja $i',
+            barra: BarraEnMemoria()..equipo = 'tablet-mala-$i',
+            aMano: DondeEstaLaCentral('127.0.0.1', puerto),
+            latido: const Duration(milliseconds: 100),
+            silencioMaximo: const Duration(seconds: 2),
+            pausa: const Duration(milliseconds: 50),
+          ),
+      ];
+      for (final m in malas) {
+        aCerrar.add(ChangeNotifierLike(m.dispose));
+        m.arrancar();
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+      expect(personas.pruebasDeLaCaja, kIntentosDeLaPagina, reason: 'de a uno: los demás se cerraron sin probar');
+      expect(malas.any((m) => m.conectada), isFalse);
+      expect(notebook.cajasGuardadas, hasLength(1), reason: 'nada de lo que mandaron se guardó');
+    });
+  });
+
+  group('la ficha deja de valer', () {
+    test('SALIR: la ficha de esa noche ya no entra, ni copiada', () async {
+      final navegador = _Navegador();
+      final c = await entrar('7777', navegador: navegador);
+      final antes = Map.of(navegador.datos);
+      await c.salir();
+      expect(c.estado, EstadoDeLaPagina.pidePin);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final otra = iphone(navegador: _Navegador()..datos.addAll(antes));
+      await otra.iniciar();
+      await hasta(() => otra.estado == EstadoDeLaPagina.pidePin, que: 'que pida el PIN');
+      expect(otra.quien, isNull);
+    });
+
+    test('le sacan el permiso a mitad de la noche: al volver pide el PIN, lo dice, y lo por confirmar se avisa',
+        () async {
+      final navegador = _Navegador();
+      final puente = await unPuente();
+      final c = await romiPor(puente, navegador: navegador);
+      puente.pierdeDelTelefono = (m) => m.contains('"t":"escribe"');
+      final r = _Resultado(retiro(c));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      personas.persona('op-romi', 'Romi', pin: '7777', rol: RolEnLaBarra.cajera);
+      puente.pierdeDelTelefono = (_) => false;
+      await puente.cortar();
+      await hasta(() => c.estado == EstadoDeLaPagina.pidePin, que: 'que pida el PIN');
+      expect(r.error, isA<QuedaPorConfirmar>());
+      expect(c.problema, contains('Ya no tenés permiso'));
+      expect(c.quien, isNull);
+      expect(navegador.datos.containsKey('barra_pagina_ficha'), isFalse, reason: 'la ficha se borró');
+      expect(c.porConfirmar, 0, reason: 'no se reenvía con otro que entre');
+      expect(c.noSeAnotaron.single, contains('te sacaron el permiso'));
+      expect(notebook.movimientosDeCajaGuardados, isEmpty);
+    });
+
+    test('si falla leer la fiesta después del PIN bueno, no dice "PIN no reconocido": vuelve sola', () async {
+      notebook.fallarAlLeer = 1;
+      // Safari tarda en guardar la ficha: el corte llega mientras tanto.
+      final c = iphone(navegador: _Navegador(demora: const Duration(milliseconds: 300)));
+      await c.iniciar();
+      c.entrar('7777');
+      await hasta(() => c.conectada && c.evento != null, que: 'que entre sola con su ficha');
+      expect(c.problema, isNull);
+      expect(c.quien?.nombre, 'Romi');
+      expect((await c.barra.ventas(_fiesta)), hasLength(1));
+    });
+  });
 }
 
 /// Para cerrar en el tearDown lo que tiene `dispose`.
 class ChangeNotifierLike {
   ChangeNotifierLike(this.dispose);
   final void Function() dispose;
+}
+
+/// Quién es quién, contando cuántos PIN se probaron (y tardando lo que se le diga, para
+/// que muchos intentos a la vez se pisen si no van de a uno).
+class _QuienQueCuenta extends QuienEsQuienEnMemoria {
+  var pruebasDeLaPagina = 0;
+  var pruebasDeLaCaja = 0;
+  Duration demora = Duration.zero;
+
+  @override
+  Future<List<PersonaDeLaBarra>> paraLaPagina() async {
+    pruebasDeLaPagina++;
+    if (demora > Duration.zero) await Future<void>.delayed(demora);
+    return super.paraLaPagina();
+  }
+
+  @override
+  Future<PersonaDeLaBarra?> operador(String id) async {
+    pruebasDeLaCaja++;
+    if (demora > Duration.zero) await Future<void>.delayed(demora);
+    return super.operador(id);
+  }
+}
+
+/// La notebook, que puede fallar al leer la fiesta las veces que se le diga.
+class _NotebookQuePuedeFallar extends BarraEnMemoria {
+  var fallarAlLeer = 0;
+
+  @override
+  Future<Map<String, List<Map<String, Object?>>>> filasDeLaFiesta(String eventoId) async {
+    if (fallarAlLeer > 0) {
+      fallarAlLeer--;
+      throw StateError('la base no contesta');
+    }
+    return super.filasDeLaFiesta(eventoId);
+  }
+}
+
+/// **Un router de mentira entre el iPhone y la notebook**: pasa todo, salvo lo que se le
+/// diga que pierda o retenga, y corta cuando se le pide. Así se prueba lo que pasa cuando
+/// se bloquea el iPhone o se corta el wifi justo en el peor momento.
+class _Puente {
+  _Puente(this.haciaPuerto);
+  final int haciaPuerto;
+  late HttpServer _servidor;
+  int get puerto => _servidor.port;
+
+  bool Function(String deLaNotebook) pierdeDeLaNotebook = (_) => false;
+  bool Function(String delTelefono) pierdeDelTelefono = (_) => false;
+  bool Function(String deLaNotebook) retiene = (_) => false;
+  final retenidos = <String>[];
+  final _pares = <(WebSocket, WebSocket)>[];
+
+  Future<void> abrir() async {
+    _servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    _servidor.listen((pedido) async {
+      final telefono = await WebSocketTransformer.upgrade(pedido);
+      final WebSocket notebook;
+      try {
+        notebook = await WebSocket.connect('ws://127.0.0.1:$haciaPuerto${pedido.uri}');
+      } catch (_) {
+        await telefono.close();
+        return;
+      }
+      _pares.add((telefono, notebook));
+      notebook.listen(
+        (m) {
+          if (m is String && pierdeDeLaNotebook(m)) return;
+          if (m is String && retiene(m)) {
+            retenidos.add(m);
+            return;
+          }
+          telefono.add(m);
+        },
+        onDone: () => telefono.close(_codigo(notebook.closeCode), notebook.closeReason),
+      );
+      telefono.listen(
+        (m) {
+          if (m is String && pierdeDelTelefono(m)) return;
+          notebook.add(m);
+        },
+        onDone: () => notebook.close(),
+      );
+    });
+  }
+
+  static int? _codigo(int? c) => c == null || c == 1005 || c == 1006 ? null : c;
+
+  /// Le manda al teléfono [mensaje] como si viniera de la notebook.
+  void alTelefono(String mensaje) {
+    for (final (telefono, _) in _pares) {
+      telefono.add(mensaje);
+    }
+  }
+
+  /// Se corta el wifi: se cierran las conexiones de ahora (las que vengan después pasan).
+  Future<void> cortar() async {
+    final pares = [..._pares];
+    _pares.clear();
+    for (final (telefono, notebook) in pares) {
+      await telefono.close();
+      await notebook.close();
+    }
+  }
+
+  Future<void> cerrar() async {
+    await cortar();
+    await _servidor.close(force: true);
+  }
+}
+
+/// Lo que pasó con un futuro que se deja correr: el valor o el error, cuando llegue.
+class _Resultado<T> {
+  _Resultado(Future<T> f) {
+    f.then((v) {
+      valor = v;
+      listo = true;
+    }, onError: (Object e) {
+      error = e;
+      listo = true;
+    });
+  }
+  T? valor;
+  Object? error;
+  var listo = false;
 }

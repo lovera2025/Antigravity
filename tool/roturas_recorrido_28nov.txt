@@ -1,11 +1,11 @@
 el stock propio del trago con receta se ignora
-lib/features/barra/widgets/vender_screen.dart
+lib/features/barra/cuentas/stock_para_vender.dart
 test/recetas_en_la_barra_test.dart
     if (propio == null) return alcanza;
     if (propio == null || propio > -1000) return alcanza;
 ---
 el trago con receta toma lo mayor
-lib/features/barra/widgets/vender_screen.dart
+lib/features/barra/cuentas/stock_para_vender.dart
 test/recetas_en_la_barra_test.dart
     return propio < alcanza ? propio : alcanza;
     return propio > alcanza ? propio : alcanza;

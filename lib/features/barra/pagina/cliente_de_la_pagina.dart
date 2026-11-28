@@ -165,6 +165,36 @@ class ClienteDeLaPagina extends ChangeNotifier {
   /// Cuántas escrituras quedaron por confirmar (la franja de arriba lo dice).
   int get porConfirmar => _porConfirmar.length;
 
+  /// **Lo que quedó por confirmar y al final no se anotó** (la notebook no lo guardó al
+  /// reenviarlo, o ya no se puede saber): la pantalla que lo mandó ya dijo "se confirma
+  /// solo", así que sin esto nadie se enteraba (28-nov-2026). La franja lo dice en rojo
+  /// hasta que lo lean.
+  final List<String> noSeAnotaron = [];
+
+  /// La franja: ENTENDIDO.
+  void olvidarLoQueNoSeAnoto() {
+    noSeAnotaron.clear();
+    notifyListeners();
+  }
+
+  /// Qué era lo mandado, en palabras de la barra.
+  static String queEra(String tabla) => switch (tabla) {
+        'barra_caja_movimientos' => 'Un retiro o cambio de caja',
+        'barra_anulaciones' => 'Una anulación',
+        'barra_cierres' => 'Un paso del cierre de una caja',
+        'barra_stock_movimientos' => 'Un movimiento del stock',
+        _ => 'Lo que anotaste',
+      };
+
+  /// Lo por confirmar que ya no se va a poder confirmar (se fue la ficha): pasa a
+  /// [noSeAnotaron] con [porque].
+  void _yaNoSeConfirma(String porque) {
+    for (final e in _porConfirmar.values) {
+      noSeAnotaron.add('${queEra(e.tabla)}: $porque');
+    }
+    _porConfirmar.clear();
+  }
+
   /// La hora de la notebook (con la del teléfono corregida).
   DateTime ahora() => _ahoraDelTelefono().add(_corrimiento);
 
@@ -214,7 +244,7 @@ class ClienteDeLaPagina extends ChangeNotifier {
     if (conectada) _mandar({'t': 'salir'});
     _ficha = null;
     quien = null;
-    _porConfirmar.clear();
+    _yaNoSeConfirma('no se sabe si se anotó (se salió antes de que se confirmara).');
     await _guardado.guardar(_claveFicha, null);
     _cortar();
     problema = null;
@@ -273,12 +303,13 @@ class ClienteDeLaPagina extends ChangeNotifier {
       barra.poner(mandada.tabla, guardada);
       if (!_llegoAlgo.isClosed) _llegoAlgo.add(null);
     }
+    final motivo = ok ? null : (json['motivo']?.toString() ?? 'La notebook no lo guardó.');
     final espera = _pendientes[pedido];
     if (espera != null && !espera.isCompleted) {
-      espera.complete((
-        fila: ok ? guardada : null,
-        motivo: ok ? null : (json['motivo']?.toString() ?? 'La notebook no lo guardó.'),
-      ));
+      espera.complete((fila: ok ? guardada : null, motivo: motivo));
+    } else if (!ok && mandada != null) {
+      // Nadie espera esta respuesta: la pantalla ya dijo "se confirma solo".
+      noSeAnotaron.add('${queEra(mandada.tabla)} no se anotó: $motivo');
     }
     if (mandada != null) notifyListeners();
   }
@@ -371,7 +402,7 @@ class ClienteDeLaPagina extends ChangeNotifier {
       case 'reto':
         _alReto(json);
       case 'adelante':
-        unawaited(_adelante(json));
+        _adelante(json);
       case 'catalogo':
       case 'filas':
         if (json['evento'] case final Map<String, dynamic> e) evento = e;
@@ -414,7 +445,10 @@ class ClienteDeLaPagina extends ChangeNotifier {
     }
   }
 
-  Future<void> _adelante(Map<String, dynamic> json) async {
+  /// Entró. **Sin esperas en el medio** (28-nov-2026): si guardar la ficha en el navegador
+  /// se esperaba antes de dar por entrada a la página, un corte justo en ese momento la
+  /// dejaba "conectada" sobre una conexión muerta, sin volver nunca.
+  void _adelante(Map<String, dynamic> json) {
     final evento = eventoId, reto = _reto;
     final rol = RolEnLaBarra.values.where((r) => r.name == json['rol']).firstOrNull;
     final quienFue = json['quien'];
@@ -438,10 +472,10 @@ class ClienteDeLaPagina extends ChangeNotifier {
     if (fichaNueva is String && llave != null) {
       final secreto = LlaveDeLaBarra.deLaFicha(llave, ficha: fichaNueva, equipo: equipo);
       _ficha = (id: fichaNueva, secreto: secreto);
-      await _guardado.guardar(
+      unawaited(_guardado.guardar(
         _claveFicha,
         jsonEncode({'f': fichaNueva, 's': [for (final b in secreto) b.toRadixString(16).padLeft(2, '0')].join()}),
-      );
+      ));
     }
     _pin = null;
     _intento = 0;
@@ -487,6 +521,15 @@ class ClienteDeLaPagina extends ChangeNotifier {
         quien = null;
         unawaited(_guardado.guardar(_claveFicha, null));
         problema = 'La notebook se reinició: poné tu PIN de nuevo.';
+        _cambiar(EstadoDeLaPagina.pidePin);
+        return;
+      case 4012:
+        // Le sacaron el permiso a mitad de la noche: lo por confirmar ya no se reenvía.
+        _ficha = null;
+        quien = null;
+        unawaited(_guardado.guardar(_claveFicha, null));
+        _yaNoSeConfirma('no se sabe si se anotó (te sacaron el permiso). Preguntale al jefe.');
+        problema = 'Ya no tenés permiso de barra en esta notebook: pedíselo al jefe.';
         _cambiar(EstadoDeLaPagina.pidePin);
         return;
       case 4029:
