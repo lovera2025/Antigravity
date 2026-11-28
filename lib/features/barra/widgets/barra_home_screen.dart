@@ -13,6 +13,7 @@ import '../central/central_barra_provider.dart';
 import '../cuentas/dia_de_operacion.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_providers.dart';
+import '../repositor/stock_de_las_barras_screen.dart';
 import '../services/barras_del_salon.dart';
 import 'abrir_caja_barra_dialog.dart';
 import 'barra_home_web.dart';
@@ -129,6 +130,14 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
     }
   }
 
+  /// STOCK del repositor (28-nov-2026): entra por BARRA con su PIN y ve solo esto. No abre
+  /// ninguna caja.
+  void _abrirStock(Evento fiesta) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => StockDeLasBarrasScreen(fiesta: fiesta)),
+    );
+  }
+
   /// LAS CAJAS de la encargada. Antes de abrirla busca la central de la barra, por si
   /// entra directo acá sin haber pasado por VENDER (`arrancarSiNoHay`).
   void _abrirLasCajas(Evento fiesta) {
@@ -241,8 +250,11 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                       )
                                     : Text(_fecha(e.fechaEvento)),
                                 // Tocar la fiesta es VENDER (su caja); la encargada
-                                // tiene además LAS CAJAS.
-                                trailing: app.esEncargadaDeBarra
+                                // tiene además LAS CAJAS. El repositor no vende: tocar
+                                // la fiesta es STOCK.
+                                trailing: app.esRepositorDeBarra
+                                    ? const Icon(Icons.inventory_2_outlined, key: Key('barra_es_repositor'))
+                                    : app.esEncargadaDeBarra
                                     ? OutlinedButton(
                                         key: Key('barra_las_cajas_${e.id}'),
                                         onPressed: () => _abrirLasCajas(e),
@@ -256,7 +268,7 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                         ),
                                       )
                                     : const Icon(Icons.chevron_right),
-                                onTap: () => _abrir(e),
+                                onTap: () => app.esRepositorDeBarra ? _abrirStock(e) : _abrir(e),
                               ),
                             );
                           },

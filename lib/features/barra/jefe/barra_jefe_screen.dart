@@ -16,6 +16,7 @@ import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../repositor/stock_de_las_barras_screen.dart';
 import '../services/fiestas_del_jefe.dart';
 import '../widgets/elegir_impresora_screen.dart';
 import 'barra_jefe_providers.dart';
@@ -173,6 +174,8 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
     // (el PIN del modo jefe dura unos minutos) con la notebook bloqueada, no vuelve sola la
     // pantalla de antes (28-nov-2026: lo encontró la prueba de la vista simple).
     final simple = _vistaSimple && esLaNotebook;
+    // La fiesta que se está mirando, para abrir su STOCK desde arriba.
+    final laFiesta = fiestas.value?.elegida(ref.watch(fiestaElegidaDelJefeProvider), enLaBarra: true);
     return PopScope(
       // En la vista simple no se sale para atrás: del otro lado está todo lo del jefe.
       canPop: !simple,
@@ -226,6 +229,16 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
         // La impresora de esta PC, para la lista de precios, las copias y el cierre: la
         // misma pantalla que la cajera abre desde VENDER. En la web no hay Bluetooth.
         actions: [
+          // El stock de cada barra (28-nov-2026): el jefe también repone y anota.
+          if (!simple && laFiesta != null)
+            IconButton(
+              key: const Key('jefe_stock'),
+              tooltip: 'El stock de cada barra',
+              icon: const Icon(Icons.inventory_2_outlined),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => StockDeLasBarrasScreen(fiesta: laFiesta),
+              )),
+            ),
           if (!enLaWeb && !simple)
             IconButton(
               key: const Key('jefe_impresora'),

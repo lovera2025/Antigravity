@@ -10,6 +10,7 @@ import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../jefe/cajas_de_la_fiesta.dart';
 import '../providers/barra_del_jefe_provider.dart';
+import '../repositor/stock_de_las_barras_screen.dart';
 import 'catalogo_y_precios_screen.dart';
 
 /// LAS CAJAS de la Encargada de barra (6.4.0): cómo va cada caja de la fiesta, con
@@ -59,6 +60,16 @@ class LasCajasScreen extends ConsumerWidget {
               ],
             ),
             actions: [
+              // El stock de cada barra: la encargada lo mira, lo anota el repositor.
+              if (veCatalogo)
+                TextButton.icon(
+                  key: const Key('las_cajas_stock'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => StockDeLasBarrasScreen(fiesta: fiesta),
+                  )),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text('STOCK'),
+                ),
               if (veCatalogo)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
