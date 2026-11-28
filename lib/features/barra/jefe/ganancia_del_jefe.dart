@@ -77,8 +77,11 @@ final gananciaDelJefeProvider = FutureProvider.family<CuentaDelProveedor, String
       ventas: await barra.ventas(id),
       anulaciones: await barra.anulaciones(id),
       precios: await barra.precios(id),
-      // El stock por barra (repartos y lo que anota el repositor) llega con el repositor;
-      // hasta entonces, lo perdido es 0 y "quedaron" sale del stock del jefe.
+      // El stock por barra (28-nov-2026): el reparto del jefe y lo que anotó el repositor.
+      // Con eso "lo perdido" son los faltantes (rotas, congeladas…), que se le pagan igual
+      // al proveedor. Sin reparto, lo perdido es 0 y "quedaron" sale del stock del jefe.
+      repartos: await barra.repartos(id),
+      movimientos: await barra.movimientosDeStock(id),
       listas: {for (final c in costos) c.productoId: c.precioLista},
       contenidos: {for (final c in costos) c.productoId: c.contenidoCc},
       recetas: await barra.recetas(id),

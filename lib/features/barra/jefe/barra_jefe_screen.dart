@@ -232,7 +232,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
           // El stock de cada barra (28-nov-2026): el jefe también repone y anota.
           if (!simple && laFiesta != null)
             IconButton(
-              key: const Key('jefe_stock'),
+              key: const Key('jefe_stock_de_las_barras'),
               tooltip: 'El stock de cada barra',
               icon: const Icon(Icons.inventory_2_outlined),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(

@@ -26,6 +26,7 @@ import '../services/productos_para_vender.dart' show paraBuscar;
 import '../widgets/pesos_enteros_formatter.dart';
 import 'barra_jefe_providers.dart';
 import 'catalogo_del_jefe.dart';
+import 'reparto_del_stock.dart';
 
 /// PRECIOS de una fiesta: qué productos del catálogo van, a cuánto, cuántos hay y desde
 /// cuántos avisar; el recargo por transferencia de la fiesta; COPIAR DE OTRA FIESTA; y
@@ -656,6 +657,19 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
         runSpacing: 8,
         alignment: WrapAlignment.end,
         children: [
+          // El stock de cada barra (28-nov-2026): con cuánto arranca cada una y su aviso.
+          // El stock general se sigue cargando acá, en la casilla "Stock" de cada producto.
+          OutlinedButton.icon(
+            key: const Key('jefe_repartir'),
+            onPressed: !esJefe || _guardando
+                ? null
+                : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => RepartoDelStockScreen(fiesta: widget.fiesta),
+                    )),
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('STOCK POR BARRA'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+          ),
           OutlinedButton.icon(
             key: const Key('jefe_copiar'),
             onPressed: esJefe && widget.otras.isNotEmpty && !_guardando ? _copiar : null,

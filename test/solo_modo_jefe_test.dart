@@ -171,10 +171,12 @@ void main() {
     );
   });
 
-  test('BARRA del jefe (etapa 7): el catálogo, los precios, el recargo, anular y '
-      'reimprimir preguntan por el modo jefe antes de guardar', () {
+  // 28-nov-2026: el reparto del stock por barra (STOCK POR BARRA, desde PRECIOS) es
+  // también solo del jefe (`_guardarReparto`).
+  test('BARRA del jefe (etapa 7): el catálogo, los precios, el recargo, el reparto del stock, '
+      'anular y reimprimir preguntan por el modo jefe antes de guardar', () {
     final escribe = RegExp(
-      r'\.(guardarProducto|guardarPrecio|guardarRecargo|anular)\(|\banotarValeQueSalio\(',
+      r'\.(guardarProducto|guardarPrecio|guardarRecargo|guardarReparto|anular)\(|\banotarValeQueSalio\(',
     );
     final funcion = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true);
     final encontradas = <String>{};
@@ -210,7 +212,7 @@ void main() {
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá.
-    expect(encontradas, {'_guardarProducto', '_guardar', '_anular', '_reimprimir'});
+    expect(encontradas, {'_guardarProducto', '_guardar', '_guardarReparto', '_anular', '_reimprimir'});
   });
 
   test('quien manda en las cajas de la barra es el jefe en modo jefe o la encargada, '
