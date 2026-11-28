@@ -301,11 +301,22 @@ class FranjaDeLaPagina extends StatelessWidget {
                   children: [
                     Icon(conectada ? Icons.wifi : Icons.wifi_off, size: 18),
                     const SizedBox(width: 8),
+                    if (cliente.porConfirmar > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '${cliente.porConfirmar} por confirmar',
+                          key: const Key('pagina_por_confirmar'),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFFF2B84B)),
+                        ),
+                      ),
                     Expanded(
                       child: Text(
                         conectada
                             ? '$quien${cliente.barraDelSalon == null ? '' : ' · ${cliente.barraDelSalon}'} · conectada a la notebook'
-                            : (cliente.problema ?? 'Sin conexión con la notebook: no se anota nada. Reconectando…'),
+                            : (cliente.problema ??
+                                'Sin conexión con la notebook: no se anota nada. Reconectando… '
+                                    'Si la notebook se reinició, escaneá otra vez su QR.'),
                         key: const Key('pagina_franja'),
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         maxLines: 2,

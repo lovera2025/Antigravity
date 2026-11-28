@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../recepcion/central/cliente_central.dart' show GuardadoDelCelular;
 import '../central/llave_de_la_barra.dart';
+import '../datos/aviso_al_anotar.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import 'barra_de_la_pagina.dart';
 
@@ -35,21 +36,33 @@ class QuienEnLaPagina {
   const QuienEnLaPagina({required this.rol, required this.nombre, this.operadorId});
 }
 
-/// No hay conexión con la notebook: nada se anotó.
-class SinConexionConLaNotebook implements Exception {
-  const SinConexionConLaNotebook();
+/// No hay conexión con la notebook: **no se mandó**, así que nada se anotó.
+class SinConexionConLaNotebook extends AvisoAlAnotar {
+  SinConexionConLaNotebook();
 
   @override
-  String toString() => 'Sin conexión con la notebook: no se anotó nada.';
+  String get texto => 'Sin conexión con la notebook: no se anotó. Probá cuando arriba diga "conectada".';
 }
 
 /// La notebook no lo guardó, con el motivo (no le toca, la caja ya cerró…).
-class LaNotebookNoLoGuardo implements Exception {
+class LaNotebookNoLoGuardo extends AvisoAlAnotar {
   final String motivo;
-  const LaNotebookNoLoGuardo(this.motivo);
+  LaNotebookNoLoGuardo(this.motivo);
 
   @override
-  String toString() => motivo;
+  String get texto => motivo;
+}
+
+/// **Se mandó y no llegó la respuesta** (se bloqueó el iPhone, se cortó el wifi): no se
+/// sabe si se anotó. Queda para confirmar: al volver la conexión se manda de nuevo con el
+/// mismo número (la notebook no lo anota dos veces) y aparece solo. **No hay que
+/// repetirlo**: repetido sería otro retiro (28-nov-2026, la revisión independiente).
+class QuedaPorConfirmar extends AvisoAlAnotar {
+  QuedaPorConfirmar();
+
+  @override
+  String get texto =>
+      'No llegó la respuesta de la notebook. No lo repitas: se confirma solo cuando vuelva la conexión.';
 }
 
 /// **La página del iPhone de la encargada y del repositor** (28-nov-2026), hablando con
@@ -140,7 +153,17 @@ class ClienteDeLaPagina extends ChangeNotifier {
   String? _pin;
   String? _reto;
   ({String id, List<int> secreto})? _ficha;
-  final _pendientes = <String, Completer<String?>>{};
+
+  /// Las escrituras que esperan respuesta, por número de pedido: la respuesta trae la
+  /// fila como quedó guardada en la notebook (o null si no la guardó, con el motivo).
+  final _pendientes = <String, Completer<({Map<String, Object?>? fila, String? motivo})>>{};
+
+  /// **Lo mandado sin respuesta** (por número de pedido): se vuelve a mandar igual al
+  /// reconectarse, y la notebook contesta "ya estaba" sin anotarlo dos veces.
+  final _porConfirmar = <String, ({String tabla, Map<String, Object?> fila})>{};
+
+  /// Cuántas escrituras quedaron por confirmar (la franja de arriba lo dice).
+  int get porConfirmar => _porConfirmar.length;
 
   /// La hora de la notebook (con la del teléfono corregida).
   DateTime ahora() => _ahoraDelTelefono().add(_corrimiento);
@@ -186,10 +209,12 @@ class ClienteDeLaPagina extends ChangeNotifier {
     _conectar();
   }
 
-  /// Salir: se olvida la ficha y vuelve a pedir el PIN.
+  /// Salir: se olvida la ficha (la notebook también) y vuelve a pedir el PIN.
   Future<void> salir() async {
+    if (conectada) _mandar({'t': 'salir'});
     _ficha = null;
     quien = null;
+    _porConfirmar.clear();
     await _guardado.guardar(_claveFicha, null);
     _cortar();
     problema = null;
@@ -209,26 +234,60 @@ class ClienteDeLaPagina extends ChangeNotifier {
     }
   }
 
-  /// **Anota una fila nueva en la notebook** y espera que conteste. Recién entonces queda
-  /// en [barra]. Sin conexión tira [SinConexionConLaNotebook]; si la notebook no la
-  /// guarda, [LaNotebookNoLoGuardo] con el motivo.
-  Future<void> escribir(String tabla, Map<String, Object?> fila) async {
-    if (!conectada) throw const SinConexionConLaNotebook();
+  /// **Anota una fila nueva en la notebook** y espera que conteste; recién entonces queda
+  /// en [barra], **como la guardó la notebook** (si ya estaba, la de la notebook). Devuelve
+  /// esa fila.
+  /// - Sin conexión, no se manda: [SinConexionConLaNotebook].
+  /// - Si la notebook no la guarda: [LaNotebookNoLoGuardo], con el motivo.
+  /// - Si se mandó y no llegó la respuesta: [QuedaPorConfirmar]; se vuelve a mandar sola
+  ///   al reconectarse, con el mismo número.
+  Future<Map<String, Object?>> escribir(String tabla, Map<String, Object?> fila) async {
+    if (!conectada) throw SinConexionConLaNotebook();
     final pedido = LlaveDeLaBarra.reto();
-    final espera = Completer<String?>();
+    final espera = Completer<({Map<String, Object?>? fila, String? motivo})>();
     _pendientes[pedido] = espera;
+    _porConfirmar[pedido] = (tabla: tabla, fila: fila);
     _mandar({'t': 'escribe', 'pedido': pedido, 'tabla': tabla, 'fila': fila});
-    final String? motivo;
+    final ({Map<String, Object?>? fila, String? motivo}) r;
     try {
-      motivo = await espera.future.timeout(esperaDeRespuesta);
+      r = await espera.future.timeout(esperaDeRespuesta);
     } on TimeoutException {
-      throw const SinConexionConLaNotebook();
+      notifyListeners();
+      throw QuedaPorConfirmar();
     } finally {
       _pendientes.remove(pedido);
     }
-    if (motivo != null) throw LaNotebookNoLoGuardo(motivo);
-    barra.poner(tabla, fila);
-    if (!_llegoAlgo.isClosed) _llegoAlgo.add(null);
+    if (r.motivo != null) throw LaNotebookNoLoGuardo(r.motivo!);
+    return r.fila ?? fila;
+  }
+
+  /// La respuesta a una escritura: la guarda en [barra] (como quedó en la notebook) y la
+  /// saca de lo por confirmar, aunque llegue tarde o después de reconectarse.
+  void _respuesta(Map<String, dynamic> json) {
+    final pedido = json['pedido'];
+    if (pedido is! String) return;
+    final mandada = _porConfirmar.remove(pedido);
+    final ok = json['ok'] == true;
+    final guardada = json['fila'] is Map ? Map<String, Object?>.from(json['fila'] as Map) : mandada?.fila;
+    if (ok && mandada != null && guardada != null) {
+      barra.poner(mandada.tabla, guardada);
+      if (!_llegoAlgo.isClosed) _llegoAlgo.add(null);
+    }
+    final espera = _pendientes[pedido];
+    if (espera != null && !espera.isCompleted) {
+      espera.complete((
+        fila: ok ? guardada : null,
+        motivo: ok ? null : (json['motivo']?.toString() ?? 'La notebook no lo guardó.'),
+      ));
+    }
+    if (mandada != null) notifyListeners();
+  }
+
+  /// Al reconectarse: lo que quedó sin respuesta se manda de nuevo, igual.
+  void _mandarLoPorConfirmar() {
+    for (final e in _porConfirmar.entries) {
+      _mandar({'t': 'escribe', 'pedido': e.key, 'tabla': e.value.tabla, 'fila': e.value.fila});
+    }
   }
 
   // ── La conexión ──────────────────────────────────────────────────────────
@@ -322,10 +381,7 @@ class ClienteDeLaPagina extends ChangeNotifier {
           if (!_llegoAlgo.isClosed) _llegoAlgo.add(null);
         }
       case 'respuesta':
-        final espera = _pendientes[json['pedido']];
-        if (espera != null && !espera.isCompleted) {
-          espera.complete(json['ok'] == true ? null : (json['motivo']?.toString() ?? 'La notebook no lo guardó.'));
-        }
+        _respuesta(json);
       case 'hola':
         _ajustarLaHora(json['hora']);
       case 'espera':
@@ -397,6 +453,7 @@ class ClienteDeLaPagina extends ChangeNotifier {
     _ajustarLaHora(json['hora']);
     problema = null;
     _cambiar(EstadoDeLaPagina.conectada);
+    _mandarLoPorConfirmar();
   }
 
   void _ajustarLaHora(Object? hora) {
@@ -412,8 +469,9 @@ class ClienteDeLaPagina extends ChangeNotifier {
 
   void _seCorto(int? codigo) {
     _cortar();
+    // Lo que se mandó y no tuvo respuesta queda por confirmar (no "no se anotó").
     for (final p in _pendientes.values) {
-      if (!p.isCompleted) p.completeError(const SinConexionConLaNotebook());
+      if (!p.isCompleted) p.completeError(QuedaPorConfirmar());
     }
     _pendientes.clear();
     if (_cerrado) return;

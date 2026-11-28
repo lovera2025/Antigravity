@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../datos/aviso_al_anotar.dart';
 import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
@@ -104,8 +105,8 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
       unawaited(ref.read(subirDeLaBarraProvider)('barra_stock_movimientos', guardado.id));
       ref.invalidate(stockDeLaFiestaProvider(_id));
       _decir(hecho(guardado, datos));
-    } catch (_) {
-      _decir('No se pudo guardar. Probá de nuevo.', error: true);
+    } catch (e) {
+      _decir(textoDelError(e, 'No se pudo guardar. Probá de nuevo.'), error: true);
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -149,8 +150,8 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
       unawaited(ref.read(subirDeLaBarraProvider)('barra_stock_movimientos', aviso.id));
       ref.invalidate(stockDeLaFiestaProvider(_id));
       _decir('Avisado a la ${s.lugar}: vas en camino con ${datos.nombreDe(s.productoId)}.');
-    } catch (_) {
-      _decir('No se pudo avisar. Probá de nuevo.', error: true);
+    } catch (e) {
+      _decir(textoDelError(e, 'No se pudo avisar. Probá de nuevo.'), error: true);
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }

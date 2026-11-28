@@ -431,7 +431,7 @@ class CentralBarra {
         nombre,
         barra: barra == null || barra.isEmpty || barra.length > 40 ? null : barra,
         esCentral: datos['central'] == '1',
-      );
+      )..ip = pedido.connectionInfo?.remoteAddress.address ?? '';
       // **Primero el PIN** (26-nov-2026): hasta probarlo no recibe nada ni se guarda nada
       // de lo que mande. Tampoco echa a la tablet de verdad que tenga ese mismo equipo.
       final reto = LlaveDeLaBarra.reto();
@@ -460,9 +460,39 @@ class CentralBarra {
     }
   }
 
+  /// **Los PIN se prueban de a uno por dirección** (28-nov-2026, la revisión
+  /// independiente): abriendo muchas conexiones juntas se probaban muchos PIN antes de que
+  /// el freno contara los equivocados. Así, a los [kIntentosDeLaPagina] equivocados en un
+  /// minuto, las demás se cierran sin probar (4029). Vale para las tablets y la página.
+  final _porIp = <String, Future<void>>{};
+
+  Future<void> _deAUnoPorIp(_Conexion conexion, Future<void> Function() probar) {
+    final ip = conexion.ip;
+    final antes = _porIp[ip] ?? Future<void>.value();
+    final ahora = antes.then((_) async {
+      if (conexion.rol != null) return;
+      if (_frenada(ip)) {
+        conexion.mandar(jsonEncode({'t': 'espera'}));
+        await conexion.cerrar(4029, 'demasiados intentos');
+        return;
+      }
+      await probar();
+    });
+    _porIp[ip] = ahora.then<void>((_) {}, onError: (Object _) {});
+    return ahora;
+  }
+
+  Future<void> _probarElPin(
+    _Conexion conexion,
+    dynamic mensaje, {
+    required String reto,
+    required String retoDeLaCaja,
+  }) =>
+      _deAUnoPorIp(conexion, () => _probarElPinAhora(conexion, mensaje, reto: reto, retoDeLaCaja: retoDeLaCaja));
+
   /// La respuesta al reto: quién es y su firma. Si da, entra con su rol, recibe todo lo
   /// de la fiesta y la central le firma su reto. Si no, se cierra (4006 o 4007).
-  Future<void> _probarElPin(
+  Future<void> _probarElPinAhora(
     _Conexion conexion,
     dynamic mensaje, {
     required String reto,
@@ -498,6 +528,7 @@ class CentralBarra {
           ? null
           : LlaveDeLaBarra.firma(llave, lado: 'caja', reto: reto, evento: eventoId, equipo: conexion.equipo);
       if (esperada == null || prueba is! String || !LlaveDeLaBarra.iguales(prueba, esperada)) {
+        _fallo(conexion.ip);
         await conexion.cerrar(4006, 'PIN no reconocido');
         return;
       }
@@ -573,7 +604,7 @@ class CentralBarra {
       return;
     }
     ws.pingInterval = const Duration(seconds: 5);
-    final conexion = _Conexion(ws, equipo, 'Página', esPagina: true);
+    final conexion = _Conexion(ws, equipo, 'Página', esPagina: true)..ip = ip;
     final reto = LlaveDeLaBarra.reto();
     ws.listen(
       (mensaje) {
@@ -599,6 +630,16 @@ class CentralBarra {
   }
 
   Future<void> _probarLaPagina(
+    _Conexion conexion,
+    dynamic mensaje, {
+    required String reto,
+    required String retoDeLaPagina,
+    required String ip,
+  }) =>
+      _deAUnoPorIp(
+          conexion, () => _probarLaPaginaAhora(conexion, mensaje, reto: reto, retoDeLaPagina: retoDeLaPagina, ip: ip));
+
+  Future<void> _probarLaPaginaAhora(
     _Conexion conexion,
     dynamic mensaje, {
     required String reto,
@@ -661,6 +702,13 @@ class CentralBarra {
           await conexion.cerrar(4008, 'ficha vencida');
           return;
         }
+        // Si a mitad de la noche le sacaron el permiso, la ficha ya no vale.
+        if (f.operadorId != null &&
+            !(await _quienEsQuien.paraLaPagina()).any((p) => p.id == f.operadorId && p.rol == f.rol)) {
+          _fichas.remove(json['ficha']);
+          await conexion.cerrar(4008, 'sin permiso');
+          return;
+        }
         llave = f.secreto;
         rol = f.rol;
         nombre = f.nombre;
@@ -690,8 +738,22 @@ class CentralBarra {
         'prueba': LlaveDeLaBarra.firma(llave,
             lado: 'central', reto: retoDeLaPagina, evento: eventoId, equipo: conexion.equipo),
       }));
-      final todo = await _encolar(() => _barra.filasDeLaFiesta(eventoId));
-      final catalogo = await catalogoParaLaPagina?.call() ?? const <String, List<Map<String, Object?>>>{};
+      // Si falla leer (después del PIN bueno), no se dice "PIN no reconocido": se cierra
+      // con otro número y la página vuelve a entrar sola con su ficha.
+      final Map<String, List<Map<String, Object?>>> todo;
+      try {
+        todo = await _encolar(() => _barra.filasDeLaFiesta(eventoId));
+      } catch (e) {
+        debugPrint('Central de la barra: no se pudo leer la fiesta para la página: $e');
+        await conexion.cerrar(4010, 'no se pudo leer');
+        return;
+      }
+      var catalogo = const <String, List<Map<String, Object?>>>{};
+      try {
+        catalogo = await catalogoParaLaPagina?.call() ?? catalogo;
+      } catch (e) {
+        debugPrint('Central de la barra: no se pudo leer el catálogo para la página: $e');
+      }
       conexion.mandar(jsonEncode({
         't': 'catalogo',
         'evento': conexion.fiesta,
@@ -736,6 +798,10 @@ class CentralBarra {
         conexion.mandar(jsonEncode({'t': 'hola', 'hora': _ahora().toUtc().toIso8601String()}));
       case 'escribe':
         unawaited(_escribirDeLaPagina(conexion, json['pedido'], json['tabla'], json['fila']));
+      case 'salir':
+        // SALIR en el iPhone: su ficha deja de valer.
+        _fichas.removeWhere((_, f) => f.equipo == conexion.equipo);
+        unawaited(conexion.cerrar(4011, 'salió'));
     }
   }
 
@@ -745,11 +811,12 @@ class CentralBarra {
   /// contesta el motivo. La página no da nada por hecho hasta la respuesta.
   Future<void> _escribirDeLaPagina(_Conexion de, Object? pedido, Object? tabla, Object? fila) async {
     if (pedido is! String || pedido.isEmpty || pedido.length > 64) return;
-    void responder({String? motivo}) => de.mandar(jsonEncode({
+    void responder({String? motivo, Map<String, Object?>? fila}) => de.mandar(jsonEncode({
           't': 'respuesta',
           'pedido': pedido,
           'ok': motivo == null,
           'motivo': ?motivo,
+          'fila': ?fila,
         }));
     final rol = de.rol;
     if (rol == null) return;
@@ -771,21 +838,22 @@ class CentralBarra {
       responder(motivo: 'No es de este teléfono.');
       return;
     }
-    final resultado = await _encolar<({bool nueva, String? motivo})>(() async {
+    final resultado = await _encolar<({bool nueva, String? motivo, Map<String, Object?>? yaEsta})>(() async {
       final yaEsta = await _barra.filaDeLaRed(tabla, id);
-      // Ya está (la página la mandó de nuevo al volver la conexión): queda como está.
-      if (yaEsta != null) return (nueva: false, motivo: null);
+      // Ya está (la página la mandó de nuevo al volver la conexión, o la misma venta la
+      // anuló otro equipo): queda como está, y se le contesta cómo está.
+      if (yaEsta != null) return (nueva: false, motivo: null, yaEsta: yaEsta);
       final motivo = await _porQueNo(de, rol, tabla, laFila, yaEsta, const {});
-      if (motivo != null) return (nueva: false, motivo: motivo);
+      if (motivo != null) return (nueva: false, motivo: motivo, yaEsta: null);
       final guardo = await _barra.guardarDeLaPagina(tabla, laFila);
-      return (nueva: guardo, motivo: guardo ? null : 'No se pudo guardar en la notebook.');
+      return (nueva: guardo, motivo: guardo ? null : 'No se pudo guardar en la notebook.', yaEsta: null);
     });
     if (resultado.motivo != null) {
       _rechazar(de, tabla, id, resultado.motivo!);
       responder(motivo: resultado.motivo);
       return;
     }
-    responder();
+    responder(fila: resultado.yaEsta ?? laFila);
     if (!resultado.nueva) return;
     alGuardar?.call();
     alGuardarDeLaPagina?.call(tabla, id);
@@ -1028,6 +1096,9 @@ class _Conexion {
 
   /// Quién entró en la página.
   String? persona;
+
+  /// De qué dirección viene: el freno de los PIN equivocados va por dirección.
+  String ip = '';
 
   /// La fiesta que se le manda a la página al entrar.
   Object? fiesta;

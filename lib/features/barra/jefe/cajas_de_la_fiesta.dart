@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../datos/aviso_al_anotar.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
@@ -188,8 +189,11 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         } on CajaYaCerrada {
           if (mounted) setState(() => _avisoPlata = (texto: 'La Caja ${caja.numeroCaja} ya cerró: no se anota.', error: true));
           return;
-        } catch (_) {
-          if (mounted) setState(() => _avisoPlata = (texto: 'No se pudo anotar. Probá de nuevo.', error: true));
+        } catch (e) {
+          // Desde el iPhone, "probá de nuevo" podía anotarlo dos veces: se dice el aviso.
+          if (mounted) {
+            setState(() => _avisoPlata = (texto: textoDelError(e, 'No se pudo anotar. Probá de nuevo.'), error: true));
+          }
           return;
         }
         unawaited(ref.read(subirDeLaBarraProvider)('barra_caja_movimientos', hecho.id));
@@ -330,6 +334,15 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     );
   }
 
+  /// Si lo que se hace acá le llega a la tablet al momento: desde la página del iPhone,
+  /// o desde la notebook con la central prendida para esta fiesta.
+  bool _seEnteraAlMomento() {
+    if (ref.read(enLaPaginaDeLaBarraProvider)) return true;
+    if (ref.read(enLaWebProvider)) return false;
+    final central = ref.read(centralDeLaBarraProvider);
+    return central.prendida && central.eventoId == widget.fiesta.id;
+  }
+
   Future<void> _anular(VentaDeLaCaja x) => _conFreno(() async {
         final conSilla = x.venta.renglones.any((r) => esSillaDeLaPuerta(r.nombre));
         // "¿Volvió el vale?" (28-nov-2026): con el vale en la mano el stock vuelve; si ya
@@ -339,7 +352,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           titulo: 'Anular la N° ${_numero(x.venta)} · ${pesos(x.venta.cobrado)}',
           explicacion: 'La venta no se borra: queda ANULADA con tu nombre y el motivo, y deja de '
               'contar en la caja. No se puede deshacer. '
-              '${ref.read(enLaPaginaDeLaBarraProvider) ? 'La tablet se entera al momento por el wifi.' : 'La tablet se entera con internet.'}'
+              '${_seEnteraAlMomento() ? 'La tablet se entera al momento por el wifi.' : 'La tablet se entera con internet.'}'
               '${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
           preguntaPorElVale: AnulacionBarra.preguntaPorElVale(x.venta),
         );
@@ -351,8 +364,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           anulacion = await ref
               .read(barraDelJefeProvider)
               .anular(x.venta, motivo: motivo, quien: quienEsElJefe(ref), valeVolvio: valeVolvio);
-        } catch (_) {
-          _decir(x.venta, 'No se pudo anular. Probá de nuevo.', error: true);
+        } catch (e) {
+          _decir(x.venta, textoDelError(e, 'No se pudo anular. Probá de nuevo.'), error: true);
           return;
         }
         unawaited(ref.read(subirDeLaBarraProvider)('barra_anulaciones', anulacion.id));

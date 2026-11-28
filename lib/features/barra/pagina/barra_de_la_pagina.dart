@@ -182,16 +182,15 @@ class BarraDeLaPagina implements BarraDelJefe {
       deviceId: _cliente.equipo,
       ahora: _cliente.ahora(),
     );
-    await _cliente.escribir('barra_anulaciones', nueva.toMap());
-    return nueva;
+    // Si la notebook ya la tenía (desde otro equipo), vale la de la notebook.
+    return AnulacionBarra.fromMap(Map<String, dynamic>.from(await _cliente.escribir('barra_anulaciones', nueva.toMap())));
   }
 
   @override
   Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
     final conEquipo = paso.conEquipo(_cliente.equipo);
     if (_filas['barra_cierres']?[conEquipo.id] case final ya?) return PasoDelCierre.fromMap(ya);
-    await _cliente.escribir('barra_cierres', conEquipo.toMap());
-    return conEquipo;
+    return PasoDelCierre.fromMap(Map<String, dynamic>.from(await _cliente.escribir('barra_cierres', conEquipo.toMap())));
   }
 
   @override
@@ -201,15 +200,15 @@ class BarraDeLaPagina implements BarraDelJefe {
       throw CajaYaCerrada(CajaBarra.fromMap(caja).numeroCaja);
     }
     final sellado = movimiento.sellado(hechoPor: quien, deviceId: _cliente.equipo, ahora: _cliente.ahora());
-    await _cliente.escribir('barra_caja_movimientos', sellado.toMap());
-    return sellado;
+    return MovimientoDeCaja.fromMap(
+        Map<String, dynamic>.from(await _cliente.escribir('barra_caja_movimientos', sellado.toMap())));
   }
 
   @override
   Future<MovimientoDeStock> anotarMovimientoDeStock(MovimientoDeStock movimiento, {required String quien}) async {
     final sellado = movimiento.selladoPor(quien).conEquipo(_cliente.equipo);
-    await _cliente.escribir('barra_stock_movimientos', sellado.toMap());
-    return sellado;
+    return MovimientoDeStock.fromMap(
+        Map<String, dynamic>.from(await _cliente.escribir('barra_stock_movimientos', sellado.toMap())));
   }
 
   @override

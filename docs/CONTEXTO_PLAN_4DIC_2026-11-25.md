@@ -10,6 +10,108 @@ A "¿Volvió el vale?" → B la encargada (y el repositor) en el iPhone → C la
 E el plano ancho y Noche y Blanco → F con él. Si falta tiempo, se cae primero Noche y Blanco, después el plano ancho,
 la página del repositor y el locutor.
 
+#### CÓMO QUEDÓ AL CORTAR (28-nov, noche; el usuario pidió "actualizá el contexto para retomar en otro chat")
+**~93 %. Nada publicado.** Hechas A, B y C; D a medias; faltan E y F. Commits: `c0d7137` (A), `3d036b3` (B),
+`cbf46f0` (C, la noche simulada), `c748e8c` (D, primera parte) y el de esta nota (los arreglos de la revisión, **sin
+probar**). El usuario preguntó en el medio cómo entra la encargada con el iPhone: se le explicó (QR de la notebook,
+solo su PIN, retoma sola).
+
+**Lo primero al retomar, en orden:**
+1. **Probar los arreglos de la tercera revisión** (commit de esta nota: compilan, `flutter analyze` sin errores,
+   **ninguna prueba corrida todavía**). Correr `test/pagina_de_la_barra_test.dart`, `test/pagina_de_la_barra_pantalla_test.dart`,
+   `test/noche_simulada_test.dart` y las de la barra (`grep -l "features/barra" test/*.dart`). Sumar pruebas y roturas de
+   cada arreglo (abajo, "La tercera revisión"). Lo más importante: **se corta justo después de mandar un retiro desde el
+   iPhone → dice "por confirmar, no lo repitas" → al reconectarse se reenvía con el mismo número → queda una sola vez**.
+2. **Mirar las roturas que corren aparte**: en la copia `..\arguello_events_pruebas` (un `git worktree` en `cbf46f0`,
+   script `correr_todo.sh`) corrieron **la suite entera: 6.951 en verde, ninguna falla** y después las 21 listas de
+   roturas (499 casos; al cortar iban 63). El resumen queda en `..\arguello_events_pruebas\build_pruebas\resumen.txt`
+   ("nombre: N de M"; cada log en esa carpeta). Una "ATENCION" = falta una prueba. Al terminar: `git worktree remove
+   ..\arguello_events_pruebas`.
+3. **Terminar la etapa D (el locutor)**: lo que falta, abajo en "Etapa D".
+4. Etapa E (el plano ancho en la tele y Noche y Blanco) y la F con él (mouse, nube, publicar).
+
+**La tercera revisión independiente (28-nov, noche; agente que leyó `b03825d..HEAD` sin mis conclusiones):**
+- **ALTA, arreglado sin probar:** desde el iPhone, si la respuesta no llegaba (iPhone bloqueado, wifi cortado), la
+  pantalla decía "No se pudo. Probá de nuevo." y repetirlo anotaba **otro** retiro, cambio o reposición (id nuevo).
+  Ahora: `ClienteDeLaPagina.escribir` guarda lo mandado en `_porConfirmar` y tira **`QuedaPorConfirmar`** ("No llegó la
+  respuesta… No lo repitas: se confirma solo"); al reconectarse (`_mandarLoPorConfirmar`) lo reenvía igual y la
+  notebook contesta "ya estaba"; una respuesta tardía también lo confirma (`_respuesta`). La franja dice "N por
+  confirmar". **Las pantallas dicen el aviso tal cual** con `textoDelError` (`barra/datos/aviso_al_anotar.dart`,
+  `AvisoAlAnotar`): `cajas_de_la_fiesta.dart` (retiro/cambio y anular), `ok_del_cierre.dart`,
+  `stock_de_las_barras_screen.dart`.
+- **ALTA, arreglado sin probar:** el freno del PIN se salteaba abriendo muchas conexiones juntas, y `/barra` (las
+  tablets) no tenía freno. Ahora **los PIN se prueban de a uno por dirección** (`CentralBarra._deAUnoPorIp`, `_Conexion.ip`)
+  en `/barra` y `/pagina`, y `/barra` también cuenta los equivocados (`_fallo`): a los 5 en un minuto, 4029.
+- **MEDIA, arreglado sin probar:** la respuesta de la notebook lleva **la fila como quedó** (`'fila'`): si la misma
+  venta ya la anuló otro equipo, el iPhone guarda la de la notebook (no la suya). `BarraDeLaPagina` devuelve lo que
+  guardó la notebook.
+- **Arreglados sin probar, menores:** si falla leer la fiesta después de un PIN bueno ya no dice "PIN no reconocido"
+  (cierra 4010 y vuelve solo); **SALIR borra la ficha en la notebook** (`'salir'`, 4011); **si a mitad de la noche le
+  sacan el permiso, la ficha deja de valer** (se revisa `paraLaPagina` al volver); la franja sin conexión agrega "Si la
+  notebook se reinició, escaneá otra vez su QR"; "La tablet se entera al momento" también en la notebook con la central
+  prendida (`_seEnteraAlMomento`); **la silla de la noche no cuenta como perdida** si el vale no volvió
+  (`entregadasSinCobrar`).
+- **NO arreglado (decirle al usuario / límites):** (a) quien tenga la clave del wifi de la barra y capture un ingreso
+  puede sacar el PIN (la llave es un sha256 del PIN, por `ws://`): **la protección real es que la clave del router de
+  cada barra no se comparta**; (b) la misma venta anulada sin internet desde la tablet y desde la notebook con
+  respuestas distintas: cada una se queda con la suya hasta que hay internet (ya en
+  `docs/pendientes/anular-dos-veces-desde-dos-pcs.md`); (c) "¿Volvió el vale?" es por venta, no por vale (con POR
+  SEPARADO no se puede decir "uno sí y otro no"); (d) el retiro y el OK desde el iPhone llevan la hora del teléfono
+  (solo el orden a la vista); (e) la noche simulada no prueba escrituras del iPhone con la respuesta perdida, ni
+  conteos, recetas o sillas: sumarlas.
+
+#### Etapa C — La noche simulada (hecha; `cbf46f0`)
+`test/noche_simulada_test.dart`: dos barras con sus centrales de verdad (UDP y WebSocket en esta PC), tres cajas, la
+encargada en su tablet, Ana en el iPhone (la página), el repositor; 300 ventas (efectivo, transferencia, mixto) de 21
+a 01:35; Sofía casi toda la noche sin señal (≥80 ventas), la notebook de la Barra 1 se apaga y vuelve, las barras se
+separan y se juntan, anulaciones con y sin el vale, retiro y cambio, reposición sin señal. Comprueba que todo llega a
+todos lados una sola vez, que todas las ventas son de la noche del 4, cada cierre igual al centavo en todos los
+equipos y en el iPhone, el stock igual en todos, GANANCIA igual en las dos notebooks, y las tres cajas cerradas con
+el OK. 5 de 5 corridas. **Encontró un error real**: al apagarse la notebook, el reintento del iPhone dejaba un error
+suelto (`canal.ready` sin atender): arreglado en `cliente_de_la_pagina.dart`.
+
+#### Etapa D — El locutor, "Cómo lo nombran" (a medias; `c748e8c`)
+**Hecho y probado** (`test/como_lo_nombran_test.dart` 16, `test/nombrar_por_el_candado_test.dart` 11; las 64 de
+Recepción, la puerta, la tele y el tótem: 1.133 en verde):
+- **Datos:** `lib/models/como_lo_nombran.dart` (`ComoLoNombran`, `NombreDeAcompanante`), `UuidUtils.comoLoNombranId`,
+  **tabla `como_lo_nombran` en la v85** (`crearTablasV85`; la base del equipo va por la 85; `test/migracion_v84_test.dart`
+  puesto al día), `ComoLoNombranRepository` (`cambios`, `sinSubir`), `comoLoNombranDelEventoProvider`.
+- **Reglas puras** (`recepcion/services/como_lo_nombran.dart`): `deCorrido`, `limpiarNombre` (60 letras, sin emojis ni
+  letras que la tele no tiene), `lugaresDe` (el mismo número que la lista de la puerta), `NombresDeLaFamilia` (cruza lo
+  guardado con la lista de hoy por lo cargado; lo que no cruza va a `sobrantes`; `firma` sin `updated_at`; `filaCon`),
+  `DatosNombres`.
+- **La puerta:** `PuertaDelEvento.masivo(nombres:)`; `GrupoPuerta.institucion` y `.nombres`; `PersonaPuerta.nombrado`
+  (el `nombre` sigue siendo el cargado); se busca también por el apodo; JSON con claves nuevas opcionales.
+- **El pedido `QuePide.nombrar`** por el mismo `ResolvedorDePedidos` (`decidirNombres`: conflicto si cambió mientras se
+  editaba, "Quedó así." si ya está, idempotente por id; `PuertaDeEstaPc.nombresDe/guardarNombres`).
+  `AccionesPuerta.nombrar` en la PC (texto según la central prendida) y en el celular (`ClienteCentral.nombrar`, solo
+  conectado, espera 8 s; `sillasPorMandar` cuenta solo sillas).
+- **La pantalla:** `recepcion/widgets/hoja_como_lo_nombran.dart` (un campo por lugar, ↺, el aviso de la tele, el
+  conflicto sin borrar lo escrito, reintento con el mismo id) y en `PanelPuerta` la línea "Lo nombran: «…»" y el botón
+  **CÓMO LO NOMBRAN** (también antes del sorteo, solo familias de alumno).
+- `ComoLoNombranEnMemoria` en `test/helpers/puerta_en_memoria.dart` (y en los arneses que reemplazan las sillas).
+
+**Falta, en orden** (el diseño entero en `docs/SPEC_locutor_2026-11-18.md`, que no está en git; **v85 en vez de v81**,
+sin la app Android del locutor, sin música, y con la tele como central):
+1. **El locutor en la central** (`central_puerta.dart`): `r=locutor` en `/vivo` con **código propio**
+   (`CodigoCentral` con otro prefijo; con el de los celulares también entra; con el suyo sin `r`, 4001); rol de solo
+   mirar (acepta solo `hola`; no recibe `puerta`, `salon`, `chat` ni `puestos`; va en `locutores`, no en puestos);
+   mensaje `locutor` con `ListaDelLocutor` (nuevo, `services/lista_del_locutor.dart`: institución → división →
+   familias por apellido, sin profes, cargados a mano ni bajas) **solo cuando cambia** (un ingreso no lo reenvía).
+2. **La página del locutor**: `?locutor` en `lib/puesto_main.dart` **antes** de crear `ClienteCentral`;
+   `ClienteLocutor` (claves propias en el navegador) y `PantallaLocutor` (oscura, Outfit, el nombre grande y los
+   acompañantes, "Sin conexión" con la lista a la vista; los extras NUEVO/A−/A+ si da el tiempo).
+3. **SUMAR AL LOCUTOR** en Recepción → CELULARES (`widgets/sumar_celular.dart`, solo en un masivo: QR, código,
+   "No puede ingresar a nadie ni cambiar nada") y en el menú de la tele (`tele/pantalla_tele.dart`).
+4. **El tótem**: `FichaTotem.desdePuerta` saluda con `nombrado ?? nombre` (nunca `deCorrido`); `armarFichaTotem` con
+   los nombres (`puente_ficha.dart`, `main.dart` AuthWrapper); `KioskLauncher.notifyFichaCambio` + `ficha_cambio` en
+   `totem_display.dart`; `TotemSigueLosNombres`. La Tele 2: mandarle los nombres por `/tele`.
+5. **Sync y nube**: en `sync_engine.dart` (`_incrementalColumns`, `_tablasDelCobro`, prioridad 4, la bajada,
+   `tablasDeLaPuerta`, `_cleanForSqlite`, `_tablasSinRevisarBorrados` con el motivo); el SQL nuevo en
+   `supabase/migrations/` (molde `20261105120000_sillas_puerta.sql`, **sin correr**); `test/sync_tablas_v85_test.dart`;
+   "Todo subido" cuenta los nombres sin subir; `test/migracion_v85_test.dart`; la migración 82 → 85 sobre una copia.
+6. Pruebas de la central con el locutor, capturas, roturas, y el recorrido en el navegador (al final, con el resto).
+
 #### Etapa A — "¿Volvió el vale?" al anular (~86 %)
 - **La ventana** (`barra/widgets/anular_venta_dialog.dart`, `pedirAnulacion`): el motivo y **"¿Volvió el vale?" SÍ,
   LO TENGO · NO, YA SE ENTREGÓ**, sin ninguna marcada (ANULAR apagado hasta contestar). La usan VENTAS de la caja (con

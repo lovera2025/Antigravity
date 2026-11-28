@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemSound, SystemSoundType;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../datos/aviso_al_anotar.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/pedido_de_cierre.dart';
@@ -310,8 +311,8 @@ class _AvisoDePedidosDeCierreState extends ConsumerState<AvisoDePedidosDeCierre>
             : 'Le pediste a la Caja ${x.caja.numeroCaja} que cuente de nuevo.';
       });
       await _mirar();
-    } catch (_) {
-      if (mounted) setState(() => _dicho = 'No se pudo guardar la respuesta. Probá de nuevo.');
+    } catch (e) {
+      if (mounted) setState(() => _dicho = textoDelError(e, 'No se pudo guardar la respuesta. Probá de nuevo.'));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }

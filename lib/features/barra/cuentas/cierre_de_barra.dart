@@ -26,6 +26,8 @@ Map<String, int> entregadasSinCobrar(Iterable<VentaBarra> ventas, Iterable<Anula
   for (final v in ventas) {
     if (!sinVale.contains(v.id)) continue;
     for (final r in v.renglones) {
+      // La silla de la noche no es bebida ni se le compra al proveedor.
+      if (esSillaDeLaPuerta(r.nombre)) continue;
       unidades[r.productoId] = (unidades[r.productoId] ?? 0) + r.cantidad;
     }
   }

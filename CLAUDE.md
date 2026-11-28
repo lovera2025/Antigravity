@@ -539,9 +539,19 @@ de la mora "después de 6.9.0"**, que cubre de la 6.6.1 en adelante.
 - **Una venta de entradas no es un pago de cuota:** no toca saldo, mora, el cierre de COBROS, el contrato ni el
   salón. `test/venta_entradas_no_toca_test.dart` lee `lib/features/entradas/{datos,cuentas,widgets,pdf}` y falla si
   aparece algo de eso. Una venta nunca se edita: anular es otra fila.
-- **La base del equipo va por la v84 (26-nov: el precio de lista, las recetas de los tragos y los retiros y el cambio
-  de la encargada): no correr la app desde esta carpeta contra la base de verdad** hasta que esta PC tenga instalada
-  la versión con la v84. Los arneses que no abren la base sí.
+- **La base del equipo va por la v85 (28-nov: `como_lo_nombran`, el locutor; la v84 es el precio de lista, las
+  recetas de los tragos y los retiros y el cambio de la encargada): no correr la app desde esta carpeta contra la base
+  de verdad** hasta que esta PC tenga instalada la versión con la v85. Los arneses que no abren la base sí.
+- **El locutor, "Cómo lo nombran" (28-nov, a medias, sin publicar; lo hecho y lo que falta en "Etapa D" del CONTEXTO
+  del 4-dic):** tabla aparte `como_lo_nombran` (v85; **la ficha de la oficina no cambia**: `PersonaPuerta.nombre` sigue
+  siendo lo cargado y `nombrado` es lo cambiado), un solo camino para escribir (el pedido `QuePide.nombrar` por
+  `ResolvedorDePedidos`, con firma y conflicto), y CÓMO LO NOMBRAN en la tarjeta de la familia. Falta el locutor en la
+  central, su página, el tótem y el sync.
+- **Desde la página del iPhone nada se repite a ciegas** (28-nov, tercera revisión): lo mandado sin respuesta queda
+  "por confirmar" (`QuedaPorConfirmar`) y se reenvía con el mismo número al reconectarse; las pantallas de la barra dicen
+  el error con `textoDelError` (`barra/datos/aviso_al_anotar.dart`), nunca "probá de nuevo" si el error es un
+  `AvisoAlAnotar`. **Una pantalla de la barra nueva que guarde algo y la use la página, igual.** Los PIN se prueban de a
+  uno por dirección en la central (`_deAUnoPorIp`).
 - Lo que la Parte A dejó como regla:
   - **La fiesta sigue en la lista de la barra y de Entradas hasta el mediodía siguiente**
     (`primerDiaDeLasFiestasQueVienen`, `common/utils/dia_de_la_fiesta.dart`). No "desde ayer": con fiestas dos noches
