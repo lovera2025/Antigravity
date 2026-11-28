@@ -185,6 +185,10 @@ class _PanelCentralDeLaBarraState extends ConsumerState<PanelCentralDeLaBarra> {
                 )
               else
                 for (final c in estado.soloCajas) _Caja(c),
+              if (estado.rechazos.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _Rechazos(estado.rechazos),
+              ],
               const SizedBox(height: 6),
               const _EstaNotebook(),
             ],
@@ -237,6 +241,66 @@ class _OtraBarra extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: color),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Lo que la central **no guardó** de lo que le mandaron por el wifi: cuántas cosas y las
+/// últimas, con la hora, quién y por qué (28-nov-2026). Sin plata: va también en la vista
+/// simple de la notebook.
+class _Rechazos extends StatelessWidget {
+  final List<RechazoDeLaCentral> rechazos;
+
+  const _Rechazos(this.rechazos);
+
+  static String _hora(DateTime d) {
+    String dos(int n) => n.toString().padLeft(2, '0');
+    final l = d.toLocal();
+    return '${dos(l.hour)}:${dos(l.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const ambar = Color(0xFFF2B84B);
+    final n = rechazos.length;
+    final ultimos = rechazos.reversed.take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.report_gmailerrorred_outlined, size: 16, color: ambar),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                n == 1
+                    ? 'La central no aceptó una cosa que le mandaron: no se guardó ni se repartió.'
+                    : 'La central no aceptó $n cosas que le mandaron: no se guardaron ni se repartieron.',
+                key: const Key('central_barra_rechazos'),
+                style: const TextStyle(fontSize: 13, color: ambar, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        for (var i = 0; i < ultimos.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(left: 22, top: 2),
+            child: Text(
+              '${_hora(ultimos[i].cuando)} · ${ultimos[i].nombre}: ${ultimos[i].motivo}',
+              key: Key('central_barra_rechazo_$i'),
+              style: const TextStyle(fontSize: 13, color: Color(0xFFC9C4BA)),
+            ),
+          ),
+        if (n > ultimos.length)
+          Padding(
+            padding: const EdgeInsets.only(left: 22, top: 2),
+            child: Text(
+              'y ${n - ultimos.length} más de antes.',
+              style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
+            ),
+          ),
       ],
     );
   }

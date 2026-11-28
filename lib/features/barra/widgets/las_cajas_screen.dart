@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/evento.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../central/central_barra_provider.dart';
+import '../central/linea_de_la_caja.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../jefe/cajas_de_la_fiesta.dart';
@@ -27,6 +29,11 @@ class LasCajasScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final veCatalogo = ReglasDeLaBarra.veCatalogoYPrecios(ref.watch(rolEnLaBarraProvider));
+    // Este aparato habla con la central de la barra (la tablet de la encargada): la misma
+    // línea de VENDER, con lo que espera subir, cómo está la central y **lo que la central
+    // no le aceptó** (28-nov-2026: en LAS CAJAS no se veía, y lo que ella anulaba o
+    // aceptaba podía no haber llegado sin que nada lo dijera).
+    final conLaCentral = !ref.watch(enLaWebProvider) && ref.watch(clienteDeLaBarraProvider) != null;
     final tema = temaDeVender(DisenioBarra.nocheDorada, base: Theme.of(context));
     return Theme(
       data: tema,
@@ -70,9 +77,17 @@ class LasCajasScreen extends ConsumerWidget {
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1280),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(margen, 8, margen, 0),
-                child: CajasDeLaFiestaVista(key: ValueKey('cajas_${fiesta.id}'), fiesta: fiesta),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (conLaCentral) const LineaDeLaCaja(),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(margen, 8, margen, 0),
+                      child: CajasDeLaFiestaVista(key: ValueKey('cajas_${fiesta.id}'), fiesta: fiesta),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

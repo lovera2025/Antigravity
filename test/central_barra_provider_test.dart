@@ -185,6 +185,54 @@ void main() {
     );
   });
 
+  // 28-nov-2026 (el hallazgo 2 de la revisión de los roles): lo que la central no guarda
+  // quedaba solo en una lista que nadie leía. Ahora va en su estado, para el panel de la
+  // notebook.
+  test('lo que la central no acepta queda a la vista en la notebook: quién, qué y por qué', () async {
+    final notebook = equipo('notebook');
+    final tablet = equipo('tablet-a');
+    await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+    expect(notebook.c.read(centralDeLaBarraProvider).rechazos, isEmpty);
+
+    await tablet.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 1 · Marta');
+    final cliente = tablet.c.read(clienteDeLaBarraProvider)!;
+    await hasta(() => cliente.estado == EstadoDeLaCentral.conectada, que: 'la tablet conectada');
+    final barra = tablet.c.read(barraDeEsteEquipoProvider);
+    final caja = await barra.abrirCaja(
+      eventoId: _fiesta,
+      operadorId: 'op-tablet-a',
+      operadorNombre: 'Marta',
+      numeroCaja: 1,
+    );
+    final venta = await barra.vender(
+      caja: caja,
+      renglones: const [RenglonVenta(productoId: 'p', nombre: 'Fernet', precio: 6000, cantidad: 1)],
+      medio: MedioBarra.efectivo,
+      efectivo: 6000,
+      quien: 'Marta',
+    );
+    await hasta(() => notebook.barra.ventasGuardadas.any((v) => v.id == venta.id), que: 'la venta en la notebook');
+    expect(notebook.c.read(centralDeLaBarraProvider).rechazos, isEmpty, reason: 'una venta de su caja se acepta');
+
+    // La cajera anula (como si una pantalla se lo dejara): la central no lo guarda.
+    await barra.anular(venta, motivo: 'me equivoqué', quien: 'Marta');
+    await hasta(
+      () => notebook.c.read(centralDeLaBarraProvider).rechazos.isNotEmpty,
+      que: 'el rechazo, en el estado de la central',
+    );
+    final r = notebook.c.read(centralDeLaBarraProvider).rechazos.single;
+    expect(r.nombre, 'Caja 1 · Marta');
+    expect(r.tabla, 'barra_anulaciones');
+    expect(r.motivo, 'Anula solo la encargada');
+    expect(notebook.barra.anulacionesGuardadas, isEmpty, reason: 'no se guardó');
+    // A la tablet también le llega (la línea de VENDER y de LAS CAJAS lo dicen).
+    await hasta(() => cliente.rechazadas.length == 1, que: 'la tablet se entera');
+
+    // Apagada la central, no queda nada de esa noche a la vista.
+    await notebook.c.read(centralDeLaBarraProvider.notifier).apagar();
+    expect(notebook.c.read(centralDeLaBarraProvider).rechazos, isEmpty);
+  });
+
   // 25-nov-2026: una central por barra, y la madrugada.
   test('prende con la barra elegida, la tablet de esa barra la encuentra, y se recuerda', () async {
     final notebook = equipo('notebook');

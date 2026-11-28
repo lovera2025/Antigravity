@@ -230,10 +230,23 @@ void main() {
       expect(porQueNo(RolEnLaBarra.repositor, 'celu-del-repo', de: caja), isNotNull);
     });
 
-    test('no sobre una caja cerrada, ni sin saber de qué caja es, ni cambiando uno que ya está', () {
-      expect(porQueNo(RolEnLaBarra.encargada, 'tablet-de-romi', de: cerrada), 'La caja ya cerró');
+    test('no sin saber de qué caja es, ni cambiando uno que ya está', () {
       expect(porQueNo(RolEnLaBarra.encargada, 'tablet-de-romi'), 'No se sabe de qué caja es');
       expect(porQueNo(RolEnLaBarra.encargada, 'tablet-de-romi', de: caja, yaEsta: const {'id': 'x'}),
+          'Un retiro no se cambia');
+    });
+
+    // 28-nov-2026, el hallazgo 7 de la revisión de los roles: la encargada lo anotó con
+    // la caja abierta, se quedó sin señal y en el medio la cajera cerró. La central lo
+    // rechazaba para siempre ("La caja ya cerró") y la plata que salió quedaba como un
+    // faltante de la cajera; con internet llegaba igual por la nube. Ahora se guarda, y
+    // LAS CAJAS lo dice aparte (la prueba de abajo: `cambioDespuesDelCierre`).
+    test('el retiro que llega con la caja ya cerrada se guarda: la plata salió de verdad', () {
+      expect(porQueNo(RolEnLaBarra.encargada, 'tablet-de-romi', de: cerrada), isNull);
+      // Sigue siendo solo de la encargada, y uno que ya está no se cambia.
+      expect(porQueNo(RolEnLaBarra.cajera, 'tablet-de-marta', de: cerrada, operadorId: _marta),
+          'La plata de las cajas la maneja la encargada');
+      expect(porQueNo(RolEnLaBarra.encargada, 'tablet-de-romi', de: cerrada, yaEsta: const {'id': 'x'}),
           'Un retiro no se cambia');
     });
 

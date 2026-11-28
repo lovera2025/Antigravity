@@ -231,6 +231,11 @@ class EstadoCentralBarra {
   /// Lo que salió mal al prenderla, en palabras.
   final String? error;
 
+  /// Lo que llegó por el wifi y la central **no guardó**, con quién lo mandó y por qué (los
+  /// últimos, del más viejo al más nuevo). Hasta el 28-nov-2026 no se veía en ninguna
+  /// pantalla de la notebook: quien lo había hecho creía que había llegado.
+  final List<RechazoDeLaCentral> rechazos;
+
   const EstadoCentralBarra({
     this.eventoId,
     this.puerto,
@@ -240,6 +245,7 @@ class EstadoCentralBarra {
     this.otras = const [],
     this.contestaBusqueda = false,
     this.error,
+    this.rechazos = const [],
   });
 
   bool get prendida => puerto != null;
@@ -257,7 +263,12 @@ class EstadoCentralBarra {
   /// Si está enganchada ahora con alguna otra central de la fiesta.
   bool get enganchada => otras.any((o) => o.conectada);
 
-  EstadoCentralBarra con({List<String>? direcciones, List<CajaConectada>? cajas, List<EngancheConOtra>? otras}) =>
+  EstadoCentralBarra con({
+    List<String>? direcciones,
+    List<CajaConectada>? cajas,
+    List<EngancheConOtra>? otras,
+    List<RechazoDeLaCentral>? rechazos,
+  }) =>
       EstadoCentralBarra(
         eventoId: eventoId,
         puerto: puerto,
@@ -267,6 +278,7 @@ class EstadoCentralBarra {
         otras: otras ?? this.otras,
         contestaBusqueda: contestaBusqueda,
         error: error,
+        rechazos: rechazos ?? this.rechazos,
       );
 }
 
@@ -281,6 +293,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
   RespondeBusqueda? _busqueda;
   StreamSubscription<List<CajaConectada>>? _cajas;
   StreamSubscription<void>? _puente;
+  StreamSubscription<void>? _rechazos;
 
   /// Si la notebook cambia de red, vuelve a abrir lo que contesta la búsqueda y relee
   /// sus direcciones, sin apagar la central (26-nov-2026).
@@ -378,6 +391,12 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     _puente = central.cambiosDelPuente.listen((_) {
       if (identical(_central, central) && state.prendida) state = state.con(otras: central.otras);
     });
+    // Lo que la central no guardó: a la vista en el panel de la notebook.
+    _rechazos = central.cambiosDeRechazos.listen((_) {
+      if (identical(_central, central) && state.prendida) {
+        state = state.con(rechazos: List.unmodifiable(central.rechazos));
+      }
+    });
     // Si la notebook cambia de red: lo que contesta la búsqueda se vuelve a abrir, las
     // direcciones que muestra CAJAS se releen y el enganche busca de nuevo (26-nov-2026:
     // hasta ahí había que apagar y prender la central).
@@ -417,6 +436,7 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
       cajas: central.cajas,
       otras: central.otras,
       contestaBusqueda: contesta,
+      rechazos: List.unmodifiable(central.rechazos),
     );
   }
 
@@ -480,6 +500,8 @@ class CentralDeLaBarra extends Notifier<EstadoCentralBarra> {
     _cajas = null;
     await _puente?.cancel();
     _puente = null;
+    await _rechazos?.cancel();
+    _rechazos = null;
     await central?.cerrar();
   }
 }

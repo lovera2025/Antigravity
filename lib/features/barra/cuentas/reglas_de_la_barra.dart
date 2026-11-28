@@ -142,7 +142,13 @@ abstract final class ReglasDeLaBarra {
         if (!manejaLaPlataDeLasCajas(rol)) return 'La plata de las cajas la maneja la encargada';
         if (yaEsta != null) return 'Un retiro no se cambia';
         if (caja == null) return 'No se sabe de qué caja es';
-        if (!caja.abierta) return 'La caja ya cerró';
+        // **Un retiro que llega con la caja ya cerrada se guarda igual** (28-nov-2026, el
+        // hallazgo 7 de la revisión de los roles). La encargada lo anotó con la caja
+        // abierta (sobre una cerrada su aparato no la deja: `CajaYaCerrada`), se quedó
+        // sin señal, y en el medio la cajera cerró. La plata salió de verdad: rechazarlo
+        // para siempre la dejaba como un faltante de la cajera, y con internet llegaba
+        // igual por la nube. LAS CAJAS lo dice aparte ("llegó después del cierre",
+        // `cambioDespuesDelCierre`) sin tocar lo anotado al cerrar.
         return null;
       case 'barra_stock_movimientos':
         return mueveElStock(rol) ? null : 'El stock lo mueve el repositor';

@@ -161,8 +161,26 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   /// El pedido de cierre de la cajera y el OK de la encargada (v79): por la red del
   /// salón llegan al otro equipo en el momento, haya internet o no.
+  ///
+  /// **El OK no se lo da una cajera** (28-nov-2026, el hallazgo 5 de la revisión de los
+  /// roles): aceptar un cierre o pedir que cuente de nuevo es de la encargada o del jefe.
+  /// Hasta acá lo cuidaba solo la pantalla, y con un OK anotado en su propia tablet la
+  /// cajera cerraba ([cerrarCaja] mira los pasos de este equipo). Pedir, cancelar y cerrar
+  /// sin esperar (con su motivo) siguen siendo de quien tiene la caja.
   @override
   Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
+    if (paso.tipo == TipoPasoDelCierre.ok || paso.tipo == TipoPasoDelCierre.recontar) {
+      _tieneQue(ReglasDeLaBarra.daElOk, 'El OK lo da la encargada');
+    }
+    final hecho = await _caja.anotarPasoDelCierre(paso);
+    return _avisar('barra_cierres', hecho.id, hecho);
+  }
+
+  /// **LA ENCARGADA ESTÁ ACÁ**: la encargada da el OK (o pide contar de nuevo) en la
+  /// tablet de la cajera, con su PIN. La pantalla ya comprobó el PIN
+  /// (`laEncargadaAutoriza`) y el paso va a su nombre. La central lo acepta de la tablet
+  /// de esa caja solo si la firma es de una encargada. Como [anularConLaEncargada].
+  Future<PasoDelCierre> responderConLaEncargada(PasoDelCierre paso) async {
     final hecho = await _caja.anotarPasoDelCierre(paso);
     return _avisar('barra_cierres', hecho.id, hecho);
   }

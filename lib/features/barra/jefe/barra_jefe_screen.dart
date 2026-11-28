@@ -167,8 +167,12 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
     // La notebook de la barra (donde se prende la central), con el modo jefe.
-    final enLaNotebook = !enLaWeb && ref.watch(centralSePrendeAcaProvider) && esJefe;
-    final simple = _vistaSimple && enLaNotebook;
+    final esLaNotebook = !enLaWeb && ref.watch(centralSePrendeAcaProvider);
+    final enLaNotebook = esLaNotebook && esJefe;
+    // Una vez puesta, la vista simple no depende de que el modo jefe siga: si se vence
+    // (el PIN del modo jefe dura unos minutos) con la notebook bloqueada, no vuelve sola la
+    // pantalla de antes (28-nov-2026: lo encontró la prueba de la vista simple).
+    final simple = _vistaSimple && esLaNotebook;
     return PopScope(
       // En la vista simple no se sale para atrás: del otro lado está todo lo del jefe.
       canPop: !simple,
@@ -180,7 +184,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
           children: [
             // El logo va siempre, como un adorno. En la vista simple, mantenerlo apretado
             // pide la clave de la notebook; nada en la pantalla lo dice.
-            if (enLaNotebook) ...[
+            if (enLaNotebook || simple) ...[
               RawGestureDetector(
                 key: const Key('jefe_logo'),
                 gestures: {

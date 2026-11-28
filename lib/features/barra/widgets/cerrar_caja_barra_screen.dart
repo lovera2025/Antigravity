@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../central/barra_con_la_red.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/pesos.dart';
@@ -356,13 +357,20 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     String? quien,
   }) async {
     try {
-      final paso = await ref.read(barraDeLaCajaProvider).anotarPasoDelCierre(PasoDelCierre.responder(
-            pedido: pedido,
-            tipo: tipo,
-            nota: nota,
-            hechoPor: quien ?? quienEnLaBarra(ref, widget.caja),
-            ahora: _ahora(),
-          ));
+      final barra = ref.read(barraDeLaCajaProvider);
+      final respuesta = PasoDelCierre.responder(
+        pedido: pedido,
+        tipo: tipo,
+        nota: nota,
+        hechoPor: quien ?? quienEnLaBarra(ref, widget.caja),
+        ahora: _ahora(),
+      );
+      // Con el PIN de la encargada en esta tablet (LA ENCARGADA ESTÁ ACÁ, [quien]): la
+      // sesión es la de la cajera, y el OK va por su camino. Sin eso, la segunda llave
+      // no deja que una cajera se dé el OK.
+      final paso = quien != null && barra is BarraConLaRed
+          ? await barra.responderConLaEncargada(respuesta)
+          : await barra.anotarPasoDelCierre(respuesta);
       unawaited(ref.read(subirDeLaBarraProvider)('barra_cierres', paso.id));
       return true;
     } catch (_) {

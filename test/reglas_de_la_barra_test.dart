@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,10 +111,83 @@ void main() {
       expect(barra.cajasGuardadas.single.abierta, isTrue);
       final pedido = await conLlave.anotarPasoDelCierre(
           PasoDelCierre.pedir(caja: c, efectivoContado: 0, hechoPor: 'Marta', ahora: DateTime.now()));
+      // La encargada, desde su sesión, da el OK.
+      rol = encargada;
       await conLlave.anotarPasoDelCierre(
           PasoDelCierre.responder(pedido: pedido, tipo: TipoPasoDelCierre.ok, hechoPor: 'Romi', ahora: DateTime.now()));
+      rol = cajera;
       await conLlave.cerrarCaja(c, efectivoContado: 0, diferencia: 0, quien: 'Marta');
       expect(barra.cajasGuardadas.single.abierta, isFalse);
+    });
+
+    // 28-nov-2026, el hallazgo 5 de la revisión de los roles: lo cuidaba solo la pantalla.
+    // Con un OK anotado en su propia tablet, la cajera cerraba sin que nadie mirara.
+    test('la cajera no se da el OK ni se pide contar de nuevo; pedir, cancelar y cerrar sin '
+        'esperar, sí', () async {
+      final c = await conLlave.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
+      final pedido = await conLlave.anotarPasoDelCierre(
+          PasoDelCierre.pedir(caja: c, efectivoContado: 0, hechoPor: 'Marta', ahora: DateTime.now()));
+      PasoDelCierre resp(TipoPasoDelCierre tipo, {String quien = 'Marta'}) =>
+          PasoDelCierre.responder(pedido: pedido, tipo: tipo, hechoPor: quien, ahora: DateTime.now());
+      for (final tipo in [TipoPasoDelCierre.ok, TipoPasoDelCierre.recontar]) {
+        // Tampoco firmando con el nombre de la encargada.
+        await expectLater(
+          conLlave.anotarPasoDelCierre(resp(tipo, quien: 'Romi')),
+          throwsA(isA<NoLeTocaEnLaBarra>().having((e) => e.motivo, 'motivo', 'El OK lo da la encargada')),
+          reason: '$tipo',
+        );
+      }
+      expect(await barra.pasosDelCierre(_fiesta), hasLength(1), reason: 'solo su pedido');
+      await expectLater(
+        conLlave.cerrarCaja(c, efectivoContado: 0, diferencia: 0, quien: 'Marta'),
+        throwsA(isA<NoLeTocaEnLaBarra>()),
+      );
+      // El repositor tampoco.
+      rol = repositor;
+      await expectLater(
+          conLlave.anotarPasoDelCierre(resp(TipoPasoDelCierre.ok)), throwsA(isA<NoLeTocaEnLaBarra>()));
+      // Lo suyo sí: cancelar el pedido (VOLVER A VENDER) y cerrar sin esperar, con motivo.
+      rol = cajera;
+      await conLlave.anotarPasoDelCierre(resp(TipoPasoDelCierre.cancelado));
+      final otro = await conLlave.anotarPasoDelCierre(
+          PasoDelCierre.pedir(caja: c, efectivoContado: 0, hechoPor: 'Marta', ahora: DateTime.now()));
+      await conLlave.anotarPasoDelCierre(PasoDelCierre.responder(
+          pedido: otro, tipo: TipoPasoDelCierre.sinOk, nota: 'no hay encargada', hechoPor: 'Marta', ahora: DateTime.now()));
+      await conLlave.cerrarCaja(c, efectivoContado: 0, diferencia: 0, quien: 'Marta');
+      expect(barra.cajasGuardadas.single.abierta, isFalse);
+    });
+
+    test('LA ENCARGADA ESTÁ ACÁ: con su PIN en la tablet de la cajera, el OK va por su camino', () async {
+      final c = await conLlave.abrirCaja(eventoId: _fiesta, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
+      final pedido = await conLlave.anotarPasoDelCierre(
+          PasoDelCierre.pedir(caja: c, efectivoContado: 0, hechoPor: 'Marta', ahora: DateTime.now()));
+      // La sesión sigue siendo la de la cajera: la pantalla comprobó el PIN de la encargada.
+      final ok = await conLlave.responderConLaEncargada(
+          PasoDelCierre.responder(pedido: pedido, tipo: TipoPasoDelCierre.ok, hechoPor: 'Romi', ahora: DateTime.now()));
+      expect(ok.hechoPor, 'Romi');
+      await conLlave.cerrarCaja(c, efectivoContado: 0, diferencia: 0, quien: 'Marta');
+      expect(barra.cajasGuardadas.single.abierta, isFalse);
+    });
+
+    test('el camino de LA ENCARGADA ESTÁ ACÁ lo usa solo la pantalla que pide su PIN', () {
+      final quienes = {
+        for (final f in Directory('lib').listSync(recursive: true))
+          if (f is File &&
+              f.path.endsWith('.dart') &&
+              f.readAsStringSync().contains('.responderConLaEncargada('))
+            f.path.replaceAll('\\', '/'),
+      };
+      expect(quienes, {'lib/features/barra/widgets/cerrar_caja_barra_screen.dart'});
+      final fuente = File('lib/features/barra/widgets/cerrar_caja_barra_screen.dart')
+          .readAsStringSync()
+          .replaceAll('\r\n', '\n');
+      // Solo con el nombre que devolvió el PIN de la encargada.
+      expect(fuente, contains('final paso = quien != null && barra is BarraConLaRed'));
+      final aca = fuente.indexOf('Future<void> _laEncargadaEstaAca() async {');
+      final cuerpo = fuente.substring(aca, fuente.indexOf('\n  }\n', aca));
+      expect(cuerpo.indexOf('await laEncargadaAutoriza('), greaterThan(0));
+      expect(cuerpo.indexOf('TipoPasoDelCierre.ok, quien: quien'),
+          greaterThan(cuerpo.indexOf('await laEncargadaAutoriza(')));
     });
 
     test('el cambio: la cajera una vez antes de vender; después nadie lo pisa sin motivo, salvo el jefe', () async {

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
+import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/cuentas/pesos.dart';
@@ -29,6 +30,16 @@ import 'helpers/operadores_en_memoria.dart';
 /// las sillas vendidas) y anula o reimprime cualquier venta, con motivo. La cajera no.
 /// En la tablet no aparece PRENDER LA CENTRAL.
 const _romi = 'a0000000-0000-4000-8000-000000000007';
+
+/// Este aparato ya habla (o no) con la central de la barra, sin abrir ninguna conexión.
+class _ConCliente extends ClienteDeLaBarra {
+  _ConCliente(this.cliente);
+
+  final ClienteDeLaCentral? cliente;
+
+  @override
+  ClienteDeLaCentral? build() => cliente;
+}
 
 void main() {
   final hoy = DateTime.now();
@@ -414,6 +425,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('las_cajas_catalogo_precios')), ve ? findsOneWidget : findsNothing,
           reason: '$rol');
+    }
+  });
+
+  // 28-nov-2026 (el hallazgo 2 de la revisión de los roles): en LAS CAJAS de la tablet
+  // de la encargada no se veía cómo estaba la central ni lo que no le había aceptado.
+  testWidgets('LAS CAJAS en la tablet de la encargada lleva la línea de la central (la de '
+      'VENDER); sin central o en la web, no', (tester) async {
+    for (final (caso, conCliente, enLaWeb, seVe) in [
+      ('la tablet con la central', true, false, true),
+      ('sin haberla buscado', false, false, false),
+      ('la web', true, true, false),
+    ]) {
+      final cliente = conCliente
+          ? ClienteDeLaCentral(
+              eventoId: fiesta.id,
+              equipo: 'tablet-romi',
+              nombreCaja: 'Encargada · Romi',
+              barra: prueba.barra,
+              credencial: () async => null,
+            )
+          : null;
+      await tester.pumpWidget(ProviderScope(
+        key: ValueKey(caso),
+        overrides: [
+          ...operadores.reemplazos,
+          ...prueba.reemplazos,
+          barraDelJefeProvider.overrideWithValue(prueba.barra),
+          centralSePrendeAcaProvider.overrideWithValue(false),
+          rolEnLaBarraProvider.overrideWithValue(RolEnLaBarra.encargada),
+          enLaWebProvider.overrideWithValue(enLaWeb),
+          clienteDeLaBarraProvider.overrideWith(() => _ConCliente(cliente)),
+        ],
+        child: MaterialApp(home: LasCajasScreen(fiesta: fiesta)),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('caja_subida')), seVe ? findsOneWidget : findsNothing, reason: caso);
+      expect(find.byKey(const Key('las_cajas_titulo')), findsOneWidget, reason: caso);
     }
   });
 

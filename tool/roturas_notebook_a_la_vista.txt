@@ -1,0 +1,126 @@
+la vista simple no tiene boton para apagar la central
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+                      sinApagar: true,
+                      sinApagar: false,
+---
+el panel de la central respeta "sin apagar"
+lib/features/barra/central/panel_central_barra.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+                if (deEstaFiesta && !widget.sinApagar)
+                if (deEstaFiesta)
+---
+el logo hay que mantenerlo apretado 2 segundos
+lib/features/barra/jefe/vista_simple_de_la_notebook.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+const kApretarElLogo = Duration(seconds: 2);
+const kApretarElLogo = Duration(seconds: 1);
+---
+solo entra con la clave de esa notebook
+lib/features/barra/jefe/vista_simple_de_la_notebook.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+      _pasoLaClave = bien;
+      _pasoLaClave = true;
+---
+de fabrica viene apagada: no se bloquea sola
+lib/features/barra/jefe/vista_simple_de_la_notebook.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    return false;
+    return true;
+---
+se bloquea sola solo con el tilde
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    if (!ref.read(vuelveSolaALaVistaSimpleProvider)) return;
+
+---
+se bloquea sola solo con la central prendida
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    if (!ref.read(centralDeLaBarraProvider).prendida) return;
+
+---
+al bloquearse cierra lo que quedo abierto encima
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    Navigator.of(context).popUntil((r) => r == esta || r.isFirst);
+
+---
+en la vista simple no se sale para atras
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+      canPop: !simple,
+      canPop: true,
+---
+si el modo jefe se vence, la vista simple sigue
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    final simple = _vistaSimple && esLaNotebook;
+    final simple = _vistaSimple && enLaNotebook;
+---
+en la web no hay vista simple
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    final esLaNotebook = !enLaWeb && ref.watch(centralSePrendeAcaProvider);
+    final esLaNotebook = ref.watch(centralSePrendeAcaProvider);
+---
+mientras se usa la notebook la cuenta empieza de nuevo
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+  void _alTocar(PointerEvent e) => _huboUso();
+  void _alTocar(PointerEvent e) {}
+---
+fuera de la vista simple el logo no pide nada
+lib/features/barra/jefe/barra_jefe_screen.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+                    (r) => r.onLongPress = simple ? () => _pedirLaClave(context) : null,
+                    (r) => r.onLongPress = () => _pedirLaClave(context),
+---
+lo que la central no acepto se ve en el panel de la notebook
+lib/features/barra/central/panel_central_barra.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+              if (estado.rechazos.isNotEmpty) ...[
+              if (estado.rechazos.length > 99) ...[
+---
+el panel muestra los ultimos cinco rechazos, el mas nuevo arriba
+lib/features/barra/central/panel_central_barra.dart
+test/notebook_de_la_barra_a_la_vista_test.dart
+    final ultimos = rechazos.reversed.take(5).toList();
+    final ultimos = rechazos.take(5).toList();
+---
+los rechazos de la central llegan a su estado
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+        state = state.con(rechazos: List.unmodifiable(central.rechazos));
+
+---
+LAS CAJAS de la tablet de la encargada lleva la linea de la central
+lib/features/barra/widgets/las_cajas_screen.dart
+test/encargada_de_barra_test.dart
+                  if (conLaCentral) const LineaDeLaCaja(),
+
+---
+LAS CAJAS en la web no lleva la linea de la central
+lib/features/barra/widgets/las_cajas_screen.dart
+test/encargada_de_barra_test.dart
+    final conLaCentral = !ref.watch(enLaWebProvider) && ref.watch(clienteDeLaBarraProvider) != null;
+    final conLaCentral = ref.watch(clienteDeLaBarraProvider) != null;
+---
+la cajera no se da el OK del cierre (la segunda llave)
+lib/features/barra/central/barra_con_la_red.dart
+test/reglas_de_la_barra_test.dart
+      _tieneQue(ReglasDeLaBarra.daElOk, 'El OK lo da la encargada');
+
+---
+el OK con el PIN de la encargada va por su camino
+lib/features/barra/widgets/cerrar_caja_barra_screen.dart
+test/reglas_de_la_barra_test.dart
+      final paso = quien != null && barra is BarraConLaRed
+      final paso = quien == null && barra is BarraConLaRed
+---
+el retiro que llega con la caja ya cerrada se guarda
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/retiros_de_la_encargada_test.dart
+        if (caja == null) return 'No se sabe de qué caja es';
+        if (caja == null || !caja.abierta) return 'No se sabe de qué caja es';
+---
