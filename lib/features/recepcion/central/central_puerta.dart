@@ -8,6 +8,7 @@ import '../../../core/red/servir_archivos.dart';
 import '../../../models/invitado.dart';
 import '../../totem/services/tiempos_a_mano.dart';
 import '../chat/mensaje_de_puesto.dart';
+import '../services/lista_del_locutor.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
 import 'resolvedor_de_pedidos.dart';
@@ -105,6 +106,7 @@ class CentralPuerta {
   CentralPuerta({
     required String eventoId,
     required String codigo,
+    String? codigoLocutor,
     required PuertaDeEstaPc pc,
     ResolvedorDePedidos? resolvedor,
     ResolvedorDePedidos Function(String eventoId)? resolvedorDe,
@@ -112,6 +114,7 @@ class CentralPuerta {
     DateTime Function()? ahora,
     this.esTele = false,
   })  : _codigo = codigo,
+        _codigoLocutor = codigoLocutor,
         _pc = pc,
         _resolvedorDe = resolvedorDe,
         // El mismo reloj para la central y sus marcas: cuánto hace que se
@@ -200,6 +203,7 @@ class CentralPuerta {
       _escuelas.remove(id);
       alSoltar?.call(id);
     }
+    _mandarLocutor();
   }
 
   /// La Tele 1 tiene que mostrar otra escuela: la pidió un celular, o la
@@ -264,6 +268,102 @@ class CentralPuerta {
   String get codigo => _codigo;
   int? get puerto => _servidor?.port;
 
+  // ── El locutor (28-nov-2026; `docs/SPEC_locutor_2026-11-18.md`) ───────────
+
+  /// **El código del locutor**: otro que el de los celulares. Con él solo se mira la
+  /// lista ([ListaDelLocutor]); no abre la puerta. Null: sin locutor.
+  String? get codigoLocutor => _codigoLocutor;
+  String? _codigoLocutor;
+
+  /// Los locutores conectados: van aparte de los puestos (no marcan, no están en el
+  /// chat ni reciben la lista de la puerta).
+  final _locutores = <_Conexion>{};
+  ListaDelLocutor? _listaLocutor;
+  String? _firmaLocutor;
+  var _versionLocutor = 0;
+  final _cambiosDeLocutores = StreamController<int>.broadcast();
+
+  int get locutoresConectados => _locutores.length;
+
+  /// Cuántos locutores hay conectados, cada vez que cambia.
+  Stream<int> get cambiosDeLocutores => _cambiosDeLocutores.stream;
+
+  /// La lista del locutor de todas las escuelas que atiende; **se le manda solo si cambió
+  /// lo que dice** (un ingreso no la cambia).
+  void _mandarLocutor() {
+    final puertas = [for (final e in _escuelas.values) ?e.puerta];
+    if (puertas.isEmpty) return;
+    final lista = ListaDelLocutor.de(puertas);
+    final firma = jsonEncode([_principal.titulo, lista.toJson()]);
+    if (firma == _firmaLocutor) return;
+    _firmaLocutor = firma;
+    _listaLocutor = lista;
+    _versionLocutor++;
+    final texto = _textoLocutor();
+    for (final c in _locutores) {
+      c.mandar(texto);
+    }
+  }
+
+  String _textoLocutor() => jsonEncode({
+        't': 'locutor',
+        'v': _versionLocutor,
+        'titulo': _principal.titulo,
+        // La hora de la central: el NUEVO no depende de la del celular.
+        'ahora': _ahora().toUtc().toIso8601String(),
+        'lista': _listaLocutor!.toJson(),
+      });
+
+  void _avisarLocutores() {
+    if (!_cambiosDeLocutores.isClosed) _cambiosDeLocutores.add(_locutores.length);
+  }
+
+  void _conectarLocutor(WebSocket ws, String celular) {
+    for (final vieja in _locutores.where((c) => c.celular == celular).toList()) {
+      _locutores.remove(vieja);
+      unawaited(vieja.cerrar(4003, 'reemplazada'));
+    }
+    ws.pingInterval = const Duration(seconds: 5);
+    final c = _Conexion(ws, celular, 'Locutor');
+    _locutores.add(c);
+    _avisarLocutores();
+    c.mandar(_listaLocutor == null ? jsonEncode({'t': 'esperando'}) : _textoLocutor());
+    ws.listen(
+      (m) => _mensajeDelLocutor(c, m),
+      onDone: () => _seFueLocutor(c),
+      onError: (Object _) => _seFueLocutor(c),
+      cancelOnError: true,
+    );
+  }
+
+  /// Del locutor solo se atiende el latido: un pedido o un chat no hacen nada.
+  void _mensajeDelLocutor(_Conexion c, dynamic mensaje) {
+    if (mensaje is! String || mensaje.length > 512) return;
+    try {
+      final j = jsonDecode(mensaje);
+      if (j is Map && j['t'] == 'hola') {
+        c.mandar(jsonEncode({'t': 'hola', 'ahora': _ahora().toUtc().toIso8601String()}));
+      }
+    } catch (_) {}
+  }
+
+  void _seFueLocutor(_Conexion c) {
+    if (_locutores.remove(c)) _avisarLocutores();
+  }
+
+  /// Otro código del locutor: el que está conectado queda afuera (los celulares de la
+  /// puerta siguen).
+  Future<void> cambiarCodigoLocutor(String nuevo) async {
+    _codigoLocutor = nuevo;
+    final viejos = _locutores.toList();
+    _locutores.clear();
+    for (final c in viejos) {
+      c.mandar(jsonEncode({'t': 'codigo'}));
+      await c.cerrar(4001, 'codigo');
+    }
+    _avisarLocutores();
+  }
+
   /// Las marcas de la escuela de la central (en la notebook, las de la
   /// noche).
   MarcasDeLaNoche get marcas => _principal.resolvedor.marcas;
@@ -325,6 +425,7 @@ class CentralPuerta {
     e.puerta = puerta;
     e.resolvedor.puerta = puerta;
     _mandarLista(e);
+    _mandarLocutor();
   }
 
   /// Los segundos de la llegada de esa noche, para que el celular los muestre
@@ -757,10 +858,17 @@ class CentralPuerta {
     for (final t in teles) {
       await t.cerrar(WebSocketStatus.goingAway, 'cerrada');
     }
+    // Los locutores también: la página dice que se cortó y vuelve sola.
+    final locutores = _locutores.toList();
+    _locutores.clear();
+    for (final c in locutores) {
+      await c.cerrar(WebSocketStatus.goingAway, 'cerrada');
+    }
     await _servidor?.close(force: true);
     _servidor = null;
     await _cambiosDePuestos.close();
     await _cambiosDeTeles.close();
+    await _cambiosDeLocutores.close();
   }
 
   // ── Lo que llega por la red ───────────────────────────────────────────────
@@ -815,7 +923,10 @@ class CentralPuerta {
       await ws.close(4029, 'espera');
       return;
     }
-    if (datos['c'] != _codigo) {
+    // El locutor entra solo con su código, y su código no abre la puerta.
+    final esLocutor = datos['r'] == 'locutor';
+    final esperado = esLocutor ? _codigoLocutor : _codigo;
+    if (esperado == null || datos['c'] != esperado) {
       (_errores[ip] ??= []).add(_ahora());
       ws.add(jsonEncode({'t': 'codigo'}));
       await ws.close(4001, 'codigo');
@@ -830,6 +941,11 @@ class CentralPuerta {
         nombre.length > 40) {
       ws.add(jsonEncode({'t': 'nombre'}));
       await ws.close(4002, 'nombre');
+      return;
+    }
+
+    if (esLocutor) {
+      _conectarLocutor(ws, celular);
       return;
     }
 

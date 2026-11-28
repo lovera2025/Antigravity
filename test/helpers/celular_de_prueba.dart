@@ -23,6 +23,9 @@ class CelularDePrueba {
 
   final WebSocket ws;
   final _llegados = <Map<String, dynamic>>[];
+
+  /// Los tipos de todo lo que llegó, en orden.
+  List<String> get tiposLlegados => [for (final m in _llegados) '${m['t']}'];
   final _leidos = <int>{};
   final _aviso = StreamController<void>.broadcast();
   final _cerro = Completer<int?>();
@@ -33,12 +36,15 @@ class CelularDePrueba {
     String id = 'cel-juli',
     String nombre = 'Juli',
     int? tele,
+    // El locutor (28-nov-2026): `r=locutor`.
+    String? rol,
   }) async {
     final q = Uri(queryParameters: {
       'c': codigo,
       'id': id,
       'p': nombre,
       if (tele != null) 't': '$tele',
+      if (rol != null) 'r': rol,
     }).query;
     return CelularDePrueba._(
       await WebSocket.connect('ws://127.0.0.1:$puerto/vivo?$q'),

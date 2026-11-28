@@ -578,4 +578,147 @@ void main() {
       expect(pc.tiempos, [TiemposAMano(nombre: 6, camino: 12)]);
     });
   });
+
+  // ── El locutor (28-nov-2026; docs/SPEC_locutor_2026-11-18.md) ─────────────
+
+  group('el locutor', () {
+    const codigoLocutor = '7391';
+
+    setUp(() async {
+      await central.cerrar();
+      pc.alumnos
+        ..add(alumnoDePrueba('a0000000-0000-4000-8000-000000000001', 'CEIBO, ANA',
+            acomp: ['ULMO, CELIA'], institucion: 'ESCUELA NORMAL', evento: _evento))
+        ..add(alumnoDePrueba('a0000000-0000-4000-8000-000000000002', 'SAUCE, PEDRO',
+            institucion: 'ESCUELA NORMAL', evento: _evento));
+      central = CentralPuerta(
+        eventoId: _evento,
+        codigo: _codigo,
+        codigoLocutor: codigoLocutor,
+        pc: pc,
+        ahora: () => ahora,
+      );
+      puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+    });
+
+    test('entra con su código; con el de los celulares no; y su código no abre la puerta', () async {
+      central.ponerPuerta(pc.lista());
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      final m = await l.espera('locutor');
+      expect(central.locutoresConectados, 1);
+      final lista = (m['lista'] as List).first as Map;
+      expect(lista['n'], 'ESCUELA NORMAL');
+
+      final conElDeLosCelulares =
+          await CelularDePrueba.conectar(puerto, codigo: _codigo, id: 'loc-2', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(conElDeLosCelulares);
+      expect(await conElDeLosCelulares.cerro(), 4001);
+
+      final sinRol = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'cel-x', nombre: 'Juli');
+      celulares.add(sinRol);
+      expect(await sinRol.cerro(), 4001, reason: 'el QR del locutor no abre la puerta');
+      expect(central.puestos, isEmpty);
+    });
+
+    test('solo mira: nunca la lista de la puerta, el chat ni los puestos; su pedido no hace nada', () async {
+      central.ponerPuerta(pc.lista());
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      await l.espera('locutor');
+      final juli = await celular();
+      await juli.espera('puerta');
+      final alumno = pc.lista().grupos.first.titular.id;
+      l.mandar({'t': 'pedido', 'id': 'x1', 'que': 'ingresar', 'persona': alumno, 'hace': 0});
+      l.mandar({'t': 'chat', 'm': {'id': 'm1', 'para': 'todos', 'texto': 'hola'}});
+      l.mandar({'t': 'hola'});
+      await l.espera('hola');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(pc.filas.values.where((f) => f.estadoIngreso == EstadoIngreso.ingresado), isEmpty,
+          reason: 'el locutor no ingresa a nadie');
+      expect(l.tiposLlegados, isNot(contains('puerta')));
+      expect(l.tiposLlegados, isNot(contains('chat')));
+      expect(l.tiposLlegados, isNot(contains('puestos')));
+      expect(l.tiposLlegados, isNot(contains('respuesta')));
+      expect(central.puestos.map((p) => p.nombre), ['Juli'], reason: 'no figura entre los puestos');
+    });
+
+    test('un ingreso no le reenvía la lista; un alumno nuevo sí', () async {
+      central.ponerPuerta(pc.lista());
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      await l.espera('locutor');
+      final juli = await celular();
+      await juli.espera('puerta');
+      await juli.pedirYEsperar('a1', QuePide.ingresar, pc.lista().grupos.first.titular.id);
+      central.ponerPuerta(pc.lista());
+      await juli.espera('puerta');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(l.tiposLlegados.where((t) => t == 'locutor'), hasLength(1));
+
+      pc.alumnos.add(alumnoDePrueba('a0000000-0000-4000-8000-000000000003', 'TALA, LUIS',
+          institucion: 'ESCUELA NORMAL', evento: _evento));
+      central.ponerPuerta(pc.lista());
+      final m = await l.espera('locutor');
+      expect(jsonEncode(m['lista']), contains('TALA, LUIS'));
+    });
+
+    test('si la PC todavía no tiene la lista, espera, y le llega apenas está', () async {
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      await l.espera('esperando');
+      central.ponerPuerta(pc.lista());
+      await l.espera('locutor');
+    });
+
+    test('cambiar el código de los celulares lo deja; cambiar el suyo lo saca', () async {
+      central.ponerPuerta(pc.lista());
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      await l.espera('locutor');
+      await central.cambiarCodigo('5555');
+      l.mandar({'t': 'hola'});
+      await l.espera('hola');
+      expect(central.locutoresConectados, 1);
+      await central.cambiarCodigoLocutor('2468');
+      await l.espera('codigo');
+      expect(await l.cerro(), 4001);
+      expect(central.locutoresConectados, 0);
+      final conElNuevo = await CelularDePrueba.conectar(puerto, codigo: '2468', id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(conElNuevo);
+      await conElNuevo.espera('locutor');
+    });
+
+    test('la misma página en otra pestaña reemplaza a la vieja (4003)', () async {
+      central.ponerPuerta(pc.lista());
+      final vieja = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(vieja);
+      await vieja.espera('locutor');
+      final nueva = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(nueva);
+      await nueva.espera('locutor');
+      expect(await vieja.cerro(), 4003);
+      expect(central.locutoresConectados, 1);
+    });
+
+    test('sin código del locutor, nadie entra como locutor', () async {
+      await central.cerrar();
+      central = CentralPuerta(eventoId: _evento, codigo: _codigo, pc: pc, ahora: () => ahora);
+      puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+      final l = await CelularDePrueba.conectar(puerto, codigo: _codigo, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      expect(await l.cerro(), 4001);
+    });
+
+    test('al cerrar la central se le corta', () async {
+      central.ponerPuerta(pc.lista());
+      final l = await CelularDePrueba.conectar(puerto, codigo: codigoLocutor, id: 'loc-1', nombre: 'Locutor', rol: 'locutor');
+      celulares.add(l);
+      await l.espera('locutor');
+      await central.cerrar();
+      expect(await l.cerro(), WebSocketStatus.goingAway);
+      central = CentralPuerta(eventoId: _evento, codigo: _codigo, pc: pc, ahora: () => ahora);
+      puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+    });
+  });
 }

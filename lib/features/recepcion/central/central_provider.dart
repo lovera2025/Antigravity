@@ -146,6 +146,35 @@ final cambiarCodigoCentralProvider =
       CodigoCentral.cambiar(eventoId, anterior: anterior),
 );
 
+/// **El código del locutor** (28-nov-2026): otro que el de los celulares, guardado con la
+/// misma regla (`CodigoCentral`, las mismas horas) bajo `locutor_<clave>`. Nunca igual al
+/// de los celulares ([noIgualA]): su QR no abre la puerta. Null si no se pudo sacar (la
+/// central anda igual, sin locutor).
+final codigoLocutorProvider = Provider<Future<String?> Function(String clave, String noIgualA)>(
+  (ref) => (clave, noIgualA) async {
+    try {
+      var c = await CodigoCentral.delEvento('locutor_$clave');
+      if (c == noIgualA) c = await CodigoCentral.cambiar('locutor_$clave', anterior: c);
+      return c == noIgualA ? null : c;
+    } catch (_) {
+      return null;
+    }
+  },
+);
+
+/// Otro código del locutor (el conectado queda afuera).
+final cambiarCodigoLocutorProvider = Provider<Future<String?> Function(String clave, String anterior, String noIgualA)>(
+  (ref) => (clave, anterior, noIgualA) async {
+    try {
+      var c = await CodigoCentral.cambiar('locutor_$clave', anterior: anterior);
+      if (c == noIgualA) c = await CodigoCentral.cambiar('locutor_$clave', anterior: c);
+      return c == noIgualA ? null : c;
+    } catch (_) {
+      return null;
+    }
+  },
+);
+
 /// La carpeta con la página del celular: `puesto` al lado del programa. La
 /// deja el instalador. En una tele o una tablet (24-nov-2026) viene adentro del
 /// APK y la tele la copia a su carpeta al abrir (`PaginaDelCelularEnAndroid`).
@@ -189,9 +218,15 @@ class EstadoCentral {
   final String? aviso;
   final int avisos;
 
+  /// El código del locutor (28-nov-2026) y cuántos locutores están conectados.
+  final String? codigoLocutor;
+  final int locutores;
+
   const EstadoCentral({
     this.eventoId,
     this.codigo,
+    this.codigoLocutor,
+    this.locutores = 0,
     this.puerto,
     this.direcciones = const [],
     this.puestos = const [],
@@ -225,9 +260,17 @@ class EstadoCentral {
 
   int get conectados => puestos.where((p) => p.conectado).length;
 
+  /// El QR del locutor: la misma página, solo para mirar la lista.
+  String? get enlaceLocutor {
+    final d = direccion;
+    return d == null || codigoLocutor == null ? null : 'http://$d/?locutor=$codigoLocutor';
+  }
+
   EstadoCentral _con({
     String? eventoId,
     String? codigo,
+    String? codigoLocutor,
+    int? locutores,
     List<String>? direcciones,
     List<PuestoConectado>? puestos,
     List<TeleConectada>? teles,
@@ -237,6 +280,8 @@ class EstadoCentral {
       EstadoCentral(
         eventoId: eventoId ?? this.eventoId,
         codigo: codigo ?? this.codigo,
+        codigoLocutor: codigoLocutor ?? this.codigoLocutor,
+        locutores: locutores ?? this.locutores,
         puerto: puerto,
         direcciones: direcciones ?? this.direcciones,
         puestos: puestos ?? this.puestos,
@@ -269,6 +314,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   ChatDelPuesto? _chat;
   ChatDelPuesto? get chat => _chat;
   StreamSubscription<List<PuestoConectado>>? _puestos;
+  StreamSubscription<int>? _locutores;
 
   /// La fila de los pedidos de cada evento: la de la central si está
   /// prendida, y la misma para lo que se pide desde esta PC aunque esté
@@ -447,9 +493,11 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     // En la tele, un código por noche: cambiar de escuela no obliga a volver
     // a escanear.
     final codigo = await ref.read(codigoCentralProvider)(noche ?? eventoId);
+    final codigoLocutor = await ref.read(codigoLocutorProvider)(noche ?? eventoId, codigo);
     final central = CentralPuerta(
       eventoId: eventoId,
       codigo: codigo,
+      codigoLocutor: codigoLocutor,
       pc: _pc(),
       resolvedor: _resolvedorDe(eventoId),
       resolvedorDe: _resolvedorDe,
@@ -499,6 +547,9 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _puestos = central.cambiosDePuestos.listen((puestos) {
       _chat?.ponerPuestos(central.puestosDelChat);
       if (identical(_central, central)) state = state._con(puestos: puestos);
+    });
+    _locutores = central.cambiosDeLocutores.listen((n) {
+      if (identical(_central, central)) state = state._con(locutores: n);
     });
     if (comoTele) {
       // Las dos escuelas de la noche: la de la otra tele también.
@@ -585,6 +636,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     state = EstadoCentral(
       eventoId: central.eventoId,
       codigo: codigo,
+      codigoLocutor: codigoLocutor,
+      locutores: central.locutoresConectados,
       puerto: central.puerto,
       direcciones: direcciones,
       puestos: central.puestos,
@@ -640,6 +693,19 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     if (identical(_central, central)) state = state._con(codigo: nuevo);
   }
 
+  /// Otro código del locutor: el que está conectado tiene que volver a escanear; los
+  /// celulares de la puerta siguen.
+  Future<void> cambiarCodigoLocutor() async {
+    final central = _central;
+    final eventoId = state.eventoId;
+    final anterior = central?.codigoLocutor;
+    if (central == null || eventoId == null || anterior == null) return;
+    final nuevo = await ref.read(cambiarCodigoLocutorProvider)(_noche ?? eventoId, anterior, central.codigo);
+    if (nuevo == null || !identical(_central, central)) return;
+    await central.cambiarCodigoLocutor(nuevo);
+    if (identical(_central, central)) state = state._con(codigoLocutor: nuevo);
+  }
+
   Future<void> apagar() async {
     _vuelta++;
     await _soltar();
@@ -679,6 +745,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     chat?.dispose();
     await _puestos?.cancel();
     _puestos = null;
+    await _locutores?.cancel();
+    _locutores = null;
     await central?.cerrar();
   }
 }

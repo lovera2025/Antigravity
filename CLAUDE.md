@@ -914,10 +914,16 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
-**Para retomar el plan del 4-dic: el bloque "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (28-nov,
-al cerrar la etapa 3 de 8: ~84 %, nada publicado; lo de abajo es de la mañana del 28, ~76 %: las pruebas a fondo de lo junto, con dos arreglos y cuatro preguntas para el usuario; el plano a
-todo lo ancho en la tele quedó aprobado con un dibujo y va al final; sigue Noche y Blanco y el repositor; ahí está lo
-hecho con sus commits y lo que falta, en orden).
+**Para retomar el plan del 4-dic: el bloque "LO ÚLTIMO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (28-nov a la
+tarde, ~95 %, nada publicado: los arreglos de la tercera revisión probados y guardados en `3c1939e`, y el locutor en
+marcha, con la central y su lista hechas; ahí está lo que falta, en orden. Para el mouse, la nube o su OK, se le avisa
+al celular y se lo espera).
+- **Desde el iPhone, lo mandado sin respuesta queda "por confirmar"** (`ClienteDeLaPagina._porConfirmar`); si al
+  final no se anotó va a `noSeAnotaron` (la franja roja). **Una pantalla de la barra que use `ref` después de esperar
+  una escritura lo lee antes**: la respuesta puede llegar con la pantalla cerrada.
+- **El locutor entra a la central de la puerta con su propio código y `r=locutor`** (`CentralPuerta.codigoLocutor`):
+  solo mira, va en `_locutores` (no en los puestos), y recibe `ListaDelLocutor` de todas las escuelas solo cuando
+  cambia.
 
 **28-nov: los que agregaron después del sorteo, la notebook a la vista y el repositor con los frenos del stock —
 programado y probado en el sandbox, SIN PUBLICAR** (etapas 1 a 3 del plan de ese día; el detalle, lo que no se hizo y

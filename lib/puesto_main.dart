@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'features/recepcion/central/cliente_central.dart';
+import 'features/recepcion/central/cliente_locutor.dart';
+import 'features/recepcion/central/pantalla_locutor.dart';
 import 'features/recepcion/central/pantalla_puesto.dart';
 
 /// La página del celular de la puerta. No es la web de siempre: la sirve la
@@ -17,6 +19,15 @@ import 'features/recepcion/central/pantalla_puesto.dart';
 void main() {
   // Las letras vienen con la página: sin internet no hay de dónde bajarlas.
   GoogleFonts.config.allowRuntimeFetching = false;
+  // **El locutor** (28-nov-2026): la misma página, solo para mirar. Se elige antes de
+  // crear el cliente de la puerta: si no, este celular se conectaría además como un
+  // puesto y se sacaría a sí mismo.
+  if (Uri.base.queryParameters.containsKey('locutor')) {
+    final locutor = ClienteLocutor(servidor: Uri.base, guardado: GuardadoEnElNavegador());
+    locutor.iniciar(codigoDelEnlace: Uri.base.queryParameters['locutor']);
+    runApp(LocutorApp(cliente: locutor));
+    return;
+  }
   final cliente = ClienteCentral(
     servidor: Uri.base,
     guardado: GuardadoEnElNavegador(),
@@ -51,5 +62,29 @@ class PuestoApp extends StatelessWidget {
         supportedLocales: const [Locale('es', 'AR')],
         locale: const Locale('es', 'AR'),
         home: PantallaPuesto(cliente: cliente),
+      );
+}
+
+class LocutorApp extends StatelessWidget {
+  const LocutorApp({super.key, required this.cliente});
+  final ClienteLocutor cliente;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'Locutor — Junior Eventos',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: const Color(0xFF141418),
+          useMaterial3: true,
+        ),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('es', 'AR')],
+        locale: const Locale('es', 'AR'),
+        home: PantallaLocutor(cliente: cliente),
       );
 }

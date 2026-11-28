@@ -2,7 +2,40 @@
 
 ## Para retomar en otro chat
 
-### EMPEZAR POR ACÁ (lo último): 28-nov a la noche, chat "donde nos quedamos… hacé todo, el mouse al final"
+### LO ÚLTIMO: 28-nov (tarde), chat "donde nos quedamos?" — los arreglos probados y el locutor en marcha
+
+**Plan de este chat:** `C:\Users\lover\.claude\plans\donde-nos-quedamos-functional-kahn-of-3e5c74a9-52d3-417b-a4cb-86363a142cb8.md`
+(pasos 1 a 4 de corrido; **para el mouse, la nube o su OK: notificación al celular y esperarlo**, dijo "ando haciendo
+cosas"). ~95 %, nada publicado.
+
+**Hecho y guardado (`3c1939e`, subido):** los puntos 1 y 2 de "Lo primero al retomar" de abajo.
+- Los arreglos de la tercera revisión **probados**: 1.649 pruebas de la barra, la puerta y el locutor en verde. Se
+  sumaron 10 pruebas a `test/pagina_de_la_barra_test.dart` (un router de mentira, `_Puente`, que pierde o retiene
+  respuestas; el PIN de a uno; SALIR; el permiso sacado; la lectura que falla) y 3 de pantalla.
+- **Lo que encontraron esas pruebas, arreglado:** (1) entrar esperaba a que Safari guardara la ficha y un corte justo
+  ahí la dejaba "conectada" muerta (`_adelante` ahora no espera); (2) lo por confirmar que al final la notebook no
+  guarda no se lo decía a nadie: **`noSeAnotaron` y la franja roja con ENTENDIDO**; (3) SALIR con algo por confirmar
+  pregunta antes (ESPERAR · SALIR IGUAL); (4) sin permiso la notebook cierra con **4012** ("Ya no tenés permiso…"), no
+  con el 4008 de "se reinició"; (5) **LAS CAJAS, STOCK y el OK del cierre usaban `ref` después de esperar**: con la
+  pantalla ya cerrada (SALIR) tiraban un error; ahora leen lo de `ref` antes.
+- Roturas: `tool/roturas_tercera_revision.txt` 21 de 21; los 20 casos viejos con texto viejo, puestos al día en sus
+  listas, 20 de 20. Se sacó el de "su propia caja la aprueba el jefe" (desde el 27-nov la encargada cierra la suya
+  sola). `..\arguello_events_pruebas` ya no existe.
+
+**El locutor (etapa D), en marcha, sin commit al escribir esto:**
+- Hecho: `recepcion/services/lista_del_locutor.dart` (`ListaDelLocutor.de(puertas)`: institución → división →
+  familias; sin profes, cargados a mano ni bajas; `firma`; `buscar`; sin cambio no viaja el nombre) con
+  `test/lista_del_locutor_test.dart` (8); **la central** (`CentralPuerta(codigoLocutor:)`, `r=locutor` entra solo con
+  su código y su código no abre la puerta, va en `_locutores`, solo `hola`, la lista **de todas las escuelas** que
+  atiende y solo si cambió, `cambiarCodigoLocutor`, `cerrar` lo corta) con 8 pruebas en `test/central_puerta_test.dart`
+  ("el locutor"); `codigoLocutorProvider` y `EstadoCentral.codigoLocutor/locutores/enlaceLocutor` en
+  `central_provider.dart`; `ClienteLocutor` y `PantallaLocutor` (`recepcion/central/`); `?locutor` en
+  `lib/puesto_main.dart` antes del cliente de la puerta (`LocutorApp`).
+- Falta, en orden: pruebas de `ClienteLocutor` y `PantallaLocutor`; **SUMAR AL LOCUTOR** en CELULARES
+  (`widgets/sumar_celular.dart`, solo masivo) y en el menú de la tele; el tótem con lo nombrado (punto 4 de "Etapa D"
+  abajo); sync y SQL (punto 5); `test/puesto_sin_internet_test.dart` con la rama `?locutor`; capturas.
+
+### ANTES: 28-nov a la noche, chat "donde nos quedamos… hacé todo, el mouse al final"
 
 **Plan aprobado de este chat** (6 etapas, A a F, todas de corrido; **el mouse, la nube y publicar, al final, con
 él**): `C:\Users\lover\.claude\plans\donde-nos-quedamos-sigamos-fluffy-lampson-of-b2f6a465-dd63-4dad-a456-d8cc83aa7804.md`.
