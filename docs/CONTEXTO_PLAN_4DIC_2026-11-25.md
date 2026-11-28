@@ -8,6 +8,15 @@
 (pasos 1 a 4 de corrido; **para el mouse, la nube o su OK: notificación al celular y esperarlo**, dijo "ando haciendo
 cosas"). ~95 %, nada publicado.
 
+**AL CORTAR (28-nov, tarde; el chat se llenó):** hechos los pasos 1 a 3 del plan y **el locutor entero salvo lo que
+va con él** (abajo). **La suite entera: 7.038 en verde** (`bash tool/suite_por_tandas.sh`; la única que falló, la
+prueba nueva de "falla leer la fiesta", esperaba las ventas junto con el catálogo: arreglada la prueba, 3 de 3).
+Último commit: el de esta nota. **Sigue, en un chat nuevo: E (el plano a todo lo ancho en la tele y Noche y Blanco;
+si falta tiempo se cae primero Noche y Blanco) y después la F con él** (el mouse, la nube: los SQL del 26-nov al
+28-nov sin correr —`20261125120000_barra_stock.sql`, `20261127120000_barra_costos.sql` y `20261128120000_como_lo_nombran.sql`, además de `supabase/lugares_cambios.sql`—, los lugares al
+sorteo con su OK, la migración 82 → 85 sobre una copia con el programa cerrado, las capturas, y publicar). Publicar a
+más tardar el martes 1 o el miércoles 2-dic.
+
 **Hecho y guardado (`3c1939e`, subido):** los puntos 1 y 2 de "Lo primero al retomar" de abajo.
 - Los arreglos de la tercera revisión **probados**: 1.649 pruebas de la barra, la puerta y el locutor en verde. Se
   sumaron 10 pruebas a `test/pagina_de_la_barra_test.dart` (un router de mentira, `_Puente`, que pierde o retiene

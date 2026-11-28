@@ -711,7 +711,13 @@ void main() {
       await hasta(() => c.conectada && c.evento != null, que: 'que entre sola con su ficha');
       expect(c.problema, isNull);
       expect(c.quien?.nombre, 'Romi');
-      expect((await c.barra.ventas(_fiesta)), hasLength(1));
+      // Lo de la noche llega después del catálogo: se espera, no se da por llegado.
+      final fin = DateTime.now().add(const Duration(seconds: 6));
+      while ((await c.barra.ventas(_fiesta)).isEmpty) {
+        if (DateTime.now().isAfter(fin)) fail('no llegaron las ventas de la noche');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(await c.barra.ventas(_fiesta), hasLength(1));
     });
   });
 }
