@@ -1,0 +1,90 @@
+el locutor entra solo con su código
+lib/features/recepcion/central/central_puerta.dart
+test/central_puerta_test.dart
+    final esperado = esLocutor ? _codigoLocutor : _codigo;
+    final esperado = _codigo;
+---
+el código del locutor no abre la puerta
+lib/features/recepcion/central/central_puerta.dart
+test/central_puerta_test.dart
+    if (esperado == null || datos['c'] != esperado) {
+    if (esperado == null || (datos['c'] != esperado && datos['c'] != _codigoLocutor)) {
+---
+el locutor va aparte de los puestos
+lib/features/recepcion/central/central_puerta.dart
+test/central_puerta_test.dart
+    if (esLocutor) {
+    if (false) {
+---
+la lista del locutor sale solo si cambió
+lib/features/recepcion/central/central_puerta.dart
+test/central_puerta_test.dart
+    if (firma == _firmaLocutor) return;
+
+---
+el celular del locutor se presenta como locutor
+lib/features/recepcion/central/cliente_locutor.dart
+test/cliente_locutor_test.dart
+      queryParameters: {'c': _codigo!, 'id': _celular, 'p': 'Locutor', 'r': 'locutor'},
+      queryParameters: {'c': _codigo!, 'id': _celular, 'p': 'Locutor'},
+---
+tocar una familia la da por vista
+lib/features/recepcion/central/cliente_locutor.dart
+test/cliente_locutor_test.dart
+    if (ca == null || _vistos[f.id] == ca) return false;
+    if (ca == null) return false;
+---
+la pantalla del locutor marca vista al tocar
+lib/features/recepcion/central/pantalla_locutor.dart
+test/pantalla_locutor_test.dart
+          onTap: () => _c.visto(f),
+          onTap: () {},
+---
+el tótem saluda al egresado como lo nombran
+lib/features/totem/services/ficha_totem.dart
+test/totem_nombrado_test.dart
+      final comoSeLlama = titular.nombrado ?? titular.nombre;
+      final comoSeLlama = titular.nombre;
+---
+el tótem saluda al acompañante como lo nombran
+lib/features/totem/services/ficha_totem.dart
+test/totem_nombrado_test.dart
+          nombre: a.nombrado ?? a.nombre,
+          nombre: a.nombre,
+---
+la ficha del tótem lee los nombres
+lib/features/totem/services/puente_ficha.dart
+test/totem_nombrado_test.dart
+      nombres: nombres,
+
+---
+el tótem atiende ficha_cambio solo de su fiesta y sin pausa
+lib/features/totem/totem_display.dart
+test/totem_nombrado_test.dart
+          if (avisoEsDeEsteEvento(call.arguments, _eventoId) && !_pausado && mounted) {
+          if (mounted) {
+---
+como_lo_nombran baja en la red de 5 minutos
+lib/core/services/sync_engine.dart
+test/sync_tablas_v85_test.dart
+    'como_lo_nombran': 'updated_at',
+
+---
+la línea sin internet cuenta los nombres
+lib/features/recepcion/services/lista_sin_internet.dart
+test/lista_sin_internet_test.dart
+        d.nombresSinSubir == 1 ? '1 nombre' : '${miles(d.nombresSinSubir)} nombres',
+
+---
+SUMAR AL LOCUTOR solo en un masivo
+lib/features/recepcion/widgets/sumar_celular.dart
+test/sumar_celular_test.dart
+        if (ref.watch(eventoMasivoProvider(widget.eventoId)) == true && estado.enlaceLocutor != null) ...[
+        if (estado.enlaceLocutor != null) ...[
+---
+la página elige el locutor antes del cliente de la puerta
+lib/puesto_main.dart
+test/puesto_sin_internet_test.dart
+    return;
+
+---

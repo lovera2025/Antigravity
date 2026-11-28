@@ -37,9 +37,18 @@ cosas"). ~95 %, nada publicado.
   **el tótem saluda con lo nombrado** (`FichaTotem.desdePuerta` con `nombrado ?? nombre`, también "acompaña a";
   `armarFichaTotem(leerNombres:)`; `KioskLauncher.notifyFichaCambio` → `ficha_cambio` en `totem_display.dart`;
   `TotemSigueLosNombres`, que arranca en AuthWrapper), con `test/totem_nombrado_test.dart` (4).
-- **Falta:** sync y SQL (punto 5 de "Etapa D": las listas de `sync_engine.dart`, el SQL nuevo sin correr, "Todo
-  subido" con los nombres, la migración 82 → 85 sobre una copia, y que `TotemSigueLosNombres` escuche también lo que
-  baja de otra PC); `test/puesto_sin_internet_test.dart` con `?locutor`; capturas; roturas del locutor.
+- **Sync y nube (`f26c261`):** `como_lo_nombran` en las siete listas del motor (como `sillas_puerta`), **su SQL
+  `supabase/migrations/20261128120000_como_lo_nombran.sql` SIN CORRER** (va con su OK, antes de instalar: sin él lo
+  nombrado se traba en la cola y en las PCs nuevas no corre la revisión de la mora al arrancar),
+  `test/sync_tablas_v85_test.dart` (7); "Todo subido" cuenta los nombres (`nombresSinSubir`); `TotemSigueLosNombres`
+  escucha también lo que baja de otra PC; `test/puesto_sin_internet_test.dart` vigila la rama `?locutor`.
+  Roturas: `tool/roturas_locutor.txt` (16).
+- **Falta del locutor:** la migración 82 → 85 **sobre una copia de la base real** (con el programa cerrado: se le pide
+  a él, va en la F), las capturas para mandarle y el recorrido en el navegador (pestañas como celulares, en la F).
+- **Límites, para decirle:** sin internet, entre dos notebooks cada una ve solo lo que nombró ella hasta que vuelve la
+  red; entre dos equipos gana el último que sube, no el último que cambió; el locutor por la app de Android (que abre
+  sin wifi con lo último) no se hizo: es la página del navegador, que recuerda lo último pero no abre si se recarga sin
+  el wifi de la notebook.
 
 ### ANTES: 28-nov a la noche, chat "donde nos quedamos… hacé todo, el mouse al final"
 

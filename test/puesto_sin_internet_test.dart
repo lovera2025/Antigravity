@@ -27,4 +27,21 @@ void main() {
     final main = File('lib/puesto_main.dart').readAsStringSync();
     expect(main, contains('GoogleFonts.config.allowRuntimeFetching = false'));
   });
+
+  // El locutor (28-nov-2026): la misma página, con `?locutor`. Las letras se cortan
+  // antes de elegir, y el locutor se elige antes de crear el cliente de la puerta (si
+  // no, el mismo celular se conectaría además como un puesto y se sacaría a sí mismo).
+  test('la rama del locutor: sin bajar letras, y antes del cliente de la puerta', () {
+    final main = File('lib/puesto_main.dart').readAsStringSync().replaceAll('\r\n', '\n');
+    final letras = main.indexOf('GoogleFonts.config.allowRuntimeFetching = false');
+    final locutor = main.indexOf("containsKey('locutor')");
+    final puerta = main.indexOf('final cliente = ClienteCentral(');
+    expect(letras, greaterThan(0));
+    expect(locutor, greaterThan(letras));
+    expect(puerta, greaterThan(locutor));
+    expect(main.substring(locutor, puerta), contains('return;'));
+    final pantalla = File('lib/features/recepcion/central/pantalla_locutor.dart').readAsStringSync();
+    expect(pantalla, contains('GoogleFonts.outfit'), reason: 'Outfit viene con la página');
+    expect(pantalla, isNot(contains('GoogleFonts.oswald')));
+  });
 }
