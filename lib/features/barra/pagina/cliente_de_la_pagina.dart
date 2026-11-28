@@ -254,6 +254,10 @@ class ClienteDeLaPagina extends ChangeNotifier {
     }
     _canal = canal;
     _ultimo = _ahoraDelTelefono();
+    // Si la notebook no está (se apagó, se fue del wifi), el intento falla también por acá:
+    // lo atiende la escucha de abajo, que reintenta. Sin esto quedaba un error suelto (lo
+    // encontró la noche simulada, 28-nov-2026).
+    unawaited(canal.ready.then<void>((_) {}, onError: (Object _) {}));
     _escucha = canal.stream.listen(
       (m) => _alRecibir(m, canal),
       onDone: () => _seCerro(canal),
