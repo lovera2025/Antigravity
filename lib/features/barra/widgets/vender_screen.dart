@@ -17,11 +17,15 @@ import '../cuentas/pesos.dart';
 import '../cuentas/recetas_de_la_barra.dart';
 import '../cuentas/reglas_de_la_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
+import '../cuentas/stock_para_vender.dart';
+import '../cuentas/stock_por_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
 import '../impresion/impresora_bluetooth.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../repositor/texto_del_stock.dart';
+import '../services/barras_del_salon.dart';
 import '../services/imagen_de_producto.dart';
 import '../services/pantalla_despierta.dart';
 import '../services/productos_para_vender.dart';
@@ -79,10 +83,15 @@ class _Vender extends ConsumerStatefulWidget {
 
 class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   List<ProductoEnVenta> _productos = const [];
-  Map<String, StockDeProducto> _stock = const {};
 
-  /// Las recetas de los tragos de la fiesta (v84): el Speed de cada vodka baja del stock.
-  RecetasDeLaBarra _recetas = RecetasDeLaBarra.ninguna;
+  /// El stock como lo mira esta caja: lo repartido en su barra, y si no, el general.
+  /// Lleva las recetas (v84): el Speed de cada vodka baja del stock.
+  StockParaVender _stock = StockParaVender.nada;
+
+  /// Lo que llegó a esta barra (reposiciones y traspasos) y la cajera todavía no vio:
+  /// "Se repusieron…", con su OK. Lo que ya estaba al abrir VENDER no se avisa.
+  List<MovimientoDeStock> _repuesto = const [];
+  Set<String>? _llegadasVistas;
   bool _cargando = true;
 
   /// Si esta caja ya vendió algo: con eso la cajera ya no pone el cambio.
@@ -148,62 +157,103 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     final anulaciones = await barra.anulaciones(widget.fiesta.id);
     final cajas = await barra.cajas(widget.fiesta.id);
     final recetas = RecetasDeLaBarra.de(await barra.recetas(widget.fiesta.id), eventoId: widget.fiesta.id);
+    // El stock repartido por barra (v83): con cuánto arrancó la de esta caja y lo que
+    // movió el repositor.
+    final repartos = await barra.repartos(widget.fiesta.id);
+    final movimientos = await barra.movimientosDeStock(widget.fiesta.id);
     if (!mounted) return;
+    // La caja de esta pantalla también, por si todavía no está entre las leídas.
+    final deLaNoche = CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]);
+    final dia = DiaDeOperacion.deLaCaja(widget.caja);
+    final miBarra = barraDe(widget.caja.sede);
+    final llegadas = StockParaVender.llegadasA(miBarra, movimientos);
+    final vistas = _llegadasVistas ??= {for (final m in llegadas) m.id};
     setState(() {
-      _recetas = recetas;
       _productos = productosParaVender(productos, precios, eventoId: widget.fiesta.id);
       _vendioAlgo = ventas.any((v) => v.cajaBarraId == widget.caja.id);
-      _stock = StockDeLaBarra.deLaNoche(
-        eventoId: widget.fiesta.id,
-        precios: precios,
-        // Con lo que va entero adentro de los tragos (el Speed del vodka).
-        ventas: recetas.paraElStock(ventas),
-        anulaciones: anulaciones,
-        // La caja de esta pantalla también, por si todavía no está entre las leídas.
-        cajas: CajasPorDia.de([widget.caja, ...cajas.where((c) => c.id != widget.caja.id)]),
-        dia: DiaDeOperacion.deLaCaja(widget.caja),
+      _repuesto = [
+        for (final m in llegadas)
+          if (!vistas.contains(m.id)) m,
+      ];
+      _stock = StockParaVender(
+        general: StockDeLaBarra.deLaNoche(
+          eventoId: widget.fiesta.id,
+          precios: precios,
+          // Con lo que va entero adentro de los tragos (el Speed del vodka).
+          ventas: recetas.paraElStock(ventas),
+          anulaciones: anulaciones,
+          cajas: deLaNoche,
+          dia: dia,
+        ),
+        porBarra: StockPorBarra.deLaNoche(
+          eventoId: widget.fiesta.id,
+          precios: precios,
+          repartos: repartos,
+          movimientos: movimientos,
+          // Con lo que va entero adentro de los tragos (el Speed del vodka).
+          ventas: recetas.paraElStock(ventas),
+          anulaciones: anulaciones,
+          cajas: deLaNoche,
+          dia: dia,
+        ),
+        barra: miBarra,
+        recetas: recetas,
       );
       _cargando = false;
     });
   }
+
+  /// Si esta caja sabe lo que pasa en las demás: está conectada a la central de su
+  /// barra, o es la notebook que la tiene prendida. Sin eso no sabe si repusieron.
+  bool get _conSenial => ref.read(hayCentralALaVistaProvider)(widget.fiesta.id);
 
   Future<void> _prepararImpresora() async {
     final estado = await ref.read(papelDeLaBarraProvider).preparar();
     if (mounted) setState(() => _impresora = estado);
   }
 
-  /// Lo que queda de un producto: lo cargado por el jefe, menos lo vendido por todas
-  /// las cajas y lo que ya está en esta cuenta. Null: no se controla.
-  int? _quedan(String productoId) {
-    final propio = _quedanDe(productoId);
-    if (_recetas.enteros(productoId).isEmpty) return propio;
-    // Un trago con algo entero (el vodka con su Speed): alcanza para lo que dé eso, y
-    // si el jefe le cargó stock al trago mismo, también cuenta: queda lo menor (28-nov-2026;
-    // antes ese stock se ignoraba y LAS CAJAS decía otra cosa).
-    final alcanza = _recetas.alcanzaPara(productoId, _quedanDe);
-    if (propio == null) return alcanza;
-    if (alcanza == null) return propio;
-    return propio < alcanza ? propio : alcanza;
-  }
+  /// Lo que queda de un producto para seguir sumándolo a esta cuenta: en la barra de
+  /// esta caja si el jefe lo repartió ahí, y si no lo cargado menos lo vendido por todas
+  /// las cajas. Un trago con algo entero (el vodka con su Speed) alcanza para lo menor
+  /// entre su stock y lo que dé eso. Null: no se controla. La cuenta es [StockParaVender].
+  int? _quedan(String productoId) => _stock.quedan(productoId, _cuenta);
 
-  int? _quedanDe(String productoId) {
-    final s = _stock[productoId];
-    if (s == null || !s.controla) return null;
-    return s.queda! - _enLaCuenta(productoId);
-  }
-
-  /// Lo que se lleva de [productoId] esta cuenta: él mismo y lo que va entero adentro de
-  /// los tragos (dos vodkas en la cuenta son dos Speed).
-  int _enLaCuenta(String productoId) => _cuenta.renglones.fold(
-        0,
-        (s, r) => s + (_recetas.loQueBaja(r.productoId, r.cantidad)[productoId] ?? 0),
-      );
-
-  /// Suma uno. Sin stock, pregunta antes (una vez por producto y por cuenta): el
-  /// stock avisa, pero lo cargado puede estar corto o sin internet otra caja ya vendió.
+  /// Suma uno. Sin stock: lo repartido en esta barra **no se vende con señal** y **sin
+  /// señal avisa en rojo y deja** (la caja no sabe si repusieron); el stock general de
+  /// siempre pregunta (una vez por producto y por cuenta).
   Future<void> _sumar(ProductoEnVenta p) async {
-    final q = _quedan(p.id);
-    if (q != null && q <= 0 && !_sinStockIgual.contains(p.id)) {
+    final freno = _stock.alSumar(p.id, _cuenta, conSenial: _conSenial);
+    if (freno == FrenoDeStock.noSeVende) {
+      await _avisarQueNoQueda(p);
+      return;
+    }
+    if (freno == FrenoDeStock.sinSenial && !_sinStockIgual.contains(p.id)) {
+      final igual = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: const Key('sin_stock_sin_senial'),
+          icon: Icon(Icons.wifi_off, color: Theme.of(ctx).colorScheme.error),
+          title: Text('No queda ${p.nombre.toLowerCase()} · sin señal'),
+          content: Text(
+            'Esta caja no está conectada a la central: no sé si repusieron.\n\n'
+            'Si hay en la barra, vendé. Lo que se venda de más se descuenta de lo que se reponga.',
+            key: const Key('sin_stock_sin_senial_texto'),
+            style: TextStyle(color: Theme.of(ctx).colorScheme.error, fontWeight: FontWeight.w600),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('NO HAY')),
+            FilledButton(
+              key: const Key('sin_stock_sin_senial_vender'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('HAY, VENDER'),
+            ),
+          ],
+        ),
+      );
+      if (igual != true || !mounted) return;
+      _sinStockIgual.add(p.id);
+    }
+    if (freno == FrenoDeStock.pregunta && !_sinStockIgual.contains(p.id)) {
       final igual = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -240,6 +290,17 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     if (_cuenta.estaVacia || _cobrando) return;
     setState(() => _cobrando = true);
     try {
+      // Con señal, lo repartido en esta barra se mira otra vez antes de cobrar: otra caja
+      // pudo vender las últimas mientras se armaba la cuenta.
+      await _cargar();
+      if (!mounted) return;
+      if (_conSenial) {
+        final falta = _stock.noAlcanzaPara(_cuenta);
+        if (falta.isNotEmpty) {
+          await _avisarQueNoAlcanza(falta);
+          return;
+        }
+      }
       final recordado = await ref.read(recargoRecordadoProvider).leer();
       final deLaFiesta = await ref.read(barraDeLaCajaProvider).recargo(_caja.eventoId);
       if (!mounted) return;
@@ -443,6 +504,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                     AvisoDeLaNoche(caja: _caja),
                     // A la encargada: "la Caja 2 pide cerrar" (a una cajera común, nada).
                     AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
+                    ..._avisosDelStock(),
                     _filtros(),
                     Expanded(child: _grilla(2)),
                     _cuentaCelular(),
@@ -458,6 +520,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                           const LineaDeLaCaja(),
                           AvisoDeLaNoche(caja: _caja),
                           AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
+                          ..._avisosDelStock(),
                           _filtros(),
                           Expanded(child: _grilla(pc ? 4 : 3)),
                         ],
@@ -471,6 +534,130 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                   ],
                 ),
     );
+  }
+
+  String _nombreDe(String productoId) {
+    for (final p in _productos) {
+      if (p.id == productoId) return p.nombre;
+    }
+    return 'Producto';
+  }
+
+  /// Con señal y sin stock en esta barra: no se vende. Un solo botón.
+  Future<void> _avisarQueNoQueda(ProductoEnVenta p) async {
+    final barra = _stock.barra ?? 'la barra';
+    // Lo que falta puede ser lo que lleva entero (el Speed del vodka).
+    final viene = [
+      for (final e in _stock.enCamino)
+        if (e.productoId == p.id || _stock.recetas.enteros(p.id).containsKey(e.productoId)) e,
+    ].firstOrNull;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('sin_stock_no_se_vende'),
+        title: Text('No queda ${p.nombre.toLowerCase()} en $barra'),
+        content: Text(
+          viene == null
+              ? 'Sin stock no se vende. Pedile al repositor que reponga.'
+              : 'Sin stock no se vende. ${viene.quien ?? 'El repositor'} ya está en camino.',
+          key: const Key('sin_stock_no_se_vende_texto'),
+        ),
+        actions: [
+          FilledButton(
+            key: const Key('sin_stock_entendido'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Al cobrar, con señal: otra caja vendió las últimas y la cuenta ya no entra.
+  Future<void> _avisarQueNoAlcanza(Map<String, int> falta) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('no_alcanza_el_stock'),
+        title: const Text('Ya no alcanza'),
+        content: Text(
+          [
+            for (final e in falta.entries)
+              '${_nombreDe(e.key)}: ${e.value == 0 ? 'no queda' : (e.value == 1 ? 'queda 1' : 'quedan ${e.value}')}.',
+            'Sacalo de la cuenta o pedile al repositor que reponga.',
+          ].join('\n'),
+          key: const Key('no_alcanza_el_stock_texto'),
+        ),
+        actions: [
+          FilledButton(
+            key: const Key('no_alcanza_entendido'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Lo del repositor para esta barra: "está en camino" (se va solo cuando repone o
+  /// avisa que no va) y "Se repusieron…", que queda hasta que la cajera toca OK.
+  List<Widget> _avisosDelStock() {
+    final tema = Theme.of(context).colorScheme;
+    Widget franja({required Key clave, required IconData icono, required String texto, Widget? boton}) => Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: tema.secondaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+              child: Row(
+                children: [
+                  Icon(icono, size: 20, color: tema.onSecondaryContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      texto,
+                      key: clave,
+                      style: TextStyle(color: tema.onSecondaryContainer, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  ?boton,
+                ],
+              ),
+            ),
+          ),
+        );
+    return [
+      for (final e in _stock.enCamino)
+        franja(
+          clave: Key('vender_en_camino_${e.productoId}'),
+          icono: Icons.directions_walk,
+          texto: '${e.quien ?? 'El repositor'} está en camino con ${_nombreDe(e.productoId).toLowerCase()}',
+        ),
+      for (final m in _repuesto)
+        franja(
+          clave: Key('vender_repuesto_${m.id}'),
+          icono: Icons.inventory_2_outlined,
+          texto: seRepusieron(
+            m,
+            _nombreDe(m.productoId).toLowerCase(),
+            quedan: _stock.enLaBarra(m.productoId) ? _stock.quedaSolo(m.productoId) : null,
+          ),
+          boton: TextButton(
+            key: Key('vender_repuesto_ok_${m.id}'),
+            onPressed: () => setState(() {
+              _llegadasVistas?.add(m.id);
+              _repuesto = [
+                for (final r in _repuesto)
+                  if (r.id != m.id) r,
+              ];
+            }),
+            child: const Text('OK'),
+          ),
+        ),
+    ];
   }
 
   Widget _filtros() {
@@ -566,7 +753,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   }
 
   Widget _tarjeta(ProductoEnVenta p) {
-    final aviso = _stock[p.id]?.aviso;
+    final aviso = _stock.avisoDe(p.id);
     final quedan = _quedan(p.id);
     final sinStock = quedan != null && quedan <= 0;
     return TarjetaProducto(

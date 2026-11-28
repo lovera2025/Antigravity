@@ -642,3 +642,15 @@ class ClienteDeLaBarra extends Notifier<ClienteDeLaCentral?> {
 
 final clienteDeLaBarraProvider =
     NotifierProvider<ClienteDeLaBarra, ClienteDeLaCentral?>(ClienteDeLaBarra.new);
+
+/// Si este equipo **sabe lo que pasa en las demás cajas** de la fiesta en este momento:
+/// está conectado a la central de la barra, o es la notebook que la tiene prendida para
+/// esa fiesta. Con eso VENDER frena lo que no queda en su barra; sin eso avisa "sin
+/// señal" y deja vender (28-nov-2026). Se pregunta en el momento, no se escucha.
+final hayCentralALaVistaProvider = Provider<bool Function(String eventoId)>((ref) {
+  return (eventoId) {
+    final central = ref.read(centralDeLaBarraProvider);
+    if (central.prendida && central.eventoId == eventoId) return true;
+    return ref.read(clienteDeLaBarraProvider)?.estado == EstadoDeLaCentral.conectada;
+  };
+});
