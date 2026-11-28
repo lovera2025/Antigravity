@@ -926,7 +926,10 @@ lo que falta, en "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`).
 - **Los precios (con el stock general) no viajan por el wifi del salón:** el reparto de la Técnica se hace con
   internet, antes. **No tildar "Repositor de barra" ni repartir por barra hasta que todos los equipos tengan la
   versión.**
-- Sin decidir: si anular una venta devuelve el stock siempre o solo si volvió el vale (hoy lo devuelve): preguntarle.
+- **"¿Volvió el vale?" al anular: decidido el 28-nov, SIN PROGRAMAR** (lo primero al retomar; el diseño, en el
+  punto 1 de "Lo que falta, en orden" del CONTEXTO). Hoy anular devuelve el stock siempre; con la pregunta, solo si
+  el vale volvió (si ya se entregó, la plata se anula y el stock no vuelve). **Mostrarle la ventana antes de
+  programar.**
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo

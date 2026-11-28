@@ -7,7 +7,9 @@
 **El plan del 4-dic va por ~84 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Publicar: martes 1 o
 miércoles 2-dic. El plan aprobado de este chat (8 etapas) está en
 `C:\Users\lover\.claude\plans\sigamos-en-donde-estuvimos-keen-chipmunk-of-671a8863-3f74-4822-8109-d6c57f2a6f8b.md`.
-**Hechas las etapas 1, 2 y 3; faltan la 4 a la 8.** Todo guardado y subido.
+**Hechas las etapas 1, 2 y 3; faltan la 4 a la 8.** Todo guardado y subido. **El usuario cerró el chat el 28-nov a
+la tarde ("retomaremos en otro chat"): lo primero al retomar es "¿Volvió el vale?", que decidió ese día** (está
+en "Lo que falta, en orden", punto 1).
 
 **Lo que contestó el usuario el 28-nov (no se vuelve a preguntar):**
 - **La notebook de la barra: "solo la central (en modo jefe)".** La encargada no tiene vista simple; sigue con sus
@@ -97,8 +99,9 @@ sorteo** (cuándo se pagó no importa).
   anterior lee el 3 como "sin Barra" y no conoce el reparto.
 
 **Lo que NO se hizo de la etapa 3 (y por qué):**
-- **"¿Volvió el vale?" al anular:** no hay nada decidido por el usuario; preguntarle antes (¿anular devuelve el
-  stock siempre, o solo si el vale volvió?). Hoy una venta anulada devuelve el stock.
+- **"¿Volvió el vale?" al anular: DECIDIDO el 28-nov ("sí, agregá la pregunta"), SIN PROGRAMAR.** Se le explicó
+  con el ejemplo de 2 Speed: hoy anular devuelve el stock siempre; con la pregunta, vuelve solo si el vale está en
+  la mano de quien anula. El diseño, en el punto 1 de "Lo que falta, en orden".
 - **LA ENCARGADA ESTÁ ACÁ con el PIN del jefe:** quedó como estaba (solo el PIN de una encargada); cambiarlo toca lo
   que acepta la central. El jefe da el OK desde su aparato.
 - **Hecho después del corte (28-nov, tarde):** arriba de las cajas, la encargada (LAS CAJAS) y el jefe (BARRA →
@@ -112,15 +115,36 @@ sorteo** (cuándo se pagó no importa).
 - No se probó con tablets ni con el router del salón.
 
 **Lo que falta, en orden (etapas 4 a 8 del plan):**
-1. **Con el usuario despierto:** el recorrido con el mouse (repositor, reparto, VENDER con y sin señal); su OK para
-   la nube (las 4 fiestas, `lugares_cambios.sql`); que mire las capturas; preguntarle lo del vale.
-2. **Etapa 4 — la encargada en su iPhone**: la página que sirve la notebook por el wifi (`guardarDeLaPagina`, el
+1. **"¿Volvió el vale?" al anular (decidido el 28-nov; lo primero).** Se le prometió **mostrarle la ventana antes
+   de programar** (una captura o maqueta de la pregunta). Lo pensado, para no empezar de cero:
+   - **La pregunta**, después del motivo, en todo lugar que anula una venta de la barra (VENTAS de la caja con el
+     PIN de la encargada, `ventas_de_la_caja_screen.dart`; LAS CAJAS y CAJAS del jefe, `jefe/cajas_de_la_fiesta.dart`;
+     la web): **"¿Volvió el vale?" · SÍ, LO TENGO · NO, YA SE ENTREGÓ.** Con SÍ, como hoy (el stock vuelve). Con
+     NO, la plata se anula igual pero **el stock no vuelve**, y queda a la vista del jefe como entregado sin cobrar,
+     con quién anuló.
+   - **Dónde se guarda:** `barra_anulaciones` no tiene columna para eso (una fila por venta, id fijo, solo se
+     agregan). Lo recomendado: **una marca dentro de `motivo`** (sin SQL ni migración, como la mesa reservada en
+     el motivo de la mesa libre), leída por un getter de `AnulacionBarra`. Una versión anterior la ve como parte
+     del motivo y devuelve el stock: decirlo en las reglas de la versión.
+   - **Las cuentas:** las de la plata siguen con `ventasAnuladas` (todas: el cierre, VENTAS, el papel). **Las del
+     stock** (`StockDeLaBarra.de`, y `StockPorBarra` en sus dos lugares) pasan a usar solo las anuladas **con el
+     vale devuelto**: la venta anulada sin el vale sigue descontando. GANANCIA la cuenta como perdida (se le paga
+     igual al proveedor). Una prueba que lea el código, como la de las recetas, para que ninguna cuenta del stock
+     use la otra lista.
+   - **La silla de la noche:** el vale de una silla lo tiene la recepcionista; hoy la silla va en rojo ("vale
+     anulado en la barra: revisar"). No cambiar eso; ver qué dice la pregunta para una venta que es solo sillas.
+   - Pruebas de pantalla (cada lugar que anula), roturas, la central (`ReglasDeLaBarra.porQueNoSeGuarda` no
+     cambia: es la misma fila) y la suite.
+2. **Con el usuario:** el recorrido con el mouse (repositor, reparto, VENDER con y sin señal; pide su permiso de
+   pantalla); su OK para la nube (las 4 fiestas, `lugares_cambios.sql`). Las 6 capturas de la etapa 3 ya se le
+   mandaron; no dijo nada de ellas todavía.
+3. **Etapa 4 — la encargada en su iPhone**: la página que sirve la notebook por el wifi (`guardarDeLaPagina`, el
    saludo solo con el PIN, el acuse "guardada", `/fiesta.json`, `lib/barra_pagina_main.dart`, el instalador).
-3. **Etapa 5 — la noche simulada y el repaso entero** (dos barras, cientos de ventas, una tablet 4 horas sin señal,
+4. **Etapa 5 — la noche simulada y el repaso entero** (dos barras, cientos de ventas, una tablet 4 horas sin señal,
    el repositor, la tele, Recepción con el chat), las roturas todas, la suite y la tercera revisión independiente.
-4. **Etapa 6 — el locutor por el wifi** (v85, `como_lo_nombran`; `docs/SPEC_locutor_2026-11-18.md`), sin música.
-5. **Etapa 7 — el plano a todo lo ancho en la tele y Noche y Blanco.**
-6. **Etapa 8 — publicar con él** (v83, v84 y v85 sobre una copia; foto de la mora; los SQL con su OK).
+5. **Etapa 6 — el locutor por el wifi** (v85, `como_lo_nombran`; `docs/SPEC_locutor_2026-11-18.md`), sin música.
+6. **Etapa 7 — el plano a todo lo ancho en la tele y Noche y Blanco.**
+7. **Etapa 8 — publicar con él** (v83, v84 y v85 sobre una copia; foto de la mora; los SQL con su OK).
 Si el tiempo no alcanza, queda afuera primero: Noche y Blanco → el plano ancho → la página del repositor para iPhone
 → el locutor.
 
