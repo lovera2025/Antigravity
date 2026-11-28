@@ -774,6 +774,7 @@ class PuertaEnMemoria {
           codigoVigenteCentralProvider
               .overrideWithValue((_) async => codigoCentral),
           codigoCentralProvider.overrideWithValue((_) async => '4821'),
+          codigoLocutorProvider.overrideWithValue((_, _) async => '7391'),
           escuchaCentralProvider.overrideWith((ref) => escuchaCentral),
           puertoCentralProvider.overrideWithValue(puertoCentral),
           direccionesDeEstaPcProvider.overrideWithValue(

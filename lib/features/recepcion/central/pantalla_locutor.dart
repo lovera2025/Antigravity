@@ -257,6 +257,16 @@ class _PantallaLocutorState extends State<PantallaLocutor> with WidgetsBindingOb
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                // Primero CAMBIADOS: es lo que más se usa, y en un celular angosto entra.
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    key: const Key('locutor_cambiadas'),
+                    label: Text('CAMBIADOS ($cambiadas)'),
+                    selected: _soloCambiadas,
+                    onSelected: (v) => setState(() => _soloCambiadas = v),
+                  ),
+                ),
                 if (instituciones.length > 1)
                   for (final i in [null, ...instituciones])
                     Padding(
@@ -267,12 +277,6 @@ class _PantallaLocutorState extends State<PantallaLocutor> with WidgetsBindingOb
                         onSelected: (_) => setState(() => _institucion = i),
                       ),
                     ),
-                FilterChip(
-                  key: const Key('locutor_cambiadas'),
-                  label: Text('CAMBIADOS ($cambiadas)'),
-                  selected: _soloCambiadas,
-                  onSelected: (v) => setState(() => _soloCambiadas = v),
-                ),
               ],
             ),
           ),

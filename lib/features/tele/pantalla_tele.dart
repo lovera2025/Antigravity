@@ -773,6 +773,25 @@ class _PantallaTeleState extends ConsumerState<PantallaTele> {
             style: _letra(17),
           ),
         ],
+        // El locutor (28-nov-2026): su propio QR, solo para mirar la lista.
+        if (principal && central.enlaceLocutor != null) ...[
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _qr(const ValueKey('tele_qr_locutor'), central.enlaceLocutor!, 120),
+              const SizedBox(width: 18),
+              Flexible(
+                child: Text(
+                  'EL LOCUTOR: este QR abre la lista con cómo nombrar a cada uno. Solo mira: '
+                  'no ingresa a nadie. Código ${central.codigoLocutor}.',
+                  key: const ValueKey('tele_locutor'),
+                  style: _letra(16),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (sinPagina) ...[
           const SizedBox(height: 10),
           Text(

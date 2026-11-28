@@ -470,6 +470,21 @@ void main() {
     expect(find.textContaining('SIN TELE'), findsOneWidget);
   });
 
+  testWidgets('el QR del locutor, en SUMAR UN CELULAR, con su código', (tester) async {
+    await abrir(
+      tester,
+      central: _CentralConLocutor.new,
+      eventos: [eventoDePrueba(eventoMasivo, 'masivo')],
+      fiesta: eventoMasivo,
+    );
+    await tecla(tester, LogicalKeyboardKey.select);
+    await tester.tap(find.byKey(const ValueKey('tele_sumar_celular')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('tele_qr_locutor')), findsOneWidget);
+    expect(tester.widgetList<QrImageView>(find.byType(QrImageView)), hasLength(2), reason: 'el de los celulares y el suyo');
+    expect(tester.widget<Text>(find.byKey(const ValueKey('tele_locutor'))).data, contains('7391'));
+  });
+
   testWidgets('sin fiesta que venga, lo dice', (tester) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(1920, 1080);
@@ -505,6 +520,21 @@ class _CentralConLaOtra extends _CentralQuieta {
       direcciones: const ['192.168.0.10'],
       esTele: comoTele,
       atiende: [eventoId, eventoParticular],
+    );
+  }
+}
+
+class _CentralConLocutor extends _CentralQuieta {
+  @override
+  Future<void> prender(String eventoId, {bool comoTele = false}) async {
+    state = EstadoCentral(
+      eventoId: eventoId,
+      codigo: '4821',
+      codigoLocutor: '7391',
+      puerto: 8787,
+      direcciones: const ['192.168.0.10'],
+      esTele: comoTele,
+      atiende: [eventoId],
     );
   }
 }

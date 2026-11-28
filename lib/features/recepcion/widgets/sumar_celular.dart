@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../models/evento.dart';
+import '../../totem/widgets/totem_local.dart' show eventoMasivoProvider;
 import '../central/central_provider.dart';
 import '../central/central_puerta.dart';
 import '../providers/recepcion_provider.dart';
@@ -76,6 +77,9 @@ class VentanaSumarCelular extends ConsumerStatefulWidget {
 
 class _VentanaSumarCelularState extends ConsumerState<VentanaSumarCelular> {
   var _prendiendo = true;
+
+  /// SUMAR AL LOCUTOR abierto (28-nov-2026).
+  var _locutor = false;
 
   @override
   void initState() {
@@ -293,6 +297,101 @@ class _VentanaSumarCelularState extends ConsumerState<VentanaSumarCelular> {
         Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
         const SizedBox(height: 10),
         _conectados(estado.puestos),
+        // El locutor (28-nov-2026): solo en un evento masivo, con su propio QR.
+        if (ref.watch(eventoMasivoProvider(widget.eventoId)) == true && estado.enlaceLocutor != null) ...[
+          const SizedBox(height: 12),
+          Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
+          const SizedBox(height: 6),
+          _elLocutor(estado),
+        ],
+      ],
+    );
+  }
+
+  Widget _elLocutor(EstadoCentral estado) {
+    if (!_locutor) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('sumar_al_locutor'),
+          onPressed: () => setState(() => _locutor = true),
+          icon: const Icon(Icons.mic_none, color: _perla),
+          label: Text(
+            estado.locutores > 0 ? 'SUMAR AL LOCUTOR · conectado' : 'SUMAR AL LOCUTOR',
+            style: _letra(size: 13, negrita: true),
+          ),
+        ),
+      );
+    }
+    return Column(
+      key: const Key('locutor_qr'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('EL LOCUTOR', style: _letra(size: 14, negrita: true)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 20,
+          runSpacing: 14,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+              child: QrImageView(
+                data: estado.enlaceLocutor!,
+                version: QrVersions.auto,
+                size: 150,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ve la lista de la noche con cómo nombrar a cada uno, y lo que cambien en '
+                    'CÓMO LO NOMBRAN le llega solo. No puede ingresar a nadie ni cambiar nada.',
+                    key: const Key('locutor_solo_mira'),
+                    style: _letra(size: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Su celular: en el wifi del router; el bloqueo automático en "Nunca"; sin pestaña '
+                    'privada; con "Cambiar a datos móviles" (o "Asistencia para Wi-Fi") apagado.',
+                    style: _letra(size: 12, color: Colors.white60),
+                  ),
+                  const SizedBox(height: 8),
+                  Text.rich(
+                    TextSpan(
+                      style: _letra(size: 13, color: Colors.white60),
+                      children: [
+                        const TextSpan(text: 'Sin QR: '),
+                        TextSpan(text: '${estado.direccion}/?locutor', style: _letra(size: 14, negrita: true)),
+                        const TextSpan(text: ' y el código '),
+                        TextSpan(text: estado.codigoLocutor, style: _letra(size: 16, negrita: true)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    estado.locutores > 0 ? 'El locutor está conectado.' : 'Todavía no se conectó.',
+                    key: const Key('locutor_conectado'),
+                    style: _letra(size: 13, negrita: estado.locutores > 0),
+                  ),
+                  TextButton(
+                    key: const Key('locutor_cambiar_codigo'),
+                    onPressed: () => ref.read(centralDeLaPuertaProvider.notifier).cambiarCodigoLocutor(),
+                    child: Text(
+                      'Cambiar el código del locutor (lo desconecta)',
+                      style: _letra(size: 12, color: Colors.white54),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

@@ -53,10 +53,14 @@ class _CentralDePrueba extends CentralDeLaPuerta {
 EstadoCentral _prendida({
   List<String> direcciones = const ['192.168.0.10'],
   List<PuestoConectado> puestos = const [],
+  String evento = eventoMasivo,
+  int locutores = 0,
 }) =>
     EstadoCentral(
-      eventoId: eventoMasivo,
+      eventoId: evento,
       codigo: '4821',
+      codigoLocutor: '7391',
+      locutores: locutores,
       puerto: 8787,
       direcciones: direcciones,
       puestos: puestos,
@@ -82,6 +86,7 @@ void main() {
     WidgetTester tester,
     EstadoCentral alPrender, {
     EstadoCentral alAbrir = const EstadoCentral(),
+    String elegido = eventoMasivo,
   }) async {
     central = _CentralDePrueba(alPrender, alAbrir: alAbrir);
     final mundo = PuertaEnMemoria(supabase, alumnos: [
@@ -93,7 +98,7 @@ void main() {
     addTearDown(mundo.motor.bajo.close);
     await tester.pumpWidget(mundo.recepcion(
       const RecepcionUnifiedScreen(),
-      elegido: eventoMasivo,
+      elegido: elegido,
       extra: [centralDeLaPuertaProvider.overrideWith(() => central)],
     ));
     for (var i = 0; i < 6; i++) {
@@ -132,6 +137,28 @@ void main() {
     await tester.tap(find.text('CERRAR'));
     await asentar(tester);
     expect(find.text('SUMAR UN CELULAR'), findsNothing);
+  });
+
+  testWidgets('SUMAR AL LOCUTOR, en un masivo: su QR (otro que el de los celulares), que solo mira, y si se '
+      'conectó', (tester) async {
+    await abrir(tester, _prendida(locutores: 1));
+    await abrirVentana(tester);
+    expect(find.byKey(const Key('locutor_qr')), findsNothing, reason: 'cerrado hasta tocarlo');
+    await tester.tap(find.byKey(const Key('sumar_al_locutor')));
+    await tester.pump();
+    final qrs = tester.widgetList<QrImageView>(find.byType(QrImageView)).toList();
+    expect(qrs, hasLength(2));
+    expect(find.byKey(const Key('locutor_solo_mira')), findsOneWidget);
+    expect(find.textContaining('No puede ingresar a nadie ni cambiar nada'), findsOneWidget);
+    expect(find.textContaining('7391', findRichText: true), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('locutor_conectado'))).data, 'El locutor está conectado.');
+  });
+
+  testWidgets('en una fiesta particular no hay locutor', (tester) async {
+    await abrir(tester, _prendida(evento: eventoParticular), elegido: eventoParticular);
+    await abrirVentana(tester);
+    expect(find.text('SUMAR UN CELULAR'), findsOneWidget);
+    expect(find.byKey(const Key('sumar_al_locutor')), findsNothing);
   });
 
   testWidgets('con celulares: el botón dice cuántos y la ventana quiénes',
