@@ -14,6 +14,7 @@ import '../impresion/modelo_ticket.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/papel_de_la_barra.dart';
+import 'anular_venta_dialog.dart';
 import 'pin_de_la_encargada.dart';
 import 'vales_de_la_venta_screen.dart';
 
@@ -187,32 +188,39 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
         }
         final conSilla = x.venta.renglones.any((r) => esSillaDeLaPuerta(r.nombre));
         final conPlata = ReglasDeLaBarra.veLaPlataDeTodas(rol) || encargada != null;
-        final motivo = await pedirMotivo(
+        // "¿Volvió el vale?" (28-nov-2026): con el vale en la mano el stock vuelve; si ya
+        // se entregó, la plata se anula igual y el stock no vuelve.
+        final pedido = await pedirAnulacion(
           context,
           titulo: 'Anular la N° ${_numero(x.venta)}${conPlata ? ' · ${pesos(x.venta.cobrado)}' : ''}',
-          explicacion: 'Deja de contar en la caja y en el stock. No se puede deshacer, y queda '
+          explicacion: 'Deja de contar en la caja. No se puede deshacer, y queda '
               'anotado con tu nombre y el motivo.'
               '${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
-          ayuda: 'Por qué: se cobró dos veces, se equivocó de bebida…',
-          boton: 'ANULAR',
-          claveBoton: 'motivo_anular',
-          peligro: true,
+          preguntaPorElVale: AnulacionBarra.preguntaPorElVale(x.venta),
         );
-        if (motivo == null || !mounted) return;
+        if (pedido == null || !mounted) return;
+        final (:motivo, :valeVolvio) = pedido;
         final AnulacionBarra anulacion;
         try {
           final barra = ref.read(barraDeLaCajaProvider);
           anulacion = encargada == null
-              ? await barra.anular(x.venta, motivo: motivo, quien: quienEnLaBarra(ref, widget.caja))
+              ? await barra.anular(x.venta,
+                  motivo: motivo, quien: quienEnLaBarra(ref, widget.caja), valeVolvio: valeVolvio)
               : barra is BarraConLaRed
-                  ? await barra.anularConLaEncargada(x.venta, motivo: motivo, encargada: encargada)
-                  : await barra.anular(x.venta, motivo: motivo, quien: encargada);
+                  ? await barra.anularConLaEncargada(x.venta,
+                      motivo: motivo, encargada: encargada, valeVolvio: valeVolvio)
+                  : await barra.anular(x.venta, motivo: motivo, quien: encargada, valeVolvio: valeVolvio);
         } catch (_) {
           _decir(x.venta, 'No se pudo anular. Probá de nuevo.', error: true);
           return;
         }
         unawaited(ref.read(subirDeLaBarraProvider)('barra_anulaciones', anulacion.id));
-        _decir(x.venta, 'Venta anulada.');
+        _decir(
+          x.venta,
+          anulacion.valeVolvio
+              ? 'Venta anulada.'
+              : 'Venta anulada. El stock no vuelve: el vale ya se entregó.',
+        );
       });
 
   static String _numero(VentaBarra v) => v.numero.toString().padLeft(4, '0');
@@ -285,7 +293,8 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'ANULADA · ${x.anulacion!.motivo}',
+                  'ANULADA · ${x.anulacion!.motivoParaMostrar}'
+                  '${x.anulacion!.valeVolvio ? '' : ' · el vale no volvió'}',
                   key: Key('anulada_$id'),
                   style: TextStyle(color: tema.colorScheme.error, fontWeight: FontWeight.bold),
                 ),

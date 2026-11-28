@@ -378,8 +378,13 @@ class _LoQueSubio implements BarraDelJefe {
       [for (final a in await b.anulaciones(eventoId)) if (!b.sinSubir.contains(a.ventaId)) a];
 
   @override
-  Future<AnulacionBarra> anular(VentaBarra venta, {required String motivo, required String quien}) =>
-      b.anular(venta, motivo: motivo, quien: quien);
+  Future<AnulacionBarra> anular(
+    VentaBarra venta, {
+    required String motivo,
+    required String quien,
+    bool valeVolvio = true,
+  }) =>
+      b.anular(venta, motivo: motivo, quien: quien, valeVolvio: valeVolvio);
 
   @override
   Future<List<ValeBarra>> vales(String eventoId) => b.vales(eventoId);

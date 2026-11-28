@@ -650,14 +650,32 @@ void main() {
       await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
       await tocar(tester, find.byKey(Key('jefe_anular_${primera.id}')));
       await escribir(tester, find.byKey(const Key('motivo_texto')), 'se cobró dos veces');
+      await tocar(tester, find.byKey(const Key('anular_vale_volvio')));
       await tocar(tester, find.byKey(const Key('motivo_anular')));
       final a = prueba.barra.anulacionesGuardadas.single;
       expect(a.ventaId, primera.id);
       expect(a.motivo, 'se cobró dos veces');
+      expect(a.valeVolvio, isTrue);
       expect(a.hechoPor, 'Jefe');
       expect(prueba.subidasDeLaBarra, contains('barra_anulaciones ${a.id}'));
       expect(find.byKey(Key('jefe_anulada_${primera.id}')), findsOneWidget);
       expect(texto(tester, 'jefe_kpi_total_valor'), r'$ 32.400');
+    });
+
+    // 28-nov-2026, "¿Volvió el vale?".
+    testWidgets('el jefe anula sin el vale de vuelta: queda dicho en el renglón, con quién', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas, tamano: const Size(1280, 1500));
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      await tocar(tester, find.byKey(Key('jefe_anular_${primera.id}')));
+      expect(find.byKey(const Key('anular_pregunta_vale')), findsOneWidget);
+      await escribir(tester, find.byKey(const Key('motivo_texto')), 'se la tomó');
+      await tocar(tester, find.byKey(const Key('anular_vale_no_volvio')));
+      await tocar(tester, find.byKey(const Key('motivo_anular')));
+      final a = prueba.barra.anulacionesGuardadas.single;
+      expect(a.valeVolvio, isFalse);
+      expect(texto(tester, 'jefe_anulada_${primera.id}'), 'ANULADA · se la tomó · el vale no volvió · Jefe');
+      expect(texto(tester, 'jefe_kpi_total_valor'), r'$ 32.400', reason: 'la plata se anula igual');
     });
 
     testWidgets('SACAR EFECTIVO: con motivo, a su nombre, sube, y lo que tiene que haber baja', (tester) async {

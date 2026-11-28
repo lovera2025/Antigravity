@@ -1,4 +1,5 @@
 import '../../../core/utils/uuid_utils.dart';
+import '../cuentas/silla_de_la_puerta.dart';
 import 'lectura_de_filas.dart';
 import 'venta_barra.dart';
 
@@ -6,6 +7,14 @@ import 'venta_barra.dart';
 /// anula, y con motivo.** La venta no se toca: queda como se vendió, y esta fila dice
 /// que no cuenta. Una por venta, con id fijo ([UuidUtils.barraAnulacionId]): anularla
 /// desde la PC y desde la web deja una sola. **Solo se agregan filas.**
+///
+/// **"¿Volvió el vale?"** (28-nov-2026, decidido por el usuario): quien anula dice si
+/// tiene el vale en la mano. Si volvió, el stock vuelve (lo de siempre); si ya se
+/// entregó, la plata se anula igual pero **el stock no vuelve** y GANANCIA lo cuenta
+/// como perdido. La respuesta va **dentro del motivo**, con [marcaValeNoVolvio] al final
+/// (sin SQL ni columnas: como "Reservada para" en la mesa libre). Lo anulado sin la
+/// marca (todo lo de antes) cuenta como "volvió". Una versión anterior lee la marca como
+/// parte del motivo y devuelve el stock.
 class AnulacionBarra {
   final String id;
   final String ventaId;
@@ -29,18 +38,45 @@ class AnulacionBarra {
     required this.updatedAt,
   });
 
-  /// La anulación de [venta]. Sin motivo no se anula.
+  /// Lo que va al final del motivo cuando el vale **no** volvió.
+  static const marcaValeNoVolvio = '[el vale no volvió]';
+
+  /// Si el vale volvió a la mano de quien anuló: el stock vuelve. Sin la marca, sí.
+  bool get valeVolvio => !motivo.trimRight().endsWith(marcaValeNoVolvio);
+
+  /// El motivo que escribió quien anuló, sin la marca: el de la pantalla y el papel.
+  String get motivoParaMostrar => sinLaMarca(motivo);
+
+  /// El motivo escrito sin la marca del vale (si alguien la tipeó, también se saca).
+  static String sinLaMarca(String motivo) {
+    var m = motivo.trim();
+    while (m.endsWith(marcaValeNoVolvio)) {
+      m = m.substring(0, m.length - marcaValeNoVolvio.length).trimRight();
+    }
+    return m;
+  }
+
+  /// Si al anular [venta] hay que preguntar por el vale: solo si lleva algo que cuenta
+  /// en el stock. **Una venta de solo sillas de la noche no pregunta**: el vale de la
+  /// silla lo tiene la recepcionista, y la silla queda en rojo en la puerta igual.
+  static bool preguntaPorElVale(VentaBarra venta) =>
+      venta.renglones.any((r) => !esSillaDeLaPuerta(r.nombre));
+
+  /// La anulación de [venta]. Sin motivo no se anula (la marca sola no es un motivo).
+  /// [valeVolvio] en false deja la marca al final del motivo.
   factory AnulacionBarra.de(
     VentaBarra venta, {
     required String motivo,
+    bool valeVolvio = true,
     String? hechoPor,
     String? deviceId,
     required DateTime ahora,
   }) {
-    final m = motivo.trim();
-    if (m.isEmpty) {
+    final escrito = sinLaMarca(motivo);
+    if (escrito.isEmpty) {
       throw ArgumentError.value(motivo, 'motivo', 'anular lleva motivo');
     }
+    final m = valeVolvio ? escrito : '$escrito $marcaValeNoVolvio';
     final iso = isoDe(ahora);
     return AnulacionBarra(
       id: UuidUtils.barraAnulacionId(venta.id),

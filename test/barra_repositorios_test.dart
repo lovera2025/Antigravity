@@ -607,6 +607,16 @@ void main() {
       expect(await db.query('barra_anulaciones'), hasLength(1));
     });
 
+    // 28-nov-2026, "¿Volvió el vale?": la respuesta queda en la fila (en el motivo).
+    test('anular sin el vale de vuelta lo guarda así, y se lee igual de la base', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      final a = await barra.anular(venta, motivo: 'se la tomó', quien: 'Romi', valeVolvio: false);
+      expect(a.valeVolvio, isFalse);
+      final leida = (await barra.anulaciones(_evento)).single;
+      expect(leida.valeVolvio, isFalse);
+      expect(leida.motivoParaMostrar, 'se la tomó');
+    });
+
     test('sin motivo no se anula', () async {
       final venta = await venderUnaCerveza(await abrirLaDeMarta());
       expect(() => barra.anular(venta, motivo: '  ', quien: 'Jefe'), throwsArgumentError);

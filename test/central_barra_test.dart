@@ -11,6 +11,7 @@ import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/dia_de_operacion.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
+import 'package:arguello_events/features/barra/cuentas/stock_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/stock_por_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
@@ -326,6 +327,44 @@ void main() {
         que: 'la anulación en las dos cajas');
     expect(a.barra.anulacionesGuardadas.single.ventaId, venta.id);
     expect(b.barra.anulacionesGuardadas.single.hechoPor, 'Jefe');
+  });
+
+  // 28-nov-2026, "¿Volvió el vale?": la respuesta viaja con la anulación, y los tres
+  // equipos cuentan el mismo stock (la anulada sin el vale sigue descontando).
+  test('la anulación sin el vale llega a las cajas y el stock da igual en los tres equipos', () async {
+    final a = tablet('tablet-a', 'Caja 1 · Marta');
+    final b = tablet('tablet-b', 'Caja 2 · Sofía');
+    await hasta(() => a.cliente.conectada && b.cliente.conectada);
+    final caja = await a.abrir(1);
+    final sinVale = await a.vender(caja, cantidad: 3);
+    final conVale = await a.vender(caja, cantidad: 2);
+    await hasta(() => notebook.ventasGuardadas.length == 2 && b.barra.ventasGuardadas.length == 2);
+
+    final avisoDeLaNotebook = AvisoALaRed()..salida = central.difundirDeEstaPc;
+    final jefe = BarraConLaRed(caja: notebook, jefe: notebook, red: notebook, aviso: avisoDeLaNotebook);
+    await jefe.anular(notebook.ventasGuardadas.firstWhere((v) => v.id == sinVale.id),
+        motivo: 'se la tomó', quien: 'Jefe', valeVolvio: false);
+    await jefe.anular(notebook.ventasGuardadas.firstWhere((v) => v.id == conVale.id),
+        motivo: 'se equivocó', quien: 'Jefe');
+    await hasta(
+      () => a.barra.anulacionesGuardadas.length == 2 && b.barra.anulacionesGuardadas.length == 2,
+      que: 'las dos anulaciones en las dos cajas',
+    );
+    expect(b.barra.anulacionesGuardadas.firstWhere((x) => x.ventaId == sinVale.id).valeVolvio, isFalse);
+    expect(b.barra.anulacionesGuardadas.firstWhere((x) => x.ventaId == conVale.id).valeVolvio, isTrue);
+
+    final precio = PrecioBarra.para(
+        eventoId: _fiesta, productoId: 'p', precio: 3500, stockInicial: 24, ahora: DateTime.now().toUtc());
+    int queda(BarraEnMemoria x) => StockDeLaBarra.de(
+          eventoId: _fiesta,
+          precios: [precio],
+          ventas: x.ventasGuardadas,
+          anulaciones: x.anulacionesGuardadas,
+        )['p']!
+            .queda!;
+    expect(queda(notebook), 21, reason: '24 − 3 entregadas sin el vale; las 2 con el vale vuelven');
+    expect(queda(a.barra), 21);
+    expect(queda(b.barra), 21);
   });
 
   test('el latido le cuenta a la notebook lo que cada caja tiene sin subir', () async {

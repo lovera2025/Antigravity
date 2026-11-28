@@ -511,12 +511,14 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
     VentaBarra venta, {
     required String motivo,
     required String quien,
+    bool valeVolvio = true,
   }) async {
     final db = await _abrir();
     final equipo = await _equipo();
     final nueva = AnulacionBarra.de(
       venta,
       motivo: motivo,
+      valeVolvio: valeVolvio,
       hechoPor: quien,
       deviceId: equipo,
       ahora: _reloj(),

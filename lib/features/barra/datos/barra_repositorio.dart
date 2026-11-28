@@ -76,11 +76,13 @@ abstract interface class BarraDelJefe {
   Future<List<AnulacionBarra>> anulaciones(String eventoId);
 
   /// **La venta no se toca:** se agrega su anulación. Anular de nuevo la misma venta
-  /// devuelve la anulación que ya había.
+  /// devuelve la anulación que ya había. [valeVolvio] en false: el vale ya se entregó y
+  /// el stock no vuelve (`AnulacionBarra.valeVolvio`).
   Future<AnulacionBarra> anular(
     VentaBarra venta, {
     required String motivo,
     required String quien,
+    bool valeVolvio = true,
   });
 
   /// Los papeles de vale que salieron de la fiesta, originales y copias.
@@ -228,6 +230,7 @@ abstract interface class BarraDeLaCaja {
     VentaBarra venta, {
     required String motivo,
     required String quien,
+    bool valeVolvio = true,
   });
 
   /// Anota un papel de vale que **salió**, con quién y desde qué equipo. Solo se

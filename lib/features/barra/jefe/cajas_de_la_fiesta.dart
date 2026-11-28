@@ -22,6 +22,7 @@ import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/pantalla_despierta.dart';
 import '../services/papel_de_la_barra.dart';
+import '../widgets/anular_venta_dialog.dart';
 import '../widgets/elegir_papel.dart';
 import '../widgets/pesos_enteros_formatter.dart';
 import '../widgets/ok_del_cierre.dart';
@@ -331,30 +332,35 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
 
   Future<void> _anular(VentaDeLaCaja x) => _conFreno(() async {
         final conSilla = x.venta.renglones.any((r) => esSillaDeLaPuerta(r.nombre));
-        final motivo = await pedirMotivo(
+        // "¿Volvió el vale?" (28-nov-2026): con el vale en la mano el stock vuelve; si ya
+        // se entregó, la plata se anula igual y el stock no vuelve.
+        final pedido = await pedirAnulacion(
           context,
           titulo: 'Anular la N° ${_numero(x.venta)} · ${pesos(x.venta.cobrado)}',
           explicacion: 'La venta no se borra: queda ANULADA con tu nombre y el motivo, y deja de '
-              'contar en la caja y en el stock. No se puede deshacer. La tablet se entera con '
+              'contar en la caja. No se puede deshacer. La tablet se entera con '
               'internet.${conSilla ? ' La silla de esta venta queda en rojo en la puerta.' : ''}',
-          ayuda: 'Por qué: se cobró dos veces, se equivocó de bebida…',
-          boton: 'ANULAR',
-          claveBoton: 'motivo_anular',
-          peligro: true,
+          preguntaPorElVale: AnulacionBarra.preguntaPorElVale(x.venta),
         );
-        if (motivo == null || !mounted) return;
+        if (pedido == null || !mounted) return;
         if (_frenaSinModoJefe()) return;
+        final (:motivo, :valeVolvio) = pedido;
         final AnulacionBarra anulacion;
         try {
           anulacion = await ref
               .read(barraDelJefeProvider)
-              .anular(x.venta, motivo: motivo, quien: quienEsElJefe(ref));
+              .anular(x.venta, motivo: motivo, quien: quienEsElJefe(ref), valeVolvio: valeVolvio);
         } catch (_) {
           _decir(x.venta, 'No se pudo anular. Probá de nuevo.', error: true);
           return;
         }
         unawaited(ref.read(subirDeLaBarraProvider)('barra_anulaciones', anulacion.id));
-        _decir(x.venta, 'Venta anulada. Ya no cuenta en la caja ni en el stock.');
+        _decir(
+          x.venta,
+          anulacion.valeVolvio
+              ? 'Venta anulada. Ya no cuenta en la caja ni en el stock.'
+              : 'Venta anulada. Ya no cuenta en la caja; el stock no vuelve (el vale ya se entregó).',
+        );
       });
 
   Future<void> _reimprimir(VentaDeLaCaja x, CajaBarra caja) => _conFreno(() async {
@@ -957,7 +963,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'ANULADA · ${x.anulacion!.motivo}'
+                  'ANULADA · ${x.anulacion!.motivoParaMostrar}'
+                  '${x.anulacion!.valeVolvio ? '' : ' · el vale no volvió'}'
                   '${x.anulacion!.hechoPor == null ? '' : ' · ${x.anulacion!.hechoPor}'}',
                   key: Key('jefe_anulada_$id'),
                   style: TextStyle(color: error, fontWeight: FontWeight.w800),

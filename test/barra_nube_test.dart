@@ -192,6 +192,14 @@ void main() {
       expect((post.cuerpo as Map)['motivo'], 'error de carga');
     });
 
+    test('sin el vale de vuelta, la respuesta sube en el motivo', () async {
+      final a = await barra.anular(venta, motivo: 'se la tomó', quien: 'Romi', valeVolvio: false);
+      expect(a.valeVolvio, isFalse);
+      final subido = AnulacionBarra.fromMap(Map<String, dynamic>.from(nube.pedidos.last.cuerpo as Map));
+      expect(subido.valeVolvio, isFalse);
+      expect(subido.motivoParaMostrar, 'se la tomó');
+    });
+
     test('si ya estaba anulada, devuelve la que hay y no escribe', () async {
       final ya = AnulacionBarra.de(venta, motivo: 'la primera', hechoPor: 'Jefe en la PC', ahora: ahora);
       nube.filas = (tabla, _) => tabla == 'barra_anulaciones' ? [ya.toMap()] : const [];

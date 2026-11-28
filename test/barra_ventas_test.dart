@@ -47,7 +47,7 @@ void main() {
     caja = await b.abrirCaja(eventoId: fiesta.id, operadorId: _marta, operadorNombre: 'Marta', numeroCaja: 2);
   });
 
-  Future<void> abrir(WidgetTester tester, {Size tamano = const Size(1280, 800)}) async {
+  Future<void> abrir(WidgetTester tester, {Size tamano = const Size(1280, 800), bool comoEncargada = false}) async {
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -57,8 +57,10 @@ void main() {
     ));
     final c = ProviderScope.containerOf(tester.element(find.byType(VenderScreen)));
     await c.read(appRoleProvider.notifier).entrarComoBarra(
-          operadores.operadores.lista.first,
-          const PermisosEfectivos(barra: true),
+          comoEncargada ? operadores.operadores.lista.last : operadores.operadores.lista.first,
+          comoEncargada
+              ? const PermisosEfectivos(barra: true, encargadaBarra: true)
+              : const PermisosEfectivos(barra: true),
         );
     await tester.pumpAndSettle();
   }
@@ -239,11 +241,14 @@ void main() {
       await pinDeLaEncargada(tester, '7777');
       expect(prendido(tester, 'motivo_anular'), isFalse, reason: 'sin motivo no anula');
       await escribirMotivo(tester, 'se cobró dos veces');
+      expect(prendido(tester, 'motivo_anular'), isFalse, reason: 'sin decir si volvió el vale no anula');
+      await tocar(tester, porClave('anular_vale_volvio'));
       await tocar(tester, porClave('motivo_anular'));
 
       final a = prueba.barra.anulacionesGuardadas.single;
       expect(a.ventaId, venta.id);
       expect(a.motivo, 'se cobró dos veces');
+      expect(a.valeVolvio, isTrue);
       expect(a.hechoPor, 'Romi', reason: 'a nombre de la encargada que puso su PIN');
       expect(prueba.subidasDeLaBarra, contains('barra_anulaciones ${a.id}'));
       expect(texto(tester, 'anulada_${venta.id}'), 'ANULADA · se cobró dos veces');
@@ -264,6 +269,49 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Quedan 5'), findsOneWidget, reason: 'una anulada no descuenta stock');
+    });
+
+    // 28-nov-2026, "¿Volvió el vale?": si el vale ya se entregó, la plata se anula igual
+    // pero el stock no vuelve.
+    testWidgets('ANULAR sin el vale de vuelta: la plata se anula, el stock no vuelve', (tester) async {
+      await abrir(tester);
+      final venta = await venderConTodoJunto(tester);
+      expect(find.text('Quedan 2'), findsOneWidget);
+      await tocar(tester, porClave('vender_ventas'));
+      await tocar(tester, porClave('anular_${venta.id}'));
+      await pinDeLaEncargada(tester, '7777');
+      expect(porClave('anular_pregunta_vale'), findsOneWidget);
+      await escribirMotivo(tester, 'se tomó y se arrepintió');
+      await tocar(tester, porClave('anular_vale_no_volvio'));
+      await tocar(tester, porClave('motivo_anular'));
+
+      final a = prueba.barra.anulacionesGuardadas.single;
+      expect(a.valeVolvio, isFalse);
+      expect(a.motivoParaMostrar, 'se tomó y se arrepintió');
+      expect(a.hechoPor, 'Romi');
+      expect(texto(tester, 'anulada_${venta.id}'), 'ANULADA · se tomó y se arrepintió · el vale no volvió');
+      expect(texto(tester, 'aviso_${venta.id}'), 'Venta anulada. El stock no vuelve: el vale ya se entregó.');
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Quedan 2'), findsOneWidget, reason: 'la bebida salió: sigue descontada');
+    });
+
+    testWidgets('la encargada en su tablet anula sin PIN, y sin el vale el stock no vuelve', (tester) async {
+      await abrir(tester, comoEncargada: true);
+      final venta = await venderConTodoJunto(tester);
+      await tocar(tester, porClave('vender_ventas'));
+      await tocar(tester, porClave('anular_${venta.id}'));
+      expect(porClave('pin_de_la_encargada'), findsNothing, reason: 'ella anula sola');
+      await escribirMotivo(tester, 'se la tomó');
+      await tocar(tester, porClave('anular_vale_no_volvio'));
+      await tocar(tester, porClave('motivo_anular'));
+      final a = prueba.barra.anulacionesGuardadas.single;
+      expect(a.valeVolvio, isFalse);
+      expect(a.hechoPor, 'Romi');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Quedan 2'), findsOneWidget, reason: 'la bebida salió');
     });
 
     testWidgets('cancelar no anula', (tester) async {

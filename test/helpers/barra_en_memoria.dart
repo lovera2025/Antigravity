@@ -289,11 +289,13 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     VentaBarra venta, {
     required String motivo,
     required String quien,
+    bool valeVolvio = true,
   }) async {
     final ya = anulacionesGuardadas.where((a) => a.ventaId == venta.id).firstOrNull;
     if (ya != null) return ya;
     final anulacion =
-        AnulacionBarra.de(venta, motivo: motivo, hechoPor: quien, deviceId: equipo, ahora: reloj());
+        AnulacionBarra.de(venta,
+        motivo: motivo, valeVolvio: valeVolvio, hechoPor: quien, deviceId: equipo, ahora: reloj());
     anulacionesGuardadas.add(anulacion);
     otrosSinSubir.add(anulacion.id);
     return anulacion;

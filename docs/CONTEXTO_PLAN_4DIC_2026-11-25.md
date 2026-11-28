@@ -2,7 +2,35 @@
 
 ## Para retomar en otro chat
 
-### EMPEZAR POR ACÁ: cómo quedó el 28-nov (chat "sigamos en donde estuvimos"; frenado a pedido del usuario al cerrar la etapa 3)
+### EMPEZAR POR ACÁ (lo último): 28-nov a la noche, chat "donde nos quedamos… hacé todo, el mouse al final"
+
+**Plan aprobado de este chat** (6 etapas, A a F, todas de corrido; **el mouse, la nube y publicar, al final, con
+él**): `C:\Users\lover\.claude\plans\donde-nos-quedamos-sigamos-fluffy-lampson-of-b2f6a465-dd63-4dad-a456-d8cc83aa7804.md`.
+A "¿Volvió el vale?" → B la encargada (y el repositor) en el iPhone → C la noche simulada y el repaso → D el locutor →
+E el plano ancho y Noche y Blanco → F con él. Si falta tiempo, se cae primero Noche y Blanco, después el plano ancho,
+la página del repositor y el locutor.
+
+#### Etapa A — "¿Volvió el vale?" al anular (~86 %)
+- **La ventana** (`barra/widgets/anular_venta_dialog.dart`, `pedirAnulacion`): el motivo y **"¿Volvió el vale?" SÍ,
+  LO TENGO · NO, YA SE ENTREGÓ**, sin ninguna marcada (ANULAR apagado hasta contestar). La usan VENTAS de la caja (con
+  el PIN de la encargada) y LAS CAJAS / CAJAS del jefe / la web (`cajas_de_la_fiesta.dart`). **Una venta de solo
+  sillas no pregunta** (`AnulacionBarra.preguntaPorElVale`). `pedirMotivo` no se tocó. Capturas mandadas
+  (`build/capturas_vale_28nov/`, de `tool/volvio_el_vale_muestra_test.dart`); el usuario no contestó todavía.
+- **La respuesta va dentro del motivo** (sin SQL): `AnulacionBarra.marcaValeNoVolvio` ("[el vale no volvió]") al
+  final; `valeVolvio`, `motivoParaMostrar`, `sinLaMarca`. Lo anulado antes (sin marca) cuenta como "volvió". **Una
+  versión anterior ve la marca en el motivo y devuelve el stock.** `anular(..., valeVolvio:)` en `BarraDelJefe`,
+  `BarraDeLaCaja`, `BarraLocal`, `BarraNube`, `BarraConLaRed` (también `anularConLaEncargada`).
+- **Las cuentas:** la plata usa `ventasAnuladas` (todas, como siempre); **el stock usa `ventasAnuladasConElVale`**
+  (`StockDeLaBarra.de`, `StockPorBarra` y sus conteos `_anulacionDe`). GANANCIA: lo entregado sin el vale va a
+  `perdidas` (`entregadasSinCobrar`), también en los tragos con receta, y "quedaron" lo descuenta. El papel imprime
+  `motivoParaMostrar` y "El vale no volvió". Los renglones ANULADA dicen "· el vale no volvió".
+- Pruebas: `test/volvio_el_vale_test.dart` (20, con una que lee el código: ninguna cuenta del stock usa
+  `ventasAnuladas(`), 2 nuevas de pantalla en `barra_ventas_test` y `barra_jefe_pantalla_test`, una en
+  `central_barra_test` (la anulación sin el vale cruza y los tres equipos dan el mismo stock), y las de la base y la
+  nube; las de antes que anulaban ahora contestan SÍ; la encargada anulando en su propia tablet. Las 77 de la barra: 1.433 en verde. Roturas (22 de 22 atrapadas; dos destaparon pruebas que faltaban):
+  `tool/roturas_volvio_el_vale.txt`.
+
+### Cómo quedó el 28-nov a la tarde (chat "sigamos en donde estuvimos"; frenado a pedido del usuario al cerrar la etapa 3)
 
 **El plan del 4-dic va por ~84 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Publicar: martes 1 o
 miércoles 2-dic. El plan aprobado de este chat (8 etapas) está en

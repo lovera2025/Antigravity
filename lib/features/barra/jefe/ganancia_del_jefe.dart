@@ -300,7 +300,7 @@ class _GananciaDelJefeVistaState extends ConsumerState<GananciaDelJefeVista> {
             const SizedBox(height: 8),
             const Text(
               'Las botellas de los tragos son una cuenta con la receta: "más o menos". Lo demás es lo que se vendió de '
-              'verdad, más lo que se anotó como perdido.',
+              'verdad, más lo que se anotó como perdido y lo que se entregó con una venta anulada sin el vale.',
               style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
             ),
             const SizedBox(height: 24),

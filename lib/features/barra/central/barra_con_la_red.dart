@@ -133,17 +133,27 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   }
 
   @override
-  Future<AnulacionBarra> anular(VentaBarra venta, {required String motivo, required String quien}) async {
+  Future<AnulacionBarra> anular(
+    VentaBarra venta, {
+    required String motivo,
+    required String quien,
+    bool valeVolvio = true,
+  }) async {
     _tieneQue(ReglasDeLaBarra.anula, 'Anula solo la encargada');
-    final hecho = await _caja.anular(venta, motivo: motivo, quien: quien);
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: quien, valeVolvio: valeVolvio);
     return _avisar('barra_anulaciones', hecho.id, hecho);
   }
 
   /// **La encargada anula en la tablet de la cajera, con su PIN** (26-nov-2026). La
   /// pantalla ya comprobó el PIN (`laEncargadaAutoriza`); queda a nombre de [encargada].
   /// La central lo acepta de la tablet de esa caja solo si la firma es de una encargada.
-  Future<AnulacionBarra> anularConLaEncargada(VentaBarra venta, {required String motivo, required String encargada}) async {
-    final hecho = await _caja.anular(venta, motivo: motivo, quien: encargada);
+  Future<AnulacionBarra> anularConLaEncargada(
+    VentaBarra venta, {
+    required String motivo,
+    required String encargada,
+    bool valeVolvio = true,
+  }) async {
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: encargada, valeVolvio: valeVolvio);
     return _avisar('barra_anulaciones', hecho.id, hecho);
   }
 

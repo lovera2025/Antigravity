@@ -44,7 +44,8 @@ abstract final class StockDeLaBarra {
     required Iterable<VentaBarra> ventas,
     required Iterable<AnulacionBarra> anulaciones,
   }) {
-    final anuladas = ventasAnuladas(anulaciones);
+    // Solo las anuladas con el vale de vuelta devuelven el stock ("¿Volvió el vale?").
+    final anuladas = ventasAnuladasConElVale(anulaciones);
     final vendido = <String, int>{};
     for (final v in ventas) {
       if (v.eventoId != eventoId || anuladas.contains(v.id)) continue;

@@ -133,7 +133,8 @@ abstract final class ModeloTicket {
       ),
       if (anulada) ...[
         const TextoTicket('*** ANULADA ***', negrita: true),
-        ..._centrado('Motivo: ${anulacion.motivo}'),
+        ..._centrado('Motivo: ${anulacion.motivoParaMostrar}'),
+        if (!anulacion.valeVolvio) ..._centrado('El vale no volvió'),
         ..._centrado('${fechaYHora(anulacion.createdAt)}'
             '${anulacion.hechoPor == null ? '' : ' - ${anulacion.hechoPor}'}'),
       ] else

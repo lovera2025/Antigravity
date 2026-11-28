@@ -828,6 +828,13 @@ la v81 el 20-nov, la v82 el 22-nov, de la 80 a la 82 de una y en dos pasos, `too
   (`test/cierre_con_retiros_test.dart` lo lee). **Y dice quién lo hizo** (28-nov, el usuario: "que diga quién"):
   `CierreDeBarra.rotuloDelCambio` y `rotuloDeLoSacado` ("Cambio que dio Romi", "Sacó Romi y el jefe";
   `quienesLoHicieron`), nunca "la encargada" fijo.
+- **"¿Volvió el vale?" al anular** (28-nov, decidido por el usuario; sin SQL): `pedirAnulacion`
+  (`barra/widgets/anular_venta_dialog.dart`) pregunta SÍ, LO TENGO · NO, YA SE ENTREGÓ (una venta de solo sillas no
+  pregunta). La respuesta va **al final del motivo** (`AnulacionBarra.marcaValeNoVolvio`, `valeVolvio`,
+  `motivoParaMostrar`: lo que se muestra y se imprime). **La plata cuenta toda anulada (`ventasAnuladas`); el stock,
+  solo las del vale de vuelta (`ventasAnuladasConElVale`)**, y GANANCIA lo entregado sin el vale como perdido.
+  `test/volvio_el_vale_test.dart` falla si una cuenta del stock usa `ventasAnuladas(`. Una versión anterior lee la
+  marca como parte del motivo y devuelve el stock: no anular "sin el vale" hasta que todos tengan la versión.
 
 **La 6.9.4: la planilla del sorteo por número de mesa y DAR MESA — PUBLICADA el 26-nov a las 6:55** (lo pidió él:
 foto de la mora "antes de 6.9.4" sin nada sospechoso, tag `v6.9.4`, release con el Setup y el APK, y la web; **falta

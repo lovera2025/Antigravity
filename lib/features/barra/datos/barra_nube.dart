@@ -212,10 +212,12 @@ class BarraNube implements BarraDelJefe {
     VentaBarra venta, {
     required String motivo,
     required String quien,
+    bool valeVolvio = true,
   }) async {
     final nueva = AnulacionBarra.de(
       venta,
       motivo: motivo,
+      valeVolvio: valeVolvio,
       hechoPor: quien,
       deviceId: await _equipo(),
       ahora: _reloj(),

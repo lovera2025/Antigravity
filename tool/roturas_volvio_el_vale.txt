@@ -1,0 +1,132 @@
+sin la marca, el vale no volvio nunca
+lib/features/barra/datos/anulacion_barra.dart
+test/volvio_el_vale_test.dart
+    final m = valeVolvio ? escrito : '$escrito $marcaValeNoVolvio';
+    final m = escrito;
+---
+la marca sola cuenta como motivo
+lib/features/barra/datos/anulacion_barra.dart
+test/volvio_el_vale_test.dart
+    if (escrito.isEmpty) {
+    if (motivo.trim().isEmpty) {
+---
+la pantalla muestra la marca
+lib/features/barra/datos/anulacion_barra.dart
+test/volvio_el_vale_test.dart
+  String get motivoParaMostrar => sinLaMarca(motivo);
+  String get motivoParaMostrar => motivo;
+---
+una venta de solo sillas pregunta por el vale
+lib/features/barra/datos/anulacion_barra.dart
+test/volvio_el_vale_test.dart
+      venta.renglones.any((r) => !esSillaDeLaPuerta(r.nombre));
+      venta.renglones.isNotEmpty;
+---
+el stock general vuelve sin el vale
+lib/features/barra/cuentas/stock_de_la_barra.dart
+test/volvio_el_vale_test.dart test/central_barra_test.dart
+    final anuladas = ventasAnuladasConElVale(anulaciones);
+    final anuladas = ventasAnuladas(anulaciones);
+---
+la lista del stock cuenta todas las anuladas
+lib/features/barra/cuentas/cierre_de_barra.dart
+test/volvio_el_vale_test.dart
+    {for (final a in anulaciones) if (a.valeVolvio) a.ventaId};
+    {for (final a in anulaciones) a.ventaId};
+---
+el stock por barra vuelve sin el vale
+lib/features/barra/cuentas/stock_por_barra.dart
+test/volvio_el_vale_test.dart
+  })  : anuladas = ventasAnuladasConElVale(anulaciones),
+  })  : anuladas = {for (final a in anulaciones) a.ventaId},
+---
+un conteo descuenta la anulada sin el vale
+lib/features/barra/cuentas/stock_por_barra.dart
+test/volvio_el_vale_test.dart
+        _anulacionDe = {for (final a in anulaciones) if (a.valeVolvio) a.ventaId: a};
+        _anulacionDe = {for (final a in anulaciones) a.ventaId: a};
+---
+GANANCIA no cuenta lo entregado sin el vale
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/volvio_el_vale_test.dart
+      final perdidas = math.max(0, netas) + entregado;
+      final perdidas = math.max(0, netas);
+---
+GANANCIA: lo que quedo no descuenta lo entregado
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/volvio_el_vale_test.dart
+          : (general == null ? null : math.max(0, general - vendidas - entregado));
+          : (general == null ? null : math.max(0, general - vendidas));
+---
+GANANCIA: el trago entregado sin el vale no se debe
+lib/features/barra/cuentas/cuenta_del_proveedor.dart
+test/volvio_el_vale_test.dart
+        final servidos = vendidas + perdidos;
+        final servidos = vendidas;
+---
+el ticket imprime la marca
+lib/features/barra/impresion/modelo_ticket.dart
+test/volvio_el_vale_test.dart
+        ..._centrado('Motivo: ${anulacion.motivoParaMostrar}'),
+        ..._centrado('Motivo: ${anulacion.motivo}'),
+---
+la ventana anula sin contestar el vale
+lib/features/barra/widgets/anular_venta_dialog.dart
+test/volvio_el_vale_test.dart
+  bool get _contesto => !widget.preguntaPorElVale || _volvio != null;
+  bool get _contesto => true;
+---
+la ventana contesta siempre que volvio
+lib/features/barra/widgets/anular_venta_dialog.dart
+test/volvio_el_vale_test.dart
+                    (motivo: _ctrl.text.trim(), valeVolvio: _volvio ?? true),
+                    (motivo: _ctrl.text.trim(), valeVolvio: true),
+---
+VENTAS no pasa la respuesta al guardar
+lib/features/barra/widgets/ventas_de_la_caja_screen.dart
+test/barra_ventas_test.dart
+                  motivo: motivo, quien: quienEnLaBarra(ref, widget.caja), valeVolvio: valeVolvio)
+                  motivo: motivo, quien: quienEnLaBarra(ref, widget.caja))
+---
+VENTAS con la encargada no pasa la respuesta
+lib/features/barra/central/barra_con_la_red.dart
+test/barra_ventas_test.dart
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: encargada, valeVolvio: valeVolvio);
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: encargada);
+---
+VENTAS no dice que el vale no volvio
+lib/features/barra/widgets/ventas_de_la_caja_screen.dart
+test/barra_ventas_test.dart
+                  '${x.anulacion!.valeVolvio ? '' : ' · el vale no volvió'}',
+                  '',
+---
+LAS CAJAS no pasa la respuesta al guardar
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+              .anular(x.venta, motivo: motivo, quien: quienEsElJefe(ref), valeVolvio: valeVolvio);
+              .anular(x.venta, motivo: motivo, quien: quienEsElJefe(ref));
+---
+LAS CAJAS no dice que el vale no volvio
+lib/features/barra/jefe/cajas_de_la_fiesta.dart
+test/barra_jefe_pantalla_test.dart
+                  '${x.anulacion!.valeVolvio ? '' : ' · el vale no volvió'}'
+                  ''
+---
+la notebook no guarda la respuesta
+lib/features/barra/datos/barra_local.dart
+test/barra_repositorios_test.dart
+      valeVolvio: valeVolvio,
+      valeVolvio: true,
+---
+la central no pasa la respuesta
+lib/features/barra/central/barra_con_la_red.dart
+test/central_barra_test.dart
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: quien, valeVolvio: valeVolvio);
+    final hecho = await _caja.anular(venta, motivo: motivo, quien: quien);
+---
+la web no guarda la respuesta
+lib/features/barra/datos/barra_nube.dart
+test/barra_nube_test.dart
+      valeVolvio: valeVolvio,
+      valeVolvio: true,
+---

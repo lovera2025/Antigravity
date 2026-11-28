@@ -127,7 +127,9 @@ class GananciaDeUnProducto {
   final int vendidas;
 
   /// Las que se rompieron, congelaron o perdieron: los faltantes y lo que dio de menos un
-  /// conteo, netos. **Se le pagan igual al proveedor** (decisión del usuario, 26-nov).
+  /// conteo, netos, y **las que se entregaron con una venta anulada sin el vale de
+  /// vuelta** ("¿Volvió el vale?", 28-nov). **Se le pagan igual al proveedor** (decisión
+  /// del usuario, 26-nov). En un trago con receta, los entregados así.
   final int perdidas;
 
   /// Lo que se vendió a precio de venta, sin el recargo por transferencia.
@@ -308,6 +310,9 @@ class CuentaDelProveedor {
     final noche = _laNoche(f, porDia);
     final ventas = [for (final v in porDia.ventasDelDia(f.ventas, noche)) if (v.eventoId == f.eventoId) v];
     final cierre = CierreDeBarra.deLaFiesta(ventas, f.anulaciones);
+    // Lo que salió con una venta anulada sin el vale: la plata no cuenta, pero la bebida
+    // se entregó y al proveedor se le paga.
+    final entregadas = entregadasSinCobrar(ventas, f.anulaciones);
     final recetas = RecetasDeLaBarra.de(f.recetas, eventoId: f.eventoId);
     final stock = StockPorBarra.deLaNoche(
       eventoId: f.eventoId,
@@ -347,6 +352,9 @@ class CuentaDelProveedor {
         // Un trago con receta: no tiene stock propio; lo que se le debe es lo que lleva,
         // por cada vendido. Lo entero (el Speed) ya baja de su propio stock.
         final vendidas = v?.unidades ?? 0;
+        // Los entregados con la venta anulada sin el vale también llevaron lo suyo.
+        final perdidos = entregadas[id] ?? 0;
+        final servidos = vendidas + perdidos;
         var leDebo = 0;
         var porUno = 0.0;
         var falta = false;
@@ -356,19 +364,19 @@ class CuentaDelProveedor {
           final u = uso(r.ingredienteId);
           if (l == null || (r.unidad == UnidadDeReceta.cc && (cc == null || cc <= 0))) {
             falta = true;
-            if (vendidas > 0) u.falta = true;
+            if (servidos > 0) u.falta = true;
             continue;
           }
           final int parte;
           if (r.unidad == UnidadDeReceta.cc) {
             final trae = cc!;
             porUno += r.cantidad * l / trae;
-            parte = (vendidas * r.cantidad * l / trae).round();
-            u.cc += vendidas * r.cantidad;
+            parte = (servidos * r.cantidad * l / trae).round();
+            u.cc += servidos * r.cantidad;
           } else {
             porUno += r.cantidad * l;
-            parte = vendidas * r.cantidad * l;
-            u.enTragos += vendidas * r.cantidad;
+            parte = servidos * r.cantidad * l;
+            u.enTragos += servidos * r.cantidad;
           }
           u.leDebo += parte;
           leDebo += parte;
@@ -377,12 +385,13 @@ class CuentaDelProveedor {
           productoId: id,
           nombre: nombreDe(id),
           vendidas: vendidas,
+          perdidas: perdidos,
           seVendio: centavos(v?.plata ?? 0),
           // Sin la lista de algo que lleva, lo que se debe va con lo que sí se sabe (lo
           // mismo que suma "Para el proveedor"), y la ganancia no se sabe.
           lista: falta ? null : porUno.round(),
           leDebo: leDebo,
-          faltaLaLista: falta && vendidas > 0,
+          faltaLaLista: falta && servidos > 0,
           porReceta: true,
         ));
         continue;
@@ -394,17 +403,21 @@ class CuentaDelProveedor {
       // Faltantes y lo que dio de menos un conteo, netos: un conteo que encontró de más
       // no baja lo que se le debe por lo vendido.
       final netas = lugares.fold<int>(0, (s, l) => s + l.falto - l.porConteos);
-      final perdidas = math.max(0, netas);
+      // Lo entregado con una venta anulada sin el vale: el stock ya lo descontó como
+      // vendido (no volvió), y se le paga al proveedor.
+      final entregado = entregadas[id] ?? 0;
+      final perdidas = math.max(0, netas) + entregado;
       final vendidas = v?.unidades ?? 0;
       // Lo vendido en una caja de una barra donde ese producto no se controla no lo
       // descuenta ningún lugar: se descuenta acá, para que "quedaron" no diga de más.
-      final sinDescontar = math.max(0, vendidas - lugares.fold<int>(0, (s, l) => s + l.vendido));
+      final sinDescontar =
+          math.max(0, vendidas + entregado - lugares.fold<int>(0, (s, l) => s + l.vendido));
       // Sin reparto a las barras, el stock por barra no lo controla: queda la cuenta de
       // siempre, lo que cargó el jefe menos lo vendido (como el "Quedan" de CAJAS).
       final general = generalDe[id];
       final quedaron = lugares.isNotEmpty
           ? math.max(0, lugares.fold<int>(0, (s, l) => s + math.max(0, l.queda)) - sinDescontar)
-          : (general == null ? null : math.max(0, general - vendidas));
+          : (general == null ? null : math.max(0, general - vendidas - entregado));
       final lista = listaDe(id);
       final falta = lista == null && (vendidas > 0 || perdidas > 0);
       final u = uso(id)

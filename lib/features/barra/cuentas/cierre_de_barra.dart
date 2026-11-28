@@ -3,9 +3,34 @@ import 'dia_de_operacion.dart';
 import 'pesos.dart';
 import 'silla_de_la_puerta.dart';
 
-/// Los ids de las ventas anuladas: una venta anulada no cuenta.
+/// Los ids de las ventas anuladas: una venta anulada no cuenta. **Es la de la plata**
+/// (el cierre, VENTAS, el papel, el OK): toda anulada deja de contar, volviera o no el
+/// vale.
 Set<String> ventasAnuladas(Iterable<AnulacionBarra> anulaciones) =>
     {for (final a in anulaciones) a.ventaId};
+
+/// **La del stock** (28-nov-2026, "¿Volvió el vale?"): solo las anuladas **con el vale
+/// de vuelta** devuelven lo vendido al stock. La anulada con el vale ya entregado sigue
+/// descontando: la bebida salió. Las cuentas del stock (`StockDeLaBarra`,
+/// `StockPorBarra`) usan esta y nunca [ventasAnuladas]
+/// (`test/volvio_el_vale_test.dart` lo vigila).
+Set<String> ventasAnuladasConElVale(Iterable<AnulacionBarra> anulaciones) =>
+    {for (final a in anulaciones) if (a.valeVolvio) a.ventaId};
+
+/// Las unidades de cada producto que se entregaron con una venta anulada **sin el vale
+/// de vuelta**: para GANANCIA son perdidas (al proveedor se le pagan igual).
+Map<String, int> entregadasSinCobrar(Iterable<VentaBarra> ventas, Iterable<AnulacionBarra> anulaciones) {
+  final sinVale = {for (final a in anulaciones) if (!a.valeVolvio) a.ventaId};
+  final unidades = <String, int>{};
+  if (sinVale.isEmpty) return unidades;
+  for (final v in ventas) {
+    if (!sinVale.contains(v.id)) continue;
+    for (final r in v.renglones) {
+      unidades[r.productoId] = (unidades[r.productoId] ?? 0) + r.cantidad;
+    }
+  }
+  return unidades;
+}
 
 /// Lo vendido de un producto en una caja: cuántas unidades y cuánta plata, con el nombre
 /// de la última venta (si el jefe le cambió el nombre en el medio, sale el último).

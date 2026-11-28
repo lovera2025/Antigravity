@@ -4,7 +4,7 @@ import '../datos/barra_repositorio.dart';
 import '../datos/movimiento_de_stock.dart';
 import '../datos/stock_en_la_barra.dart';
 import '../services/barras_del_salon.dart' show barraDe;
-import 'cierre_de_barra.dart' show ventasAnuladas;
+import 'cierre_de_barra.dart' show ventasAnuladasConElVale;
 import 'dia_de_operacion.dart';
 import 'nombre_de_barra.dart';
 
@@ -190,7 +190,8 @@ class StockPorBarra {
     final idsDeCajas = {for (final c in cajasDeLaFiesta) c.id};
     final lasVentas = [for (final v in ventas) if (v.eventoId == eventoId) v];
     final lasAnulaciones = [for (final a in anulaciones) if (a.eventoId == eventoId) a];
-    final anuladas = ventasAnuladas(lasAnulaciones);
+    // Solo las anuladas con el vale de vuelta devuelven el stock ("¿Volvió el vale?").
+    final anuladas = ventasAnuladasConElVale(lasAnulaciones);
     final losMovimientos = [
       for (final m in movimientos)
         if (m.eventoId == eventoId && m.tipo != null) m,
@@ -545,8 +546,9 @@ class _Datos {
     required this.ventas,
     required this.anulaciones,
     required this.movimientos,
-  })  : anuladas = ventasAnuladas(anulaciones),
-        _anulacionDe = {for (final a in anulaciones) a.ventaId: a};
+  })  : anuladas = ventasAnuladasConElVale(anulaciones),
+        // La anulada sin el vale sigue vendida para el stock: un conteo no la descuenta.
+        _anulacionDe = {for (final a in anulaciones) if (a.valeVolvio) a.ventaId: a};
 
   static String? _lugar(String? l) => l == null ? null : (esElDeposito(l) ? kDeposito : claveDeBarra(l));
 

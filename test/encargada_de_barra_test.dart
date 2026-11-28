@@ -195,6 +195,7 @@ void main() {
     await tocar(tester, find.byKey(Key('jefe_anular_${fernetDeMarta.id}')));
     await tester.enterText(find.byKey(const Key('motivo_texto')), 'se cobró dos veces');
     await tester.pumpAndSettle();
+    await tocar(tester, find.byKey(const Key('anular_vale_volvio')));
     await tocar(tester, find.byKey(const Key('motivo_anular')));
     final a = prueba.barra.anulacionesGuardadas.single;
     expect(a.ventaId, fernetDeMarta.id);
