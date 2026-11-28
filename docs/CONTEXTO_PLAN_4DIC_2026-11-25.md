@@ -45,6 +45,19 @@ solo su PIN, retoma sola).
      vigilarla, una prueba que reemplace ese provider con datos y vea que PRECIOS sin modo jefe no lo mira.
 3. **Terminar la etapa D (el locutor)**: lo que falta, abajo en "Etapa D".
 4. Etapa E (el plano ancho en la tele y Noche y Blanco) y la F con él (mouse, nube, publicar).
+5. **Lugares al sorteo, en la F, con su OK en el momento** (28-nov, noche; detalle con nombres en
+   `build/lugares_27nov/dudosos_revisados_28nov.md`). La regla, repetida por él: **"importa el agregar más que el
+   pagar"**: lo cargado en la ficha antes del sorteo va con descuento, lo de después sin descuento; el pago solo hace
+   falta para retirar. Los 16 dudosos de las 4 fiestas sin anotar, revisados con las copias: 3 con descuento, 13 sin
+   (los 2 sin comprobar, por su decisión). Un alumno de la Técnica que preguntó (cargó todo el 27-nov) queda sin
+   descuento, como está.
+   - Rehacer `anotar_lugares.sql` sobre una copia nueva (`tool/copiar_base_solo_lectura.py`, el programa cerrado):
+     `tool/lugares_para_aceptar_test.dart --dart-define=tildar=build/lugares_27nov/tildar.json` (ya rehecho) y
+     `build/lugares_27nov/armar_sql.py`. Antes, **mirar que ninguna de esas familias tenga entradas vendidas con
+     descuento**.
+   - Corregir en la nube el dudoso de la Técnica (lista ya aceptada), como los tres del 27-nov.
+   - Correr `supabase/lugares_cambios.sql` (el registro de cada cambio de mesas o sillas: con eso, la próxima vez no
+     hace falta mirar copias).
 
 **La tercera revisión independiente (28-nov, noche; agente que leyó `b03825d..HEAD` sin mis conclusiones):**
 - **ALTA, arreglado sin probar:** desde el iPhone, si la respuesta no llegaba (iPhone bloqueado, wifi cortado), la
