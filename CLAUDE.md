@@ -889,10 +889,41 @@ programado y probado en el sandbox, SIN PUBLICAR; juntado en esta rama el 26-nov
   `laQueAbreEnLaBarra`**. El corte al mediodía lo confirmó el usuario el 26-nov.
 - Ventana de prueba: `tool/dos_barras_prueba.dart`; roturas: `tool/roturas_barra_por_noche.txt` (41, todas atrapadas).
 
-**Para retomar el plan del 4-dic: el bloque "LEER PRIMERO" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (28-nov:
-~76 %, nada publicado; las pruebas a fondo de lo junto, con dos arreglos y cuatro preguntas para el usuario; el plano a
+**Para retomar el plan del 4-dic: el bloque "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`** (28-nov,
+al cerrar la etapa 3 de 8: ~84 %, nada publicado; lo de abajo es de la mañana del 28, ~76 %: las pruebas a fondo de lo junto, con dos arreglos y cuatro preguntas para el usuario; el plano a
 todo lo ancho en la tele quedó aprobado con un dibujo y va al final; sigue Noche y Blanco y el repositor; ahí está lo
 hecho con sus commits y lo que falta, en orden).
+
+**28-nov: los que agregaron después del sorteo, la notebook a la vista y el repositor con los frenos del stock —
+programado y probado en el sandbox, SIN PUBLICAR** (etapas 1 a 3 del plan de ese día; el detalle, lo que no se hizo y
+lo que falta, en "EMPEZAR POR ACÁ" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). ~84 % del plan del 4-dic.
+- **Lugares al sorteo, sin lista que revisar** (pedido del usuario): quién agregó mesa o sillas después del sorteo lo
+  dice **`AgregaronDespues`** (`eventos/services/agregaron_despues.dart`: lo de hoy contra lo anotado al sorteo, la
+  misma cuenta que cobra VENDER), y **al entrar a VENDER** sale el aviso con esas familias y un solo botón
+  (`entradas/widgets/agregaron_despues_dialog.dart`; sin plata; no sale con `familiaId`). **Los dudosos van sin
+  descuento.** Las 4 fiestas sin anotar se anotan una vez en la nube **con su OK** (sin hacer).
+  `supabase/lugares_cambios.sql` (el registro de cada cambio de mesas o sillas, solo anota) está **sin correr**.
+  **Una prueba que monte VENDER de entradas cierra ese aviso** (`_montar(dejarElAviso:)`, `cerrarElAviso`).
+- **La notebook de la barra: la vista simple es solo del jefe** ("solo la central, en modo jefe"; la encargada no la
+  tiene) y **sigue aunque venza el modo jefe**. Probada (`test/notebook_de_la_barra_a_la_vista_test.dart`).
+- **Lo que la central no aceptó se ve** en la notebook y en LAS CAJAS (`EstadoCentralBarra.rechazos`). **El OK del
+  cierre tiene segunda llave** (`daElOk`; LA ENCARGADA ESTÁ ACÁ va por `responderConLaEncargada`, y sigue siendo
+  solo con el PIN de una encargada). Un retiro que llega con la caja ya cerrada se guarda.
+- **El repositor de barra es Barra con un 3** (`PermisoOperador.repositorBarra`, sin SQL; el tilde en OPERADORES; no
+  es cajera ni encargada). Entra por BARRA y ve solo **STOCK** (`lib/features/barra/repositor/`): REPONER, FALTANTE,
+  ANOTAR LO QUE HAY, ENTRÓ MERCADERÍA, VOY EN CAMINO. La encargada y el jefe la abren para mirar. **El jefe reparte
+  en PRECIOS → STOCK POR BARRA** (`jefe/reparto_del_stock.dart`).
+- **VENDER cuenta el stock con `StockParaVender`** (`cuentas/stock_para_vender.dart`): lo repartido, en la barra de la
+  caja y de esa noche; lo demás, el stock general de siempre. **Con señal** (`hayCentralALaVistaProvider`) lo que no
+  queda **no se vende** y al cobrar se mira otra vez; **sin señal** avisa en rojo y deja (queda en negativo y se
+  descuenta de lo repuesto). Arriba, "está en camino" y "Se repusieron…" con OK. **Una prueba que monte VENDER y
+  quiera "con señal" reemplaza ese provider.**
+- **Toda pantalla que diga cuánto queda en una barra sale de `StockPorBarra` o de `StockParaVender`**, con las
+  palabras de `repositor/texto_del_stock.dart`. Un guardado nuevo del stock va por `BarraConLaRed` (llave y aviso).
+- **Los precios (con el stock general) no viajan por el wifi del salón:** el reparto de la Técnica se hace con
+  internet, antes. **No tildar "Repositor de barra" ni repartir por barra hasta que todos los equipos tengan la
+  versión.**
+- Sin decidir: si anular una venta devuelve el stock siempre o solo si volvió el vale (hoy lo devuelve): preguntarle.
 
 **26-nov (noche): todo en un solo chat, y el precio de lista del audio 77** (plan aprobado; el detalle en "Para
 retomar" de `docs/CONTEXTO_PLAN_4DIC_2026-11-25.md`). **No se abren sesiones en paralelo**: cada parte va en el mismo

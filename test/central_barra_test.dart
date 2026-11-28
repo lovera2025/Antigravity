@@ -8,8 +8,10 @@ import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
 import 'package:arguello_events/features/barra/central/llave_de_la_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/dia_de_operacion.dart';
 import 'package:arguello_events/features/barra/cuentas/reglas_de_la_barra.dart';
 import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
+import 'package:arguello_events/features/barra/cuentas/stock_por_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/datos/movimiento_de_stock.dart';
 import 'package:arguello_events/features/barra/datos/stock_en_la_barra.dart';
@@ -367,6 +369,89 @@ void main() {
     await b.cliente.mandar('barra_stock_movimientos', repuso.id);
     await hasta(() => a.barra.movimientosGuardados.any((m) => m.id == repuso.id), que: 'la reposición en la caja');
     expect(notebook.movimientosGuardados.where((m) => m.id == repuso.id), hasLength(1));
+  });
+
+  test('el repositor repone sin la central a la vista; al volver llega a la caja y el stock da igual en los tres equipos',
+      () async {
+    final ahora = DateTime.now().toUtc();
+    final a = tablet('tablet-a', 'Caja 1 · Marta');
+    final r = tablet('celu-nico', 'Repositor · Nico', rol: RolEnLaBarra.repositor);
+    // Los precios (con el stock general) bajaron de la nube antes de la fiesta, a cada
+    // equipo: no viajan por la red del salón.
+    for (final e in [notebook, a.barra, r.barra]) {
+      e.preciosGuardados.add(
+        PrecioBarra.para(eventoId: _fiesta, productoId: 'p', precio: 3500, stockInicial: 100, ahora: ahora),
+      );
+    }
+    notebook.repartosGuardados.add(
+      StockEnLaBarra.para(eventoId: _fiesta, productoId: 'p', barra: 'Barra 1', arranque: 3, ahora: ahora),
+    );
+    await hasta(() => a.cliente.conectada && r.cliente.conectada);
+    await hasta(() => a.barra.repartosGuardados.isNotEmpty && r.barra.repartosGuardados.isNotEmpty,
+        que: 'el reparto en la caja y en el celular del repositor');
+    final caja = await a.caja.abrirCaja(
+      eventoId: _fiesta,
+      operadorId: a.operadorId,
+      operadorNombre: 'Marta',
+      numeroCaja: 1,
+      sede: 'Barra 1',
+    );
+    await a.vender(caja, cantidad: 3);
+    await hasta(() => r.barra.ventasGuardadas.length == 1, que: 'la venta en el celular del repositor');
+
+    int queda(BarraEnMemoria e) => StockPorBarra.deLaNoche(
+          eventoId: _fiesta,
+          precios: e.preciosGuardados,
+          repartos: e.repartosGuardados,
+          movimientos: e.movimientosGuardados,
+          ventas: e.ventasGuardadas,
+          anulaciones: e.anulacionesGuardadas,
+          cajas: CajasPorDia.de(e.cajasGuardadas),
+          dia: DiaDeOperacion.deLaCaja(caja),
+        ).en('Barra 1', 'p')!.queda;
+    for (final e in [notebook, a.barra, r.barra]) {
+      expect(queda(e), 0, reason: 'arrancó con 3 y se vendieron 3');
+    }
+
+    // Se cae la central (la notebook se apagó, o cada uno quedó lejos del router).
+    await central.cerrar();
+    await hasta(
+      () => a.cliente.estado == EstadoDeLaCentral.sinCentral && r.cliente.estado == EstadoDeLaCentral.sinCentral,
+      que: 'los dos se dan cuenta',
+    );
+    // Sin señal la caja avisa y deja vender: vende 2 sin stock. El repositor repone 24.
+    await a.vender(caja, cantidad: 2);
+    final repuso = await r.caja.anotarMovimientoDeStock(
+      MovimientoDeStock.reposicion(
+        eventoId: _fiesta,
+        productoId: 'p',
+        barra: 'Barra 1',
+        cantidad: 24,
+        ahora: DateTime.now().toUtc(),
+      ),
+      quien: 'Nico',
+    );
+    expect(queda(a.barra), -2, reason: 'la caja todavía no sabe que repusieron');
+    expect(queda(r.barra), 24, reason: 'el repositor todavía no sabe de las 2 vendidas');
+
+    // Vuelve la central, en otro puerto.
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, quienEsQuien: _personas, alGuardar: () => guardadas++);
+    final puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+    final nueva = DondeEstaLaCentral('127.0.0.1', puerto);
+    a.cliente.ponerAMano(nueva);
+    r.cliente.ponerAMano(nueva);
+    await hasta(() => a.cliente.conectada && r.cliente.conectada, que: 'los dos de vuelta');
+    await hasta(() => a.barra.movimientosGuardados.any((m) => m.id == repuso.id), que: 'la reposición en la caja');
+    await hasta(() => r.barra.ventasGuardadas.length == 2, que: 'las ventas en el celular del repositor');
+    await hasta(() => notebook.ventasGuardadas.length == 2 && notebook.movimientosGuardados.length == 1,
+        que: 'todo en la notebook');
+    for (final e in [notebook, a.barra, r.barra]) {
+      expect(queda(e), 22, reason: '3 − 3 − 2 vendidas sin stock + 24 repuestas');
+      expect(e.movimientosGuardados.where((m) => m.id == repuso.id), hasLength(1), reason: 'sin duplicar');
+      expect(e.ventasGuardadas, hasLength(2));
+    }
+    expect(a.cliente.porMandar, 0);
+    expect(r.cliente.porMandar, 0);
   });
 
   test('la caja encuentra sola a la central, preguntando por la red', () async {

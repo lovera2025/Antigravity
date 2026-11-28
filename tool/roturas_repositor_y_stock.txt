@@ -1,0 +1,192 @@
+con señal, lo repartido que no queda no se vende
+lib/features/barra/cuentas/stock_para_vender.dart
+test/vender_con_el_stock_por_barra_test.dart
+    return conSenial ? FrenoDeStock.noSeVende : FrenoDeStock.sinSenial;
+    return FrenoDeStock.sinSenial;
+---
+sin señal no frena: avisa y deja vender
+lib/features/barra/cuentas/stock_para_vender.dart
+test/vender_con_el_stock_por_barra_test.dart
+    return conSenial ? FrenoDeStock.noSeVende : FrenoDeStock.sinSenial;
+    return FrenoDeStock.noSeVende;
+---
+lo que no se repartio pregunta como siempre
+lib/features/barra/cuentas/stock_para_vender.dart
+test/vender_con_el_stock_por_barra_test.dart
+    if (!frenaLaBarra(productoId)) return FrenoDeStock.pregunta;
+
+---
+"Quedan" de lo repartido es lo de la barra de la caja
+lib/features/barra/cuentas/stock_para_vender.dart
+test/vender_con_el_stock_por_barra_test.dart
+    if (enLaBarra(productoId)) return porBarra!.en(barra!, productoId)!.queda;
+
+---
+"Se repusieron" es solo de lo que llega a esta barra
+lib/features/barra/cuentas/stock_para_vender.dart
+test/vender_con_el_stock_por_barra_test.dart
+            claveDeBarra(m.hacia!) == clave)
+            m.productoId.isNotEmpty)
+---
+al cobrar con señal se mira otra vez lo que queda
+lib/features/barra/widgets/vender_screen.dart
+test/vender_con_el_stock_por_barra_test.dart
+      if (_conSenial) {
+      if (!_conSenial) {
+---
+el aviso de sin señal sale antes de sumar
+lib/features/barra/widgets/vender_screen.dart
+test/vender_con_el_stock_por_barra_test.dart
+    if (freno == FrenoDeStock.sinSenial && !_sinStockIgual.contains(p.id)) {
+    if (freno == FrenoDeStock.sinSenial && _sinStockIgual.contains(p.id)) {
+---
+con señal y sin stock no se suma
+lib/features/barra/widgets/vender_screen.dart
+test/vender_con_el_stock_por_barra_test.dart
+    if (freno == FrenoDeStock.noSeVende) {
+    if (freno == FrenoDeStock.noSeVende && _sinStockIgual.contains(p.id)) {
+---
+lo repuesto antes de abrir VENDER no se avisa
+lib/features/barra/widgets/vender_screen.dart
+test/vender_con_el_stock_por_barra_test.dart
+    final vistas = _llegadasVistas ??= {for (final m in llegadas) m.id};
+    final vistas = _llegadasVistas ??= <String>{};
+---
+el OK de "Se repusieron" lo saca para siempre
+lib/features/barra/widgets/vender_screen.dart
+test/vender_con_el_stock_por_barra_test.dart
+              _llegadasVistas?.add(m.id);
+
+---
+la notebook con la central prendida tiene señal
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    if (central.prendida && central.eventoId == eventoId) return true;
+
+---
+buscando la central no es tener señal
+lib/features/barra/central/central_barra_provider.dart
+test/central_barra_provider_test.dart
+    return ref.read(clienteDeLaBarraProvider)?.estado == EstadoDeLaCentral.conectada;
+    return ref.read(clienteDeLaBarraProvider) != null;
+---
+el stock lo mueve el repositor: la regla
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/repositor_de_barra_test.dart test/reglas_de_la_barra_test.dart
+  static bool mueveElStock(RolEnLaBarra? r) => r == RolEnLaBarra.repositor || r == RolEnLaBarra.jefe;
+  static bool mueveElStock(RolEnLaBarra? r) => r != null;
+---
+la central no guarda un movimiento de stock de una cajera
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+        return mueveElStock(rol) ? null : 'El stock lo mueve el repositor';
+        return null;
+---
+la central no guarda un reparto que no es del jefe
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+        return 'El reparto lo hace el jefe';
+        return null;
+---
+la central no le guarda una venta al repositor
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/central_barra_permisos_test.dart
+    if (rol == RolEnLaBarra.repositor) return 'El repositor solo anota el stock';
+
+---
+el repositor es repositor aunque la fila traiga algo mas
+lib/features/barra/cuentas/reglas_de_la_barra.dart
+test/repositor_de_barra_test.dart test/reglas_de_la_barra_test.dart
+    if (p.repositorBarra) return RolEnLaBarra.repositor;
+
+---
+la segunda llave del reparto
+lib/features/barra/central/barra_con_la_red.dart
+test/repositor_de_barra_test.dart
+    _tieneQue(ReglasDeLaBarra.reparteElStock, 'El reparto lo hace el jefe');
+
+---
+la segunda llave de los movimientos de stock
+lib/features/barra/central/barra_con_la_red.dart
+test/repositor_de_barra_test.dart
+    _tieneQue(ReglasDeLaBarra.mueveElStock, 'El stock lo mueve el repositor');
+
+---
+el repositor es Barra con un 3
+lib/features/caja_sesiones/models/permisos_operador.dart
+test/repositor_de_barra_test.dart test/operadores_screen_test.dart
+        repositorBarra: barra == 3,
+        repositorBarra: barra == 4,
+---
+el nivel de barra del repositor
+lib/features/caja_sesiones/models/permisos_operador.dart
+test/repositor_de_barra_test.dart test/operadores_screen_test.dart
+  int get nivelBarra => repositorBarra ? 3 : (encargadaBarra ? 2 : (barra ? 1 : 0));
+  int get nivelBarra => encargadaBarra ? 2 : (barra ? 1 : 0);
+---
+tildar repositor le saca Barra
+lib/features/caja_sesiones/widgets/operadores_caja_screen.dart
+test/operadores_screen_test.dart
+                    _barra = false;
+
+---
+tildar Barra le saca el repositor
+lib/features/caja_sesiones/widgets/operadores_caja_screen.dart
+test/operadores_screen_test.dart
+                  if (v) _repositor = false;
+
+---
+el stock cruza por el wifi del salon
+lib/features/barra/central/filas_de_la_red.dart
+test/central_barra_test.dart
+  'barra_stock_movimientos',
+
+---
+el reparto cruza por el wifi del salon
+lib/features/barra/central/filas_de_la_red.dart
+test/central_barra_test.dart
+  'barra_stock_barras',
+
+---
+STOCK no guarda a quien solo mira
+lib/features/barra/repositor/stock_de_las_barras_screen.dart
+test/stock_de_las_barras_pantalla_test.dart
+    if (ReglasDeLaBarra.mueveElStock(ref.read(rolEnLaBarraProvider))) return false;
+    if (ref.read(rolEnLaBarraProvider) != null) return false;
+---
+no se repone mas de lo que hay en el deposito
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart test/stock_de_las_barras_pantalla_test.dart
+    if (cantidad > hay) return 'En el depósito quedan $hay: no se puede reponer más.';
+
+---
+no se reparte mas de lo que hay
+lib/features/barra/cuentas/stock_por_barra.dart
+test/stock_por_barra_test.dart test/reparto_del_stock_test.dart
+    if (total > sinReparto) return 'Hay $sinReparto: no se puede repartir $total.';
+
+---
+el reparto pide modo jefe
+lib/features/barra/jefe/reparto_del_stock.dart
+test/reparto_del_stock_test.dart
+    if (_guardando || _frenaSinModoJefe()) return;
+    if (_guardando) return;
+---
+la reposicion anota un conteo solo si no dio la cuenta
+lib/features/barra/repositor/dialogos_del_stock.dart
+test/stock_de_las_barras_pantalla_test.dart
+      final contado = ajuste != 0;
+      final contado = true;
+---
+al abrir a un repositor, "Barra" no viene tildada
+lib/features/caja_sesiones/widgets/operadores_caja_screen.dart
+test/operadores_screen_test.dart
+  late bool _barra = widget.permisos.tiene(PermisoOperador.barra) && !widget.permisos.repositorBarra;
+  late bool _barra = widget.permisos.tiene(PermisoOperador.barra);
+---
+solo repositor no es "sin permisos"
+lib/features/caja_sesiones/widgets/operadores_caja_screen.dart
+test/operadores_screen_test.dart
+    final sinNinguno = !_cobros && !_entradas && !_barra && !_repositor;
+    final sinNinguno = !_cobros && !_entradas && !_barra;
+---

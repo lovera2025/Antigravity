@@ -280,7 +280,8 @@ class _FichaOperadorState extends State<_FichaOperador> {
   late bool _cobros = widget.permisos.cobros;
   late bool _entradas = widget.permisos.tiene(PermisoOperador.entradas);
   late bool _vende = widget.permisos.vendeEntradas;
-  late bool _barra = widget.permisos.tiene(PermisoOperador.barra);
+  // El repositor entra por BARRA pero no vende: su casilla es la suya, no "Barra".
+  late bool _barra = widget.permisos.tiene(PermisoOperador.barra) && !widget.permisos.repositorBarra;
   late bool _encargada = widget.permisos.encargadaBarra;
   late bool _repositor = widget.permisos.repositorBarra;
   String? _problema;
@@ -342,7 +343,7 @@ class _FichaOperadorState extends State<_FichaOperador> {
 
   @override
   Widget build(BuildContext context) {
-    final sinNinguno = !_cobros && !_entradas && !_barra;
+    final sinNinguno = !_cobros && !_entradas && !_barra && !_repositor;
     return AlertDialog(
       title: Text(widget.existente == null ? 'Nuevo operador' : 'Editar operador'),
       content: SizedBox(

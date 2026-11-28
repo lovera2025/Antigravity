@@ -228,6 +228,86 @@ void main() {
       expect(permisos.filas[_juan]!.toMap()['entradas'], 1);
     });
 
+    testWidgets('Repositor de barra: se guarda con un 3, saca Barra y Encargada, y avisa lo '
+        'de las versiones', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(encargadaBarra: true),
+        ahora: DateTime.utc(2026, 11, 3),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_repositor_barra'), isFalse);
+      expect(find.byKey(const Key('aviso_repositor_barra')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('permiso_repositor_barra')));
+      await tester.tap(find.byKey(const Key('permiso_repositor_barra')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_barra'), isFalse, reason: 'el repositor no vende');
+      expect(tildada(tester, 'permiso_encargada_barra'), isFalse, reason: 'ni es encargada');
+      expect(find.byKey(const Key('aviso_repositor_barra')), findsOneWidget);
+      await guardar(tester);
+      final guardada = permisos.filas[_juan]!;
+      expect(guardada.permisos.repositorBarra, isTrue);
+      expect(guardada.permisos.encargadaBarra, isFalse);
+      expect(guardada.toMap()['barra'], 3);
+      expect(find.textContaining('Repositor de barra'), findsOneWidget);
+      // Al volver a abrirlo sigue siendo repositor: guardar otra cosa no le saca el 3.
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_repositor_barra'), isTrue);
+      expect(tildada(tester, 'permiso_barra'), isFalse, reason: 'no vende: "Barra" no va tildada');
+      expect(tildada(tester, 'permiso_encargada_barra'), isFalse);
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.toMap()['barra'], 3);
+    });
+
+    testWidgets('tildar Barra o Encargada le saca el Repositor', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(repositorBarra: true),
+        ahora: DateTime.utc(2026, 11, 3),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_repositor_barra'), isTrue);
+      await tester.ensureVisible(find.byKey(const Key('permiso_encargada_barra')));
+      await tester.tap(find.byKey(const Key('permiso_encargada_barra')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_repositor_barra'), isFalse);
+      expect(tildada(tester, 'permiso_barra'), isTrue);
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.toMap()['barra'], 2);
+    });
+
+    testWidgets('solo Repositor no es "sin permisos": no sale ese aviso', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(repositorBarra: true),
+        ahora: DateTime.utc(2026, 11, 3),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_cobros'), isFalse);
+      expect(find.byKey(const Key('aviso_sin_permisos')), findsNothing);
+    });
+
+    testWidgets('tildar Barra sola tambien le saca el Repositor: queda de cajera, con un 1', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(repositorBarra: true),
+        ahora: DateTime.utc(2026, 11, 3),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      await tester.ensureVisible(find.byKey(const Key('permiso_barra')));
+      await tester.tap(find.byKey(const Key('permiso_barra')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_barra'), isTrue);
+      expect(tildada(tester, 'permiso_repositor_barra'), isFalse, reason: 'quien vende no es repositor');
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.toMap()['barra'], 1);
+      expect(permisos.filas[_juan]!.permisos.repositorBarra, isFalse);
+    });
+
     testWidgets('destildar Barra le saca también Encargada', (tester) async {
       permisos.filas[_juan] = PermisosOperador.para(
         operadorId: _juan,

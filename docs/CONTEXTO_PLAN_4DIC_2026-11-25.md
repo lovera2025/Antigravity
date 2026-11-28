@@ -2,7 +2,132 @@
 
 ## Para retomar en otro chat
 
-### EMPEZAR POR ACÁ: cómo quedó el 27-nov a las 20:30 (el usuario cerró el chat: "retomaré en otro chat")
+### EMPEZAR POR ACÁ: cómo quedó el 28-nov (chat "sigamos en donde estuvimos"; frenado a pedido del usuario al cerrar la etapa 3)
+
+**El plan del 4-dic va por ~84 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Publicar: martes 1 o
+miércoles 2-dic. El plan aprobado de este chat (8 etapas) está en
+`C:\Users\lover\.claude\plans\sigamos-en-donde-estuvimos-keen-chipmunk-of-671a8863-3f74-4822-8109-d6c57f2a6f8b.md`.
+**Hechas las etapas 1, 2 y 3; faltan la 4 a la 8.** Todo guardado y subido.
+
+**Lo que contestó el usuario el 28-nov (no se vuelve a preguntar):**
+- **La notebook de la barra: "solo la central (en modo jefe)".** La encargada no tiene vista simple; sigue con sus
+  límites (sin ganancia ni precio de lista).
+- **Los 4 dudosos de los lugares: sin descuento.**
+- **El locutor entra, por el wifi** (sin la app Android del locutor) **y sin música.**
+- Las pruebas que necesitan que él apruebe algo (el permiso de pantalla para el mouse, la nube): **al final, y
+  esperarlo** ("cuando me desperté me esperás y le acepto y probás").
+
+#### Etapa 1 — Los que agregaron después del sorteo (commit `e1f46a5`)
+Pidió: "eso de revisar lista es muy demasiado… que le aparezcan todas las personas que agregaron después del sorteo, y
+que sea preciso y que solo tenga que darle a ok… solo avisa". **Con descuento, solo lo que ya estaba cargado al
+sorteo** (cuándo se pagó no importa).
+- **`AgregaronDespues`** (`eventos/services/agregaron_despues.dart`, puro): sale de
+  `RetiroEntradas.entradasDe(a, foto:).cosas` con `!alSorteo`. No hace otra cuenta: es lo mismo que cobra VENDER.
+- **Al entrar a VENDER** (`vender_entradas_screen.dart`, `_alEntrar`): el aviso
+  (`entradas/widgets/agregaron_despues_dialog.dart`, `avisarQuienesAgregaronDespues`), **antes de la caja**, con un
+  solo botón (ENTENDIDO), sin plata; apagada la familia que ya compró lo suyo. No sale con `familiaId` ni se repite
+  si baja algo; queda el renglón **"Agregaron después: N · VER"**. Una fiesta **sin anotar** lo dice ("avisale al
+  jefe").
+- `tool/lugares_de_todas_las_fiestas_test.dart` usa lo mismo: sobre una copia de la base (v82) dio igual que el
+  27-nov en las 10 fiestas sorteadas (5 anotadas con 11 familias que agregaron después, 4 sin anotar).
+- **`supabase/lugares_cambios.sql` (SIN CORRER, pide su OK):** tabla `lugares_cambios` y un trigger sobre
+  `contratos_alumnos` que anota cada cambio de cantidad o precio de mesas adicionales o sillas (solo anota, nunca
+  frena). Probado en el sandbox: `tool/lugares_cambios_sandbox.mjs` (12 de 12).
+- Pruebas: `test/agregaron_despues_test.dart` (17), 11 nuevas en `test/vender_entradas_pantalla_test.dart`;
+  `tool/roturas_agregaron_despues.txt` (15 de 15). Capturas: `build/capturas_lugares_28nov/` (mandadas).
+- **Falta, con su OK en el momento:** anotar en la nube las **4 fiestas sin anotar** y el dudoso de la Técnica, con
+  los dudosos **sin descuento** (rehacer el SQL de `build/lugares_27nov/` sobre una copia nueva con
+  `tool/lugares_para_aceptar_test.dart`; simulacro; huella de cada renglón; **mirar antes que ninguna de esas
+  familias tenga entradas ya vendidas con descuento**), y correr `supabase/lugares_cambios.sql`.
+
+#### Etapa 2 — La notebook de la barra y lo de la revisión de los roles (commit `fb78d95`)
+- **La vista simple, probada** (`test/notebook_de_la_barra_a_la_vista_test.dart`, 26; `tool/roturas_notebook_a_la_vista.txt`,
+  21 de 21; capturas en `build/capturas_notebook_28nov/`, mandadas). Arreglo: **la vista simple sigue aunque venza el
+  modo jefe** (antes desaparecía y quedaba todo a la vista).
+- **Lo que la central no aceptó se ve** en el panel de la notebook (`EstadoCentralBarra.rechazos`, `_Rechazos`) y en
+  LAS CAJAS (`LineaDeLaCaja`).
+- **Una cajera no puede darse sola el OK del cierre**: `BarraConLaRed.anotarPasoDelCierre` pide `daElOk` para `ok` y
+  `recontar`; LA ENCARGADA ESTÁ ACÁ va por `responderConLaEncargada`.
+- **Un retiro que llega con la caja ya cerrada se guarda** (antes la central lo rechazaba para siempre).
+- Los hallazgos 9, 10 y 11: verificados, son límites conocidos, sin cambio.
+
+#### Etapa 3 — El repositor y los frenos del stock (commits `569fce8`, `9d26380`, `bf2fcdd`, `3262e51` y el de esta nota)
+- **Datos:** `BarraDelJefe` y `BarraDeLaCaja` leen y escriben `barra_stock_barras` y `barra_stock_movimientos`
+  (`repartos`, `guardarReparto`, `movimientosDeStock`, `anotarMovimientoDeStock`, `avisarQueVa`) en `BarraLocal`,
+  `BarraNube` y `BarraConLaRed`, con la segunda llave (`reparteElStock`: el jefe; `mueveElStock`: el repositor y el
+  jefe) y el aviso a la red.
+- **El permiso:** `PermisoOperador.repositorBarra` = **Barra con un 3** (sin SQL). Tilde "Repositor de barra" en
+  OPERADORES (no es cajera ni encargada; avisa lo de las versiones). Entra por BARRA: tocar la fiesta abre **STOCK**.
+- **STOCK** (`lib/features/barra/repositor/`: `stock_de_la_fiesta.dart`, `texto_del_stock.dart`,
+  `dialogos_del_stock.dart`, `stock_de_las_barras_screen.dart`): lo que queda en cada barra y en el depósito,
+  REPONER, FALTANTE, ANOTAR LO QUE HAY, ENTRÓ MERCADERÍA, VOY EN CAMINO / YA NO VOY y los movimientos. Sin plata. La
+  encargada (LAS CAJAS → STOCK) y el jefe (BARRA → el ícono) la abren **solo para mirar**. Cada guardado pasa por
+  `_frenaSinPermiso()`, antes de la ventana y otra vez antes de guardar.
+- **El jefe reparte** en PRECIOS → **STOCK POR BARRA** (`jefe/reparto_del_stock.dart`, `_guardarReparto` con
+  `_frenaSinModoJefe`; en `test/solo_modo_jefe_test.dart`). GANANCIA ya cuenta lo perdido que anotó el repositor.
+- **VENDER** (`widgets/vender_screen.dart`) cuenta con **`StockParaVender`** (`cuentas/stock_para_vender.dart`: una
+  sola cuenta para "Quedan", el freno al tocar y el freno al cobrar):
+  - lo repartido en la barra de la caja se cuenta con `StockPorBarra.deLaNoche`; lo demás, con el stock general de
+    siempre (pregunta y deja "VENDER IGUAL");
+  - **con señal** (`hayCentralALaVistaProvider`: conectada a la central, o la notebook que la tiene prendida), **lo
+    que no queda no se vende**: un aviso con un solo botón; y al cobrar se mira otra vez (`noAlcanzaPara`), por si
+    otra caja vendió las últimas;
+  - **sin señal**, aviso en rojo "no sé si repusieron" con NO HAY · HAY, VENDER (una vez por producto y por cuenta);
+    el stock queda en negativo y se descuenta de lo que se reponga;
+  - arriba, **"Nico está en camino con …"** y **"Se repusieron 12 … en tu barra · quedan N · Nico"** con OK (lo que
+    ya estaba repuesto al abrir VENDER no se avisa).
+- **Sin internet:** `test/central_barra_test.dart` prueba que el repositor repone con la central caída, la caja vende
+  sin stock, y al volver **los tres equipos dan el mismo stock** (3 − 3 − 2 + 24 = 22), sin duplicar.
+- Pruebas: `test/repositor_de_barra_test.dart` (20), `test/stock_de_las_barras_pantalla_test.dart` (21),
+  `test/reparto_del_stock_test.dart` (11), `test/vender_con_el_stock_por_barra_test.dart` (24), dos en
+  `test/operadores_screen_test.dart`, una en `test/central_barra_provider_test.dart`. Roturas:
+  `tool/roturas_repositor_y_stock.txt` (32 de 32 atrapadas; una no tenia prueba y destapo un error de OPERADORES: al abrir a un repositor "Barra" venia tildada, arreglado). Capturas: `tool/repositor_y_stock_muestra_test.dart` →
+  `build/capturas_stock_28nov/` (6 capturas sacadas; SIN MANDAR al usuario).
+
+**Reglas que dejó la etapa 3 (para lo que se programe después):**
+- **Toda pantalla que diga cuánto queda en una barra sale de `StockPorBarra`** (STOCK, LAS CAJAS) **o de
+  `StockParaVender`** (VENDER); ninguna hace otra cuenta. Cómo se dice, en `repositor/texto_del_stock.dart`.
+- **Un guardado nuevo del stock** va por `BarraConLaRed` (su llave y su aviso a la red) y, en la pantalla, con
+  `_frenaSinPermiso()` o `_frenaSinModoJefe()`.
+- **Una prueba que monte VENDER y quiera "con señal" reemplaza `hayCentralALaVistaProvider`** (en las pruebas de
+  pantalla la red está apagada: es "sin señal").
+- **Los precios (con el stock general) no viajan por el wifi del salón**: bajan de la nube antes de la fiesta. El
+  reparto y los movimientos sí cruzan. **Repartir el stock de la Técnica con internet, antes del 4-dic.**
+- **No tildar "Repositor de barra" ni repartir stock por barra hasta que todos los equipos tengan la versión**: una
+  anterior lee el 3 como "sin Barra" y no conoce el reparto.
+
+**Lo que NO se hizo de la etapa 3 (y por qué):**
+- **"¿Volvió el vale?" al anular:** no hay nada decidido por el usuario; preguntarle antes (¿anular devuelve el
+  stock siempre, o solo si el vale volvió?). Hoy una venta anulada devuelve el stock.
+- **LA ENCARGADA ESTÁ ACÁ con el PIN del jefe:** quedó como estaba (solo el PIN de una encargada); cambiarlo toca lo
+  que acepta la central. El jefe da el OK desde su aparato.
+- **"Se vendieron N sin stock"** se ve en STOCK ("SIN STOCK · se vendieron 5 de más") y en la cuenta de REPONER;
+  **falta un renglón propio en LAS CAJAS**.
+- **Un repositor en una ventana de prueba** (`tool/dos_barras_prueba.dart`) y **el recorrido con el mouse**: esperan
+  al usuario (el permiso de pantalla).
+- **La suite entera** (`bash tool/suite_por_tandas.sh`) sobre lo último: NO SE CORRIO (se corto por el limite de uso). Corridas y en verde: las pruebas de la barra, de OPERADORES y de la venta de entradas.
+- No se probó con tablets ni con el router del salón.
+
+**Lo que falta, en orden (etapas 4 a 8 del plan):**
+1. **Con el usuario despierto:** el recorrido con el mouse (repositor, reparto, VENDER con y sin señal); su OK para
+   la nube (las 4 fiestas, `lugares_cambios.sql`); que mire las capturas; preguntarle lo del vale.
+2. **Etapa 4 — la encargada en su iPhone**: la página que sirve la notebook por el wifi (`guardarDeLaPagina`, el
+   saludo solo con el PIN, el acuse "guardada", `/fiesta.json`, `lib/barra_pagina_main.dart`, el instalador).
+3. **Etapa 5 — la noche simulada y el repaso entero** (dos barras, cientos de ventas, una tablet 4 horas sin señal,
+   el repositor, la tele, Recepción con el chat), las roturas todas, la suite y la tercera revisión independiente.
+4. **Etapa 6 — el locutor por el wifi** (v85, `como_lo_nombran`; `docs/SPEC_locutor_2026-11-18.md`), sin música.
+5. **Etapa 7 — el plano a todo lo ancho en la tele y Noche y Blanco.**
+6. **Etapa 8 — publicar con él** (v83, v84 y v85 sobre una copia; foto de la mora; los SQL con su OK).
+Si el tiempo no alcanza, queda afuera primero: Noche y Blanco → el plano ancho → la página del repositor para iPhone
+→ el locutor.
+
+**Lo que depende del usuario:** su OK para la nube; **probar ya un iPhone en el router del salón sin internet** con
+lo instalado (Recepción → CELULARES → el QR): es el mismo mecanismo de la página de la encargada y del locutor;
+instalar la 6.9.4 en las otras dos PCs (foto de la mora "después"); mirar las capturas; el APK en la Quint.
+
+---
+
+### Cómo quedó el 27-nov a las 20:30 (para la historia; lo vigente está arriba)
 
 **El plan del 4-dic va por ~78 %. Nada publicado. La fiesta es el viernes 4-dic, sin internet.** Recomendado: publicar
 a más tardar el martes 1 o miércoles 2-dic. Todo lo de abajo está guardado y subido (último commit: el de esta nota).

@@ -490,6 +490,31 @@ void main() {
     expect(cliente.desde, isNotNull);
   });
 
+  // 28-nov-2026: con esto VENDER decide si frena lo que no queda en su barra (con señal) o
+  // avisa en rojo y deja vender (sin señal).
+  test('"hay central a la vista": la notebook que la tiene prendida y la tablet conectada; apagada, no', () async {
+    final notebook = equipo('notebook');
+    final tablet = equipo('tablet-a');
+    bool ve(({ProviderContainer c}) e, [String fiesta = _fiesta]) => e.c.read(hayCentralALaVistaProvider)(fiesta);
+    expect(ve((c: notebook.c)), isFalse);
+    expect(ve((c: tablet.c)), isFalse, reason: 'todavía no la buscó');
+
+    await notebook.c.read(centralDeLaBarraProvider.notifier).prender(_fiesta);
+    expect(ve((c: notebook.c)), isTrue);
+    expect(ve((c: notebook.c), 'e0000000-0000-4000-8000-0000000000ff'), isFalse, reason: 'la central es de otra fiesta');
+
+    await tablet.c.read(clienteDeLaBarraProvider.notifier).arrancar(eventoId: _fiesta, nombreCaja: 'Caja 1 · Marta');
+    final cliente = tablet.c.read(clienteDeLaBarraProvider)!;
+    expect(ve((c: tablet.c)), isFalse, reason: 'buscando no es tener señal');
+    await hasta(() => cliente.conectada);
+    expect(ve((c: tablet.c)), isTrue);
+
+    await notebook.c.read(centralDeLaBarraProvider.notifier).apagar();
+    await hasta(() => cliente.estado == EstadoDeLaCentral.sinCentral, que: 'la tablet se da cuenta');
+    expect(ve((c: tablet.c)), isFalse, reason: 'sin central no sabe si repusieron');
+    expect(ve((c: notebook.c)), isFalse);
+  });
+
   test('sin la red del salón (la web, las pruebas de pantalla), nada se prende', () async {
     final c = ProviderContainer(overrides: [redDeLaBarraHabilitadaProvider.overrideWithValue(false)]);
     addTearDown(c.dispose);
