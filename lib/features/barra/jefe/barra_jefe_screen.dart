@@ -16,6 +16,7 @@ import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../repositor/aviso_de_vendido_sin_stock.dart';
 import '../repositor/stock_de_las_barras_screen.dart';
 import '../services/fiestas_del_jefe.dart';
 import '../widgets/elegir_impresora_screen.dart';
@@ -382,9 +383,18 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                             fiesta: fiesta,
                             otras: [for (final e in datos.todas) if (e.id != fiesta.id) e],
                           ),
-                        PestanaBarraJefe.cajas => CajasDeLaFiestaVista(
-                            key: ValueKey('cajas_${fiesta.id}'),
-                            fiesta: fiesta,
+                        PestanaBarraJefe.cajas => Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Lo que alguna caja vendió con el stock en cero.
+                              AvisoDeVendidoSinStock(fiesta: fiesta),
+                              Expanded(
+                                child: CajasDeLaFiestaVista(
+                                  key: ValueKey('cajas_${fiesta.id}'),
+                                  fiesta: fiesta,
+                                ),
+                              ),
+                            ],
                           ),
                         // Sin modo jefe no se ve (y la pestaña ni aparece).
                         PestanaBarraJefe.ganancia when veGanancia => GananciaDelJefeVista(

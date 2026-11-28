@@ -88,6 +88,18 @@ String? notaDelMovimiento(MovimientoDeStock m) {
   return partes.isEmpty ? null : partes.join(' · ');
 }
 
+/// "Se vendió sin stock: 5 speed en la Barra 1 · 2 agua en la Barra 2. Se descuenta de lo
+/// que se reponga.": lo vendido con el stock en cero (sin señal no se frena), para la
+/// encargada y el jefe. Null si no se vendió nada de más.
+String? vendidoSinStock(Iterable<StockDeUnLugar> deMas, String Function(String productoId) nombreDe) {
+  final partes = [
+    for (final s in deMas)
+      if (s.queda < 0) '${-s.queda} ${nombreDe(s.productoId).toLowerCase()} en ${elLugar(s.lugar)}',
+  ];
+  if (partes.isEmpty) return null;
+  return 'Se vendió sin stock: ${partes.join(' · ')}. Se descuenta de lo que se reponga.';
+}
+
 /// "Se repusieron 12 Speed en tu barra · quedan 12 · Nico": lo que ven la cajera de esa
 /// barra y la encargada cuando llega una reposición o un traspaso.
 String seRepusieron(MovimientoDeStock m, String producto, {int? quedan, bool enTuBarra = true}) {

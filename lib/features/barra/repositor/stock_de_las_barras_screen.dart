@@ -452,20 +452,26 @@ class _StockDeLasBarrasScreenState extends ConsumerState<StockDeLasBarrasScreen>
         key: Key('stock_fila_${s.productoId}'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          // En un celular angosto, "SIN STOCK · se vendieron 5 de más" no entra al lado del
+          // nombre: baja al renglón siguiente en vez de salirse (28-nov-2026).
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              children: [
+                Text(
                   datos.nombreDe(s.productoId),
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
-              ),
-              Text(
-                cuantoQueda(s),
-                key: Key('stock_queda_${s.productoId}'),
-                style: TextStyle(color: color, fontWeight: FontWeight.w800),
-              ),
-            ],
+                Text(
+                  cuantoQueda(s),
+                  key: Key('stock_queda_${s.productoId}'),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
           ),
           Text(
             detalleDelStock(s),

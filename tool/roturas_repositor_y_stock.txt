@@ -190,3 +190,15 @@ test/operadores_screen_test.dart
     final sinNinguno = !_cobros && !_entradas && !_barra && !_repositor;
     final sinNinguno = !_cobros && !_entradas && !_barra;
 ---
+lo vendido sin stock se ve arriba de LAS CAJAS
+lib/features/barra/widgets/las_cajas_screen.dart
+test/vendido_sin_stock_en_las_cajas_test.dart
+                  if (veCatalogo) AvisoDeVendidoSinStock(fiesta: fiesta),
+
+---
+"vendido sin stock" cuenta solo lo que quedo en negativo
+lib/features/barra/repositor/texto_del_stock.dart
+test/vendido_sin_stock_en_las_cajas_test.dart
+      if (s.queda < 0) '${-s.queda} ${nombreDe(s.productoId).toLowerCase()} en ${elLugar(s.lugar)}',
+      if (s.queda <= 0) '${-s.queda} ${nombreDe(s.productoId).toLowerCase()} en ${elLugar(s.lugar)}',
+---

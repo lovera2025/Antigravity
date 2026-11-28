@@ -10,6 +10,7 @@ import '../cuentas/reglas_de_la_barra.dart';
 import '../estilos/disenio_barra.dart';
 import '../jefe/cajas_de_la_fiesta.dart';
 import '../providers/barra_del_jefe_provider.dart';
+import '../repositor/aviso_de_vendido_sin_stock.dart';
 import '../repositor/stock_de_las_barras_screen.dart';
 import 'catalogo_y_precios_screen.dart';
 
@@ -92,6 +93,8 @@ class LasCajasScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (conLaCentral) const LineaDeLaCaja(),
+                  // Lo que alguna caja vendió con el stock en cero (sin señal no se frena).
+                  if (veCatalogo) AvisoDeVendidoSinStock(fiesta: fiesta),
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(margen, 8, margen, 0),
